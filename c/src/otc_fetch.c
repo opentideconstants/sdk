@@ -10,6 +10,10 @@
  * the same directory, fsynced and renamed into place; .verified is last. A
  * .lock/ directory (owner.json inside) only stops duplicate work.
  */
+/* fsync, gethostname, nanosleep and gmtime_r are XSI / POSIX 2008 on glibc */
+#if !defined(_WIN32) && !defined(_XOPEN_SOURCE)
+#define _XOPEN_SOURCE 700
+#endif
 #include "otc_internal.h"
 #include "otc_sha256_rename.h"
 #include "sha-256.h"
