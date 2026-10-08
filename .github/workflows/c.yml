@@ -23,8 +23,6 @@ jobs:
           - { os: macos-14, cc: clang, runner: c/build/otc_runner }
           - { os: windows-2022, cc: msvc, runner: c/build/Debug/otc_runner.exe }
     steps:
-      # The fixtures are checked by SHA-256: Windows must not rewrite them to CRLF.
-      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }

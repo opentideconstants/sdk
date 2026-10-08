@@ -1,0 +1,11 @@
+# Checksum-sensitive data must keep the bytes as committed on every
+# platform. Git must not convert line endings in these files (for example
+# core.autocrlf=true on Windows), because the conformance suite checks the
+# fixtures by SHA-256 and compares the generated JSON byte for byte.
+*.gz                  binary
+*.jsonl               -text
+*.sha256              -text
+conformance/fixtures/** -text
+conformance/cases/*.json -text
+conformance/api.json  -text
+conformance/name_fold.json -text

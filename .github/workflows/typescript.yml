@@ -30,9 +30,6 @@ jobs:
           - os: ubuntu-latest
             node: "22"
     steps:
-      # The fixtures are byte-exact (their SHA-256 is checked): no CRLF on Windows.
-      - name: Keep line endings as committed
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -71,8 +68,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Keep line endings as committed
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
