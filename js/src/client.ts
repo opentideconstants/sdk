@@ -451,12 +451,16 @@ export class OpenTideConstants {
     }
 
     /** Close the client and every release it loaded (stream mode holds a file handle). */
-    async close(): Promise<void> {
+    close(): void {
         for (const r of this.#all) r._close();
     }
 
+    [Symbol.dispose](): void {
+        this.close();
+    }
+
     async [Symbol.asyncDispose](): Promise<void> {
-        await this.close();
+        this.close();
     }
 
     // ------------------------------------------------------------------ queries, forwarded to the current release
