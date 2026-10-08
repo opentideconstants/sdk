@@ -1,4 +1,4 @@
-/** @internal JSON helpers for tolerant reading (spec 7.3). */
+// JSON helpers for tolerant reading (spec 7.3).
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 /** A parsed JSON object, as the file gives it. */
 export type JsonObject = { readonly [key: string]: Json };
