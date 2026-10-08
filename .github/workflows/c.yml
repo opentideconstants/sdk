@@ -54,10 +54,13 @@ jobs:
           - { cc: clang, sanitize: "address,undefined" }
           - { cc: gcc, sanitize: "address,undefined" }
           - { cc: clang, sanitize: "thread" }
+    # The driver does not check a runner's exit status when it closes it, so a report
+    # written at exit (a leak) would not fail a case. Every report goes to a log file,
+    # and the job fails if any log file exists.
     env:
-      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
-      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      TSAN_OPTIONS: halt_on_error=1
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:log_path=${{ github.workspace }}/san/asan
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=${{ github.workspace }}/san/ubsan
+      TSAN_OPTIONS: halt_on_error=1:log_path=${{ github.workspace }}/san/tsan
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -66,9 +69,14 @@ jobs:
       - run: cmake --build c/build --parallel
       # TSan on recent Ubuntu kernels needs fewer ASLR bits.
       - run: sudo sysctl vm.mmap_rnd_bits=28
+      - run: mkdir -p san
       - run: python conformance/driver.py --runner c/build/otc_runner
       - run: python conformance/driver.py --runner c/build/otc_runner
         env: { OTC_RUNNER_THREADS: "8" }
+      - name: No sanitizer reports
+        run: |
+          if [ -n "$(ls -A san)" ]; then head -50 san/*; exit 1; fi
+          echo "no sanitizer report files"
 
   valgrind:
     runs-on: ubuntu-24.04
@@ -78,15 +86,25 @@ jobs:
         with: { python-version: "3.12" }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
       - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug && cmake --build c/build --parallel
+      # The driver ignores the runner's exit status at close, so every Valgrind report
+      # goes to a log file per process; the job fails if any of them is not empty.
+      - run: mkdir -p vg
       - name: Conformance suite under Valgrind
         env:
-          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/%p.log
         run: python conformance/driver.py --runner conformance/runners/c/run.sh
       - name: Conformance suite under Valgrind, 4 threads
         env:
           OTC_RUNNER_THREADS: "4"
-          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
         run: python conformance/driver.py --runner conformance/runners/c/run.sh
+      - name: No Valgrind reports
+        run: |
+          echo "valgrind log files: $(ls vg | wc -l)"
+          test "$(ls vg | wc -l)" -gt 400
+          bad=$(find vg -type f -size +0)
+          if [ -n "$bad" ]; then head -60 $bad; exit 1; fi
+          echo "every valgrind log is empty"
 
   amalgamation:
     runs-on: ubuntu-24.04
