@@ -14,8 +14,9 @@ import { createRequire } from "node:module";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const jsDir = path.resolve(here, "..", "..", "..", "js");
 const distDir = path.join(jsDir, "dist");
 // The driver points HOME at a temporary directory; find Playwright's browsers under the real home.

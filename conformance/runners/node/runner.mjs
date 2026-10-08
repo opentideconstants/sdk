@@ -6,11 +6,11 @@
 // It loads the built package from js/dist (run `npm run build` in js/ first), or the module named
 // by --sdk (a path or a package name, for an installed tarball), and calls only its public API.
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { makeRunner } from "./ops.mjs";
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const sdkArg = argv.indexOf("--sdk") >= 0 ? argv[argv.indexOf("--sdk") + 1] : path.join(here, "..", "..", "..", "js", "dist", "index.js");
 const sdkSpec = sdkArg.startsWith(".") || path.isAbsolute(sdkArg) ? pathToFileURL(path.resolve(sdkArg)).href : sdkArg;
