@@ -1,0 +1,5 @@
+dist/
+*.gem
+*.tgz
+__pycache__/
+*.egg-info/

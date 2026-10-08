@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opentideconstants"
+version = "0.0.0"
+description = "Placeholder for the OpenTideConstants SDK"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Jordan Ritter" }]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://opentideconstants.org"
+Source = "https://github.com/opentideconstants/sdk"

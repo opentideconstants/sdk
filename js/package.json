@@ -1,0 +1,11 @@
+{
+  "name": "opentideconstants",
+  "version": "0.0.0",
+  "description": "Placeholder for the OpenTideConstants SDK",
+  "license": "MIT",
+  "author": "Jordan Ritter",
+  "homepage": "https://opentideconstants.org",
+  "repository": { "type": "git", "url": "git+https://github.com/opentideconstants/sdk.git", "directory": "js" },
+  "main": "index.js",
+  "files": ["index.js", "README.md", "LICENSE"]
+}
