@@ -2190,7 +2190,7 @@
    "code": "offline_unavailable",
    "class": "OfflineError",
    "c": "OTC_E_OFFLINE_UNAVAILABLE",
-   "when": "offline, or a network failure with on_network_error raise, and the release is not cached",
+   "when": "offline mode and no usable cached release, or releases() offline and no cached index (a network failure with on_network_error raise is the network error)",
    "fields": [],
    "languages": [
     "ruby",
