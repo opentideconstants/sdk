@@ -1,0 +1,39 @@
+{
+ "concept_doi": null,
+ "created": "2099-12-31T00:00:00Z",
+ "datestamp": "20991231",
+ "doi": null,
+ "files": [
+  {
+   "name": "OTC_20991231.json",
+   "sha256": "96ee4872cb18a1ff1f9eff35847ae74531987186f0f14b4e9a6465ab4fa71f21",
+   "size": 21719,
+   "url": "OTC_20991231.json"
+  },
+  {
+   "name": "OTC_20991231.json.gz",
+   "sha256": "6ddd044ac13671c8bb562880dd4119328cda5518dbe975661320c50abf94803a",
+   "size": 3435,
+   "url": "OTC_20991231.json.gz"
+  },
+  {
+   "name": "OTC_20991231.jsonl",
+   "sha256": "c4197eaeb020ebad1dc4ede94b87a544d8fe8d4b48a673a759331ea96bb346ac",
+   "size": 18825,
+   "url": "OTC_20991231.jsonl"
+  },
+  {
+   "name": "OTC_20991231.meta.json",
+   "sha256": "17b111d34acf61c2e24ea31bc1d54fa3294495ec95d9c701a5a668894fc20661",
+   "size": 2881,
+   "url": "OTC_20991231.meta.json"
+  },
+  {
+   "name": "OTC_20991231.sha256",
+   "sha256": "b83e4b56d15d226dc53bb274e691c13b205d92e00771694ab3505caf67f0ca0c",
+   "size": 345,
+   "url": "OTC_20991231.sha256"
+  }
+ ],
+ "format_version": "0.2"
+}

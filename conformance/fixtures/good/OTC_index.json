@@ -1,0 +1,82 @@
+{
+ "releases": [
+  {
+   "concept_doi": "10.5072/zenodo.1",
+   "created": "2099-12-31T12:00:00Z",
+   "datestamp": "20991231.2",
+   "doi": "10.5072/zenodo.2",
+   "files": [
+    {
+     "name": "OTC_20991231.2.json",
+     "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2",
+     "size": 21765,
+     "url": "OTC_20991231.2.json"
+    },
+    {
+     "name": "OTC_20991231.2.json.gz",
+     "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d",
+     "size": 3444,
+     "url": "OTC_20991231.2.json.gz"
+    },
+    {
+     "name": "OTC_20991231.2.jsonl",
+     "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4",
+     "size": 18967,
+     "url": "OTC_20991231.2.jsonl"
+    },
+    {
+     "name": "OTC_20991231.2.meta.json",
+     "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26",
+     "size": 2785,
+     "url": "OTC_20991231.2.meta.json"
+    },
+    {
+     "name": "OTC_20991231.2.sha256",
+     "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028",
+     "size": 353,
+     "url": "OTC_20991231.2.sha256"
+    }
+   ],
+   "format_version": "0.2"
+  },
+  {
+   "concept_doi": null,
+   "created": "2099-12-31T00:00:00Z",
+   "datestamp": "20991231",
+   "doi": null,
+   "files": [
+    {
+     "name": "OTC_20991231.json",
+     "sha256": "96ee4872cb18a1ff1f9eff35847ae74531987186f0f14b4e9a6465ab4fa71f21",
+     "size": 21719,
+     "url": "OTC_20991231.json"
+    },
+    {
+     "name": "OTC_20991231.json.gz",
+     "sha256": "6ddd044ac13671c8bb562880dd4119328cda5518dbe975661320c50abf94803a",
+     "size": 3435,
+     "url": "OTC_20991231.json.gz"
+    },
+    {
+     "name": "OTC_20991231.jsonl",
+     "sha256": "c4197eaeb020ebad1dc4ede94b87a544d8fe8d4b48a673a759331ea96bb346ac",
+     "size": 18825,
+     "url": "OTC_20991231.jsonl"
+    },
+    {
+     "name": "OTC_20991231.meta.json",
+     "sha256": "17b111d34acf61c2e24ea31bc1d54fa3294495ec95d9c701a5a668894fc20661",
+     "size": 2881,
+     "url": "OTC_20991231.meta.json"
+    },
+    {
+     "name": "OTC_20991231.sha256",
+     "sha256": "b83e4b56d15d226dc53bb274e691c13b205d92e00771694ab3505caf67f0ca0c",
+     "size": 345,
+     "url": "OTC_20991231.sha256"
+    }
+   ],
+   "format_version": "0.2"
+  }
+ ]
+}
