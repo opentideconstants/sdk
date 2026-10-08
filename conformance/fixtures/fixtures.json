@@ -12,6 +12,16 @@
    "root": "good"
   },
   {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.10",
+   "releases": [
+    "20991231.10",
+    "20991231.2"
+   ],
+   "root": "order"
+  },
+  {
    "defect": "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
    "expect": {
     "error": "checksum_mismatch"

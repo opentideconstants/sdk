@@ -39,6 +39,8 @@ TOL = 1e-6
 
 FIX = "${fixtures}"
 SRV = "${server}"
+SRV_ALIAS = "${server_alias}"  # the fixture server under a name only the recording proxy resolves
+D10 = "20991231.10"            # fixtures/order: newer than 20991231.2 by counter, older by string order
 
 # --------------------------------------------------------------------------- fixtures
 
@@ -633,7 +635,8 @@ def group_load():
             out.append(case(f"load/bad-{root}{ext.replace('.', '-')}", f"bad/{root} opened as {ext}: {code}", "4.8, 5.3, 7.4",
                             [step("open", err(code), file=f"{FIX}/bad/{root}/OTC_20991231{ext}")], requires=["fs"] + req))
     out.append(case("load/format-minor-loads", "bad/format-minor (format 0.3) loads from a file", "7.3",
-                    [step("open", {"loaded_from": "file", "datestamp": "20991231", "format_version": "0.3"}, file=f"{FIX}/bad/format-minor/OTC_20991231.jsonl")], requires=["fs"]))
+                    [step("open", {"loaded_from": "file", "datestamp": "20991231", "format_version": "0.3"}, file=f"{FIX}/bad/format-minor/OTC_20991231.jsonl"),
+                     step("station_count", {"station_count": len(Rel("bad/format-minor", "20991231").active)})], requires=["fs"]))
     out.append(case("load/verify-file", "verify passes on an intact file and fails with checksum_mismatch after one byte changes", "4.3, 5.3",
                     [drv("copy", files=[f"{G}/OTC_{d}.jsonl", f"{G}/OTC_{d}.meta.json", f"{G}/OTC_{d}.sha256"], to="${tmp}/rel"),
                      step("open", {"loaded_from": "file"}, file=f"${{tmp}}/rel/OTC_{d}.jsonl"),
@@ -694,7 +697,7 @@ def group_network():
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
                      drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", min=1, status=304, header={"if-none-match": '^"[0-9a-f]{64}"$'}),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.", count=0),
-                     step("release_files", {"files": {"$all": [{"$type": "array"}, {"$len_min": 1}]}})],
+                     step("release_files", {"files": info2["files"]})],
                     requires=["fs"]))
     out.append(case("net/pinned-cached-no-network", "a pinned, cached release opens with the server stopped and no socket", "4.2, 5.2, 6.5",
                     [net(step("open", {"loaded_from": "download", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
@@ -702,10 +705,16 @@ def group_network():
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
                      drv("assert_requests", source="any", count=0)],
                     requires=["fs"]))
-    out.append(case("net/pinned-download", "a pinned older release downloads; its metadata is that release's", "4.2, 5.2",
+    # A pinned download reads only OTC_{D}.sha256 (spec 5.2), so release.files is checked against that file
+    # alone: its names and digests; url and size are the true values or null (README "Choices").
+    pinned_rows = [{"name": n, "url": {"$any_of": [None, G + n]},
+                    "size": {"$any_of": [None, (FIXTURES / "good" / n).stat().st_size]}, "sha256": h}
+                   for n, h in sorted(sha256_rows("good", d1).items())]
+    out.append(case("net/pinned-download", "a pinned older release downloads; its metadata is that release's; files from its .sha256", "4.2, 4.3.1, 5.2",
                     [net(step("open", {"loaded_from": "download", "datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
+                     drv("assert_requests", match=r"OTC_(latest|index)", count=0),
                      step("release_metadata", {"datestamp": d1, "doi": None, "build_commit": "0123456789abcdef0123456789abcdef01234567"}),
-                     step("release_files", {"files": info1["files"]})],
+                     step("release_files", {"files": pinned_rows})],
                     requires=["fs"]))
     out.append(case("net/pinned-404", "a pinned datestamp that the server does not have: release_not_found, and the 404 is not retried", "4.8, 5.7",
                     [net(step("open", err("release_not_found"), release="20991230", base_url=G, cache_dir="${cache}")),
@@ -734,7 +743,8 @@ def group_network():
                     [open_latest(), drv("restart_runner"),
                      drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f0)?\.json$", "action": "status", "status": 500}]),
                      open_latest({"loaded_from": "cache_after_error", "datestamp": d2}),
-                     step("last_error", {"code": "network"})],
+                     step("last_error", {"code": "network"}),
+                     step("release_files", {"files": info2["files"]})],
                     requires=["fs"], timeout_s=90))
     out.append(case("net/last-error-null", "last_error is null after a clean download", "4.3",
                     [open_latest(), step("last_error", {"code": None})], requires=["fs"]))
@@ -759,6 +769,17 @@ def group_network():
                      net(step("open", {"datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
                      drv("restart_runner"), drv("server_stop"),
                      open_latest({"loaded_from": "cache", "datestamp": d2}, offline=True)],
+                    requires=["fs"]))
+    O = f"{SRV}/order/"
+    out.append(case("net/offline-latest-counter-order", "offline latest is the newest cached release by counter: 20991231.10 > 20991231.2 (string order says otherwise)", "4.3.1, 5.2",
+                    [net(step("open", {"datestamp": D10}, release=D10, base_url=O, cache_dir="${cache}")),
+                     net(step("open", {"datestamp": d2}, release=d2, base_url=O, cache_dir="${cache}")),
+                     drv("restart_runner"), drv("server_stop"),
+                     open_latest({"loaded_from": "cache", "datestamp": D10}, base_url=O, offline=True)],
+                    requires=["fs"]))
+    out.append(case("net/releases-counter-order", "releases(): 20991231.10 before 20991231.2 (newest first by counter)", "4.3, 4.3.1",
+                    [open_latest({"loaded_from": "download", "datestamp": D10, "format_version": "0.2"}, base_url=O),
+                     net(step("releases", {"releases": [enc_release_info("order", D10, O), enc_release_info("order", d2, O)]}))],
                     requires=["fs"]))
     out.append(case("net/env-base-url", "OPENTIDECONSTANTS_BASE_URL sets the server", "4.2",
                     [drv("restart_runner", env={"OPENTIDECONSTANTS_BASE_URL": G}),
@@ -812,11 +833,19 @@ def group_network():
                     [open_latest(user_agent="conformance-test/1.0"),
                      drv("assert_requests", header={"user-agent": UA[:-1] + r" conformance-test/1\.0$"}, min=1, all=True)],
                     requires=["fs"]))
+    # The proxy cases use ${server_alias}, a name that does not resolve: the request succeeds only through the
+    # proxy, whatever the HTTP stack does with loopback addresses (README "Choices").
+    GA = f"{SRV_ALIAS}/good/"
     out.append(case("net/proxy-option", "the proxy option sends every request through the proxy", "5.7",
-                    [open_latest(proxy="${proxy}"), drv("assert_requests", source="proxy", min=2)], requires=["fs"]))
+                    [open_latest(base_url=GA, proxy="${proxy}"), drv("assert_requests", source="proxy", min=2),
+                     drv("assert_requests", source="server", min=2)], requires=["fs"]))
     out.append(case("net/proxy-env", "HTTP_PROXY / http_proxy send requests through the proxy", "5.7",
                     [drv("restart_runner", env={"HTTP_PROXY": "${proxy}", "http_proxy": "${proxy}"}),
-                     open_latest(), drv("assert_requests", source="proxy", min=2)], requires=["fs"]))
+                     open_latest(base_url=GA), drv("assert_requests", source="proxy", min=2),
+                     drv("assert_requests", source="server", min=2)], requires=["fs"]))
+    out.append(case("net/proxy-env-no-proxy-other-host", "NO_PROXY for another host does not bypass the proxy", "5.7",
+                    [drv("restart_runner", env={"HTTP_PROXY": "${proxy}", "http_proxy": "${proxy}", "NO_PROXY": "example.org", "no_proxy": "example.org"}),
+                     open_latest(base_url=GA), drv("assert_requests", source="proxy", min=2)], requires=["fs"]))
     out.append(case("net/no-proxy-env", "NO_PROXY bypasses the proxy for the server host", "5.7",
                     [drv("restart_runner", env={"HTTP_PROXY": "${proxy}", "http_proxy": "${proxy}", "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}),
                      open_latest(), drv("assert_requests", source="proxy", count=0), drv("assert_requests", source="server", min=2)],
@@ -871,13 +900,14 @@ def group_update():
                     [drv("server_rules", rules=old_pointer),
                      net(step("open", {"datestamp": d1}, base_url=G, cache_dir="${cache}", auto_update=True, update_interval=1)),
                      drv("server_rules", rules=[]), drv("sleep", s=2.5),
-                     step("station_count", {"station_count": 20}),
+                     # the first query must already see the new release: OTC-T-0021 is active in 20991231, removed in .2
+                     step("station", {"station": None}, station_id="OTC-T-0021"),
                      step("release_metadata", {"datestamp": d2})], requires=["fs"]))
     out.append(case("update/auto-off", "without auto_update the loaded release never changes", "5.6",
                     [drv("server_rules", rules=old_pointer),
                      net(step("open", {"datestamp": d1}, base_url=G, cache_dir="${cache}", update_interval=1)),
                      drv("server_rules", rules=[]), drv("sleep", s=2.5),
-                     step("station_count", {"station_count": 20}),
+                     step("station", {"station": enc_station(R1, R1.by_id["OTC-T-0021"])}, station_id="OTC-T-0021"),
                      step("release_metadata", {"datestamp": d1})], requires=["fs"]))
     return out
 
@@ -894,6 +924,15 @@ def group_cache():
     d2, d1 = "20991231.2", "20991231"
     both = [net(step("open", {"datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
             net(step("open", {"datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}"))]
+    O = f"{SRV}/order/"
+    out.append(case("cache/cached-releases-counter-order", "cached_releases orders by counter: 20991231.10 before 20991231.2", "4.3, 4.3.1",
+                    [net(step("open", {"datestamp": D10}, release=D10, base_url=O, cache_dir="${cache}")),
+                     net(step("open", {"datestamp": d2}, release=d2, base_url=O, cache_dir="${cache}")),
+                     net(step("cached_releases", {"datestamps": [D10, d2]}))], requires=["fs"]))
+    out.append(case("cache/prune-counter-order", "prune(keep: 1) keeps 20991231.10 (newest by counter) and removes 20991231.2", "4.3, 4.3.1",
+                    [net(step("open", {"datestamp": d2}, release=d2, base_url=O, cache_dir="${cache}")),
+                     net(step("open", {"datestamp": D10}, release=D10, base_url=O, cache_dir="${cache}")),
+                     net(step("prune", {"removed": [d2]}, keep=1)), net(step("cached_releases", {"datestamps": [D10]}))], requires=["fs"]))
     out.append(case("cache/cached-releases", "cached_releases lists the cached datestamps, newest first", "4.3",
                     both + [net(step("cached_releases", {"datestamps": [d2, d1]}))], requires=["fs"]))
     out.append(case("cache/prune", "prune(keep: 1) removes the older release and returns it", "4.3",
@@ -914,7 +953,7 @@ def group_cache():
     out.append(case("cache/files-from-verified", "loaded_from cache: release.files comes from .verified", "4.3.1",
                     [open_latest_step(G), drv("restart_runner"), drv("server_stop"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
-                     step("release_files", {"files": {"$all": [{"$type": "array"}, {"$len_min": 1}]}})], requires=["fs"]))
+                     step("release_files", {"files": enc_release_info("good", d2, G)["files"]})], requires=["fs"]))
     return out
 
 

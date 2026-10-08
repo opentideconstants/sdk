@@ -300,16 +300,38 @@
     {
      "op": "release_files",
      "expect": {
-      "files": {
-       "$all": [
-        {
-         "$type": "array"
-        },
-        {
-         "$len_min": 1
-        }
-       ]
-      }
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 21765,
+        "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 3444,
+        "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 18967,
+        "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 2785,
+        "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028"
+       }
+      ]
      }
     }
    ]
@@ -374,8 +396,8 @@
   },
   {
    "id": "net/pinned-download",
-   "title": "a pinned older release downloads; its metadata is that release's",
-   "spec": "4.2, 5.2",
+   "title": "a pinned older release downloads; its metadata is that release's; files from its .sha256",
+   "spec": "4.2, 4.3.1, 5.2",
    "requires": [
     "fs"
    ],
@@ -398,6 +420,11 @@
      }
     },
     {
+     "driver": "assert_requests",
+     "match": "OTC_(latest|index)",
+     "count": 0
+    },
+    {
      "op": "release_metadata",
      "expect": {
       "datestamp": "20991231",
@@ -411,33 +438,67 @@
       "files": [
        {
         "name": "OTC_20991231.json",
-        "url": "${server}/good/OTC_20991231.json",
-        "size": 21719,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.json"
+         ]
+        },
+        "size": {
+         "$any_of": [
+          null,
+          21719
+         ]
+        },
         "sha256": "96ee4872cb18a1ff1f9eff35847ae74531987186f0f14b4e9a6465ab4fa71f21"
        },
        {
         "name": "OTC_20991231.json.gz",
-        "url": "${server}/good/OTC_20991231.json.gz",
-        "size": 3435,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.json.gz"
+         ]
+        },
+        "size": {
+         "$any_of": [
+          null,
+          3435
+         ]
+        },
         "sha256": "6ddd044ac13671c8bb562880dd4119328cda5518dbe975661320c50abf94803a"
        },
        {
         "name": "OTC_20991231.jsonl",
-        "url": "${server}/good/OTC_20991231.jsonl",
-        "size": 18825,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.jsonl"
+         ]
+        },
+        "size": {
+         "$any_of": [
+          null,
+          18825
+         ]
+        },
         "sha256": "c4197eaeb020ebad1dc4ede94b87a544d8fe8d4b48a673a759331ea96bb346ac"
        },
        {
         "name": "OTC_20991231.meta.json",
-        "url": "${server}/good/OTC_20991231.meta.json",
-        "size": 2881,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.meta.json"
+         ]
+        },
+        "size": {
+         "$any_of": [
+          null,
+          2881
+         ]
+        },
         "sha256": "17b111d34acf61c2e24ea31bc1d54fa3294495ec95d9c701a5a668894fc20661"
-       },
-       {
-        "name": "OTC_20991231.sha256",
-        "url": "${server}/good/OTC_20991231.sha256",
-        "size": 345,
-        "sha256": "b83e4b56d15d226dc53bb274e691c13b205d92e00771694ab3505caf67f0ca0c"
        }
       ]
      }
@@ -705,6 +766,43 @@
      "op": "last_error",
      "expect": {
       "code": "network"
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 21765,
+        "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 3444,
+        "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 18967,
+        "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 2785,
+        "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028"
+       }
+      ]
      }
     }
    ]
@@ -1008,6 +1106,184 @@
      "expect": {
       "loaded_from": "cache",
       "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/offline-latest-counter-order",
+   "title": "offline latest is the newest cached release by counter: 20991231.10 > 20991231.2 (string order says otherwise)",
+   "spec": "4.3.1, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.10",
+      "base_url": "${server}/order/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.10"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/order/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/order/",
+      "cache_dir": "${cache}",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.10"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/releases-counter-order",
+   "title": "releases(): 20991231.10 before 20991231.2 (newest first by counter)",
+   "spec": "4.3, 4.3.1",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/order/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.10",
+      "format_version": "0.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.10",
+        "format_version": "0.2",
+        "doi": "10.5072/zenodo.2",
+        "files": [
+         {
+          "name": "OTC_20991231.10.json",
+          "url": "${server}/order/OTC_20991231.10.json",
+          "size": 21766,
+          "sha256": "453600fc3850242b3d6af4f80c3f014a632c0d1eefc6b8b5d259dfbe111b2a5c"
+         },
+         {
+          "name": "OTC_20991231.10.json.gz",
+          "url": "${server}/order/OTC_20991231.10.json.gz",
+          "size": 3447,
+          "sha256": "b18773de7173f727c00a575e4fda918d53d0dd0f75fab192bb0ff5baa647cfb0"
+         },
+         {
+          "name": "OTC_20991231.10.jsonl",
+          "url": "${server}/order/OTC_20991231.10.jsonl",
+          "size": 18967,
+          "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4"
+         },
+         {
+          "name": "OTC_20991231.10.meta.json",
+          "url": "${server}/order/OTC_20991231.10.meta.json",
+          "size": 2786,
+          "sha256": "ab24eb1f1ea5e4a0827e9eff1f8254509c23dfd5a898cbbda2e1b551b96b4d4d"
+         },
+         {
+          "name": "OTC_20991231.10.sha256",
+          "url": "${server}/order/OTC_20991231.10.sha256",
+          "size": 357,
+          "sha256": "14160af914d585d64246c07c0b226fc64ab5d991bdd59c5558529d2d6134ccd1"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231.2",
+        "format_version": "0.2",
+        "doi": "10.5072/zenodo.2",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/order/OTC_20991231.2.json",
+          "size": 21765,
+          "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/order/OTC_20991231.2.json.gz",
+          "size": 3444,
+          "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/order/OTC_20991231.2.jsonl",
+          "size": 18967,
+          "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/order/OTC_20991231.2.meta.json",
+          "size": 2785,
+          "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/order/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028"
+         }
+        ]
+       }
+      ]
      },
      "expect_if_missing": {
       "fetch": {
@@ -1656,7 +1932,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
+      "base_url": "${server_alias}/good/",
       "cache_dir": "${cache}",
       "proxy": "${proxy}"
      },
@@ -1674,6 +1950,11 @@
     {
      "driver": "assert_requests",
      "source": "proxy",
+     "min": 2
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
      "min": 2
     }
    ]
@@ -1696,7 +1977,53 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
+      "base_url": "${server_alias}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2",
+      "format_version": "0.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "proxy",
+     "min": 2
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "min": 2
+    }
+   ]
+  },
+  {
+   "id": "net/proxy-env-no-proxy-other-host",
+   "title": "NO_PROXY for another host does not bypass the proxy",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "restart_runner",
+     "env": {
+      "HTTP_PROXY": "${proxy}",
+      "http_proxy": "${proxy}",
+      "NO_PROXY": "example.org",
+      "no_proxy": "example.org"
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server_alias}/good/",
       "cache_dir": "${cache}"
      },
      "expect": {

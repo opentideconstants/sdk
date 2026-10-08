@@ -536,6 +536,12 @@
       "datestamp": "20991231",
       "format_version": "0.3"
      }
+    },
+    {
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
     }
    ]
   },

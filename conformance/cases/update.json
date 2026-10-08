@@ -268,9 +268,12 @@
      "s": 2.5
     },
     {
-     "op": "station_count",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
      "expect": {
-      "station_count": 20
+      "station": null
      }
     },
     {
@@ -325,9 +328,28 @@
      "s": 2.5
     },
     {
-     "op": "station_count",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
      "expect": {
-      "station_count": 20
+      "station": {
+       "station_id": "OTC-T-0021",
+       "name": "Closing Pier",
+       "country": "GBR",
+       "lat": 52.0,
+       "lon": 1.7,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0021/gesla-fit"
+      }
      }
     },
     {
