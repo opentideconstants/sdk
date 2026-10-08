@@ -376,24 +376,49 @@ class OpenTideConstants
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
-        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks)
-        write_stream_index(d, rel, ver) if @mode == :stream
+        return Reader.load(paths.first, mode: @mode, files: files, checks: checks) unless @mode == :stream
+        index = fresh_stream_index(d, ver, paths.first)
+        if index
+            begin
+                return Reader.load(paths.first, mode: @mode, files: files, checks: checks, index: index)
+            rescue InvalidReleaseError => e
+                log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
+            end
+        end
+        rows = []
+        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks, index_rows: rows)
+        write_stream_index(d, rel, rows, ver, paths.first)
         rel
     end
 
-    # Writes index-v1.json (spec §6.2) when it is missing or stale. A failure
-    # to write it is logged, not raised: the index only saves work.
-    def write_stream_index(d, rel, ver)
+    # The entries of index-v1.json when it is fresh for release d (spec §6.2), else nil.
+    def fresh_stream_index(d, ver, jsonl_path)
+        path = File.join(cache.release_dir(d), "index-v1.json")
+        return nil unless File.file?(path)
+        idx = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
+        jsonl = "OTC_#{d}.jsonl"
+        return nil unless idx.is_a?(Hash) && idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
+        return nil unless idx["datestamp"] == d && idx["jsonl"] == jsonl
+        return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
+        return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
+        return nil unless idx["stations"].is_a?(Array) && idx["stations"].all? { |e| Reader.index_entry_ok?(e) }
+        idx["stations"]
+    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+        nil
+    end
+
+    # Writes index-v1.json (spec §6.2): rows are the entries of every line,
+    # from the pass that loaded rel. A failure to write it is logged, not
+    # raised: the index only saves work.
+    def write_stream_index(d, rel, rows, ver, jsonl_path)
         jsonl = "OTC_#{d}.jsonl"
         sha = ver["files"].dig(jsonl, "sha256")
-        path = File.join(cache.release_dir(d), "index-v1.json")
-        if File.file?(path)
-            current = JSON.parse(File.read(path)) rescue nil
-            return if current.is_a?(Hash) && current["jsonl_sha256"] == sha
-        end
+        return unless sha.is_a?(String)
+        kinds = rel.send(:index_kinds)
+        rows.each { |r| r["kind"] = kinds[r["station_id"]] if r["status"] == "active" && kinds.key?(r["station_id"]) }
         doc = { "index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
-                "stations" => rel.send(:stream_index) }
-        cache.write_atomic(path, JSON.generate(doc) + "\n")
+                "jsonl_size" => File.size(jsonl_path), "by" => "opentideconstants-ruby/#{VERSION}", "stations" => rows }
+        cache.write_atomic(File.join(cache.release_dir(d), "index-v1.json"), JSON.generate(doc) + "\n")
     rescue CacheError, SystemCallError, IOError => e
         log(:warn, "cannot write the stream index for #{d}: #{e.message}")
     end
