@@ -43,9 +43,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from server import FixtureServer, RecordingProxy, validate_rule  # noqa: E402
+import stream_index  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
 CASES_DIR = HERE / "cases"
+CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
 FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 RESERVED_EXPECT = {"error", "error_fields", "tolerance"}
@@ -80,7 +82,8 @@ OPS = {
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
-                  "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir"}
+                  "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir",
+                  "assert_index", "json_set"}
 PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
 # A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
 # fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
@@ -291,8 +294,20 @@ def check_cases(cases):
             problems.append(f"{c.get('_file')}: missing or duplicate id {cid!r}")
         ids.add(cid)
         compared = 0
+        roles = c.get("roles")
+        if roles is not None and (not isinstance(roles, dict) or len(roles) < 2
+                                  or any(f not in FEATURES for fs in roles.values() for f in fs)):
+            problems.append(f"{cid}: roles must name two or more roles, each with a list of features")
         for i, st in enumerate(c.get("steps", [])):
             where = f"{cid} step {i}"
+            if roles is not None and st.get("driver") != "restart_runner":
+                who = st.get("as") if "driver" not in st else None
+                if "driver" not in st and not all(r in roles for r in ([who] if isinstance(who, str) else who or [None])):
+                    problems.append(f"{where}: 'as' must name roles of the case, got {who!r}")
+            elif roles is not None:
+                problems.append(f"{where}: restart_runner is not allowed in a case with roles")
+            if roles is None and "as" in st:
+                problems.append(f"{where}: 'as' needs the case to have roles")
             for s in re.findall(r"\$\{([a-z_]+)\}", json.dumps(st)):
                 if s not in PLACEHOLDERS:
                     problems.append(f"{where}: unknown placeholder ${{{s}}}")
@@ -564,12 +579,47 @@ def run_action(st, ctx, srv, proxy):
         time.sleep(float(a["s"]))
     elif kind == "restart_runner":
         return [], a.get("env", {})
+    elif kind == "assert_index":
+        return act_assert_index(a), None
+    elif kind == "json_set":
+        p = Path(a["path"])
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            return [f"json_set: {p}: cannot read it as JSON ({e})"], None
+        parts = [x.replace("~1", "/").replace("~0", "~") for x in a["pointer"].split("/")[1:]]
+        node = doc
+        try:
+            for k in parts[:-1]:
+                node = node[int(k)] if isinstance(node, list) else node[k]
+            if isinstance(node, list):
+                node[int(parts[-1])] = a["value"]
+            elif isinstance(node, dict):
+                node[parts[-1]] = a["value"]
+            else:
+                raise TypeError(type(node).__name__)
+        except (KeyError, IndexError, ValueError, TypeError) as e:
+            return [f"json_set: {p.name}: the pointer {a['pointer']} does not resolve ({type(e).__name__}: {e})"], None
+        p.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
     return [], None
+
+
+def act_assert_index(a):
+    """Compare the index-v1.json an SDK wrote with the reference index built from the same .jsonl (§6.2)."""
+    p, jsonl = Path(a["path"]), Path(a["jsonl"])
+    if not p.is_file():
+        return [f"{p}: missing"]
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError as e:
+        return [f"{p}: not JSON ({e})"]
+    return [f"{p.name}: {x}" for x in stream_index.compare(doc, stream_index.build(jsonl, a["datestamp"]))][:20]
 
 
 # --------------------------------------------------------------------------- run one case
 
-def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, stats):
+def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
+    """Run one case. runners: {role: (command, features)}; a case without roles has the one role "main"."""
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
     env_extra = isolated_env(tmp)
@@ -577,13 +627,15 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
     srv.set_rules([])
     srv.log.clear()
     proxy.log.clear()
-    stderr_path = tmp / "runner.stderr"
     failures = []
-    runner = None
+    live = {}
     step_timeout = float(case.get("timeout_s", 60))
 
-    def start():
-        r = Runner(runner_cmd, runner_env(env_extra), stderr_path, cwd=str(HERE.parent))
+    def stderr_path(role):
+        return tmp / ("runner.stderr" if role == "main" else f"runner-{role}.stderr")
+
+    def start(role):
+        r = Runner(runners[role][0], runner_env(env_extra), stderr_path(role), cwd=str(HERE.parent))
         try:
             parse_hello(r.read(60))
         except BaseException:
@@ -591,52 +643,63 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
             raise
         return r
 
+    def check(i, st, role, msg, reply, expect):
+        if expect is None:
+            # an uncompared step still must not fail: a malformed or ok:false reply fails the case
+            problems = reply_problems(reply) or (
+                [f"unexpected error {reply['error'].get('code')!r} ({str(reply['error'].get('message'))[:200]})"]
+                if not reply["ok"] else [])
+        else:
+            stats["steps_compared"] += 1
+            problems = evaluate(subst(expect, ctx), reply)
+        if problems:
+            stats["steps_failed"] += 1
+            f = {"step": i, "op": st["op"], "args": msg["args"], "problems": problems}
+            if role != "main":
+                f["as"] = role
+            failures.append(f)
+        return bool(problems)
+
     cur = {"step": None}
     try:
-        runner = start()
+        for role in runners:
+            live[role] = start(role)
         for i, st in enumerate(case["steps"]):
             cur = {"step": i, "driver": st["driver"]} if "driver" in st else {"step": i, "op": st.get("op")}
             if "driver" in st:
                 problems, restart_env = run_action(st, ctx, srv, proxy)
                 if restart_env is not None:
-                    runner.close()
+                    live["main"].close()
                     env_extra.update(restart_env)
-                    runner = start()
+                    live["main"] = start("main")
                 if problems:
                     failures.append({"step": i, "driver": st["driver"], "problems": problems})
                     if not all_steps:
                         break
                 continue
+            who = st.get("as", "main")
+            roles = [who] if isinstance(who, str) else list(who)
             msg = {"case": case["id"], "step": i, "op": st["op"], "args": subst(st.get("args", {}), ctx)}
             if st.get("on"):
                 msg["on"] = st["on"]
-            expect = st.get("expect")
-            last = False
-            for feat, alt in (st.get("expect_if_missing") or {}).items():
-                if feat not in hello_features:
-                    expect, last = alt, True
-                    break
-            runner.send(msg)
-            reply = runner.read(step_timeout)
-            if expect is None:
-                # an uncompared step still must not fail: a malformed or ok:false reply fails the case
-                problems = reply_problems(reply) or (
-                    [f"unexpected error {reply['error'].get('code')!r} ({str(reply['error'].get('message'))[:200]})"]
-                    if not reply["ok"] else [])
-                if problems:
-                    stats["steps_failed"] += 1
-                    failures.append({"step": i, "op": st["op"], "args": msg["args"], "problems": problems})
-                    if not all_steps:
+            plan = []
+            for role in roles:
+                expect, last = st.get("expect"), False
+                for feat, alt in (st.get("expect_if_missing") or {}).items():
+                    if feat not in runners[role][1]:
+                        expect, last = alt, True
                         break
-            else:
-                stats["steps_compared"] += 1
-                problems = evaluate(subst(expect, ctx), reply)
-                if problems:
-                    stats["steps_failed"] += 1
-                    failures.append({"step": i, "op": st["op"], "args": msg["args"], "problems": problems})
-                    if not all_steps:
-                        break
-            if last:
+                plan.append((role, expect, last))
+            # every role gets the request before any reply is read, so a step with several roles runs at once
+            for role, _, _ in plan:
+                cur = {"step": i, "op": st.get("op"), **({"as": role} if role != "main" else {})}
+                live[role].send(msg)
+            failed = last_step = False
+            for role, expect, last in plan:
+                cur = {"step": i, "op": st.get("op"), **({"as": role} if role != "main" else {})}
+                failed |= check(i, st, role, msg, live[role].read(step_timeout), expect)
+                last_step |= last
+            if (failed and not all_steps) or last_step:
                 break
     except (TimeoutError, EOFError, RunnerError, OSError) as e:
         failures.append({**cur, "problems": [f"{type(e).__name__}: {e}"]})
@@ -644,15 +707,39 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
         stats["harness_errors"] += 1
         failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
     finally:
-        if runner:
-            runner.close()
+        for r in live.values():
+            r.close()
         if not srv.running:
             srv.resume()
         srv.set_rules([])
-        stderr_tail = stderr_path.read_text(errors="replace")[-2000:] if stderr_path.exists() else ""
+        tails = []
+        for role in runners:
+            sp = stderr_path(role)
+            t = sp.read_text(errors="replace")[-2000:] if sp.exists() else ""
+            if t:
+                tails.append(t if role == "main" else f"[{role}]\n{t}")
+        stderr_tail = "\n".join(tails)
         if not keep_tmp:
             shutil.rmtree(tmp, ignore_errors=True)
     return failures, stderr_tail
+
+
+def expand_cross(cases, hellos):
+    """One case per ordered assignment of distinct runners to the case's roles. hellos: {name: (cmd, features)}."""
+    import itertools
+    out = []
+    for c in cases:
+        roles = list(c.get("roles") or {})
+        if not roles:
+            raise ValueError(f"{c.get('id')}: a cross case needs roles")
+        for names in itertools.permutations(hellos, len(roles)):
+            if any(set(c["roles"][r]) - hellos[n][1] for r, n in zip(roles, names)):
+                continue
+            v = copy.deepcopy(c)
+            v["id"] = f"{c['id']}[{'>'.join(names)}]"
+            v["_runners"] = {r: hellos[n] for r, n in zip(roles, names)}
+            out.append(v)
+    return out
 
 
 # --------------------------------------------------------------------------- self-test of the server
@@ -769,7 +856,10 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(description="OpenTideConstants SDK conformance driver")
     ap.add_argument("--runner", help="the runner command (split with shlex)")
-    ap.add_argument("--cases", default=str(CASES_DIR))
+    ap.add_argument("--cross", action="append", metavar="NAME=COMMAND",
+                    help="cross-SDK mode: a named runner (give two or more); runs the cases in conformance/cross/ "
+                         "once per ordered pair of distinct runners")
+    ap.add_argument("--cases", help="the case directory (default conformance/cases, or conformance/cross with --cross)")
     ap.add_argument("--only", help="run only case ids matching this regular expression")
     ap.add_argument("--profile", choices=sorted(PROFILES),
                     help="the features the runner must claim (default: the hello's runner name if it is a profile, else none)")
@@ -784,11 +874,16 @@ def main():
 
     if a.selftest:
         return selftest()
+    if a.cross and a.runner:
+        ap.error("--runner and --cross do not go together")
+    cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross else CASES_DIR)
     try:
-        raw = load_cases(Path(a.cases))
-        cases = expand(raw)
+        raw = load_cases(cases_dir)
+        cases = raw if a.cross else expand(raw)
+        if a.check_cases and not a.cases:
+            raw_cross = load_cases(CROSS_DIR)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        print(f"case files in {a.cases}: cannot load: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"case files in {cases_dir}: cannot load: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
     if a.only:
         try:
@@ -796,34 +891,64 @@ def main():
         except re.error as e:
             print(f"--only {a.only!r}: not a regular expression: {e}", file=sys.stderr)
             return 2
-        cases = [c for c in cases if only.search(c["id"])]
+        if not a.cross:
+            cases = [c for c in cases if only.search(c["id"])]
     if a.check_cases:
         # non-matrix cases are the same before and after expansion: lint them once
         problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
+        n_cross = 0
+        if not a.cases:
+            problems += check_cases(raw_cross)
+            problems += [f"{c['id']}: a cross case needs roles" for c in raw_cross if not c.get("roles")]
+            problems += [f"{c['id']}: a case in cases/ must not have roles" for c in raw if c.get("roles")]
+            n_cross = len(raw_cross)
         for p in problems:
             print("PROBLEM", p)
-        print(f"case check: {len(raw)} case definitions, {len(expand(raw))} expanded cases, {len(problems)} problems")
+        print(f"case check: {len(raw)} case definitions, {len(expand(raw))} expanded cases, "
+              f"{n_cross} cross-SDK case definitions, {len(problems)} problems")
         return 0 if not problems else 2
     if a.list:
         for c in cases:
             print(c["id"])
         print(f"{len(cases)} cases")
         return 0
-    if not a.runner:
-        ap.error("--runner is required")
-
-    cmd = shlex.split(a.runner)
-    hello, err = probe_runner(cmd)
-    if err:
-        print(f"runner failed the handshake: {err}", file=sys.stderr)
-        return 2
-    features = set(hello["features"])
-    profile = a.profile or (hello.get("runner") if hello.get("runner") in PROFILES else "none")
-    lacking = sorted(set(PROFILES[profile]) - features)
-    if lacking:
-        print(f"runner {hello.get('runner')!r} (profile {profile}) does not claim the required features {lacking}; "
-              f"it claims {sorted(features)}", file=sys.stderr)
-        return 2
+    if not a.runner and not a.cross:
+        ap.error("--runner (or --cross, two or more times) is required")
+    named = {}
+    for spec in (a.cross or []):
+        name, sep, command = spec.partition("=")
+        if not sep or not name or not command or name in named:
+            ap.error(f"--cross {spec!r}: expected a new NAME=COMMAND")
+        named[name] = command
+    if a.cross and len(named) < 2:
+        ap.error("--cross needs two or more runners")
+    hellos = {}
+    for name, command in (named.items() if a.cross else [("main", a.runner)]):
+        cmd = shlex.split(command)
+        hello, err = probe_runner(cmd)
+        if err:
+            print(f"runner {name if a.cross else ''} failed the handshake: {err}".replace("runner  ", "runner "), file=sys.stderr)
+            return 2
+        features = set(hello["features"])
+        profile = a.profile or (hello.get("runner") if hello.get("runner") in PROFILES else "none")
+        lacking = sorted(set(PROFILES[profile]) - features)
+        if lacking:
+            print(f"runner {hello.get('runner')!r} (profile {profile}) does not claim the required features {lacking}; "
+                  f"it claims {sorted(features)}", file=sys.stderr)
+            return 2
+        hellos[name] = (cmd, features, hello, profile)
+    if a.cross:
+        try:
+            cases = expand_cross(cases, {n: (h[0], h[1]) for n, h in hellos.items()})
+            if a.only:
+                cases = [c for c in cases if only.search(c["id"])]
+        except (ValueError, KeyError, TypeError) as e:
+            print(f"case files in {cases_dir}: {e}", file=sys.stderr)
+            return 2
+        hello = {"runner": "cross", "runners": {n: h[2] for n, h in hellos.items()}}
+        features = set()
+    else:
+        cmd, features, hello, profile = hellos["main"]
     srv = FixtureServer().start()
     try:
         proxy = RecordingProxy().start()
@@ -831,7 +956,11 @@ def main():
         srv.shutdown()
         raise
     proxy.aliases[SERVER_ALIAS] = srv.host
-    print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}  profile: {profile}")
+    if a.cross:
+        for n, h in hellos.items():
+            print(f"runner {n}: {h[2].get('runner')} {h[2].get('version', '')}  features: {sorted(h[1])}  profile: {h[3]}")
+    else:
+        print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}  profile: {profile}")
     print(f"fixture server {srv.url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
@@ -839,14 +968,15 @@ def main():
     t0 = time.monotonic()
     try:
         for c in cases:
-            missing = [f for f in c.get("requires", []) if f not in features]
+            missing = [] if a.cross else [f for f in c.get("requires", []) if f not in features]
             if missing:
                 counts["SKIP"] += 1
                 report.append({"id": c["id"], "status": "SKIP", "missing_features": missing})
                 if a.verbose:
                     print(f"SKIP  {c['id']}  (runner lacks {missing})")
                 continue
-            failures, stderr_tail = run_case(c, cmd, features, srv, proxy, a.keep_tmp, a.all_steps, stats)
+            runners = c.pop("_runners") if a.cross else {"main": (cmd, features)}
+            failures, stderr_tail = run_case(c, runners, srv, proxy, a.keep_tmp, a.all_steps, stats)
             status = "FAIL" if failures else "PASS"
             counts[status] += 1
             report.append({"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""})
@@ -854,6 +984,8 @@ def main():
             if failures:
                 first = failures[0]
                 where = f"step {first['step']} {first.get('op') or first.get('driver') or ''}".strip()
+                if first.get("as"):
+                    where += f" as {first['as']}"
                 line += f"  [{where}] {first['problems'][0]}"
                 if len(failures) > 1:
                     line += f"  (+{len(failures) - 1} more failed step(s))"

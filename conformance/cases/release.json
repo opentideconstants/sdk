@@ -486,6 +486,40 @@
    ]
   },
   {
+   "id": "release/citation-exact-20991231.2",
+   "title": "citation of 20991231.2, exact text (DOI set)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "good",
+    "release": "20991231.2"
+   },
+   "steps": [
+    {
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.2 [Data set]. https://doi.org/10.5072/zenodo.2"
+     }
+    }
+   ]
+  },
+  {
+   "id": "release/citation-exact-20991231",
+   "title": "citation of 20991231, exact text (DOI null)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "good",
+    "release": "20991231"
+   },
+   "steps": [
+    {
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231 [Data set]. https://data.opentideconstants.org/OTC_20991231.json"
+     }
+    }
+   ]
+  },
+  {
    "id": "release/attribution-one-station",
    "title": "attribution for stations OTC-T-0006",
    "spec": "4.6",
