@@ -203,7 +203,7 @@ class OpenTideConstants
             tmp = Cache.tmp_path(@to)
             begin
                 FileUtils.cp(src, tmp)
-                File.open(tmp, "rb", &:fsync)
+                File.open(tmp, "r+b", &:fsync) # Windows: fsync needs a handle open for writing
                 actual = Release.sha256_file(tmp)
                 raise ChecksumError.new("#{name}: SHA-256 mismatch", file: dest, expected: sha, actual: actual) if actual != sha
                 File.rename(tmp, dest)
