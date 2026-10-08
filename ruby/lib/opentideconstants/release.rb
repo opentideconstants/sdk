@@ -17,7 +17,7 @@ class OpenTideConstants
         # A small per-station summary, used by the filters and the indexes.
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
-                           :pos, :len, :station, keyword_init: true)
+                           :aliases, :pos, :len, :station, keyword_init: true)
 
         attr_reader :datestamp, :created, :format_version, :doi, :concept_doi, :source_versions,
                     :build_commit, :changelog_url, :files, :conventions, :licences, :constituent_names
@@ -255,6 +255,22 @@ class OpenTideConstants
             nil
         end
 
+        # The stream index rows (spec §6.2), one per line of the .jsonl file
+        # (active stations; tombstones are in the index with their status).
+        # Written to the cache as index-v1.json by the client.
+        def stream_index
+            rows = @entries.map do |e|
+                { "offset" => e.pos, "length" => e.len, "station_id" => e.station_id, "status" => "active",
+                  "folded_name" => e.folded, "country" => e.country, "type" => e.type&.to_s, "kind" => e.kind&.to_s,
+                  "lat" => e.lat, "lon" => e.lon, "aliases" => e.aliases, "reference_station_id" => e.reference_id }
+            end
+            (rows + @tomb_pos.map do |t, pos, len|
+                { "offset" => pos, "length" => len, "station_id" => t.station_id, "status" => "removed",
+                  "folded_name" => Fold.fold(t.name.to_s), "country" => nil, "type" => nil, "kind" => nil,
+                  "lat" => nil, "lon" => nil, "aliases" => {}, "reference_station_id" => nil }
+            end).sort_by { |r| r["offset"] || 0 }
+        end
+
         def default_url
             "https://data.opentideconstants.org/OTC_#{@datestamp}.json"
         end
@@ -356,6 +372,7 @@ class OpenTideConstants
         def load_stations(stations)
             entries = []
             tombs = []
+            tomb_pos = []
             raws = {}
             names = Set.new
             @set_sources = []
@@ -366,6 +383,7 @@ class OpenTideConstants
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
                 if raw["status"] == "removed"
                     tombs << Tombstone.new(raw)
+                    tomb_pos << [tombs.last, pos, len]
                     next
                 end
                 entries << entry_for(raw, pos, len, names)
@@ -381,6 +399,7 @@ class OpenTideConstants
             @entries = entries.freeze
             @by_id.freeze
             @tombstones = tombs.sort_by(&:station_id).freeze
+            @tomb_pos = tomb_pos.freeze
             @tomb_by_id = @tombstones.to_h { |t| [t.station_id, t] }.freeze
             @constituent_names = names.to_a.sort.freeze
             @set_sources.freeze
@@ -427,7 +446,9 @@ class OpenTideConstants
                       kind: rec && quantity_kind(rec["quantity"]), sources: sources.freeze,
                       rec_source_type: rec && Util.enum(rec["source_type"], ENUMS[:source_type]),
                       rec_licence_id: rec && rec["licence_id"], offsets_licence_id: off && off["licence_id"],
-                      reference_id: off && off["reference_station_id"], pos: pos, len: len, station: nil)
+                      reference_id: off && off["reference_station_id"],
+                      aliases: (raw["aliases"].is_a?(Hash) ? raw["aliases"].transform_values { |v| Array(v) } : {}),
+                      pos: pos, len: len, station: nil)
         end
 
         def quantity_kind(q)

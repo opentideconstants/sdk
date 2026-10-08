@@ -376,7 +376,26 @@ class OpenTideConstants
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
-        Reader.load(paths.first, mode: @mode, files: files, checks: checks)
+        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks)
+        write_stream_index(d, rel, ver) if @mode == :stream
+        rel
+    end
+
+    # Writes index-v1.json (spec §6.2) when it is missing or stale. A failure
+    # to write it is logged, not raised: the index only saves work.
+    def write_stream_index(d, rel, ver)
+        jsonl = "OTC_#{d}.jsonl"
+        sha = ver["files"].dig(jsonl, "sha256")
+        path = File.join(cache.release_dir(d), "index-v1.json")
+        if File.file?(path)
+            current = JSON.parse(File.read(path)) rescue nil
+            return if current.is_a?(Hash) && current["jsonl_sha256"] == sha
+        end
+        doc = { "index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
+                "stations" => rel.send(:stream_index) }
+        cache.write_atomic(path, JSON.generate(doc) + "\n")
+    rescue CacheError, SystemCallError, IOError => e
+        log(:warn, "cannot write the stream index for #{d}: #{e.message}")
     end
 
     # Downloads, checks and caches release d (spec §5.2 step 4), then loads it.
@@ -404,10 +423,11 @@ class OpenTideConstants
             pf = pointer_files[name]
             verified[name] = { "sha256" => sha, "size" => pf && pf["size"], "url" => url_of.call(name) }
         end
-        verified[sha_name] = { "sha256" => Digest::SHA256.hexdigest(sha_bytes), "size" => sha_bytes.bytesize,
-                               "url" => url_of.call(sha_name) }
+        # The .sha256 file is in release.files only when the pointer lists it
+        # (a pinned download reads no pointer: README, suite choices).
         if pointer_files[sha_name]
-            verified[sha_name]["sha256"] = pointer_files[sha_name]["sha256"] || verified[sha_name]["sha256"]
+            verified[sha_name] = { "sha256" => Digest::SHA256.hexdigest(sha_bytes), "size" => sha_bytes.bytesize,
+                                   "url" => url_of.call(sha_name) }
         end
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
         format_version = entry && entry["format_version"]

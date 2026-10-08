@@ -105,8 +105,10 @@ class OpenTideConstants
                 conn.request(req) do |res|
                     code = res.code.to_i
                     if code == 200
-                        check_length!(res)
-                        return yield(res)
+                        expected = expected_length(res)
+                        result = yield(res)
+                        check_length!(uri, expected, result.size)
+                        return result
                     end
                     @retry_after = retry_after(res["retry-after"]) if code == 429 || code >= 500
                     res.read_body { |_| } if code != 304
@@ -115,9 +117,21 @@ class OpenTideConstants
             end
         end
 
-        # A body shorter than its Content-Length makes Net::HTTP raise EOFError
-        # while it reads; nothing to do here but keep the hook explicit.
-        def check_length!(_res); end
+        # The Content-Length of a body that is not content-encoded (read before
+        # Net::HTTP decodes a gzip body), or nil.
+        def expected_length(res)
+            enc = res["content-encoding"].to_s.strip.downcase
+            return nil unless enc.empty? || enc == "identity"
+            cl = res["content-length"]
+            cl && Integer(cl.strip, exception: false)
+        end
+
+        # Net::HTTP accepts a body that ends before its Content-Length; the
+        # SDK treats it as a network error (README suite choices).
+        def check_length!(uri, expected, got)
+            return if expected.nil? || got == expected
+            raise EOFError, "#{uri}: body ended after #{got} of #{expected} bytes"
+        end
 
         def retry_after(value)
             return nil if value.nil?

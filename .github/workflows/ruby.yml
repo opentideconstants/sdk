@@ -1,0 +1,63 @@
+name: Ruby SDK
+
+on:
+  push:
+    paths:
+      - "ruby/**"
+      - "conformance/**"
+      - ".github/workflows/ruby.yml"
+  pull_request:
+    paths:
+      - "ruby/**"
+      - "conformance/**"
+      - ".github/workflows/ruby.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: ${{ matrix.os }} / Ruby ${{ matrix.ruby }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ["3.3"]
+        include:
+          - os: ubuntu-latest
+            ruby: "3.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - uses: astral-sh/setup-uv@v6
+      - name: The gem's fold table is the suite's
+        shell: bash
+        run: cmp conformance/name_fold.json ruby/lib/opentideconstants/name_fold.json
+      - name: Build and install the gem
+        shell: bash
+        working-directory: ruby
+        run: |
+          gem build opentideconstants.gemspec
+          gem install --local opentideconstants-*.gem
+      - name: API manifest check (installed gem)
+        shell: bash
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: ruby conformance/runners/ruby/check_api.rb
+      - name: Conformance suite (installed gem)
+        shell: bash
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: uv run conformance/driver.py --runner "ruby conformance/runners/ruby/runner.rb" --report ruby-report.json
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruby-conformance-${{ matrix.os }}-${{ matrix.ruby }}
+          path: ruby-report.json
+          if-no-files-found: ignore

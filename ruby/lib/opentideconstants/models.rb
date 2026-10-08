@@ -2,7 +2,8 @@ require "time"
 
 class OpenTideConstants
     # Helpers shared by the data objects. Every object is frozen and keeps the
-    # parsed JSON object as #raw (a deep-frozen Hash), so a caller can read
+    # parsed JSON object as #raw (a deep-frozen Hash) where the API manifest
+    # lists one, so a caller can read
     # fields that a newer minor format adds (spec §3, §7.3).
     module Util
         module_function
