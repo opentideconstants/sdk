@@ -1,17 +1,35 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "opentideconstants"
-version = "0.0.0"
-description = "Placeholder for the OpenTideConstants SDK"
+dynamic = ["version"]
+description = "Harmonic tidal constants from the OpenTideConstants open dataset (standard library only)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Jordan Ritter" }]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["tides", "tidal constants", "harmonics", "oceanography", "opentideconstants"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Oceanography",
+    "Typing :: Typed",
+]
 
 [project.urls]
 Homepage = "https://opentideconstants.org"
 Source = "https://github.com/opentideconstants/sdk"
+
+[tool.setuptools.dynamic]
+version = { attr = "opentideconstants._client.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opentideconstants = ["name_fold.json", "py.typed"]

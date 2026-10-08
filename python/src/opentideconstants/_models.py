@@ -233,13 +233,17 @@ class ConstantSet:
     qc_status: E.QcStatus
     qc_flags: Tuple[QcFlag, ...]
     dropped_constituents: Tuple[DroppedConstituent, ...]
-    is_recommended: bool
+    _is_recommended: bool
     convention: Convention
     licence: Licence
     provenance: Provenance
     validation: Tuple[Validation, ...]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _constituents: Any = field(default=None, repr=False, compare=False)
+
+    @property
+    def is_recommended(self) -> bool:
+        return self._is_recommended
 
     @property
     def constituents(self) -> Tuple[Constituent, ...]:
