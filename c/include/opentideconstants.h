@@ -508,40 +508,82 @@ OTC_API otc_status otc_constituent_raw_json(const otc_set *set, size_t i, char *
 
 /* ------------------------------------------------- the optional otc_fetch module
  * Declared always. In a build without -DOTC_WITH_FETCH=ON every otc_fetch_*
- * function returns OTC_E_NOT_BUILT and opens no socket. */
+ * function returns OTC_E_NOT_BUILT and opens no socket.
+ *
+ * The module downloads releases into the cache layout that every SDK on the
+ * machine shares (spec 5.4: <root>/v1/pointer, <root>/v1/releases/<D>/), and
+ * returns paths to OTC_{D}.jsonl files there. HTTP is libcurl (spec 5.7).
+ *
+ * Lists of strings out (otc_fetch_cached_releases, otc_fetch_prune,
+ * otc_fetch_to_dir): the caller passes an array of char* and its capacity;
+ * each element is a NUL-terminated string allocated by the library, which
+ * the caller frees with otc_free(). otc_fetch_releases fills an array of
+ * otc_release_info*, each freed with otc_release_info_free().
+ * otc_fetch_prune and otc_fetch_to_dir change files: they do their work once,
+ * fill up to cap entries and set *count to the full number; if cap is too
+ * small they return OTC_E_BUFFER_TOO_SMALL after the work is done. */
 
 typedef struct otc_fetch_options {
     size_t               struct_size;   /* set by otc_fetch_options_init() */
-    const char          *cache_dir;     /* NULL: the platform default (spec 5.4) */
-    const char          *base_url;      /* NULL: https://data.opentideconstants.org/ */
-    bool                 offline;
-    double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s) */
-    const char          *proxy;
-    const char          *ca_file;
-    const char          *user_agent;    /* a suffix */
-    otc_on_network_error on_network_error;
+    const char          *cache_dir;     /* NULL: OPENTIDECONSTANTS_CACHE_DIR, else the platform default (spec 5.4) */
+    const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/ */
+    bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE=1; no socket is ever opened */
+    double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both */
+    const char          *proxy;         /* NULL: HTTP(S)_PROXY / http(s)_proxy and NO_PROXY / no_proxy */
+    const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default */
+    const char          *user_agent;    /* a suffix, added after one space */
+    otc_on_network_error on_network_error; /* latest only: USE_CACHE (default) or RAISE */
     otc_error           *error;
     otc_log_fn           log_fn;
     void                *log_user_data;
+    unsigned             formats;       /* data files kept in the cache: OTC_FORMAT_* bits; 0 = OTC_FORMAT_JSONL.
+                                           The .jsonl and .meta.json are always kept (the C library opens them);
+                                           OTC_FORMAT_JSON also keeps OTC_{D}.json, as eager mode does. */
 } otc_fetch_options;
 OTC_API void otc_fetch_options_init(otc_fetch_options *opts);
 
+/* The path of OTC_{D}.jsonl of the latest release in the cache, downloaded and
+ * verified first if needed (spec 5.2). On a network error with
+ * on_network_error USE_CACHE it gives the newest cached release. */
 OTC_API otc_status otc_fetch_latest(const otc_fetch_options *opts, char *path, size_t len, size_t *needed);
+/* The same for a pinned datestamp; no network access when it is cached. */
 OTC_API otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestamp, char *path, size_t len,
                                      size_t *needed);
+/* otc_fetch_latest / otc_fetch_release (release NULL or "latest": latest),
+ * then otc_open_file on the result. The release handle reports loaded_from
+ * download, cache or cache_after_error, release files from the cache's
+ * .verified record (spec 4.3.1), and, after cache_after_error, the network
+ * error through otc_last_error / otc_last_error_status. oopts may be NULL;
+ * errors go to fopts->error (and oopts->error). */
+OTC_API otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, const otc_open_options *oopts,
+                                  otc_release **out);
 OTC_API otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap,
                                       size_t *count);
 OTC_API otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_release_info **info);
+/* *found is true and *info is set when the latest release is newer than current. */
 OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char *current,
                                               otc_release_info **info, bool *found);
+/* If a release newer than current exists, downloads it into the cache, sets
+ * *updated and writes the path of its .jsonl; the app then opens it and
+ * closes the old handle (C has no automatic update, spec 5.6). */
 OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                                     bool *updated);
+/* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":
+ * the latest. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL. paths gets
+ * the full paths written (a file left alone because it was identical is not
+ * listed). */
 OTC_API otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, const char *dir,
                                     unsigned formats, bool overwrite, char **paths, size_t cap, size_t *count);
+/* Datestamps of the verified cached releases, newest first. */
 OTC_API otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char **datestamps, size_t cap,
                                              size_t *count);
-OTC_API otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, char **removed, size_t cap,
-                                   size_t *count);
+/* Removes the cached releases after the newest keep, never current (the
+ * datestamp of the release the app has open; NULL = none). removed gets the
+ * datestamps removed, newest first. */
+OTC_API otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const char *current, char **removed,
+                                   size_t cap, size_t *count);
+/* Frees a string that the library allocated (lists of the otc_fetch module). */
+OTC_API void otc_free(void *p);
 OTC_API void otc_release_info_free(otc_release_info *info);
 OTC_API otc_status otc_release_info_datestamp(const otc_release_info *ri, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_info_format_version(const otc_release_info *ri, char *buf, size_t len,

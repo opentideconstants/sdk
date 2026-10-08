@@ -94,6 +94,8 @@ char *otc__join(const char *a, const char *b);
 otc_status otc__sha256_file(const char *path, char hex[65]);
 /* The digest of name in a sha256sum file (malloc'd hex), or NULL. *found_file is 0 if the file does not exist. */
 otc_status otc__sha256_rows(const char *sha_path, char ***names, char ***digests, size_t *n);
+/* The same for the text of a sha256sum file. */
+otc_status otc__sha256_rows_text(const char *text, char ***names, char ***digests, size_t *n);
 void otc__free_rows(char **names, char **digests, size_t n);
 
 /* enum parsing: unknown -> OTHER, NULL -> UNSET */
