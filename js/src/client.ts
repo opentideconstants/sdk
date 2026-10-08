@@ -125,14 +125,16 @@ export class OpenTideConstants {
 
         const node = isNode() ? await import("./node.js") : null;
         const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
-        if (!node && (file !== null || options.cacheDir)) throw new UnsupportedError("file and cacheDir need a file system (Node)");
+        if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
         if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
         const offline = optBool(options.offline, "offline") ?? platform.env("OPENTIDECONSTANTS_OFFLINE") === "1";
         let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
         if (!baseUrl.endsWith("/")) baseUrl += "/";
-        const cacheRoot = node ? optStr(options.cacheDir, "cacheDir") ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
+        const cacheDir = optStr(options.cacheDir, "cacheDir");
+        // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
+        const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
         const ctx: Ctx = {
-            platform, store: await platform.cache(cacheRoot), baseUrl, offline, timeout,
+            platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
             proxy: optStr(options.proxy, "proxy"), caFile: optStr(options.caFile, "caFile"),
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
             onNetworkError, logger: options.logger ?? null, mode,
