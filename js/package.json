@@ -1,11 +1,41 @@
 {
   "name": "opentideconstants",
-  "version": "0.0.0",
-  "description": "Placeholder for the OpenTideConstants SDK",
+  "version": "0.1.0",
+  "description": "Read OpenTideConstants releases: tidal harmonic constants with provenance, validation and licences",
   "license": "MIT",
   "author": "Jordan Ritter",
   "homepage": "https://opentideconstants.org",
   "repository": { "type": "git", "url": "git+https://github.com/opentideconstants/sdk.git", "directory": "js" },
-  "main": "index.js",
-  "files": ["index.js", "README.md", "LICENSE"]
+  "keywords": ["tides", "tidal constants", "harmonics", "opentideconstants"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "gen": "node scripts/gen-fold-table.mjs",
+    "gen:check": "node scripts/gen-fold-table.mjs --check",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:api": "node scripts/check-api.mjs",
+    "test:unit": "node --test \"test/*.test.mjs\"",
+    "conformance": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/runner.mjs\"",
+    "conformance:browser": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/browser-runner.mjs\"",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "playwright": "1.60.0",
+    "typescript": "6.0.3"
+  }
 }

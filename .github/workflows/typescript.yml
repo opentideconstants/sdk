@@ -1,0 +1,130 @@
+name: TypeScript SDK
+
+on:
+  push:
+    paths:
+      - "js/**"
+      - "conformance/**"
+      - ".github/workflows/typescript.yml"
+  pull_request:
+    paths:
+      - "js/**"
+      - "conformance/**"
+      - ".github/workflows/typescript.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["24"]
+        include:
+          - os: ubuntu-latest
+            node: "22"
+    steps:
+      # The fixtures are byte-exact (their SHA-256 is checked): no CRLF on Windows.
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dev dependencies
+        working-directory: js
+        run: npm ci
+      - name: The embedded fold table is the suite's
+        working-directory: js
+        run: npm run gen:check
+      - name: Build (tsc, strict)
+        working-directory: js
+        run: npm run build
+      - name: API manifest check (dist/index.d.ts with the compiler API)
+        working-directory: js
+        run: npm run check:api
+      - name: Unit tests
+        working-directory: js
+        run: npm run test:unit
+      - name: Conformance suite (Node)
+        shell: bash
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --report ts-node-report.json
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts-node-report-${{ matrix.os }}-${{ matrix.node }}
+          path: ts-node-report.json
+          if-no-files-found: ignore
+
+  browser:
+    name: headless Chromium (CORS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dev dependencies and Chromium
+        working-directory: js
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run build
+      - name: Conformance suite (profile typescript-browser)
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --report ts-browser-report.json
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts-browser-report
+          path: ts-browser-report.json
+          if-no-files-found: ignore
+
+  package:
+    name: npm pack in node:lts-slim
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: astral-sh/setup-uv@v6
+      - name: Pack
+        working-directory: js
+        run: |
+          npm ci
+          mkdir -p "$RUNNER_TEMP/pkg"
+          npm pack --pack-destination "$RUNNER_TEMP/pkg"
+          cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
+      - name: Install the tarball in a clean container and run the quickstart against the fixture server
+        run: |
+          uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 &
+          sleep 3
+          docker run --rm --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim sh -ec '
+            node --version
+            mkdir /app && cd /app && npm init -y >/dev/null
+            npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
+            test "$(npm ls --all --omit=dev --parseable | wc -l)" -eq 2
+            cp /pkg/quickstart.mjs .
+            OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:18765/good/ node quickstart.mjs 9900001 | tee out.txt
+            grep -q "OTC-T-0001 San Francisco: M2 amplitude 0.5 m" out.txt
+            OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | grep -q "(cache)"
+            node -e "const { OpenTideConstants } = require(\"opentideconstants\"); if (typeof OpenTideConstants.open !== \"function\") process.exit(1)"
+          '
