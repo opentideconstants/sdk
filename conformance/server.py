@@ -35,7 +35,8 @@ What it does:
   also recorded as a tripwire entry and gets no response. So "the server is
   stopped" and "no socket was opened" can both be checked. resume() serves again.
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
-  that records every request it relays.
+  that records every request it relays. Its aliases map a host name (one that
+  does not resolve) to the address it connects to instead.
 """
 from __future__ import annotations
 
@@ -452,6 +453,7 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             self._record(400, self.path, error="CONNECT target is not host:port")
             self.send_error(400, "CONNECT target must be host:port")
             return
+        host = self.server.proxy.aliases.get(host, host)  # type: ignore[attr-defined]
         try:
             upstream = socket.create_connection((host, int(port)), timeout=10)
         except OSError as e:
@@ -493,7 +495,8 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection", "connection", "keep-alive")}
         try:
-            conn = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=120)
+            host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
+            conn = http.client.HTTPConnection(host, parts.port or 80, timeout=120)
             conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
             resp = conn.getresponse()
             data = resp.read()
@@ -525,6 +528,7 @@ class RecordingProxy:
         self.host = host
         self.port = port
         self.log = RequestLog()
+        self.aliases = {}  # host name -> the address the proxy connects to instead
         self._httpd = None
 
     @property

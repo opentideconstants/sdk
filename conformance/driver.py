@@ -81,7 +81,19 @@ OPS = {
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
                   "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir"}
-PLACEHOLDERS = {"fixtures", "server", "proxy", "tmp", "cache"}
+PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
+# A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
+# fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
+# rule for loopback addresses (Ruby's Net::HTTP has one) can hide that an SDK ignored the proxy.
+SERVER_ALIAS = "otc-fixture.invalid"
+# The features each SDK must claim (spec: Python, Ruby and TypeScript on Node have every feature).
+# The profile is the hello's "runner" name, or --profile.
+PROFILES = {
+    "python": FEATURES, "ruby": FEATURES, "typescript": FEATURES,
+    "typescript-browser": ["fetch", "json", "eager", "stream"],
+    "c": ["fs", "stream"], "c-fetch": ["fs", "fetch", "stream"],
+    "none": [],
+}
 
 
 class CaseError(Exception):
@@ -131,6 +143,11 @@ def match(exp, act, tol, path="result"):
             return [] if _type_name(act) == arg else [f"{path}: expected a {arg}, got {_type_name(act)}"]
         if op == "$len_min":
             return [] if isinstance(act, (list, str, dict)) and len(act) >= arg else [f"{path}: expected length >= {arg}"]
+        if op == "$any_of":
+            for m in arg:
+                if not match(m, act, tol, path):
+                    return []
+            return [f"{path}: {json.dumps(act)[:200]} matches none of {json.dumps(arg)[:200]}"]
         if op == "$all":
             out = []
             for m in arg:
@@ -554,7 +571,7 @@ def run_action(st, ctx, srv, proxy):
 
 def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, stats):
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
-    ctx = {"fixtures": str(FIXTURES), "server": srv.url, "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
+    ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
     env_extra = isolated_env(tmp)
     env_extra.update(subst(case.get("env", {}), ctx))
     srv.set_rules([])
@@ -754,6 +771,8 @@ def main():
     ap.add_argument("--runner", help="the runner command (split with shlex)")
     ap.add_argument("--cases", default=str(CASES_DIR))
     ap.add_argument("--only", help="run only case ids matching this regular expression")
+    ap.add_argument("--profile", choices=sorted(PROFILES),
+                    help="the features the runner must claim (default: the hello's runner name if it is a profile, else none)")
     ap.add_argument("--all-steps", action="store_true", help="keep running a case's steps after a failure, to check every step")
     ap.add_argument("--report", help="write a JSON report here")
     ap.add_argument("--keep-tmp", action="store_true")
@@ -798,14 +817,21 @@ def main():
     if err:
         print(f"runner failed the handshake: {err}", file=sys.stderr)
         return 2
+    features = set(hello["features"])
+    profile = a.profile or (hello.get("runner") if hello.get("runner") in PROFILES else "none")
+    lacking = sorted(set(PROFILES[profile]) - features)
+    if lacking:
+        print(f"runner {hello.get('runner')!r} (profile {profile}) does not claim the required features {lacking}; "
+              f"it claims {sorted(features)}", file=sys.stderr)
+        return 2
     srv = FixtureServer().start()
     try:
         proxy = RecordingProxy().start()
     except BaseException:
         srv.shutdown()
         raise
-    features = set(hello["features"])
-    print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}")
+    proxy.aliases[SERVER_ALIAS] = srv.host
+    print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}  profile: {profile}")
     print(f"fixture server {srv.url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
