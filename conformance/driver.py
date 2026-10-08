@@ -56,7 +56,7 @@ VARIANTS = [
     ("json.gz", ".json.gz", "eager", ["fs", "json", "eager"]),
     ("jsonl", ".jsonl", "eager", ["fs", "eager"]),
     ("jsonl-stream", ".jsonl", "stream", ["fs", "stream"]),
-    ("server", None, "eager", ["fetch", "eager"]),
+    ("server", None, "eager", ["fs", "fetch", "eager"]),  # the variant passes cache_dir, an fs option
 ]
 
 FILTERS = ["country", "type", "kind", "source", "source_type"]
@@ -333,7 +333,11 @@ class Runner:
         except queue.Empty:
             raise TimeoutError(f"no reply within {timeout} s")
         if line is None:
-            raise EOFError(f"runner exited (status {self.proc.poll()})")
+            try:
+                status = self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                status = None
+            raise EOFError(f"runner closed its stdout (exit status {status})")
         try:
             return json.loads(line)
         except json.JSONDecodeError:
@@ -365,6 +369,33 @@ def parse_hello(line):
     if not isinstance(feats, list) or not all(isinstance(f, str) for f in feats):
         raise RunnerError(f"hello.features is not a list of strings: {json.dumps(hello)[:200]}")
     return hello
+
+
+def isolated_env(tmp: Path):
+    """Point every per-user directory an SDK might default to at a fresh directory under tmp."""
+    home = tmp / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    return {"HOME": str(home), "USERPROFILE": str(home), "XDG_CACHE_HOME": str(tmp / "xdg-cache"),
+            "LOCALAPPDATA": str(tmp / "localappdata")}
+
+
+def probe_runner(cmd):
+    """Start the runner once and read its hello. Returns (hello, None) or (None, error text with the stderr tail)."""
+    d = Path(tempfile.mkdtemp(prefix="otc-probe-"))
+    try:
+        probe = None
+        try:
+            probe = Runner(cmd, runner_env(isolated_env(d)), d / "stderr", cwd=str(HERE.parent))
+            return parse_hello(probe.read(60)), None
+        except (TimeoutError, EOFError, RunnerError, OSError) as e:
+            err = f"{type(e).__name__}: {e}"
+        finally:
+            if probe:
+                probe.close()
+        tail = (d / "stderr").read_text(errors="replace")[-2000:] if (d / "stderr").exists() else ""
+        return None, err + (f"\nrunner stderr:\n{tail}" if tail.strip() else "\n(the runner wrote nothing to stderr)")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def runner_env(extra):
@@ -518,7 +549,7 @@ def run_action(st, ctx, srv, proxy):
 def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, stats):
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
-    env_extra = {"XDG_CACHE_HOME": str(tmp / "xdg-cache"), "LOCALAPPDATA": str(tmp / "localappdata")}
+    env_extra = isolated_env(tmp)
     env_extra.update(subst(case.get("env", {}), ctx))
     srv.set_rules([])
     srv.log.clear()
@@ -530,9 +561,11 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
 
     def start():
         r = Runner(runner_cmd, runner_env(env_extra), stderr_path, cwd=str(HERE.parent))
-        hello = r.read(60)
-        if not isinstance(hello, dict) or "hello" not in hello:
-            raise RunnerError(f"first line is not a hello: {json.dumps(hello)[:200]}")
+        try:
+            parse_hello(r.read(60))
+        except BaseException:
+            r.close()
+            raise
         return r
 
     cur = {"step": None}
@@ -744,18 +777,16 @@ def main():
         ap.error("--runner is required")
 
     cmd = shlex.split(a.runner)
-    srv = FixtureServer().start()
-    proxy = RecordingProxy().start()
-    probe = Runner(cmd, runner_env({}), os.devnull, cwd=str(HERE.parent))
-    try:
-        hello = parse_hello(probe.read(60))
-    except (TimeoutError, EOFError, RunnerError, OSError) as e:
-        print(f"runner failed the handshake: {type(e).__name__}: {e}", file=sys.stderr)
-        srv.shutdown()
-        proxy.shutdown()
+    hello, err = probe_runner(cmd)
+    if err:
+        print(f"runner failed the handshake: {err}", file=sys.stderr)
         return 2
-    finally:
-        probe.close()
+    srv = FixtureServer().start()
+    try:
+        proxy = RecordingProxy().start()
+    except BaseException:
+        srv.shutdown()
+        raise
     features = set(hello["features"])
     print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}")
     print(f"fixture server {srv.url}  proxy {proxy.url}")

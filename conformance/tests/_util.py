@@ -12,7 +12,7 @@ DRIVER = CONF / "driver.py"
 NULL_RUNNER = CONF / "runners" / "null" / "runner.py"
 
 # A fake runner: prints the hello from $FAKE_HELLO (raw line) and answers every
-# request with $FAKE_REPLY (raw line). Optional $FAKE_STDERR is written first.
+# request with $FAKE_REPLY (raw line); FAKE_HELLO=- exits 3 with no hello. Optional $FAKE_STDERR is written first.
 FAKE_RUNNER = textwrap.dedent('''
     import os, sys
     if os.environ.get("FAKE_STDERR"):
@@ -20,8 +20,9 @@ FAKE_RUNNER = textwrap.dedent('''
     if os.environ.get("FAKE_HOME_PROBE"):
         open(os.environ["FAKE_HOME_PROBE"], "a").write(os.environ.get("HOME", "") + "\\n")
     hello = os.environ.get("FAKE_HELLO", '{"hello": {"runner": "fake", "features": ["fs","fetch","json","eager","stream"]}}')
-    if hello != "-":
-        sys.stdout.write(hello + "\\n"); sys.stdout.flush()
+    if hello == "-":
+        sys.exit(3)
+    sys.stdout.write(hello + "\\n"); sys.stdout.flush()
     for line in sys.stdin:
         if line.strip():
             sys.stdout.write(os.environ.get("FAKE_REPLY", '{"ok": true, "result": {}}') + "\\n"); sys.stdout.flush()
