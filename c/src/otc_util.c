@@ -39,6 +39,8 @@ const char *otc_status_code(otc_status status)
     return "unknown";
 }
 
+void otc_free(void *p) { free(p); }
+
 void otc_error_init(otc_error *err)
 {
     if (!err) return;
@@ -529,23 +531,36 @@ void otc__free_rows(char **names, char **digests, size_t n)
 /* Parses a sha256sum file: "<64 hex>  <name>" or "<64 hex> *<name>" per line. */
 otc_status otc__sha256_rows(const char *sha_path, char ***names_out, char ***digests_out, size_t *n_out)
 {
-    char *text = NULL, *p, **names = NULL, **digests = NULL;
-    size_t n = 0, cap = 0;
+    char *text = NULL;
     otc_status st = otc__read_all(sha_path, &text, NULL);
     *names_out = NULL;
     *digests_out = NULL;
     *n_out = 0;
     if (st != OTC_OK) return st;
+    st = otc__sha256_rows_text(text, names_out, digests_out, n_out);
+    free(text);
+    return st;
+}
+
+otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***digests_out, size_t *n_out)
+{
+    const char *p;
+    char **names = NULL, **digests = NULL;
+    size_t n = 0, cap = 0;
+    otc_status st = OTC_OK;
+    *names_out = NULL;
+    *digests_out = NULL;
+    *n_out = 0;
     p = text;
     while (*p) {
-        char *eol = strchr(p, '\n'), *line_end = eol ? eol : p + strlen(p), *q = p, *name;
+        const char *eol = strchr(p, '\n'), *line_end = eol ? eol : p + strlen(p), *q = p, *name;
         size_t hl = 0;
         while (q < line_end && ((*q >= '0' && *q <= '9') || (*q >= 'a' && *q <= 'f') || (*q >= 'A' && *q <= 'F'))) {
             q++;
             hl++;
         }
         if (hl == 64 && q < line_end && (*q == ' ' || *q == '\t')) {
-            char *e = line_end;
+            const char *e = line_end;
             name = q;
             while (name < e && (*name == ' ' || *name == '\t')) name++;
             if (name < e && *name == '*') name++;
@@ -575,7 +590,6 @@ otc_status otc__sha256_rows(const char *sha_path, char ***names_out, char ***dig
         if (!eol) break;
         p = eol + 1;
     }
-    free(text);
     if (st != OTC_OK) { otc__free_rows(names, digests, n); return st; }
     *names_out = names;
     *digests_out = digests;

@@ -5,6 +5,7 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: opentideconstants
 Description: Read OpenTideConstants tidal-constant releases (.jsonl + .meta.json)
 Version: @PROJECT_VERSION@
+Requires.private: @OTC_PC_REQUIRES_PRIVATE@
 Libs: -L${libdir} -lopentideconstants
 Libs.private: -lm -pthread
 Cflags: -I${includedir}

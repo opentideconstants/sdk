@@ -42,16 +42,60 @@ jobs:
         env: { OTC_RUNNER_THREADS: "8" }
         run: python conformance/driver.py --runner ${{ matrix.runner }}
 
+  # The otc_fetch module (libcurl): the runner says hello as c-fetch, so every
+  # download, network, cache and update case runs (profile c-fetch).
+  conformance-fetch:
+    name: fetch ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc, runner: c/build/otc_runner }
+          - { os: ubuntu-24.04, cc: clang, runner: c/build/otc_runner }
+          - { os: macos-14, cc: clang, runner: c/build/otc_runner }
+          - { os: windows-2022, cc: msvc, runner: c/build/Debug/otc_runner.exe }
+    steps:
+      # The fixtures and downloads are checked by SHA-256: Windows must not rewrite them to CRLF.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: libcurl (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+      - name: libcurl (Windows, vcpkg)
+        if: runner.os == 'Windows'
+        run: vcpkg install curl:x64-windows
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "${{ matrix.cc }}" = msvc ]; then
+            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          else
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
+          fi
+      - name: Build
+        run: cmake --build c/build --config Debug --parallel
+      - name: Conformance suite (profile c-fetch)
+        run: python conformance/driver.py --runner ${{ matrix.runner }}
+      - name: Conformance suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner ${{ matrix.runner }}
+
   sanitizers:
-    name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }}
+    name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }} fetch=${{ matrix.fetch }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { cc: clang, sanitize: "address,undefined" }
-          - { cc: gcc, sanitize: "address,undefined" }
-          - { cc: clang, sanitize: "thread" }
+          - { cc: clang, sanitize: "address,undefined", fetch: "OFF" }
+          - { cc: gcc, sanitize: "address,undefined", fetch: "OFF" }
+          - { cc: clang, sanitize: "thread", fetch: "OFF" }
+          - { cc: clang, sanitize: "address,undefined", fetch: "ON" }
+          - { cc: gcc, sanitize: "address,undefined", fetch: "ON" }
+          - { cc: clang, sanitize: "thread", fetch: "ON" }
     # The driver does not check a runner's exit status when it closes it, so a report
     # written at exit (a leak) would not fail a case. Every report goes to a log file,
     # and the job fails if any log file exists.
@@ -63,7 +107,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }}
+      - if: matrix.fetch == 'ON'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }} -DOTC_WITH_FETCH=${{ matrix.fetch }}
       - run: cmake --build c/build --parallel
       # TSan on recent Ubuntu kernels needs fewer ASLR bits.
       - run: sudo sysctl vm.mmap_rnd_bits=28
@@ -77,13 +123,18 @@ jobs:
           echo "no sanitizer report files"
 
   valgrind:
+    name: valgrind fetch=${{ matrix.fetch }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        fetch: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
-      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug && cmake --build c/build --parallel
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind libcurl4-openssl-dev
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=${{ matrix.fetch }} && cmake --build c/build --parallel
       # The driver ignores the runner's exit status at close, so every Valgrind report
       # goes to a log file per process; the job fails if any of them is not empty.
       - run: mkdir -p vg

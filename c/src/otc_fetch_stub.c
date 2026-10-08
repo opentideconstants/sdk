@@ -34,6 +34,19 @@ otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestam
     return not_built(opts, "otc_fetch_release");
 }
 
+otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, const otc_open_options *oopts,
+                          otc_release **out)
+{
+    (void)release;
+    if (out) *out = NULL;
+    if (oopts && oopts->struct_size >= sizeof *oopts && oopts->error && (!fopts || oopts->error != fopts->error)) {
+        otc_error_init(oopts->error);
+        otc__err_set(oopts->error, OTC_E_NOT_BUILT, NULL,
+                     "otc_fetch_open: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)");
+    }
+    return not_built(fopts, "otc_fetch_open");
+}
+
 otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap, size_t *count)
 {
     (void)out; (void)cap;
@@ -79,9 +92,10 @@ otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char **dates
     return not_built(opts, "otc_fetch_cached_releases");
 }
 
-otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, char **removed, size_t cap, size_t *count)
+otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const char *current, char **removed, size_t cap,
+                           size_t *count)
 {
-    (void)keep; (void)removed; (void)cap;
+    (void)keep; (void)current; (void)removed; (void)cap;
     if (count) *count = 0;
     return not_built(opts, "otc_fetch_prune");
 }
