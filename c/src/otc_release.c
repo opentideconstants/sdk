@@ -122,7 +122,7 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
         return otc__fail(rel, OTC_E_IO, "cannot read %s at offset %lu", rel->path, (unsigned long)offset);
     }
     buf[length] = '\0';
-    v = cJSON_ParseWithLength(buf, length);
+    v = otc__json_parse(buf, length);
     free(buf);
     if (!v) return otc__fail(rel, OTC_E_INVALID_RELEASE, "a line of %s is not JSON (it changed after open?)", rel->path);
     *out = v;
@@ -294,7 +294,7 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
 static otc_status index_line(builder *b, const char *line, size_t len, uint64_t offset)
 {
     otc_release *r = b->rel;
-    cJSON *root = cJSON_ParseWithLength(line, len);
+    cJSON *root = otc__json_parse(line, len);
     const char *id, *status;
     otc_status st = OTC_OK;
     if (!root) return bad_line(b, "not JSON");
@@ -469,7 +469,7 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         otc__err_set(err, st, meta_path, "cannot read %s", meta_path);
         return st;
     }
-    r->meta = cJSON_ParseWithLength(text, len);
+    r->meta = otc__json_parse(text, len);
     free(text);
     if (!r->meta || !cJSON_IsObject(r->meta)) {
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s is not a JSON object", meta_path);

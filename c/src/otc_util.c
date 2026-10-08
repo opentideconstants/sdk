@@ -150,6 +150,30 @@ otc_dropped_reason otc__parse_dropped_reason(const char *s)
     return (otc_dropped_reason)parse_enum(DROP, OTC_DROPPED_REASON_OTHER, s);
 }
 
+/* ------------------------------------------------------------- JSON parse */
+
+#ifdef _WIN32
+static SRWLOCK g_parse_lock = SRWLOCK_INIT;
+cJSON *otc__json_parse(const char *text, size_t len)
+{
+    cJSON *v;
+    AcquireSRWLockExclusive(&g_parse_lock);
+    v = cJSON_ParseWithLength(text, len);
+    ReleaseSRWLockExclusive(&g_parse_lock);
+    return v;
+}
+#else
+static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
+cJSON *otc__json_parse(const char *text, size_t len)
+{
+    cJSON *v;
+    pthread_mutex_lock(&g_parse_lock);
+    v = cJSON_ParseWithLength(text, len);
+    pthread_mutex_unlock(&g_parse_lock);
+    return v;
+}
+#endif
+
 /* ----------------------------------------------------------------- strings */
 
 char *otc__strndup(const char *s, size_t n)

@@ -139,11 +139,25 @@ static cJSON *j_cstr(const char *s) { return s ? cJSON_CreateString(s) : cJSON_C
 static cJSON *j_fixed(const char *s) { return s[0] ? cJSON_CreateString(s) : cJSON_CreateNull(); }
 static cJSON *j_enum(const char *name) { return name ? cJSON_CreateString(name) : cJSON_CreateNull(); }
 
+/* cJSON_Parse writes a process-wide error slot, so parses from the worker
+ * threads are serialised (the library does the same for its own copy). */
+#ifdef _WIN32
+static SRWLOCK g_parse_lock = SRWLOCK_INIT;
+#define PARSE_LOCK() AcquireSRWLockExclusive(&g_parse_lock)
+#define PARSE_UNLOCK() ReleaseSRWLockExclusive(&g_parse_lock)
+#else
+static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
+#define PARSE_LOCK() pthread_mutex_lock(&g_parse_lock)
+#define PARSE_UNLOCK() pthread_mutex_unlock(&g_parse_lock)
+#endif
+
 static cJSON *j_parse_or_null(char *text)
 {
     cJSON *v = NULL;
     if (text) {
+        PARSE_LOCK();
         v = cJSON_Parse(text);
+        PARSE_UNLOCK();
         free(text);
     }
     return v ? v : cJSON_CreateNull();
@@ -1124,7 +1138,7 @@ static char *run_query(request *q)
 /* ---------------------------------------------------------------- threads */
 
 typedef struct thread_job {
-    request *q;
+    request q;      /* each thread has its own copy (args.bad is written per call) */
     char *out;
 } thread_job;
 
@@ -1132,14 +1146,14 @@ typedef struct thread_job {
 static DWORD WINAPI thread_main(LPVOID p)
 {
     thread_job *j = (thread_job *)p;
-    j->out = run_query(j->q);
+    j->out = run_query(&j->q);
     return 0;
 }
 #else
 static void *thread_main(void *p)
 {
     thread_job *j = (thread_job *)p;
-    j->out = run_query(j->q);
+    j->out = run_query(&j->q);
     return NULL;
 }
 #endif
@@ -1156,7 +1170,7 @@ static char *run_threaded(request *q, int n)
 #endif
     if (!jobs || !th) { free(jobs); free(th); return run_query(q); }
     for (i = 0; i < n; i++) {
-        jobs[i].q = q;
+        jobs[i].q = *q;
 #ifdef _WIN32
         th[i] = CreateThread(NULL, 0, thread_main, &jobs[i], 0, NULL);
         if (!th[i]) break;

@@ -66,6 +66,11 @@ void otc__mutex_lock(otc__mutex *m);
 void otc__mutex_unlock(otc__mutex *m);
 void otc__mutex_destroy(otc__mutex *m);
 
+/* cJSON_Parse* writes a process-wide error slot on every call (cJSON.c,
+ * global_error), so concurrent parses race. Every parse in the library goes
+ * through this wrapper, which holds one process-wide lock while it parses. */
+cJSON *otc__json_parse(const char *text, size_t len);
+
 /* ----------------------------------------------------------------- helpers */
 
 char *otc__strdup(const char *s);
