@@ -30,6 +30,9 @@ jobs:
           - os: ubuntu-latest
             ruby: "3.0"
     steps:
+      # The fixtures are byte-exact (their SHA-256 is checked): no CRLF on Windows.
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
