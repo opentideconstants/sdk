@@ -164,7 +164,7 @@ static cJSON *j_parse_or_null(char *text)
 }
 
 /*
- * A string accessor called the way an app calls it: first into a small
+ * A string accessor called the way an app calls it: first into a sbuf
  * buffer (which checks OTC_E_BUFFER_TOO_SMALL and NUL termination), then
  * into a buffer of the reported size. Returns a malloc'd string, or NULL for
  * "no value" (OTC_E_NOT_FOUND). *bad is set on any other status.
@@ -172,17 +172,17 @@ static cJSON *j_parse_or_null(char *text)
 #define DEF_STR(NAME, FN, T)                                                      \
     static char *NAME(const T *o, int *bad)                                       \
     {                                                                             \
-        char small[4];                                                            \
+        char sbuf[4];                                                            \
         size_t need = 0, need2 = 0;                                               \
         char *buf;                                                                \
-        otc_status rc = FN(o, small, sizeof small, &need);                        \
+        otc_status rc = FN(o, sbuf, sizeof sbuf, &need);                        \
         if (rc == OTC_E_NOT_FOUND) return NULL;                                   \
         if (rc == OTC_OK) {                                                       \
-            if (strlen(small) + 1 != need) { *bad = 1; return NULL; }             \
-            return xstrdup(small);                                                \
+            if (strlen(sbuf) + 1 != need) { *bad = 1; return NULL; }             \
+            return xstrdup(sbuf);                                                \
         }                                                                         \
-        if (rc != OTC_E_BUFFER_TOO_SMALL || need <= sizeof small                  \
-            || small[sizeof small - 1] != '\0') { *bad = 1; return NULL; }        \
+        if (rc != OTC_E_BUFFER_TOO_SMALL || need <= sizeof sbuf                  \
+            || sbuf[sizeof sbuf - 1] != '\0') { *bad = 1; return NULL; }        \
         if (FN(o, NULL, 0, &need2) != OTC_OK || need2 != need) {                 \
             *bad = 1; return NULL;                                                \
         }                                                                         \
