@@ -1,11 +1,14 @@
 # Checksum-sensitive data must keep the bytes as committed on every
 # platform. Git must not convert line endings in these files (for example
 # core.autocrlf=true on Windows), because the conformance suite checks the
-# fixtures by SHA-256 and compares the generated JSON byte for byte.
+# fixtures by SHA-256 and compares the generated JSON byte for byte. The
+# SDK copies of the name fold table, and the TypeScript table generated from
+# it, are also compared byte for byte with the suite's table.
 *.gz                  binary
 *.jsonl               -text
 *.sha256              -text
 conformance/fixtures/** -text
 conformance/cases/*.json -text
 conformance/api.json  -text
-conformance/name_fold.json -text
+name_fold.json        -text
+js/src/fold-table.ts  -text
