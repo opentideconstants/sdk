@@ -254,7 +254,7 @@ class Runner
 
     def stats(st)
         %i[type kind country source qc_status].to_h do |k|
-            [k.to_s, (st[k] || {}).to_h { |v, n| [v.to_s, n] }]
+            [k.to_s, (st.public_send(k) || {}).to_h { |v, n| [v.to_s, n] }]
         end
     end
 
