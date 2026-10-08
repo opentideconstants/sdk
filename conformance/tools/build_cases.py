@@ -32,6 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "fixtures"
 CASES = ROOT / "cases"
+CROSS = ROOT / "cross"
 FOLD = ROOT / "name_fold.json"
 SUITE_VERSION = "0.1"
 EARTH_R_KM = 6371.0088
@@ -317,6 +318,14 @@ def attribution(rel, station_ids=None):
     return f"Tidal constants: OpenTideConstants {r['datestamp']}, {ident}, CC BY 4.0. Sources: " + "; ".join(parts)
 
 
+def citation(rel):
+    """The dataset citation (§4.6): the year is the first four digits of the datestamp."""
+    r = rel.doc["release"]
+    d = r["datestamp"]
+    link = f"https://doi.org/{r['doi']}" if r.get("doi") else f"https://data.opentideconstants.org/OTC_{d}.json"
+    return f"OpenTideConstants contributors ({d[:4]}). OpenTideConstants, release {d} [Data set]. {link}"
+
+
 def stats(rel):
     def count(values):
         out = {}
@@ -414,6 +423,9 @@ def group_release(R2, R1):
                       step("licence", {"licence": None}, licence_id="no-such-licence")]))
     out.append(mcase("release/citation", "citation contains the version DOI and the datestamp", "4.6",
                      [step("citation", {"citation": {"$all": [{"$contains": "10.5072/zenodo.2"}, {"$contains": "20991231.2"}]}})]))
+    for cr in (R2, R1):
+        out.append(mcase(f"release/citation-exact-{cr.datestamp}", f"citation of {cr.datestamp}, exact text (DOI {'set' if cr.doc['release'].get('doi') else 'null'})", "4.6",
+                         [step("citation", {"citation": citation(cr)})], release=cr.datestamp))
     for label, ids in [("one-station", ["OTC-T-0006"]),
                        ("ordered-by-licence-id", ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"]),
                        ("offsets-only-subordinate", ["OTC-T-0003"]),
@@ -1016,6 +1028,100 @@ def group_download():
     return out
 
 
+def as_(role, st):
+    """A runner step for one role of a cross-SDK case (a list of roles: sent to all of them at once)."""
+    return {"as": role, **st}
+
+
+def group_cross(R2):
+    """The cross-SDK cases (spec §5.4, §5.5, §6.2, phase step S4). The driver runs each case once per ordered
+    pair of distinct runners (--cross); the writer fills the cache, the reader uses it."""
+    out = []
+    d = R2.datestamp
+    G = f"{SRV}/good/"
+    rdir = f"${{cache}}/v1/releases/{d}"
+    idx, jl = f"{rdir}/index-v1.json", f"{rdir}/OTC_{d}.jsonl"
+    fs_stream = ["fs", "fetch", "stream"]
+    roles = {"writer": fs_stream, "reader": fs_stream}
+    fill = [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode="stream")),
+            as_("writer", step("station_count", {"station_count": len(R2.active)})),
+            as_("writer", step("close")),
+            drv("assert_files", dir=rdir, present=[".verified", f"OTC_{d}.sha256", f"OTC_{d}.jsonl", f"OTC_{d}.meta.json", "index-v1.json"],
+                absent=[".lock"], no_tmp=True),
+            drv("assert_index", path=idx, jsonl=jl, datestamp=d)]
+    offline = [drv("server_stop"), drv("clear_log")]
+    no_requests = drv("assert_requests", source="any", count=0)
+    ids3 = ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"]
+    queries = [as_("reader", step("station_count", {"station_count": len(R2.active)})),
+               as_("reader", step("tombstone_count", {"tombstone_count": len(R2.tombs)})),
+               as_("reader", step("near", {**near(R2, 0.0, 179.95, 50), "tolerance": TOL}, lat=0.0, lon=179.95, radius_km=50)),
+               as_("reader", step("search", {"station_ids": search(R2, "tromso")}, name="tromso")),
+               as_("reader", step("stations", {"station_ids": [s["station_id"] for s in apply_filters(R2, R2.active, {"kind": "current"})]}, kind="current")),
+               as_("reader", step("station", {"station": enc_station(R2, R2.by_id["OTC-T-0003"])}, station_id="OTC-T-0003")),
+               as_("reader", step("citation", {"citation": citation(R2)})),
+               as_("reader", step("attribution", {"attribution": attribution(R2, ids3)}, station_ids=ids3))]
+    out.append(case("cross/cache-offline-stream", "one SDK fills the cache in stream mode; another opens it offline (server stopped) and gets the same answers, with no request", "5.4, 5.5, 6.2",
+                    fill + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("verify", {"verified": True})),
+                        as_("reader", step("release_files", {"files": {"$len_min": 4}}))] + queries + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("cached_releases", {"datestamps": [d]})),
+                        no_requests,
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d)],
+                    roles=roles))
+    out.append(case("cross/cache-offline-eager", "one SDK fills the cache in stream mode; another opens the cached .jsonl offline in eager mode", "5.4, 5.5, 6.1",
+                    fill + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="eager"))]
+                    + queries + [no_requests],
+                    roles={"writer": fs_stream, "reader": ["fs", "fetch", "eager"]}))
+    # The reader must use a fresh index that another SDK wrote, not rebuild it: a change to one entry (still
+    # fresh: the .jsonl digest and size match) shows in the reader's answers, and the file is not rewritten.
+    pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
+    country = R2.by_id["OTC-T-0011"]["country"]
+    out.append(case("cross/index-shared", "the reader uses the stream index the writer built (a fresh index is read, not rebuilt)", "6.2",
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
+                        as_("reader", step("close")),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"),
+                        no_requests],
+                    roles=roles))
+    out.append(case("cross/index-stale", "a stale stream index (its jsonl_sha256 does not match) is ignored, rebuilt and rewritten", "6.2",
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("json_set", path=idx, pointer="/jsonl_sha256", value="0" * 64)] + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
+                        as_("reader", step("stations", {"station_ids": [x["station_id"] for x in apply_filters(R2, R2.active, {"country": country})]}, country=country)),
+                        as_("reader", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d),
+                        no_requests],
+                    roles=roles))
+    out.append(case("cross/index-other-version", "an index with another index_version is stale: rebuilt and rewritten", "6.2",
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("json_set", path=idx, pointer="/index_version", value=2)] + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
+                        as_("reader", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d),
+                        no_requests],
+                    roles=roles))
+    # Two processes (two SDKs) open the same uncached release at once. The data file is slow, so the second one
+    # finds the lock (§5.4 Locks), waits for .verified and loads it: one download of each file in all.
+    both = ["writer", "reader"]
+    out.append(case("cross/lock-contention", "two SDKs open the same uncached release at once: the lock directory stops the second download", "5.4",
+                    [drv("server_rules", rules=[{"match": rf"/good/OTC_{re.escape(d)}\.jsonl$", "action": "slow", "delay_s": 2}]),
+                     as_(both, step("open", {"loaded_from": {"$any_of": ["download", "cache"]}, "datestamp": d},
+                                    release=d, base_url=G, cache_dir="${cache}", mode="stream")),
+                     as_(both, step("station_count", {"station_count": len(R2.active)})),
+                     drv("assert_requests", source="server", match=rf"/good/OTC_{re.escape(d)}\.jsonl$", status=200, count=1),
+                     drv("assert_files", dir=rdir, present=[".verified", "index-v1.json"], absent=[".lock"], no_tmp=True),
+                     drv("assert_index", path=idx, jsonl=jl, datestamp=d)],
+                    roles=roles, timeout_s=90))
+    return out
+
+
 GROUPS = {
     "load": lambda R2, R1: group_load(),
     "release": group_release,
@@ -1031,8 +1137,15 @@ GROUPS = {
 }
 
 
-def build(outdir: Path):
+def build(outdir: Path, crossdir: Path):
     R2, R1 = Rel("good", "20991231.2"), Rel("good", "20991231")
+    crossdir.mkdir(parents=True, exist_ok=True)
+    cross = group_cross(R2)
+    doc = {"suite_version": SUITE_VERSION, "group": "cross",
+           "description": "Generated by conformance/tools/build_cases.py from conformance/fixtures; do not edit. "
+                          "Run with driver.py --cross NAME=COMMAND (two or more runners).",
+           "cases": cross}
+    (crossdir / "cross.json").write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     outdir.mkdir(parents=True, exist_ok=True)
     seen = set()
     for name, fn in GROUPS.items():
@@ -1053,13 +1166,15 @@ def main():
     ap.add_argument("--check", action="store_true", help="rebuild in a temporary directory and compare with conformance/cases")
     a = ap.parse_args()
     if not a.check:
-        n = build(CASES)
-        print(f"wrote {n} cases to {CASES}")
+        n = build(CASES, CROSS)
+        print(f"wrote {n} cases to {CASES} and the cross-SDK cases to {CROSS}")
         return 0
     with tempfile.TemporaryDirectory() as tmp:
-        n = build(Path(tmp))
-        fresh = {p.name: p.read_bytes() for p in Path(tmp).glob("*.json")}
-        committed = {p.name: p.read_bytes() for p in CASES.glob("*.json")}
+        n = build(Path(tmp) / "cases", Path(tmp) / "cross")
+        fresh = {f"cases/{p.name}": p.read_bytes() for p in (Path(tmp) / "cases").glob("*.json")}
+        fresh.update({f"cross/{p.name}": p.read_bytes() for p in (Path(tmp) / "cross").glob("*.json")})
+        committed = {f"cases/{p.name}": p.read_bytes() for p in CASES.glob("*.json")}
+        committed.update({f"cross/{p.name}": p.read_bytes() for p in CROSS.glob("*.json")})
         bad = sorted(set(fresh) ^ set(committed)) + sorted(k for k in fresh if k in committed and fresh[k] != committed[k])
         if bad:
             print("FAIL: committed cases differ from a fresh build: " + ", ".join(bad))

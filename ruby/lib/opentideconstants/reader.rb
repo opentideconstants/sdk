@@ -83,7 +83,7 @@ class OpenTideConstants
         end
 
         # Loads a release from a data file whose checks are already done.
-        def load(path, mode:, files:, checks:)
+        def load(path, mode:, files:, checks:, index: nil, index_rows: nil)
             _, _, ext = parse_name(path)
             case ext
             when "json"
@@ -96,7 +96,7 @@ class OpenTideConstants
                 meta_path = files_read(path)[1]
                 meta = parse_json(read_text(meta_path))
                 Release.check_format!(meta)
-                load_jsonl(path, meta, mode: mode, files: files, checks: checks)
+                load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
@@ -111,17 +111,26 @@ class OpenTideConstants
                         files: files, checks: checks)
         end
 
-        def load_jsonl(path, meta, mode:, files:, checks:)
+        # index: the entries of a fresh index-v1.json (spec §6.2); the stations
+        # then come from it, and only the tombstone lines are read. Otherwise
+        # every line is read, and index_rows (an Array, if given) gets the
+        # index entry of each line.
+        def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil)
             io = File.open(path, "rb")
             lines = Enumerator.new do |y|
-                pos = 0
-                io.each_line do |line|
-                    len = line.bytesize
-                    unless line.strip.empty?
-                        raw = parse_json(line.force_encoding(Encoding::UTF_8))
-                        y << [raw, pos, len]
+                if index
+                    index.each { |e| y << [raw_from_index(e, io), e["offset"], e["length"]] }
+                else
+                    pos = 0
+                    io.each_line do |line|
+                        body = line.chomp
+                        unless line.strip.empty?
+                            raw = parse_json(body.force_encoding(Encoding::UTF_8))
+                            index_rows << index_entry(raw, pos, body.bytesize) if index_rows && raw.is_a?(Hash)
+                            y << [raw, pos, body.bytesize]
+                        end
+                        pos += line.bytesize
                     end
-                    pos += len
                 end
             end
             begin
@@ -133,6 +142,69 @@ class OpenTideConstants
             rel
         rescue SystemCallError, IOError => e
             raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+        end
+
+        SET_KEYS = %w[set_id source source_type quantity qc_status convention_id licence_id].freeze
+        ENTRY_STR = %w[name name_folded country type kind reference_station_id offsets_licence_id recommended_set_id].freeze
+
+        # The stream index entry of one line (spec §6.2). "kind" is the
+        # station's own kind; the client sets the resolved kind.
+        def index_entry(raw, pos, len)
+            str = ->(h, k) { h.is_a?(Hash) && h[k].is_a?(String) ? h[k] : nil }
+            num = ->(k) { raw[k].is_a?(Numeric) ? raw[k] : nil }
+            off = raw["subordinate_offsets"].is_a?(Hash) ? raw["subordinate_offsets"] : {}
+            rec_id = str.call(raw, "recommended_set_id")
+            kind = nil
+            sets = (raw["constant_sets"].is_a?(Array) ? raw["constant_sets"] : []).map do |cs|
+                cs = {} unless cs.is_a?(Hash)
+                if !rec_id.nil? && cs["set_id"] == rec_id
+                    kind = { "water_level" => "tide", "current" => "current" }.fetch(cs["quantity"], "other")
+                end
+                SET_KEYS.to_h { |k| [k, str.call(cs, k)] }.merge(
+                    "constituents" => Array(cs["constituents"]).filter_map { |c| c["name"] if c.is_a?(Hash) && c["name"].is_a?(String) }
+                )
+            end
+            name = str.call(raw, "name")
+            aliases = (raw["aliases"].is_a?(Hash) ? raw["aliases"] : {}).transform_values do |v|
+                v.is_a?(String) ? [v] : Array(v).grep(String)
+            end
+            { "offset" => pos, "length" => len, "station_id" => raw["station_id"], "status" => raw["status"],
+              "name" => name, "name_folded" => name && Fold.fold(name), "country" => str.call(raw, "country"),
+              "type" => str.call(raw, "type"), "lat" => num.call("lat"), "lon" => num.call("lon"), "kind" => kind,
+              "aliases" => aliases, "reference_station_id" => str.call(off, "reference_station_id"),
+              "offsets_licence_id" => str.call(off, "licence_id"), "recommended_set_id" => rec_id, "sets" => sets }
+        end
+
+        # True when e has every key of an index entry with the right type (spec §6.2).
+        def index_entry_ok?(e)
+            return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)
+            return false unless e["station_id"].is_a?(String) && e["status"].is_a?(String)
+            return false unless ENTRY_STR.all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(String)) }
+            return false unless %w[lat lon].all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(Numeric)) }
+            return false unless e["aliases"].is_a?(Hash) && e["aliases"].values.all? { |v| v.is_a?(Array) && v.all?(String) }
+            return false unless e["sets"].is_a?(Array)
+            e["sets"].all? do |cs|
+                cs.is_a?(Hash) && SET_KEYS.all? { |k| cs.key?(k) && (cs[k].nil? || cs[k].is_a?(String)) } &&
+                    cs["constituents"].is_a?(Array) && cs["constituents"].all?(String)
+            end
+        end
+
+        # The station document a load needs, from an index entry. A tombstone's
+        # own line is read (the index does not hold removed_in and removed_reason).
+        def raw_from_index(e, io)
+            if e["status"] == "removed"
+                io.seek(e["offset"])
+                return parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
+            end
+            raw = e.slice("station_id", "status", "name", "country", "type", "lat", "lon", "recommended_set_id", "aliases")
+            raw["constant_sets"] = e["sets"].map do |cs|
+                cs.reject { |k, _| k == "constituents" }.merge("constituents" => cs["constituents"].map { |n| { "name" => n } })
+            end
+            if e["reference_station_id"] || e["offsets_licence_id"]
+                raw["subordinate_offsets"] = { "reference_station_id" => e["reference_station_id"],
+                                               "licence_id" => e["offsets_licence_id"] }
+            end
+            raw
         end
 
         def read_text(path)

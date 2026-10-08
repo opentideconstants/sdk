@@ -88,11 +88,10 @@ class OpenTideConstants
                       qc_status: count.call(@set_qc))
         end
 
+        # The dataset citation (spec §4.6); the year is the first four digits of the datestamp.
         def citation
-            year = @created ? @created.year : @datestamp[0, 4]
             ident = @doi ? "https://doi.org/#{@doi}" : default_url
-            "OpenTideConstants (#{year}). OpenTideConstants tidal constants, release #{@datestamp} " \
-                "(format #{@format_version}). CC BY 4.0. #{ident}"
+            "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{ident}"
         end
 
         # The CC BY 4.0 attribution text for what an app shows (spec §4.6).
@@ -255,20 +254,10 @@ class OpenTideConstants
             nil
         end
 
-        # The stream index rows (spec §6.2), one per line of the .jsonl file
-        # (active stations; tombstones are in the index with their status).
-        # Written to the cache as index-v1.json by the client.
-        def stream_index
-            rows = @entries.map do |e|
-                { "offset" => e.pos, "length" => e.len, "station_id" => e.station_id, "status" => "active",
-                  "folded_name" => e.folded, "country" => e.country, "type" => e.type&.to_s, "kind" => e.kind&.to_s,
-                  "lat" => e.lat, "lon" => e.lon, "aliases" => e.aliases, "reference_station_id" => e.reference_id }
-            end
-            (rows + @tomb_pos.map do |t, pos, len|
-                { "offset" => pos, "length" => len, "station_id" => t.station_id, "status" => "removed",
-                  "folded_name" => Fold.fold(t.name.to_s), "country" => nil, "type" => nil, "kind" => nil,
-                  "lat" => nil, "lon" => nil, "aliases" => {}, "reference_station_id" => nil }
-            end).sort_by { |r| r["offset"] || 0 }
+        # The resolved kind of each active station, {station_id => "tide" | "current" | "other" | nil},
+        # for the stream index (spec §6.2). Used by the client.
+        def index_kinds
+            @entries.to_h { |e| [e.station_id, e.kind&.to_s] }
         end
 
         def default_url
@@ -455,7 +444,6 @@ class OpenTideConstants
             case q
             when "water_level" then :tide
             when "current" then :current
-            when nil then nil
             else :other
             end
         end

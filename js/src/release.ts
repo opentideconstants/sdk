@@ -15,8 +15,44 @@ const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------------------------------ index
 
-/** @internal One line (station or tombstone) of a release, as the stream index holds it (spec 6.2). */
+/** @internal One constant set in a stream index entry (spec 6.2). */
+export interface StoredSet {
+    set_id: string | null;
+    source: string | null;
+    source_type: string | null;
+    quantity: string | null;
+    qc_status: string | null;
+    convention_id: string | null;
+    licence_id: string | null;
+    constituents: string[];
+}
+
+/** @internal One entry of index-v1.json, exactly as spec 6.2 gives it (the same in every SDK). */
+export interface StoredEntry {
+    offset: number;
+    length: number;
+    station_id: string;
+    status: string;
+    name: string | null;
+    name_folded: string | null;
+    country: string | null;
+    type: string | null;
+    lat: number | null;
+    lon: number | null;
+    kind: string | null;
+    aliases: Record<string, string[]>;
+    reference_station_id: string | null;
+    offsets_licence_id: string | null;
+    recommended_set_id: string | null;
+    sets: StoredSet[];
+}
+
+const SET_KEYS = ["set_id", "source", "source_type", "quantity", "qc_status", "convention_id", "licence_id"] as const;
+const ENTRY_STR = ["name", "name_folded", "country", "type", "kind", "reference_station_id", "offsets_licence_id", "recommended_set_id"] as const;
+
+/** @internal One line (station or tombstone) of a release, as the SDK keeps it in memory: the stored entry plus derived facts. */
 export interface IndexEntry {
+    stored: StoredEntry;
     offset: number;
     length: number;
     station_id: string;
@@ -97,7 +133,6 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     const sets = arr(doc, "constant_sets").filter(isObject);
     const recId = str(doc, "recommended_set_id");
     let rec: JsonObject | null = null;
-    const names = new Set<string>();
     for (const cs of sets) {
         const conv = str(cs, "convention_id");
         const lic = str(cs, "licence_id");
@@ -105,34 +140,102 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
         if (conv === null || !conventions.has(conv)) throw new InvalidReleaseError(`set ${String(cs["set_id"])}: convention_id ${JSON.stringify(conv)} does not resolve`);
         if (lic === null || !licences.has(lic)) throw new InvalidReleaseError(`set ${String(cs["set_id"])}: licence_id ${JSON.stringify(lic)} does not resolve`);
         if (cs["set_id"] === recId) rec = cs;
-        for (const c of arr(cs, "constituents")) if (isObject(c) && typeof c["name"] === "string") names.add(c["name"]);
     }
     if (status === "active") {
         if (typeof doc["lat"] !== "number" || typeof doc["lon"] !== "number") throw new InvalidReleaseError(`station ${id} has no lat or lon`);
         if (recId !== null && rec === null) throw new InvalidReleaseError(`station ${id}: recommended_set_id ${recId} does not resolve`);
     }
     const off = obj(doc, "subordinate_offsets");
-    const type = str(doc, "type");
+    const offLic = off ? str(off, "licence_id") : null;
     let kind: string | null = null;
     if (rec) {
         const q = str(rec, "quantity");
         kind = q === "water_level" ? "tide" : q === "current" ? "current" : "other";
     }
-    return {
+    const name = str(doc, "name");
+    return entryFromStored({
         offset, length, station_id: id, status,
-        name: str(doc, "name") ?? "", name_folded: foldName(str(doc, "name") ?? ""),
-        country: str(doc, "country"), type, kind, lat: num(doc, "lat"), lon: num(doc, "lon"),
+        name, name_folded: name === null ? null : foldName(name),
+        country: str(doc, "country"), type: str(doc, "type"), lat: num(doc, "lat"), lon: num(doc, "lon"), kind,
         aliases: aliasMap(doc),
-        reference_station_id: type === "subordinate" && off ? str(off, "reference_station_id") : null,
-        recommended_set_id: rec ? recId : null,
-        recommended_source_type: rec ? str(rec, "source_type") : null,
-        recommended_licence_id: rec ? str(rec, "licence_id") : null,
-        offsets_licence_id: off ? str(off, "licence_id") : null,
-        usable_sources: [...new Set(sets.filter((cs) => cs["qc_status"] !== "excluded").map((cs) => str(cs, "source")).filter((s): s is string => s !== null))],
-        set_sources: sets.map((cs) => str(cs, "source") ?? ""),
-        set_qc_statuses: sets.map((cs) => str(cs, "qc_status") ?? ""),
+        reference_station_id: off ? str(off, "reference_station_id") : null,
+        offsets_licence_id: offLic,
+        recommended_set_id: recId,
+        sets: sets.map((cs) => ({
+            set_id: str(cs, "set_id"), source: str(cs, "source"), source_type: str(cs, "source_type"), quantity: str(cs, "quantity"),
+            qc_status: str(cs, "qc_status"), convention_id: str(cs, "convention_id"), licence_id: str(cs, "licence_id"),
+            constituents: arr(cs, "constituents").filter(isObject).map((c) => str(c, "name")).filter((x): x is string => x !== null),
+        })),
+    });
+}
+
+/** @internal The in-memory entry of a stored index entry (spec 6.2). */
+export function entryFromStored(s: StoredEntry): IndexEntry {
+    const rec = s.recommended_set_id === null ? undefined : s.sets.find((cs) => cs.set_id === s.recommended_set_id);
+    const names = new Set<string>();
+    for (const cs of s.sets) for (const c of cs.constituents) names.add(c);
+    return {
+        stored: s, offset: s.offset, length: s.length, station_id: s.station_id, status: s.status,
+        name: s.name ?? "", name_folded: s.name_folded ?? "",
+        country: s.country, type: s.type, kind: s.kind, lat: s.lat, lon: s.lon,
+        aliases: s.aliases,
+        reference_station_id: s.type === "subordinate" ? s.reference_station_id : null,
+        recommended_set_id: rec ? s.recommended_set_id : null,
+        recommended_source_type: rec ? rec.source_type : null,
+        recommended_licence_id: rec ? rec.licence_id : null,
+        offsets_licence_id: s.offsets_licence_id,
+        usable_sources: [...new Set(s.sets.filter((cs) => cs.qc_status !== "excluded").map((cs) => cs.source).filter((x): x is string => x !== null))],
+        set_sources: s.sets.map((cs) => cs.source ?? ""),
+        set_qc_statuses: s.sets.map((cs) => cs.qc_status ?? ""),
         constituent_names: [...names].sort(),
     };
+}
+
+/** @internal The index-v1.json document (spec 6.2) for these entries (kinds resolved). */
+export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha256: string, jsonlSize: number, by: string): JsonObject {
+    return {
+        index_version: 1, datestamp, jsonl: `OTC_${datestamp}.jsonl`, jsonl_sha256: jsonlSha256, jsonl_size: jsonlSize, by,
+        stations: entries.map((e) => ({ ...e.stored, kind: e.kind })) as unknown as Json[],
+    };
+}
+
+/**
+ * @internal The entries of a fresh index-v1.json, or null when it is stale or cannot be used (spec 6.2).
+ * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed and every
+ * reference resolving.
+ */
+export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string | null, jsonlSize: number | null,
+    conventions: Set<string>, licences: Set<string>): IndexEntry[] | null {
+    if (!isObject(v) || v["index_version"] !== 1 || v["datestamp"] !== datestamp || v["jsonl"] !== `OTC_${datestamp}.jsonl`) return null;
+    if (jsonlSha256 === null || v["jsonl_sha256"] !== jsonlSha256 || jsonlSize === null || v["jsonl_size"] !== jsonlSize) return null;
+    const stations = v["stations"];
+    if (!Array.isArray(stations)) return null;
+    const strOrNull = (x: unknown) => x === null || typeof x === "string";
+    const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
+    const isInt = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0;
+    const out: IndexEntry[] = [];
+    for (const e of stations) {
+        if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
+        if (!ENTRY_STR.every((k) => k in e && strOrNull(e[k])) || !("lat" in e) || !("lon" in e) || !numOrNull(e["lat"]) || !numOrNull(e["lon"])) return null;
+        const aliases = e["aliases"];
+        if (!isObject(aliases) || !Object.values(aliases).every((ids) => Array.isArray(ids) && ids.every((x) => typeof x === "string"))) return null;
+        const sets = e["sets"];
+        if (!Array.isArray(sets)) return null;
+        for (const cs of sets) {
+            if (!isObject(cs) || !SET_KEYS.every((k) => k in cs && strOrNull(cs[k]))) return null;
+            const cons = cs["constituents"];
+            if (!Array.isArray(cons) || !cons.every((x) => typeof x === "string")) return null;
+            if (e["status"] === "active" && (!conventions.has(cs["convention_id"] as string) || !licences.has(cs["licence_id"] as string))) return null;
+        }
+        if (e["status"] === "active") {
+            if (e["offsets_licence_id"] !== null && !licences.has(e["offsets_licence_id"] as string)) return null;
+            if (e["recommended_set_id"] !== null && !sets.some((cs) => isObject(cs) && cs["set_id"] === e["recommended_set_id"])) return null;
+            if (e["lat"] === null || e["lon"] === null) return null;
+        }
+        const stored = e as unknown as StoredEntry;
+        out.push(entryFromStored({ ...stored, kind: stored.kind }));
+    }
+    return out;
 }
 
 /** @internal Resolve the kind of subordinate stations with offsets only (from their reference station). */
@@ -594,9 +697,9 @@ export class Release {
         return this.#tombById.size;
     }
 
-    /** The dataset citation, with the version DOI. */
+    /** The dataset citation (spec 4.6); the year is the first four digits of the datestamp. */
     get citation(): string {
-        const year = this.created ? this.created.getUTCFullYear() : this.datestamp.slice(0, 4);
+        const year = this.datestamp.slice(0, 4);
         const where = this.doi ? `https://doi.org/${this.doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
         return `OpenTideConstants contributors (${year}). OpenTideConstants, release ${this.datestamp} [Data set]. ${where}`;
     }

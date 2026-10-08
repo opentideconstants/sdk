@@ -393,16 +393,3 @@ def build_station(d, conventions, licences, kind):
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         raise InvalidReleaseError(f"station {d.get('station_id') if isinstance(d, dict) else d!r}: {e!r}") from e
-
-
-def own_kind(d):
-    """The station's kind from its own data: the field when the file has it, else the quantity of the
-    recommended set. None when only the reference station can tell (subordinate with offsets only)."""
-    k = d.get("kind")
-    if k is not None:
-        return k
-    rid = d.get("recommended_set_id")
-    for cs in d.get("constant_sets") or ():
-        if cs.get("set_id") == rid:
-            return {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
-    return None

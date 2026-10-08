@@ -206,6 +206,7 @@ struct otc_release {
     otc_file_info  *files;
     size_t          n_files;
     otc_loaded_from loaded_from;
+    int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
     otc__kvlist     source_counts;
     otc__kvlist     qc_counts;
     /* the only mutable state after open: the last failure on this handle */
@@ -220,6 +221,9 @@ const otc__entry *otc__find_entry(const otc_release *rel, const char *id);
 const otc__tomb *otc__find_tomb(const otc_release *rel, const char *id);
 const otc_convention *otc__find_convention(const otc_release *rel, const char *id);
 const otc_licence *otc__find_licence(const otc_release *rel, const char *id);
+/* The index-v1.json document (spec 6.2) of an open release: one more pass
+ * over the .jsonl. NULL when out of memory or the file cannot be read. */
+cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by);
 /* Reads and parses one line of the .jsonl file. */
 otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length, cJSON **out);
 int otc__filter_match(const otc_filter *f, const otc__entry *e);

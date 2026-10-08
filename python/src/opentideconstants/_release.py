@@ -19,7 +19,7 @@ from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, Stat
                       StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, build_station, freeze,
-                      own_kind, parse_time)
+                      parse_time)
 
 SUPPORTED_FORMAT_MAJORS = (0,)
 EARTH_R_KM = 6371.0088
@@ -87,27 +87,81 @@ def haversine(lat1, lon1, lat2, lon2):
 
 # --------------------------------------------------------------------------- index entries
 
+_SET_KEYS = ("set_id", "source", "source_type", "quantity", "qc_status", "convention_id", "licence_id")
+_ENTRY_STR = ("name", "name_folded", "country", "type", "kind", "reference_station_id", "offsets_licence_id",
+              "recommended_set_id")
+
+
+def _s(d, k):
+    v = d.get(k)
+    return v if isinstance(v, str) else None
+
+
+def _n(d, k):
+    v = d.get(k)
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
 def _entry(d, offset=None, length=None):
-    """The index entry of one station line (spec §6.2, plus the set facts the filters need)."""
-    e = {"station_id": d["station_id"], "status": d.get("status")}
-    if offset is not None:
-        e["offset"], e["length"] = offset, length
-    if d.get("status") != "active":
-        return e
-    off = d.get("subordinate_offsets") or {}
-    e.update({
-        "name": d.get("name"), "name_folded": fold(d.get("name") or ""), "country": d.get("country"),
-        "type": d.get("type"), "kind": own_kind(d), "lat": d.get("lat"), "lon": d.get("lon"),
-        "aliases": {k: (list(v) if isinstance(v, list) else [v]) for k, v in (d.get("aliases") or {}).items()},
-        "reference_station_id": off.get("reference_station_id"),
-        "recommended_set_id": d.get("recommended_set_id"),
-        "sets": [{"set_id": s.get("set_id"), "source": s.get("source"), "source_type": s.get("source_type"),
-                  "qc_status": s.get("qc_status"), "licence_id": s.get("licence_id"),
-                  "constituents": [c.get("name") for c in s.get("constituents") or ()]}
-                 for s in d.get("constant_sets") or ()],
-        "offsets_licence_id": off.get("licence_id"),
-    })
-    return e
+    """The stream index entry of one line (spec §6.2): every key, for active stations and tombstones.
+    `kind` is the station's own kind here; _resolve_kinds finishes it."""
+    off = d.get("subordinate_offsets")
+    off = off if isinstance(off, dict) else {}
+    rec_id = _s(d, "recommended_set_id")
+    sets, kind = [], None
+    for cs in d.get("constant_sets") or ():
+        sets.append({**{k: _s(cs, k) for k in _SET_KEYS},
+                     "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)]})
+        if rec_id is not None and cs.get("set_id") == rec_id:
+            kind = {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
+    name = _s(d, "name")
+    return {
+        "offset": offset, "length": length, "station_id": d["station_id"], "status": d.get("status"),
+        "name": name, "name_folded": fold(name) if name is not None else None,
+        "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"), "kind": kind,
+        "aliases": {k: ([v] if isinstance(v, str) else [x for x in v if isinstance(x, str)])
+                    for k, v in (d.get("aliases") or {}).items()},
+        "reference_station_id": _s(off, "reference_station_id"), "offsets_licence_id": _s(off, "licence_id"),
+        "recommended_set_id": rec_id, "sets": sets,
+    }
+
+
+def _usable_index(idx, name, sha256, size, conv, lic):
+    """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2)."""
+    def is_int(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    def is_num(v):
+        return v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
+
+    if not isinstance(idx, dict) or not is_int(idx.get("index_version")) or idx["index_version"] != INDEX_VERSION:
+        return None
+    if idx.get("jsonl") != name or name != f"OTC_{idx.get('datestamp')}.jsonl" or idx.get("jsonl_sha256") != sha256 \
+            or not is_int(idx.get("jsonl_size")) or idx["jsonl_size"] != size or not isinstance(idx.get("stations"), list):
+        return None
+    out = []
+    for e in idx["stations"]:
+        if not isinstance(e, dict) or not is_int(e.get("offset")) or not is_int(e.get("length")) \
+                or not isinstance(e.get("station_id"), str) or not isinstance(e.get("status"), str) \
+                or not all(k in e and (e[k] is None or isinstance(e[k], str)) for k in _ENTRY_STR) \
+                or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
+                or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list):
+            return None
+        if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
+            return None
+        for cs in e["sets"]:
+            if not isinstance(cs, dict) or not all(k in cs and (cs[k] is None or isinstance(cs[k], str)) for k in _SET_KEYS) \
+                    or not isinstance(cs.get("constituents"), list) or not all(isinstance(x, str) for x in cs["constituents"]):
+                return None
+            if e["status"] == "active" and (cs["convention_id"] not in conv or cs["licence_id"] not in lic):
+                return None  # a reference that does not resolve: rebuild, and the pass raises invalid_release
+        if e["status"] == "active":
+            if e["offsets_licence_id"] is not None and e["offsets_licence_id"] not in lic:
+                return None
+            if e["recommended_set_id"] is not None and e["recommended_set_id"] not in {cs["set_id"] for cs in e["sets"]}:
+                return None
+        out.append(e)
+    return out
 
 
 def _resolve_kinds(entries):
@@ -265,10 +319,9 @@ class Release:
 
     @property
     def citation(self) -> str:
-        created = self.created
-        year = created.year if created else self.datestamp[:4]
+        """The dataset citation (spec §4.6); the year is the first four digits of the datestamp."""
         ident = f"https://doi.org/{self.doi}" if self.doi else f"{DATA_URL}OTC_{self.datestamp}.json"
-        return f"OpenTideConstants contributors ({year}). OpenTideConstants, release {self.datestamp} [Data set]. {ident}"
+        return f"OpenTideConstants contributors ({self.datestamp[:4]}). OpenTideConstants, release {self.datestamp} [Data set]. {ident}"
 
     # ---- station access
 
@@ -376,7 +429,7 @@ class Release:
             raise InvalidArgumentError("the query is empty")
         ranked = []
         for e in self._filtered(country, type, kind, source, source_type):
-            n = e["name_folded"]
+            n = e["name_folded"] or ""
             if n == q:
                 r = 0
             elif match is not None:
@@ -509,7 +562,8 @@ def _validate_refs(d, conventions, licences):
         build_station(d, conventions, licences, None)
 
 
-def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None) -> Release:
+def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None,
+                  index_sha256: Optional[str] = None) -> Release:
     """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json)."""
     name = path.name
     if name.endswith(".jsonl"):
@@ -518,7 +572,7 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         conv = {c.convention_id: c for c in (Convention._parse(c) for c in meta.get("conventions") or ())}
         lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
         if mode == "stream":
-            entries = _stream_index(path, conv, lic, index_path)
+            entries = _stream_index(path, conv, lic, index_path, index_sha256)
             return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path)
         data = _read_bytes(path)
         docs = []
@@ -573,18 +627,19 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _stream_index(path: Path, conv, lic, index_path: Optional[Path]):
-    """Read index-v1.json when it matches the .jsonl, else make one pass and build it (spec §6.2)."""
+def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha256: Optional[str] = None):
+    """Use index-v1.json when it is fresh, else make one pass over the .jsonl and write it (spec §6.2).
+    index_sha256: the .jsonl digest from .verified (computed when not given)."""
     size = path.stat().st_size if path.exists() else None
     if size is None:
         raise FileError(f"cannot open {path}", path=str(path))
     if index_path is not None and index_path.exists():
         try:
             idx = json.loads(index_path.read_text(encoding="utf-8"))
-            if (idx.get("index_version") == INDEX_VERSION and idx.get("jsonl_size") == size
-                    and idx.get("jsonl_sha256") == file_sha256(path)):
-                return idx["entries"]
-        except (OSError, ValueError, KeyError, AttributeError):
+            entries = _usable_index(idx, path.name, index_sha256 or file_sha256(path), size, conv, lic)
+            if entries is not None:
+                return entries
+        except (OSError, ValueError):
             pass  # a stale or broken index is rebuilt
     entries = []
     h = hashlib.sha256()
@@ -609,8 +664,9 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path]):
     _resolve_kinds(entries)
     if index_path is not None:
         from ._cache import atomic_write
-        doc = {"index_version": INDEX_VERSION, "jsonl_sha256": h.hexdigest(), "jsonl_size": size,
-               "entries": entries}
+        from ._client import SDK
+        doc = {"index_version": INDEX_VERSION, "datestamp": path.name[len("OTC_"):-len(".jsonl")], "jsonl": path.name,
+               "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
         try:
             atomic_write(index_path, json.dumps(doc, ensure_ascii=False).encode("utf-8"))
         except OSError:
