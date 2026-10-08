@@ -14,8 +14,10 @@ are in conformance/README.md.
     uv run conformance/driver.py --selftest        (check the fixture server and proxy; no runner)
     uv run conformance/driver.py --list            (print the expanded case ids)
 
-Exit status: 0 when every case that ran passed, 1 otherwise, 2 for a usage or
-case-file error.
+Exit status: 0 when at least one case ran and every case that ran passed; 1 when
+a case failed or no case ran; 2 for a usage error, a case-file error, a runner
+that fails the handshake, or a harness error (an exception in the driver while
+it ran a case; the case is reported as failed and the run goes on).
 """
 from __future__ import annotations
 
@@ -84,6 +86,10 @@ PLACEHOLDERS = {"fixtures", "server", "proxy", "tmp", "cache"}
 
 class CaseError(Exception):
     pass
+
+
+class RunnerError(Exception):
+    """The runner broke the protocol (a line that is not JSON, a bad hello)."""
 
 
 # --------------------------------------------------------------------------- matching
@@ -159,23 +165,40 @@ def match(exp, act, tol, path="result"):
     raise CaseError(f"cannot match {exp!r}")
 
 
+def reply_problems(reply):
+    """Check the shape of a runner reply (README "The runner protocol"); return problems."""
+    if not isinstance(reply, dict) or "ok" not in reply:
+        return [f"malformed reply {json.dumps(reply)[:200]}"]
+    if not isinstance(reply["ok"], bool):
+        return [f"malformed reply: ok is not a boolean: {json.dumps(reply)[:200]}"]
+    if not reply["ok"]:
+        e = reply.get("error")
+        if not isinstance(e, dict):
+            return [f"malformed reply: error is not an object: {json.dumps(reply)[:200]}"]
+        if "fields" in e and e["fields"] is not None and not isinstance(e["fields"], dict):
+            return [f"malformed reply: error.fields is not an object: {json.dumps(reply)[:200]}"]
+    return []
+
+
 def evaluate(expect, reply):
     """Compare a runner reply with a step expectation; return mismatch messages."""
     tol = expect.get("tolerance", DEFAULT_TOL)
-    if not isinstance(reply, dict) or "ok" not in reply:
-        return [f"malformed reply {json.dumps(reply)[:200]}"]
+    bad = reply_problems(reply)
+    if bad:
+        return bad
     if "error" in expect:
         if reply["ok"]:
             return [f"expected error {expect['error']!r}, got a result {json.dumps(reply.get('result'))[:200]}"]
-        e = reply.get("error") or {}
+        e = reply["error"]
         out = []
         if e.get("code") != expect["error"]:
             out.append(f"expected error {expect['error']!r}, got error {e.get('code')!r} ({str(e.get('message'))[:200]})")
+        fields = e.get("fields") or {}
         for k, v in (expect.get("error_fields") or {}).items():
-            out += match(v, (e.get("fields") or {}).get(k, _MISSING), tol, f"error.fields.{k}")
+            out += match(v, fields.get(k, _MISSING), tol, f"error.fields.{k}")
         return out
     if not reply["ok"]:
-        e = reply.get("error") or {}
+        e = reply["error"]
         return [f"expected a result, got error {e.get('code')!r} ({str(e.get('message'))[:200]})"]
     result = reply.get("result")
     if not isinstance(result, dict):
@@ -314,7 +337,7 @@ class Runner:
         try:
             return json.loads(line)
         except json.JSONDecodeError:
-            raise ValueError(f"runner printed a line that is not JSON: {line[:200]!r}")
+            raise RunnerError(f"runner printed a line that is not JSON: {line[:200]!r}")
 
     def send(self, msg):
         self.proc.stdin.write((json.dumps(msg) + "\n").encode())
@@ -331,6 +354,17 @@ class Runner:
             self.proc.kill()
             self.proc.wait()
         self.stderr_f.close()
+
+
+def parse_hello(line):
+    """Validate the runner's first line: {"hello": {"runner": str, "features": [str, ...], ...}}."""
+    if not isinstance(line, dict) or not isinstance(line.get("hello"), dict):
+        raise RunnerError(f"first line is not a hello object: {json.dumps(line)[:200]}")
+    hello = line["hello"]
+    feats = hello.get("features")
+    if not isinstance(feats, list) or not all(isinstance(f, str) for f in feats):
+        raise RunnerError(f"hello.features is not a list of strings: {json.dumps(hello)[:200]}")
+    return hello
 
 
 def runner_env(extra):
@@ -357,7 +391,8 @@ def act_assert_requests(a, srv, proxy):
         entries += proxy.log.entries()
     entries.sort(key=lambda e: e["t"])
     if "match" in a:
-        entries = [e for e in entries if e["path"] and re.search(a["match"], e["path"])]
+        rx = re.compile(a["match"])  # compile first: a bad pattern is a case error even when the log is empty
+        entries = [e for e in entries if e["path"] and rx.search(e["path"])]
     if "status" in a:
         entries = [e for e in entries if e["status"] == a["status"]]
     if a.get("has_query"):
@@ -444,6 +479,8 @@ def run_action(st, ctx, srv, proxy):
         if not p.is_file():
             return [f"corrupt: {p} does not exist"], None
         data = bytearray(p.read_bytes())
+        if not data:
+            return [f"corrupt: {p} is empty"], None
         i = a.get("offset", 0) % len(data)
         data[i] ^= 0x01
         p.write_bytes(bytes(data))
@@ -494,13 +531,15 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
     def start():
         r = Runner(runner_cmd, runner_env(env_extra), stderr_path, cwd=str(HERE.parent))
         hello = r.read(60)
-        if "hello" not in hello:
-            raise ValueError(f"first line is not a hello: {json.dumps(hello)[:200]}")
+        if not isinstance(hello, dict) or "hello" not in hello:
+            raise RunnerError(f"first line is not a hello: {json.dumps(hello)[:200]}")
         return r
 
+    cur = {"step": None}
     try:
         runner = start()
         for i, st in enumerate(case["steps"]):
+            cur = {"step": i, "driver": st["driver"]} if "driver" in st else {"step": i, "op": st.get("op")}
             if "driver" in st:
                 problems, restart_env = run_action(st, ctx, srv, proxy)
                 if restart_env is not None:
@@ -523,7 +562,17 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
                     break
             runner.send(msg)
             reply = runner.read(step_timeout)
-            if expect is not None:
+            if expect is None:
+                # an uncompared step still must not fail: a malformed or ok:false reply fails the case
+                problems = reply_problems(reply) or (
+                    [f"unexpected error {reply['error'].get('code')!r} ({str(reply['error'].get('message'))[:200]})"]
+                    if not reply["ok"] else [])
+                if problems:
+                    stats["steps_failed"] += 1
+                    failures.append({"step": i, "op": st["op"], "args": msg["args"], "problems": problems})
+                    if not all_steps:
+                        break
+            else:
                 stats["steps_compared"] += 1
                 problems = evaluate(subst(expect, ctx), reply)
                 if problems:
@@ -533,8 +582,11 @@ def run_case(case, runner_cmd, hello_features, srv, proxy, keep_tmp, all_steps, 
                         break
             if last:
                 break
-    except (TimeoutError, EOFError, ValueError, OSError, CaseError) as e:
-        failures.append({"step": None, "problems": [f"{type(e).__name__}: {e}"]})
+    except (TimeoutError, EOFError, RunnerError, OSError) as e:
+        failures.append({**cur, "problems": [f"{type(e).__name__}: {e}"]})
+    except Exception as e:  # a case-file or driver error: fail this case, flag the run, go on
+        stats["harness_errors"] += 1
+        failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
     finally:
         if runner:
             runner.close()
@@ -663,12 +715,22 @@ def main():
 
     if a.selftest:
         return selftest()
-    raw = load_cases(Path(a.cases))
-    cases = expand(raw)
+    try:
+        raw = load_cases(Path(a.cases))
+        cases = expand(raw)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        print(f"case files in {a.cases}: cannot load: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
     if a.only:
-        cases = [c for c in cases if re.search(a.only, c["id"])]
+        try:
+            only = re.compile(a.only)
+        except re.error as e:
+            print(f"--only {a.only!r}: not a regular expression: {e}", file=sys.stderr)
+            return 2
+        cases = [c for c in cases if only.search(c["id"])]
     if a.check_cases:
-        problems = check_cases(raw) + check_cases([c for c in expand(raw)])
+        # non-matrix cases are the same before and after expansion: lint them once
+        problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
         for p in problems:
             print("PROBLEM", p)
         print(f"case check: {len(raw)} case definitions, {len(expand(raw))} expanded cases, {len(problems)} problems")
@@ -686,13 +748,18 @@ def main():
     proxy = RecordingProxy().start()
     probe = Runner(cmd, runner_env({}), os.devnull, cwd=str(HERE.parent))
     try:
-        hello = probe.read(60)["hello"]
+        hello = parse_hello(probe.read(60))
+    except (TimeoutError, EOFError, RunnerError, OSError) as e:
+        print(f"runner failed the handshake: {type(e).__name__}: {e}", file=sys.stderr)
+        srv.shutdown()
+        proxy.shutdown()
+        return 2
     finally:
         probe.close()
-    features = set(hello.get("features", []))
+    features = set(hello["features"])
     print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}")
     print(f"fixture server {srv.url}  proxy {proxy.url}")
-    stats = {"steps_compared": 0, "steps_failed": 0}
+    stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
     counts = {"PASS": 0, "FAIL": 0, "SKIP": 0}
     t0 = time.monotonic()
@@ -725,6 +792,12 @@ def main():
           f"({ran} ran; {stats['steps_compared']} runner steps compared, {stats['steps_failed']} failed) in {time.monotonic() - t0:.1f} s")
     if a.report:
         Path(a.report).write_text(json.dumps({"runner": hello, "counts": counts, "steps": stats, "cases": report}, indent=1) + "\n")
+    if stats["harness_errors"]:
+        print(f"{stats['harness_errors']} harness error(s): a case file or the driver is wrong (exit 2)")
+        return 2
+    if ran == 0:
+        print("no case ran: check --only and the features the runner reports (exit 1)")
+        return 1
     return 0 if counts["FAIL"] == 0 else 1
 
 
