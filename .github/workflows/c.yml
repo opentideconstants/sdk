@@ -1,0 +1,135 @@
+name: C library
+
+on:
+  push:
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml"]
+  pull_request:
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc, runner: c/build/otc_runner }
+          - { os: ubuntu-24.04, cc: clang, runner: c/build/otc_runner }
+          - { os: macos-14, cc: clang, runner: c/build/otc_runner }
+          - { os: windows-2022, cc: msvc, runner: c/build/Debug/otc_runner.exe }
+    steps:
+      # The fixtures are checked by SHA-256: Windows must not rewrite them to CRLF.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "${{ matrix.cc }}" = msvc ]; then
+            cmake -S c -B c/build
+          else
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          fi
+      - name: Build
+        run: cmake --build c/build --config Debug --parallel
+      - name: Conformance suite (profile c, no otc_fetch)
+        run: python conformance/driver.py --runner ${{ matrix.runner }}
+      - name: Conformance suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner ${{ matrix.runner }}
+
+  sanitizers:
+    name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: clang, sanitize: "address,undefined" }
+          - { cc: gcc, sanitize: "address,undefined" }
+          - { cc: clang, sanitize: "thread" }
+    # The driver does not check a runner's exit status when it closes it, so a report
+    # written at exit (a leak) would not fail a case. Every report goes to a log file,
+    # and the job fails if any log file exists.
+    env:
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:log_path=${{ github.workspace }}/san/asan
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=${{ github.workspace }}/san/ubsan
+      TSAN_OPTIONS: halt_on_error=1:log_path=${{ github.workspace }}/san/tsan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }}
+      - run: cmake --build c/build --parallel
+      # TSan on recent Ubuntu kernels needs fewer ASLR bits.
+      - run: sudo sysctl vm.mmap_rnd_bits=28
+      - run: mkdir -p san
+      - run: python conformance/driver.py --runner c/build/otc_runner
+      - run: python conformance/driver.py --runner c/build/otc_runner
+        env: { OTC_RUNNER_THREADS: "8" }
+      - name: No sanitizer reports
+        run: |
+          if [ -n "$(ls -A san)" ]; then head -50 san/*; exit 1; fi
+          echo "no sanitizer report files"
+
+  valgrind:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug && cmake --build c/build --parallel
+      # The driver ignores the runner's exit status at close, so every Valgrind report
+      # goes to a log file per process; the job fails if any of them is not empty.
+      - run: mkdir -p vg
+      - name: Conformance suite under Valgrind
+        env:
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/%p.log
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh
+      - name: Conformance suite under Valgrind, 4 threads
+        env:
+          OTC_RUNNER_THREADS: "4"
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh
+      - name: No Valgrind reports
+        run: |
+          echo "valgrind log files: $(ls vg | wc -l)"
+          test "$(ls vg | wc -l)" -gt 400
+          bad=$(find vg -type f -size +0)
+          if [ -n "$bad" ]; then head -60 $bad; exit 1; fi
+          echo "every valgrind log is empty"
+
+  amalgamation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python c/tools/gen_sources.py --check
+      - run: python c/tools/check_manifest.py
+      - run: python c/tools/amalgamate.py --out dist
+      - name: Build with only cc -std=c99
+        run: cc -std=c99 -c dist/opentideconstants.c -o dist/otc.o
+      - name: No warnings with -Wall -Wextra -pedantic
+        run: cc -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
+      - name: The runner on the amalgamation passes the suite
+        run: |
+          cc -std=c99 -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
+          python conformance/driver.py --runner dist/otc_runner
+      - name: Vendored files match their recorded SHA-256
+        run: |
+          cd c && sha256sum -c <<'SUMS'
+          298581a04a36c0165da4b0aade235c23088cb2faa58651d720ea2f3706ed0b0d  vendor/cjson/cJSON.c
+          25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee  vendor/cjson/cJSON.h
+          a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c  vendor/cjson/LICENSE
+          7a74437adc78576b8faff060f9573ba88a6da798914f45d263c75b149add3d27  vendor/sha256/sha-256.c
+          c2173d83813a0c29fcc3345ce489766efeadee6a52ca927ecd0f917a120df9fb  vendor/sha256/sha-256.h
+          506de94a03e23bbc34e32a8b628b56688ac7c33672982388822816887727f1ac  vendor/sha256/LICENSE.md
+          SUMS
