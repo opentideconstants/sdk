@@ -237,7 +237,8 @@ class OpenTideConstants:
             if self._verify_on_open:
                 self._check_file(p, rec.get("sha256"))
         return load_document(path, mode, self._cached_files(datestamp),
-                             index_path=d / "index-v1.json" if mode == "stream" else None)
+                             index_path=d / "index-v1.json" if mode == "stream" else None,
+                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"))
 
     def _newest_cached(self, mode: str):
         for ds in self._cache.cached():
@@ -445,7 +446,8 @@ class OpenTideConstants:
                     files[n] = {"sha256": sha, "size": written.get(n, prev.get("size")), "url": self._url(n)}
             files_infos = [FileInfo(n, f.get("url"), f.get("size"), f.get("sha256")) for n, f in sorted(files.items())]
             rel = load_document(d / data_name, mode, files_infos,
-                                index_path=d / "index-v1.json" if mode == "stream" else None)
+                                index_path=d / "index-v1.json" if mode == "stream" else None,
+                                index_sha256=(files.get(data_name) or {}).get("sha256"))
             verified = {"files": files, "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "by": SDK, "datestamp": datestamp, "format_version": rel.format_version}
             try:
