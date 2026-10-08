@@ -1,0 +1,43 @@
+{
+ "releases": [
+  {
+   "concept_doi": null,
+   "created": "2099-12-31T00:00:00Z",
+   "datestamp": "20991231",
+   "doi": null,
+   "files": [
+    {
+     "name": "OTC_20991231.json",
+     "sha256": "cf4d6513245ee302043e6d7078fd8c0acee0b3743005b5c39c99902d74e8bda7",
+     "size": 22007,
+     "url": "OTC_20991231.json"
+    },
+    {
+     "name": "OTC_20991231.json.gz",
+     "sha256": "7433eb166bba59c0a5b3184213b7dd51a57234968f6703ec77d2b04b9a699c06",
+     "size": 3548,
+     "url": "OTC_20991231.json.gz"
+    },
+    {
+     "name": "OTC_20991231.jsonl",
+     "sha256": "3e499d7ed53cd10c9106422d76d3de8730e566bc20eeed650d84c9aac4763330",
+     "size": 18957,
+     "url": "OTC_20991231.jsonl"
+    },
+    {
+     "name": "OTC_20991231.meta.json",
+     "sha256": "5b94d350c0220a2465779dd77e7137460f5db339b92d111a90a3ae4d7bfe022a",
+     "size": 3037,
+     "url": "OTC_20991231.meta.json"
+    },
+    {
+     "name": "OTC_20991231.sha256",
+     "sha256": "40dd7eaec9115b47d3e6207a7d96b9e85da26a54069419ba85a16af759810a16",
+     "size": 345,
+     "url": "OTC_20991231.sha256"
+    }
+   ],
+   "format_version": "0.3"
+  }
+ ]
+}
