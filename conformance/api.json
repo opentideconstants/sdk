@@ -1,0 +1,2475 @@
+{
+ "description": "OpenTideConstants SDK API manifest (SDK spec section 4). Every public operation, attribute, argument, default, enum value and error code, by its snake_case name. Each SDK's CI turns the names into its own form by the naming rules below and compares them with its public surface; a missing or an extra name fails CI.",
+ "suite_version": "0.1",
+ "supported_format_majors": [
+  0
+ ],
+ "naming": {
+  "canonical": "snake_case",
+  "ruby": "methods and options snake_case; a predicate is_x is x?; an operation with mutating true ends in !; aliases.ruby are extra idiom names for the same operation",
+  "python": "snake_case; a predicate is_x is a property; options are keyword-only",
+  "typescript": "methods, predicates and options in camelCase: split the snake_case name on _, capitalise the first letter of each part after the first, join (station_by_alias -> stationByAlias, radius_km -> radiusKm, is_reference -> isReference getter); kind field members (data fields) keep snake_case; operations with typescript_async true return a Promise",
+  "c": "otc_ + snake_case; an operation's c gives its C function name(s) where the spec names them (a slash separates several functions); a field of an object with c type T is the accessor T_<field> (otc_station_lat), or a struct member when c_struct is true; enum values are OTC_<ENUM>_<VALUE> plus OTC_<ENUM>_OTHER; error codes map to otc_status values in errors[].c",
+  "kinds": {
+   "method": "a call with args",
+   "attribute": "a value with no args (Ruby method, Python property, TypeScript getter or property)",
+   "predicate": "a boolean attribute named is_x",
+   "field": "a data field with the schema's snake_case name in every language"
+  }
+ },
+ "client_options": {
+  "note": "Options of the client constructor (Ruby keyword arguments, Python keyword-only, TypeScript one options object, C otc_open_options / otc_fetch_options).",
+  "c_only": [
+   {
+    "name": "require_checksum",
+    "type": "boolean",
+    "required": false,
+    "positional": false,
+    "default": false,
+    "note": "otc_open_options: a missing OTC_{D}.sha256 is an error"
+   },
+   {
+    "name": "error",
+    "type": "otc_error*",
+    "required": false,
+    "positional": false,
+    "default": null,
+    "note": "otc_open_options and otc_fetch_options: error-out struct for calls with no handle"
+   }
+  ]
+ },
+ "filters": [
+  {
+   "name": "country",
+   "type": "string",
+   "required": false,
+   "positional": false,
+   "default": null,
+   "note": "ISO 3166-1 alpha-3"
+  },
+  {
+   "name": "type",
+   "type": "enum",
+   "required": false,
+   "positional": false,
+   "default": null,
+   "enum": "station_type"
+  },
+  {
+   "name": "kind",
+   "type": "enum",
+   "required": false,
+   "positional": false,
+   "default": null,
+   "enum": "kind"
+  },
+  {
+   "name": "source",
+   "type": "string",
+   "required": false,
+   "positional": false,
+   "default": null,
+   "note": "the station has at least one usable set from this source"
+  },
+  {
+   "name": "source_type",
+   "type": "enum",
+   "required": false,
+   "positional": false,
+   "default": null,
+   "enum": "source_type",
+   "note": "applied to the recommended set"
+  }
+ ],
+ "objects": {
+  "Client": {
+   "c": null,
+   "description": "Options, cache, HTTP and the current Release; forwards every operation marked forwarded_to_client on Release. Ruby/Python/TypeScript class OpenTideConstants. C has no client object.",
+   "members": [
+    {
+     "name": "open",
+     "kind": "method",
+     "static": true,
+     "args": [
+      {
+       "name": "release",
+       "type": "datestamp_or_latest",
+       "required": false,
+       "positional": false,
+       "default": "latest",
+       "note": "'latest' or a datestamp matching ^[0-9]{8}(\\.[2-9]|\\.[1-9][0-9]+)?$; otherwise invalid_argument"
+      },
+      {
+       "name": "file",
+       "type": "path",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "open a local .json, .json.gz or .jsonl (+ .meta.json); TypeScript: Node only"
+      },
+      {
+       "name": "cache_dir",
+       "type": "path",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = platform cache directory (spec 5.4); env OPENTIDECONSTANTS_CACHE_DIR"
+      },
+      {
+       "name": "offline",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false,
+       "note": "env OPENTIDECONSTANTS_OFFLINE=1"
+      },
+      {
+       "name": "mode",
+       "type": "enum",
+       "required": false,
+       "positional": false,
+       "default": "eager",
+       "enum": "mode"
+      },
+      {
+       "name": "base_url",
+       "type": "url",
+       "required": false,
+       "positional": false,
+       "default": "https://data.opentideconstants.org/",
+       "note": "env OPENTIDECONSTANTS_BASE_URL"
+      },
+      {
+       "name": "timeout",
+       "type": "seconds",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = connect 10 s, read 60 s (spec 5.7)"
+      },
+      {
+       "name": "proxy",
+       "type": "url",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = HTTPS_PROXY / HTTP_PROXY / NO_PROXY, either case"
+      },
+      {
+       "name": "ca_file",
+       "type": "path",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = SSL_CERT_FILE, else the system store"
+      },
+      {
+       "name": "user_agent",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a suffix added to opentideconstants-{lang}/{version} (+https://opentideconstants.org)"
+      },
+      {
+       "name": "on_network_error",
+       "type": "enum",
+       "required": false,
+       "positional": false,
+       "default": "use_cache",
+       "enum": "on_network_error"
+      },
+      {
+       "name": "auto_update",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false
+      },
+      {
+       "name": "update_interval",
+       "type": "seconds",
+       "required": false,
+       "positional": false,
+       "default": 86400
+      },
+      {
+       "name": "logger",
+       "type": "logger",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "Ruby logger:, Python the 'opentideconstants' logging logger, TypeScript {debug, info, warn}, C opts.log_fn"
+      },
+      {
+       "name": "verify_on_open",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false,
+       "note": "hash the whole file on every open (spec 5.3)"
+      }
+     ],
+     "returns": "Client",
+     "errors": [
+      "invalid_argument",
+      "network",
+      "release_not_found",
+      "offline_unavailable",
+      "checksum_mismatch",
+      "unsupported_format",
+      "invalid_release",
+      "cache",
+      "io"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_open_file",
+     "typescript_async": true,
+     "note": "Ruby OpenTideConstants.new(**options) and OpenTideConstants.open(**options) { |otc| }; Python OpenTideConstants(**options), usable as a context manager; TypeScript static async open(options) (a constructor cannot be async); C otc_open_file(path, &opts, &rel) opens a file only, and otc_fetch_latest / otc_fetch_release download first"
+    },
+    {
+     "name": "release",
+     "kind": "attribute",
+     "returns": "Release",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "(the otc_release* handle itself)"
+    },
+    {
+     "name": "loaded_from",
+     "kind": "attribute",
+     "returns": "enum:loaded_from",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_loaded_from"
+    },
+    {
+     "name": "last_error",
+     "kind": "attribute",
+     "returns": "Error|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_last_error",
+     "note": "the error behind loaded_from = cache_after_error; C: otc_last_error(rel, buf, len, &needed) gives the message of the last failure on the handle"
+    },
+    {
+     "name": "releases",
+     "kind": "method",
+     "args": [],
+     "returns": "ReleaseInfo[]",
+     "errors": [
+      "network",
+      "offline_unavailable",
+      "invalid_release"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_releases",
+     "typescript_async": true,
+     "note": "reads OTC_index.json; newest first"
+    },
+    {
+     "name": "latest",
+     "kind": "method",
+     "args": [],
+     "returns": "ReleaseInfo",
+     "errors": [
+      "network",
+      "offline_unavailable",
+      "invalid_release"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_latest_info",
+     "typescript_async": true,
+     "note": "one conditional GET of the pointer; does not switch release"
+    },
+    {
+     "name": "check_for_update",
+     "kind": "method",
+     "args": [],
+     "returns": "ReleaseInfo|null",
+     "errors": [
+      "network",
+      "offline_unavailable"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_check_for_update",
+     "typescript_async": true
+    },
+    {
+     "name": "update",
+     "kind": "method",
+     "args": [],
+     "returns": "UpdateResult",
+     "errors": [
+      "pinned_release",
+      "network",
+      "offline_unavailable",
+      "checksum_mismatch",
+      "unsupported_format",
+      "invalid_release",
+      "cache"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_update",
+     "mutating": true,
+     "typescript_async": true,
+     "note": "Ruby update!; a Release held from before stays valid"
+    },
+    {
+     "name": "download",
+     "kind": "method",
+     "args": [
+      {
+       "name": "release",
+       "type": "datestamp_or_latest",
+       "required": false,
+       "positional": true,
+       "default": "latest"
+      },
+      {
+       "name": "to",
+       "type": "path",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "formats",
+       "type": "enum[]",
+       "required": false,
+       "positional": false,
+       "default": [
+        "jsonl"
+       ],
+       "enum": "format",
+       "note": "C: bit mask of OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ, OTC_FORMAT_JSONL; 0 = default"
+      },
+      {
+       "name": "overwrite",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false
+      }
+     ],
+     "returns": "path[]",
+     "errors": [
+      "invalid_argument",
+      "offline_unavailable",
+      "release_not_found",
+      "network",
+      "checksum_mismatch",
+      "unsupported_format",
+      "file_exists",
+      "io",
+      "unsupported",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_to_dir",
+     "typescript_async": true,
+     "typescript_env": "node",
+     "note": "spec 4.3.2: writes the data files in formats plus OTC_{D}.sha256 and OTC_{D}.meta.json into to; returns the paths written (an identical existing file is not written and not listed); TypeScript in a browser fails with unsupported; C without otc_fetch returns OTC_E_NOT_BUILT"
+    },
+    {
+     "name": "verify",
+     "kind": "method",
+     "args": [],
+     "returns": "boolean",
+     "errors": [
+      "checksum_mismatch",
+      "io"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_verify_file",
+     "typescript_async": true,
+     "note": "hashes the files again in full against OTC_{D}.sha256; C otc_verify_file(path, sha256_path, &err) is in the core library"
+    },
+    {
+     "name": "cached_releases",
+     "kind": "method",
+     "args": [],
+     "returns": "datestamp[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_cached_releases"
+    },
+    {
+     "name": "prune",
+     "kind": "method",
+     "args": [
+      {
+       "name": "keep",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": 3
+      }
+     ],
+     "returns": "datestamp[]",
+     "errors": [
+      "invalid_argument",
+      "cache"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_prune",
+     "note": "never removes the loaded release"
+    },
+    {
+     "name": "close",
+     "kind": "method",
+     "args": [],
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_close"
+    }
+   ]
+  },
+  "Release": {
+   "c": "otc_release",
+   "description": "One loaded release; immutable.",
+   "members": [
+    {
+     "name": "datestamp",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false
+    },
+    {
+     "name": "created",
+     "kind": "field",
+     "type": "time",
+     "nullable": false
+    },
+    {
+     "name": "format_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "doi",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "concept_doi",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source_versions",
+     "kind": "field",
+     "type": "map<string,string>",
+     "nullable": false
+    },
+    {
+     "name": "build_commit",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "changelog_url",
+     "kind": "field",
+     "type": "url",
+     "nullable": true
+    },
+    {
+     "name": "files",
+     "kind": "field",
+     "type": "FileInfo[]",
+     "nullable": false,
+     "note": "spec 4.3.1: source depends on loaded_from"
+    },
+    {
+     "name": "conventions",
+     "kind": "attribute",
+     "returns": "Convention[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_convention_count/otc_release_convention_at"
+    },
+    {
+     "name": "convention",
+     "kind": "method",
+     "args": [
+      {
+       "name": "convention_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Convention|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_convention"
+    },
+    {
+     "name": "licences",
+     "kind": "attribute",
+     "returns": "Licence[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_licence_count/otc_release_licence_at"
+    },
+    {
+     "name": "licence",
+     "kind": "method",
+     "args": [
+      {
+       "name": "licence_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Licence|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_licence"
+    },
+    {
+     "name": "constituent_names",
+     "kind": "attribute",
+     "returns": "string[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_constituent_names",
+     "note": "sorted union over all sets"
+    },
+    {
+     "name": "stats",
+     "kind": "attribute",
+     "returns": "Stats",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_stats"
+    },
+    {
+     "name": "station_count",
+     "kind": "attribute",
+     "returns": "integer",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_station_count",
+     "note": "active stations only"
+    },
+    {
+     "name": "tombstone_count",
+     "kind": "attribute",
+     "returns": "integer",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_tombstone_count"
+    },
+    {
+     "name": "citation",
+     "kind": "attribute",
+     "returns": "string",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_release_citation"
+    },
+    {
+     "name": "station",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Station|null",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station",
+     "forwarded_to_client": true,
+     "note": "active stations only; C caller frees with otc_station_free"
+    },
+    {
+     "name": "require_station",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Station",
+     "errors": [
+      "station_not_found",
+      "station_removed",
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_require_station",
+     "forwarded_to_client": true,
+     "note": "Ruby, Python and TypeScript attach the tombstone to station_removed"
+    },
+    {
+     "name": "tombstone",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Tombstone|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_tombstone",
+     "forwarded_to_client": true
+    },
+    {
+     "name": "station_by_alias",
+     "kind": "method",
+     "args": [
+      {
+       "name": "system",
+       "type": "enum",
+       "required": true,
+       "positional": true,
+       "enum": "alias_system",
+       "note": "unknown systems a newer minor adds are accepted"
+      },
+      {
+       "name": "alias_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Station|null",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_by_alias",
+     "forwarded_to_client": true
+    },
+    {
+     "name": "stations",
+     "kind": "method",
+     "args": [],
+     "filters": true,
+     "returns": "Station[]",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_stations",
+     "forwarded_to_client": true,
+     "note": "ordered by station_id; C returns station ids"
+    },
+    {
+     "name": "iter_stations",
+     "kind": "method",
+     "args": [],
+     "filters": true,
+     "returns": "Iterator<Station>",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_iter_open/otc_iter_next/otc_iter_close",
+     "aliases": {
+      "ruby": [
+       "each_station"
+      ]
+     },
+     "forwarded_to_client": true,
+     "note": "Ruby each_station { } is the idiom name of this one operation"
+    },
+    {
+     "name": "search",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": false,
+       "note": "empty: invalid_argument"
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": null
+      },
+      {
+       "name": "match",
+       "type": "enum",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "enum": "match",
+       "note": "null = ranked (exact, prefix, word start, substring; spec 4.4.1)"
+      }
+     ],
+     "filters": true,
+     "returns": "Station[]",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_search",
+     "forwarded_to_client": true,
+     "note": "C returns otc_hit {id, name}"
+    },
+    {
+     "name": "near",
+     "kind": "method",
+     "args": [
+      {
+       "name": "lat",
+       "type": "number",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "lon",
+       "type": "number",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "radius_km",
+       "type": "number",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": null
+      }
+     ],
+     "filters": true,
+     "returns": "Nearby[]",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_near",
+     "forwarded_to_client": true,
+     "note": "haversine, R = 6371.0088 km; sorted by distance, then station_id"
+    },
+    {
+     "name": "nearest",
+     "kind": "method",
+     "args": [
+      {
+       "name": "lat",
+       "type": "number",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "lon",
+       "type": "number",
+       "required": true,
+       "positional": false
+      },
+      {
+       "name": "max_km",
+       "type": "number",
+       "required": false,
+       "positional": false,
+       "default": null
+      }
+     ],
+     "filters": true,
+     "returns": "Nearby|null",
+     "errors": [
+      "invalid_argument"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_nearest",
+     "forwarded_to_client": true
+    },
+    {
+     "name": "reference_station",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Station|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_reference_station",
+     "forwarded_to_client": true
+    },
+    {
+     "name": "subordinates_of",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Station[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_subordinates_of",
+     "forwarded_to_client": true
+    },
+    {
+     "name": "attribution",
+     "kind": "method",
+     "args": [
+      {
+       "name": "stations",
+       "type": "Station[]",
+       "required": false,
+       "positional": true,
+       "default": null
+      }
+     ],
+     "returns": "string",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_attribution",
+     "forwarded_to_client": true,
+     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{doi}, CC BY 4.0. Sources: {provider}: {attribution}; ..."
+    }
+   ]
+  },
+  "ReleaseInfo": {
+   "c": "otc_release_info",
+   "description": "An entry of the pointer or the index; no station data.",
+   "members": [
+    {
+     "name": "datestamp",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false
+    },
+    {
+     "name": "format_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "doi",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "files",
+     "kind": "field",
+     "type": "FileInfo[]",
+     "nullable": false
+    }
+   ]
+  },
+  "FileInfo": {
+   "c": "otc_file_info",
+   "members": [
+    {
+     "name": "name",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "url",
+     "kind": "field",
+     "type": "url",
+     "nullable": true
+    },
+    {
+     "name": "size",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true
+    },
+    {
+     "name": "sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    }
+   ]
+  },
+  "Station": {
+   "c": "otc_station",
+   "members": [
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "name",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "country",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "lat",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "lon",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "station_type"
+    },
+    {
+     "name": "kind",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "kind",
+     "note": "from the recommended set's quantity, or the reference station's for a subordinate"
+    },
+    {
+     "name": "timezone",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "aliases",
+     "kind": "field",
+     "type": "map<string,string[]>",
+     "nullable": false,
+     "c": "otc_station_alias_count/otc_station_alias_at",
+     "note": "always {system -> [id]}"
+    },
+    {
+     "name": "status",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "station_status"
+    },
+    {
+     "name": "is_reference",
+     "kind": "predicate",
+     "type": "boolean"
+    },
+    {
+     "name": "is_subordinate",
+     "kind": "predicate",
+     "type": "boolean"
+    },
+    {
+     "name": "is_tide",
+     "kind": "predicate",
+     "type": "boolean"
+    },
+    {
+     "name": "is_current",
+     "kind": "predicate",
+     "type": "boolean"
+    },
+    {
+     "name": "recommended_set",
+     "kind": "attribute",
+     "returns": "ConstantSet|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_recommended_set"
+    },
+    {
+     "name": "constant_sets",
+     "kind": "method",
+     "args": [
+      {
+       "name": "include_excluded",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false
+      }
+     ],
+     "returns": "ConstantSet[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_set_count/otc_station_set_at",
+     "note": "recommended first, then by set_id"
+    },
+    {
+     "name": "constant_set",
+     "kind": "method",
+     "args": [
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "ConstantSet|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_set"
+    },
+    {
+     "name": "subordinate_offsets",
+     "kind": "attribute",
+     "returns": "SubordinateOffsets|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_offsets"
+    },
+    {
+     "name": "validation",
+     "kind": "attribute",
+     "returns": "Validation[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_station_validation_count/otc_station_validation_at"
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "Tombstone": {
+   "c": "otc_tombstone",
+   "members": [
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "status",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "station_status"
+    },
+    {
+     "name": "removed_in",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false
+    },
+    {
+     "name": "removed_reason",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "ConstantSet": {
+   "c": "otc_set",
+   "members": [
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "source",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "source_type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "source_type"
+    },
+    {
+     "name": "quantity",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "quantity",
+     "note": "schema 0.2 field; the station kind derives from it"
+    },
+    {
+     "name": "source_record_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "record_span",
+     "kind": "field",
+     "type": "RecordSpan",
+     "nullable": true
+    },
+    {
+     "name": "datum",
+     "kind": "field",
+     "type": "Datum",
+     "nullable": true
+    },
+    {
+     "name": "qc_status",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "qc_status"
+    },
+    {
+     "name": "qc_flags",
+     "kind": "field",
+     "type": "QcFlag[]",
+     "nullable": false,
+     "c": "otc_set_qc_flag_count/otc_set_qc_flag_at"
+    },
+    {
+     "name": "dropped_constituents",
+     "kind": "field",
+     "type": "DroppedConstituent[]",
+     "nullable": false,
+     "c": "otc_set_dropped_count/otc_set_dropped_at"
+    },
+    {
+     "name": "is_recommended",
+     "kind": "predicate",
+     "type": "boolean"
+    },
+    {
+     "name": "convention",
+     "kind": "attribute",
+     "returns": "Convention",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_convention"
+    },
+    {
+     "name": "licence",
+     "kind": "attribute",
+     "returns": "Licence",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_licence"
+    },
+    {
+     "name": "provenance",
+     "kind": "attribute",
+     "returns": "Provenance",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_provenance_field/otc_set_provenance_json"
+    },
+    {
+     "name": "validation",
+     "kind": "attribute",
+     "returns": "Validation[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_validation_count/otc_set_validation_at",
+     "note": "ordered by window"
+    },
+    {
+     "name": "constituents",
+     "kind": "attribute",
+     "returns": "Constituent[]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_constituent_count/otc_set_constituent_at",
+     "note": "file order"
+    },
+    {
+     "name": "constituent",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": true
+      }
+     ],
+     "returns": "Constituent|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_set_constituent",
+     "note": "case-sensitive canonical name"
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "Constituent": {
+   "c": "otc_constituent_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "name",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "note": "C char name[16]"
+    },
+    {
+     "name": "source_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "note": "C char source_name[32]"
+    },
+    {
+     "name": "doodson",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "note": "C char doodson[8]"
+    },
+    {
+     "name": "speed_deg_per_hour",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "amplitude_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "phase_deg",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "note": "Greenwich phase lag g, 0 <= g < 360"
+    },
+    {
+     "name": "amp_uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "C NaN when missing"
+    },
+    {
+     "name": "phase_uncertainty_deg",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "C NaN when missing"
+    },
+    {
+     "name": "kept_reason",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "Convention": {
+   "c": "otc_convention",
+   "members": [
+    {
+     "name": "convention_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "phase_reference",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "phase_reference"
+    },
+    {
+     "name": "utc_offset_hours",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "v0_model",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "nodal_handling",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "nodal_handling"
+    },
+    {
+     "name": "nodal_formula_ids",
+     "kind": "field",
+     "type": "map<string,string|integer>",
+     "nullable": true
+    },
+    {
+     "name": "constituent_table_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "tables_sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "canary",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "note": "{status, gauges, median_amp_diff_m, median_phase_diff_deg}"
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "Licence": {
+   "c": "otc_licence",
+   "members": [
+    {
+     "name": "licence_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "spdx",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "provider",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "citation",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "attribution",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "url",
+     "kind": "field",
+     "type": "url",
+     "nullable": true
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "Provenance": {
+   "c": "otc_set_provenance",
+   "members": [
+    {
+     "name": "build_commit",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "adapter_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "input_sha256",
+     "kind": "field",
+     "type": "string[]",
+     "nullable": true
+    },
+    {
+     "name": "time_base",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "note": "{verdict, correction, comparators}"
+    },
+    {
+     "name": "selection_reason",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "decision",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "note": "{tier, outcome, rule, reason}"
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "object",
+     "nullable": false,
+     "c": "otc_{object}_raw_json",
+     "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "QcFlag": {
+   "c": "otc_qc_flag",
+   "members": [
+    {
+     "name": "flag",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "qc_flag"
+    },
+    {
+     "name": "verdict",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "values",
+     "kind": "field",
+     "type": "object",
+     "nullable": true
+    }
+   ]
+  },
+  "DroppedConstituent": {
+   "c": "otc_dropped",
+   "members": [
+    {
+     "name": "name",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "dropped_reason",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "dropped_reason"
+    },
+    {
+     "name": "detail",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    }
+   ]
+  },
+  "Validation": {
+   "c": "otc_validation_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "reference_source",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "reference_station",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_distance_km",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "window",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "time_mae_min",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "time_p95_min",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "time_bias_min",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "height_mae_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "range_error_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "missed_events",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "note": "C -1 when missing"
+    },
+    {
+     "name": "extra_events",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "note": "C -1 when missing"
+    },
+    {
+     "name": "previous_release",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "note": "same metrics for the previous release"
+    }
+   ]
+  },
+  "SubordinateOffsets": {
+   "c": "otc_offsets_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "reference_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "time_offset_high_min",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "time_offset_low_min",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "height_offset_high",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "height_offset_low",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "height_adjusted_type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "height_adjusted_type"
+    },
+    {
+     "name": "licence_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    }
+   ]
+  },
+  "Nearby": {
+   "c": "otc_nearby",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "station",
+     "kind": "field",
+     "type": "Station",
+     "nullable": false,
+     "c": "(C: otc_nearby.id)"
+    },
+    {
+     "name": "distance_km",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    }
+   ]
+  },
+  "UpdateResult": {
+   "c": null,
+   "members": [
+    {
+     "name": "updated",
+     "kind": "field",
+     "type": "boolean",
+     "nullable": false
+    },
+    {
+     "name": "from",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": true
+    },
+    {
+     "name": "to",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": true
+    }
+   ]
+  },
+  "RecordSpan": {
+   "c": "otc_record_span",
+   "members": [
+    {
+     "name": "start",
+     "kind": "field",
+     "type": "time",
+     "nullable": false
+    },
+    {
+     "name": "end",
+     "kind": "field",
+     "type": "time",
+     "nullable": false
+    },
+    {
+     "name": "good_samples",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true
+    }
+   ]
+  },
+  "Datum": {
+   "c": "otc_datum",
+   "members": [
+    {
+     "name": "msl_offset_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true
+    },
+    {
+     "name": "named",
+     "kind": "field",
+     "type": "map<string,number>",
+     "nullable": true
+    }
+   ]
+  },
+  "Stats": {
+   "c": "otc_stats",
+   "members": [
+    {
+     "name": "type",
+     "kind": "field",
+     "type": "map<string,integer>",
+     "nullable": false,
+     "note": "active stations by type"
+    },
+    {
+     "name": "kind",
+     "kind": "field",
+     "type": "map<string,integer>",
+     "nullable": false
+    },
+    {
+     "name": "country",
+     "kind": "field",
+     "type": "map<string,integer>",
+     "nullable": false
+    },
+    {
+     "name": "source",
+     "kind": "field",
+     "type": "map<string,integer>",
+     "nullable": false,
+     "note": "sets by source"
+    },
+    {
+     "name": "qc_status",
+     "kind": "field",
+     "type": "map<string,integer>",
+     "nullable": false,
+     "note": "sets by qc_status"
+    }
+   ]
+  }
+ },
+ "enums": {
+  "kind": [
+   "tide",
+   "current"
+  ],
+  "station_type": [
+   "reference",
+   "subordinate"
+  ],
+  "station_status": [
+   "active",
+   "removed"
+  ],
+  "source_type": [
+   "official",
+   "gauge",
+   "model"
+  ],
+  "quantity": [
+   "water_level",
+   "current"
+  ],
+  "qc_status": [
+   "accepted",
+   "fallback",
+   "excluded"
+  ],
+  "loaded_from": [
+   "download",
+   "cache",
+   "cache_after_error",
+   "file",
+   "file_unverified"
+  ],
+  "phase_reference": [
+   "greenwich_utc",
+   "local"
+  ],
+  "nodal_handling": [
+   "f_u_at_prediction",
+   "none"
+  ],
+  "canary_status": [
+   "pass",
+   "fail",
+   "not_applicable"
+  ],
+  "height_adjusted_type": [
+   "R",
+   "A"
+  ],
+  "dropped_reason": [
+   "rayleigh",
+   "noise",
+   "long_period_rule",
+   "non_tidal_rule",
+   "convention",
+   "other"
+  ],
+  "qc_flag": [
+   "time_base",
+   "broken_record",
+   "microtidal",
+   "non_tidal_signal",
+   "short_record",
+   "sibling_disagreement"
+  ],
+  "decision_tier": [
+   "rule",
+   "review",
+   "fallback"
+  ],
+  "decision_outcome": [
+   "accept",
+   "fallback"
+  ],
+  "alias_system": [
+   "noaa",
+   "gesla",
+   "ticon",
+   "xtide",
+   "kartverket",
+   "slackwater",
+   "webcaltides"
+  ],
+  "mode": [
+   "eager",
+   "stream"
+  ],
+  "on_network_error": [
+   "use_cache",
+   "raise"
+  ],
+  "format": [
+   "json",
+   "json.gz",
+   "jsonl"
+  ],
+  "match": [
+   "exact"
+  ]
+ },
+ "errors": [
+  {
+   "code": "not_found",
+   "class": null,
+   "c": "OTC_E_NOT_FOUND",
+   "when": "a lookup found nothing; Ruby/Python/TypeScript return nil/None/null, not an error",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "network",
+   "class": "NetworkError",
+   "c": "OTC_E_NETWORK",
+   "when": "DNS, TLS, connection or timeout failure, or HTTP 5xx after the retries",
+   "fields": [
+    "url",
+    "status"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "release_not_found",
+   "class": "ReleaseNotFoundError",
+   "c": "OTC_E_RELEASE_NOT_FOUND",
+   "when": "HTTP 404 for a pinned datestamp",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "offline_unavailable",
+   "class": "OfflineError",
+   "c": "OTC_E_OFFLINE_UNAVAILABLE",
+   "when": "offline, or a network failure with on_network_error raise, and the release is not cached",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "checksum_mismatch",
+   "class": "ChecksumError",
+   "c": "OTC_E_CHECKSUM",
+   "when": "a SHA-256 or size does not match, or the pointer and the .sha256 file disagree",
+   "fields": [
+    "file",
+    "expected",
+    "actual"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "unsupported_format",
+   "class": "UnsupportedFormatError",
+   "c": "OTC_E_UNSUPPORTED_FORMAT",
+   "when": "format_version major not supported",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "invalid_release",
+   "class": "InvalidReleaseError",
+   "c": "OTC_E_INVALID_RELEASE",
+   "when": "not JSON, a required field missing, or a reference does not resolve",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "station_not_found",
+   "class": "StationNotFoundError",
+   "c": "OTC_E_STATION_NOT_FOUND",
+   "when": "require_station with an unknown id",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "station_removed",
+   "class": "StationRemovedError",
+   "c": "OTC_E_STATION_REMOVED",
+   "when": "require_station with a removed id",
+   "fields": [
+    "tombstone"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "pinned_release",
+   "class": "PinnedReleaseError",
+   "c": "OTC_E_PINNED_RELEASE",
+   "when": "update on a client opened on a pinned release or a file",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "cache",
+   "class": "CacheError",
+   "c": "OTC_E_CACHE",
+   "when": "the cache cannot be written",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "file_exists",
+   "class": "FileExistsError",
+   "c": "OTC_E_FILE_EXISTS",
+   "when": "download found a file in to with the same name and a different SHA-256, and overwrite is false",
+   "fields": [
+    "path"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "unsupported",
+   "class": "UnsupportedError",
+   "c": null,
+   "when": "TypeScript in a browser: an operation that needs a file system (download)",
+   "fields": [],
+   "languages": [
+    "typescript"
+   ]
+  },
+  {
+   "code": "io",
+   "class": "FileError",
+   "c": "OTC_E_IO",
+   "when": "a local file cannot be opened or read",
+   "fields": [
+    "path",
+    "cause"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "invalid_argument",
+   "class": "InvalidArgumentError",
+   "c": "OTC_E_INVALID_ARGUMENT",
+   "when": "a bad datestamp, lat or lon out of range, a negative radius, an empty query, or a NULL handle",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "buffer_too_small",
+   "class": null,
+   "c": "OTC_E_BUFFER_TOO_SMALL",
+   "when": "C only; the needed size is in *needed or *count",
+   "fields": [],
+   "languages": [
+    "c"
+   ]
+  },
+  {
+   "code": "out_of_memory",
+   "class": null,
+   "c": "OTC_E_NOMEM",
+   "when": "C only",
+   "fields": [],
+   "languages": [
+    "c"
+   ]
+  },
+  {
+   "code": "not_built",
+   "class": null,
+   "c": "OTC_E_NOT_BUILT",
+   "when": "C only: an otc_fetch_* or otc_predict_* call in a build without that module",
+   "fields": [],
+   "languages": [
+    "c"
+   ]
+  }
+ ],
+ "error_base_class": {
+  "ruby": "OpenTideConstants::Error",
+  "python": "OpenTideConstantsError",
+  "typescript": "OpenTideConstantsError",
+  "note": "every error class is a direct subclass of the base and of nothing else; every error has .code; a system error that causes an SDK error is kept as the cause"
+ },
+ "constants": {
+  "SUPPORTED_FORMAT_MAJORS": {
+   "value": [
+    0
+   ],
+   "c": "OTC_FORMAT_MAJOR"
+  },
+  "DEFAULT_BASE_URL": {
+   "value": "https://data.opentideconstants.org/"
+  },
+  "CACHE_LAYOUT_VERSION": {
+   "value": "v1",
+   "note": "cache root subdirectory (spec 5.4)"
+  },
+  "c_only": [
+   "OTC_ABI_VERSION",
+   "OTC_FORMAT_JSON",
+   "OTC_FORMAT_JSON_GZ",
+   "OTC_FORMAT_JSONL"
+  ]
+ },
+ "environment": {
+  "OPENTIDECONSTANTS_CACHE_DIR": "cache_dir",
+  "OPENTIDECONSTANTS_OFFLINE": "offline (value 1)",
+  "OPENTIDECONSTANTS_BASE_URL": "base_url"
+ },
+ "reserved_phase2": {
+  "note": "Names reserved for the phase 2 prediction module (spec 4.9). Not built in phase 1: an SDK must not expose them yet, and the surface check ignores them.",
+  "operations": [
+   {
+    "object": "Client",
+    "name": "heights",
+    "args": [
+     "station",
+     "from",
+     "to",
+     "step_s",
+     "datum"
+    ],
+    "c": "otc_heights"
+   },
+   {
+    "object": "Client",
+    "name": "extremes",
+    "args": [
+     "station",
+     "from",
+     "to"
+    ],
+    "c": "otc_extremes"
+   },
+   {
+    "object": "Astro",
+    "name": "node_factor",
+    "c": "otc_astro_node_factor"
+   },
+   {
+    "object": "Astro",
+    "name": "equilibrium_argument",
+    "c": "otc_astro_equilibrium_argument"
+   },
+   {
+    "object": "Astro",
+    "name": "node_factor_for_year",
+    "c": "otc_astro_node_factor_for_year"
+   },
+   {
+    "object": "Astro",
+    "name": "equilibrium_for_year",
+    "c": "otc_astro_equilibrium_for_year"
+   },
+   {
+    "object": "Astro",
+    "name": "valid_range",
+    "c": "otc_astro_valid_range"
+   }
+  ],
+  "errors": [
+   {
+    "code": "unsupported_convention",
+    "class": "UnsupportedConventionError",
+    "c": "OTC_E_UNSUPPORTED_CONVENTION"
+   }
+  ]
+ }
+}
