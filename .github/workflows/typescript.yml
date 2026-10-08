@@ -110,6 +110,7 @@ jobs:
         working-directory: js
         run: |
           npm ci
+          mkdir -p "$RUNNER_TEMP/pkg"
           npm pack --pack-destination "$RUNNER_TEMP/pkg"
           cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
       - name: Install the tarball in a clean container and run the quickstart against the fixture server

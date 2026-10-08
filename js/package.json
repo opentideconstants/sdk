@@ -28,7 +28,7 @@
     "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:api": "node scripts/check-api.mjs",
-    "test:unit": "node --test test/",
+    "test:unit": "node --test \"test/*.test.mjs\"",
     "conformance": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/runner.mjs\"",
     "conformance:browser": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/browser-runner.mjs\"",
     "prepack": "npm run build"
