@@ -29,8 +29,10 @@ What it does:
     {"match": RE, "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}   serve one JSON value of a fixture (RFC 6901 pointer)
   Rules are tried in order; the first active match applies. "times" null = always.
 - Records every request (method, path, query, headers, status, time) in a log.
-- stop() closes the HTTP listener and puts a tripwire on the same port: it
-  accepts any connection, records it, and closes it at once. So "the server is
+- stop() closes the HTTP listener and every open (keep-alive) connection, and
+  puts a tripwire on the same port: it accepts any connection, records it, and
+  closes it at once. A request that still reaches a handler while stopped is
+  also recorded as a tripwire entry and gets no response. So "the server is
   stopped" and "no socket was opened" can both be checked. resume() serves again.
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays.
@@ -47,6 +49,7 @@ import re
 import select
 import socket
 import socketserver
+import sys
 import threading
 import time
 import urllib.parse
@@ -67,6 +70,32 @@ PREFLIGHT_HEADERS = {
     "Access-Control-Max-Age": "86400",
 }
 ACTIONS = {"status", "short_body", "truncate", "slow", "file", "json"}
+# action -> required fields and their types; then the optional fields of any rule
+_REQUIRED = {"status": {"status": int}, "file": {"file": str}, "json": {"file": str}, "truncate": {"bytes": int}}
+_OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str}
+
+
+def validate_rule(i, r):
+    """Raise ValueError when rule i is not a valid rule (see the module docstring)."""
+    if not isinstance(r, dict):
+        raise ValueError(f"rule {i}: not an object: {r!r}")
+    if r.get("action") not in ACTIONS:
+        raise ValueError(f"rule {i}: unknown rule action {r.get('action')!r}")
+    if not isinstance(r.get("match"), str):
+        raise ValueError(f"rule {i}: match must be a regular expression string, got {r.get('match')!r}")
+    try:
+        re.compile(r["match"])
+    except re.error as e:
+        raise ValueError(f"rule {i}: match {r['match']!r} is not a regular expression: {e}") from None
+    for k, t in _REQUIRED.get(r["action"], {}).items():
+        if k not in r:
+            raise ValueError(f"rule {i}: action {r['action']!r} needs {k!r}")
+    for k, t in {**_OPTIONAL, **_REQUIRED.get(r["action"], {})}.items():
+        if k in r and (isinstance(r[k], bool) or not isinstance(r[k], t)):
+            raise ValueError(f"rule {i}: {k} has the wrong type: {r[k]!r}")
+    times = r.get("times")
+    if times is not None and (isinstance(times, bool) or not isinstance(times, int)):
+        raise ValueError(f"rule {i}: times must be an integer or null, got {times!r}")
 
 
 def json_pointer(doc, pointer):
@@ -118,11 +147,29 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
     def fx(self) -> "FixtureServer":
         return self.server.fixture  # type: ignore[attr-defined]
 
-    def _record(self, status, rule=None):
+    def setup(self):
+        super().setup()
+        self.fx._track(self.connection, True)
+
+    def finish(self):
+        try:
+            super().finish()
+        finally:
+            self.fx._track(self.connection, False)
+
+    def _stopped(self):
+        """While stopped, a request on a still-open connection is a tripwire hit: record it, answer nothing."""
+        if self.fx.running:
+            return False
+        self.fx.log.add(source="tripwire", method=None, path=None, query="", headers={}, status=None, rule=None, error=None)
+        self.close_connection = True
+        return True
+
+    def _record(self, status, rule=None, error=None):
         parsed = urllib.parse.urlsplit(self.path)
         self.fx.log.add(source="server", method=self.command, path=urllib.parse.unquote(parsed.path),
                         query=parsed.query, headers={k.lower(): v for k, v in self.headers.items()},
-                        status=status, rule=rule)
+                        status=status, rule=rule, error=error)
 
     def _send(self, status, body=b"", headers=None, head=False):
         self.send_response(status)
@@ -130,13 +177,15 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.send_header(k, v)
         for k, v in (headers or {}).items():
             self.send_header(k, v)
-        if "Content-Length" not in (headers or {}):
+        if "content-length" not in {k.lower() for k in (headers or {})}:
             self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if not head and body:
             self.wfile.write(body)
 
     def do_OPTIONS(self):
+        if self._stopped():
+            return
         self._record(204)
         self.send_response(204)
         for k, v in PREFLIGHT_HEADERS.items():
@@ -148,12 +197,23 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         self.do_GET(head=True)
 
     def do_GET(self, head=False):
+        if self._stopped():
+            return
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         rule = self.fx.take_rule(path)
         try:
             self._serve(path, rule, head)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        except Exception as e:  # a rule that cannot be applied: log it and answer 500, do not drop the connection
+            msg = f"{type(e).__name__}: {e}"
+            print(f"fixture server: cannot serve {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
+            self._record(500, rule.get("name") if rule else None, error=msg)
+            try:
+                self.close_connection = True
+                self._send(500, f"fixture server error: {msg}\n".encode(), {"Content-Type": "text/plain"}, head)
+            except OSError:
+                pass
 
     def _load(self, rel):
         target = (FIXTURES / rel.lstrip("/")).resolve()
@@ -171,11 +231,15 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             hdrs.setdefault("Content-Type", "text/plain")
             self._send(status, body, hdrs, head)
             return
+        served = path  # the name that decides the Content-Type
         if action == "file":
             data = self._load(rule["file"])
+            served = rule["file"]
         elif action == "json":
-            doc = json.loads(self._load(rule["file"]))
-            data = (json.dumps(json_pointer(doc, rule.get("pointer", "")), indent=1, sort_keys=True) + "\n").encode()
+            raw = self._load(rule["file"])
+            data = None if raw is None else (
+                json.dumps(json_pointer(json.loads(raw), rule.get("pointer", "")), indent=1, sort_keys=True) + "\n").encode()
+            served = "x.json"
         else:
             data = self._load(path)
         if data is None:
@@ -193,8 +257,8 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        ctype = "application/json" if path.endswith((".json", ".jsonl")) else (
-            "application/gzip" if path.endswith(".gz") else "text/plain")
+        ctype = "application/json" if served.endswith((".json", ".jsonl")) else (
+            "application/gzip" if served.endswith(".gz") else "text/plain")
         headers = {"ETag": tag, "Content-Type": ctype}
         body = data
         accept = self.headers.get("Accept-Encoding", "")
@@ -238,6 +302,10 @@ class FixtureServer:
         self._thread = None
         self._trip_sock = None
         self._trip_thread = None
+        self._trip_stop = threading.Event()
+        self._conns = set()
+        self._conns_lock = threading.Lock()
+        self.trip_errors = []
         self.running = False
 
     @property
@@ -246,11 +314,10 @@ class FixtureServer:
 
     # rules
     def set_rules(self, rules):
+        for i, r in enumerate(rules or []):
+            validate_rule(i, r)
         rules = [dict(r) for r in (rules or [])]
         for r in rules:
-            if r.get("action") not in ACTIONS:
-                raise ValueError(f"unknown rule action {r.get('action')!r}")
-            re.compile(r["match"])
             r.setdefault("times", None)
         with self._rules_lock:
             self._rules = rules
@@ -276,28 +343,66 @@ class FixtureServer:
         self.running = True
         return self
 
-    def stop(self):
-        """Stop serving; a tripwire on the same port records and drops every connection."""
-        if not self.running:
-            return
+    def _track(self, conn, add):
+        with self._conns_lock:
+            (self._conns.add if add else self._conns.discard)(conn)
+
+    def _close_conns(self):
+        with self._conns_lock:
+            conns = list(self._conns)
+        for c in conns:
+            try:
+                c.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def _close_listener(self):
+        self.running = False  # first, so a handler that still gets a request treats it as a tripwire hit
         self._httpd.shutdown()
         self._httpd.server_close()
-        self.running = False
+        self._close_conns()
+
+    def stop(self):
+        """Stop serving; a tripwire on the same port records and drops every connection.
+
+        If the tripwire cannot bind, OSError is raised and the server is left stopped with no
+        tripwire; resume() then serves again."""
+        if not self.running:
+            return
+        self._close_listener()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
-        sock.listen(64)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((self.host, self.port))
+            sock.listen(64)
+        except OSError as e:
+            sock.close()
+            raise OSError(e.errno, f"fixture server: cannot put the tripwire on port {self.port}: {e.strerror or e}") from e
         sock.settimeout(0.05)
-        self._trip_sock = sock
-        self._trip_stop = threading.Event()
+        stop = threading.Event()
+        self._trip_sock, self._trip_stop = sock, stop
 
         def trip():
-            while not self._trip_stop.is_set():
+            backoff, last = 0.05, None
+            while not stop.is_set():
                 try:
-                    conn, addr = sock.accept()
-                except (socket.timeout, OSError):
+                    conn, _ = sock.accept()
+                except socket.timeout:
                     continue
-                self.log.add(source="tripwire", method=None, path=None, query="", headers={}, status=None, rule=None)
+                except OSError as e:
+                    if stop.is_set():
+                        break
+                    self.trip_errors.append(repr(e))
+                    if repr(e) != last:  # log each new error once, then back off quietly
+                        print(f"fixture server: tripwire accept() on port {self.port} failed: {e}; retrying",
+                              file=sys.stderr, flush=True)
+                        last = repr(e)
+                    stop.wait(backoff)
+                    backoff = min(backoff * 2, 1.0)
+                    continue
+                backoff, last = 0.05, None
+                self.log.add(source="tripwire", method=None, path=None, query="", headers={}, status=None, rule=None,
+                             error=None)
                 try:
                     conn.close()
                 except OSError:
@@ -306,25 +411,26 @@ class FixtureServer:
         self._trip_thread = threading.Thread(target=trip, daemon=True)
         self._trip_thread.start()
 
+    def _stop_tripwire(self):
+        self._trip_stop.set()
+        if self._trip_thread is not None:
+            self._trip_thread.join()
+            self._trip_thread = None
+        if self._trip_sock is not None:
+            self._trip_sock.close()
+            self._trip_sock = None
+
     def resume(self):
+        """Serve again on the same port. If the bind fails, OSError is raised and the server stays stopped."""
         if self.running:
             return
-        self._trip_stop.set()
-        self._trip_thread.join()
-        self._trip_sock.close()
-        self._trip_sock = None
+        self._stop_tripwire()
         self.start()
 
     def shutdown(self):
         if self.running:
-            self._httpd.shutdown()
-            self._httpd.server_close()
-            self.running = False
-        elif self._trip_sock is not None:
-            self._trip_stop.set()
-            self._trip_thread.join()
-            self._trip_sock.close()
-            self._trip_sock = None
+            self._close_listener()
+        self._stop_tripwire()
 
 
 class _ProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -333,16 +439,23 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def _record(self, status, target):
+    def _record(self, status, target, error=None):
         self.server.proxy.log.add(source="proxy", method=self.command, path=target, query="",  # type: ignore[attr-defined]
-                                  headers={k.lower(): v for k, v in self.headers.items()}, status=status, rule=None)
+                                  headers={k.lower(): v for k, v in self.headers.items()}, status=status, rule=None,
+                                  error=error)
 
     def do_CONNECT(self):
-        host, _, port = self.path.rpartition(":")
+        self.close_connection = True  # after a tunnel the connection carries no more HTTP
+        host, sep, port = self.path.rpartition(":")
+        host = host.strip("[]")
+        if not sep or not host or not port.isdigit():
+            self._record(400, self.path, error="CONNECT target is not host:port")
+            self.send_error(400, "CONNECT target must be host:port")
+            return
         try:
             upstream = socket.create_connection((host, int(port)), timeout=10)
-        except OSError:
-            self._record(502, self.path)
+        except OSError as e:
+            self._record(502, self.path, error=f"{type(e).__name__}: {e}")
             self.send_error(502)
             return
         self._record(200, self.path)
@@ -359,6 +472,8 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
                     if not data:
                         return
                     (upstream if s is self.connection else self.connection).sendall(data)
+        except OSError:
+            pass  # one side went away: the tunnel is over
         finally:
             upstream.close()
 
@@ -369,7 +484,12 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             self._record(400, target)
             self.send_error(400, "absolute http URI required")
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._record(400, target, error="bad Content-Length")
+            self.send_error(400, "bad Content-Length")
+            return
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection", "connection", "keep-alive")}
         try:
@@ -377,8 +497,8 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
             resp = conn.getresponse()
             data = resp.read()
-        except (OSError, http.client.HTTPException):
-            self._record(502, target)
+        except (OSError, http.client.HTTPException) as e:
+            self._record(502, target, error=f"{type(e).__name__}: {e}")
             try:
                 self.send_error(502)
             except OSError:

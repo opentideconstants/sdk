@@ -42,7 +42,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from server import FixtureServer, RecordingProxy  # noqa: E402
+from server import FixtureServer, RecordingProxy, validate_rule  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
 CASES_DIR = HERE / "cases"
@@ -285,6 +285,12 @@ def check_cases(cases):
             if "driver" in st:
                 if st["driver"] not in DRIVER_ACTIONS:
                     problems.append(f"{where}: unknown driver action {st['driver']!r}")
+                if st["driver"] == "server_rules":
+                    for j, rule in enumerate(st.get("rules", [])):
+                        try:
+                            validate_rule(j, rule)
+                        except ValueError as e:
+                            problems.append(f"{where}: {e}")
                 continue
             op = st.get("op")
             if op not in OPS:
@@ -707,7 +713,18 @@ def selftest():
         r, body = get("/good/OTC_latest.json", via_proxy=True)
         check("proxy relays and records the request", r.status == 200 and len(proxy.log.entries()) == 1 and len([e for e in srv.log.entries() if e["source"] == "server"]) == 1)
         srv.log.clear()
+        keep = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
+        keep.request("GET", "/good/OTC_latest.json")
+        keep.getresponse().read()
         srv.stop()
+        try:
+            keep.request("GET", "/good/OTC_latest.json")
+            keep.getresponse().read()
+            kept = "response"
+        except (OSError, http.client.HTTPException) as e:
+            kept = type(e).__name__
+        keep.close()
+        check("stopped: a kept-alive connection is closed too", kept != "response", kept)
         try:
             get("/good/OTC_latest.json", timeout=2)
             got = "response"
