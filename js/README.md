@@ -2,9 +2,17 @@
 
 The JavaScript/TypeScript SDK for [OpenTideConstants](https://opentideconstants.org), an open dataset of tidal harmonic constants with provenance, validation scores and licences.
 
-- No runtime dependencies. Node 22.12 or later, and modern browsers (fetch, WebCrypto, `DecompressionStream`, Cache Storage).
+- Node 22.12 or later is the main, recommended target. No runtime dependencies.
 - Downloads a release from `data.opentideconstants.org`, checks its SHA-256, and caches it (`~/.cache/opentideconstants/v1`, shared with the Python, Ruby and C SDKs).
-- ESM, with types. CommonJS code can `require("opentideconstants")` (Node's `require` of ES modules).
+- ESM only, with types. CommonJS code can `require("opentideconstants")` on Node 22.12 or later (Node's `require` of ES modules).
+
+## Browsers
+
+The browser build is supported for read-only use: it fetches releases over CORS and reads them (it needs fetch, WebCrypto, `DecompressionStream` and Cache Storage). A browser has no file system, so these are not available there and fail with the `unsupported` error code:
+
+- `cachedReleases()` and `prune()` (the local cache list);
+- `autoUpdate`;
+- `download({ to })` to a folder, and `open({ file })`.
 
 ## Install
 
