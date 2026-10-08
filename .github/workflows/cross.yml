@@ -1,0 +1,90 @@
+name: Cross-SDK cases
+
+# Spec §5.4, §5.5, §6.2 (phase step S4): the four SDKs share one cache and one
+# stream index. Every case in conformance/cross/ runs once for each ordered
+# pair of SDKs (writer, reader), with the fixture server stopped for the
+# offline reads.
+
+on:
+  push:
+    paths:
+      - "python/**"
+      - "ruby/**"
+      - "js/**"
+      - "c/**"
+      - "conformance/**"
+      - ".github/workflows/cross.yml"
+  pull_request:
+    paths:
+      - "python/**"
+      - "ruby/**"
+      - "js/**"
+      - "c/**"
+      - "conformance/**"
+      - ".github/workflows/cross.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, c_runner: c/build/otc_runner }
+          - { os: macos-14, c_runner: c/build/otc_runner }
+          - { os: windows-2022, c_runner: c/build/Debug/otc_runner.exe }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: "3.3" }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - name: Build the TypeScript SDK
+        working-directory: js
+        run: npm ci && npm run build
+      - name: libcurl (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+      - name: libcurl (Windows, vcpkg)
+        if: runner.os == 'Windows'
+        run: vcpkg install curl:x64-windows
+      - name: Build the C library with otc_fetch
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = Windows ]; then
+            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          else
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
+          fi
+          cmake --build c/build --config Debug --parallel
+      - name: The case files are current
+        run: |
+          python conformance/tools/build_cases.py --check
+          python conformance/driver.py --check-cases
+      - name: Cross-SDK cases (Python, Ruby, TypeScript, C)
+        shell: bash
+        run: |
+          python conformance/driver.py \
+            --cross python="python conformance/runners/python/runner.py" \
+            --cross ruby="ruby conformance/runners/ruby/runner.rb" \
+            --cross typescript="node conformance/runners/node/runner.mjs" \
+            --cross c="${{ matrix.c_runner }}" \
+            --report cross-report.json
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-report-${{ matrix.os }}
+          path: cross-report.json
