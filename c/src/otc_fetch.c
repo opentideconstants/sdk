@@ -1318,115 +1318,36 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
 
 /* ------------------------------------------------------------- stream index */
 
-typedef struct ix_item {
-    uint64_t offset;
-    cJSON   *json;
-} ix_item;
-
-static int ix_cmp(const void *a, const void *b)
-{
-    uint64_t x = ((const ix_item *)a)->offset, y = ((const ix_item *)b)->offset;
-    return x < y ? -1 : x > y;
-}
-
-static cJSON *num_or_null(double v) { return isnan(v) ? cJSON_CreateNull() : cJSON_CreateNumber(v); }
 static cJSON *str_or_null(const char *s) { return s ? cJSON_CreateString(s) : cJSON_CreateNull(); }
 
 /*
- * index-v1.json (spec 6.2): one entry per line of the .jsonl, in file order,
- * with its byte offset and length, station_id, status, folded name, country,
- * type, kind, lat, lon, aliases and reference_station_id. The C library
- * builds its index in memory at every open and does not read this file; it
- * writes it for the other SDKs, only when it is missing or its jsonl_sha256
- * is stale. A failure to write it is logged, not raised.
+ * index-v1.json (spec 6.2). otc_open_file reads it when it is fresh; when the
+ * open did not use it (missing or stale), it is written here with an atomic
+ * rename. A failure to write it is logged, not raised: it only saves work.
  */
-static void write_stream_index(fctx *c, const char *ds, const otc_release *rel, const char *jsonl_sha)
+static void write_stream_index(fctx *c, const char *ds, const otc_release *rel)
 {
-    char *d = rel_dir(c, ds), *p = d ? path2(d, "index-v1.json") : NULL, *old = p ? slurp(p) : NULL, *txt = NULL;
-    char jsonl[64];
-    ix_item *items = NULL;
-    cJSON **aliases = NULL, *doc = NULL, *arr;
-    size_t i, n = 0;
-    if (!d || !p || !jsonl_sha) goto done;
-    if (old) {
-        cJSON *o = otc__json_parse(old, strlen(old));
-        int fresh = o && otc__jstr(o, "jsonl_sha256") && !strcmp(otc__jstr(o, "jsonl_sha256"), jsonl_sha);
-        cJSON_Delete(o);
-        if (fresh) goto done;
-    }
-    items = (ix_item *)calloc(rel->n_st + rel->n_tomb + 1, sizeof *items);
-    aliases = (cJSON **)calloc(rel->n_st + 1, sizeof *aliases);
-    if (!items || !aliases) goto done;
-    for (i = 0; i < rel->n_st; i++) aliases[i] = cJSON_CreateObject();
-    for (i = 0; i < rel->n_alias; i++) {
-        const otc__entry *e = otc__find_entry(rel, rel->alias[i].station);
-        cJSON *obj, *list;
-        if (!e) continue;
-        obj = aliases[e - rel->st];
-        list = cJSON_GetObjectItemCaseSensitive(obj, rel->alias[i].system);
-        if (!list) {
-            list = cJSON_CreateArray();
-            cJSON_AddItemToObject(obj, rel->alias[i].system, list);
-        }
-        cJSON_AddItemToArray(list, cJSON_CreateString(rel->alias[i].alias));
-    }
-    for (i = 0; i < rel->n_st; i++) {
-        const otc__entry *e = &rel->st[i];
-        cJSON *o = cJSON_CreateObject();
-        cJSON_AddStringToObject(o, "station_id", e->id);
-        cJSON_AddStringToObject(o, "status", "active");
-        cJSON_AddNumberToObject(o, "offset", (double)e->offset);
-        cJSON_AddNumberToObject(o, "length", (double)e->length);
-        cJSON_AddItemToObject(o, "name_folded", str_or_null(e->folded));
-        cJSON_AddItemToObject(o, "country", str_or_null(e->country));
-        cJSON_AddItemToObject(o, "type", str_or_null(e->type_s));
-        cJSON_AddItemToObject(o, "kind", str_or_null(otc_kind_name(e->kind)));
-        cJSON_AddItemToObject(o, "lat", num_or_null(e->lat));
-        cJSON_AddItemToObject(o, "lon", num_or_null(e->lon));
-        cJSON_AddItemToObject(o, "aliases", aliases[i]);
-        aliases[i] = NULL;
-        cJSON_AddItemToObject(o, "reference_station_id", str_or_null(e->ref_id));
-        items[n].offset = e->offset;
-        items[n++].json = o;
-    }
-    for (i = 0; i < rel->n_tomb; i++) {
-        cJSON *o = cJSON_CreateObject();
-        cJSON_AddStringToObject(o, "station_id", rel->tomb[i].id);
-        cJSON_AddStringToObject(o, "status", "removed");
-        cJSON_AddNumberToObject(o, "offset", (double)rel->tomb[i].offset);
-        cJSON_AddNumberToObject(o, "length", (double)rel->tomb[i].length);
-        items[n].offset = rel->tomb[i].offset;
-        items[n++].json = o;
-    }
-    if (n > 1) qsort(items, n, sizeof *items, ix_cmp);
-    doc = cJSON_CreateObject();
-    snprintf(jsonl, sizeof jsonl, "OTC_%s.jsonl", ds);
-    cJSON_AddNumberToObject(doc, "index_version", 1);
-    cJSON_AddStringToObject(doc, "datestamp", ds);
-    cJSON_AddStringToObject(doc, "jsonl", jsonl);
-    cJSON_AddStringToObject(doc, "jsonl_sha256", jsonl_sha);
-    cJSON_AddStringToObject(doc, "by", SDK_ID);
-    arr = cJSON_CreateArray();
-    for (i = 0; i < n; i++) cJSON_AddItemToArray(arr, items[i].json);
-    n = 0;
-    cJSON_AddItemToObject(doc, "stations", arr);
-    txt = cJSON_PrintUnformatted(doc);
+    char *d, *p, *txt = NULL, jn[80];
+    const char *sha = NULL;
+    cJSON *doc;
+    size_t i;
+    if (!rel || rel->index_used) return;
+    snprintf(jn, sizeof jn, "OTC_%s.jsonl", ds);
+    for (i = 0; i < rel->n_files; i++)
+        if (!strcmp(rel->files[i].name, jn)) sha = rel->files[i].sha256;
+    if (!sha) return;
+    d = rel_dir(c, ds);
+    p = d ? path2(d, "index-v1.json") : NULL;
+    doc = p ? otc__index_doc(rel, sha, SDK_ID) : NULL;
+    if (doc) txt = cJSON_PrintUnformatted(doc);
     if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
-        logf_(c, 2, "cannot write the stream index %s", p);
+        logf_(c, 2, "cannot write the stream index %s", p ? p : ds);
         if (c->err) otc_error_init(c->err);
     }
-done:
-    if (items)
-        for (i = 0; i < n; i++) cJSON_Delete(items[i].json);
-    if (aliases)
-        for (i = 0; i < rel->n_st; i++) cJSON_Delete(aliases[i]);
-    free(items);
-    free(aliases);
-    cJSON_Delete(doc);
     cJSON_free(txt);
-    free(d);
+    cJSON_Delete(doc);
     free(p);
-    free(old);
+    free(d);
 }
 
 /* ---------------------------------------------------------- download to cache */
@@ -1608,11 +1529,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         st = otc_open_file(jsonl_path, &oo, &rel);
         if (st != OTC_OK) goto out;
     }
-    {
-        char jn[64];
-        snprintf(jn, sizeof jn, "OTC_%s.jsonl", ds);
-        write_stream_index(c, ds, rel, row_of(names, digests, n_rows, jn));
-    }
+    write_stream_index(c, ds, rel);
     ver = cJSON_CreateObject();
     files = cJSON_CreateObject();
     if (old && cJSON_IsObject(otc__jget(old, "files"))) {
@@ -1703,6 +1620,7 @@ static otc_status open_cached(fctx *c, const char *ds, otc_release **out)
         otc_open_options_init(&oo);
         oo.error = c->err;
         st = otc_open_file(p, &oo, out);
+        if (st == OTC_OK) write_stream_index(c, ds, *out);
     }
     free(p);
     return st;
