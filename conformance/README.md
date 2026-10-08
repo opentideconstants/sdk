@@ -23,7 +23,7 @@ uv run conformance/driver.py --selftest                              # check the
 uv run conformance/tools/build_cases.py [--check]                    # regenerate the cases / check they are current
 ```
 
-The driver exits 0 only when every case that ran passed. `--all-steps` keeps running a case after a failed step, so that every step is checked; the summary line counts the runner steps that were compared and that failed.
+Exit status. The driver exits 0 only when at least one case ran and every case that ran passed. It exits 1 when a case failed, or when no case ran (an `--only` pattern that matches nothing, or a runner whose features make every case SKIP). It exits 2 for a usage error, a case file that cannot be loaded, a bad `--only` pattern, a runner that fails the handshake (the driver prints the tail of the runner's stderr), or a harness error. A harness error is an exception in the driver while it runs a case (for example a bad regular expression or a missing field in a driver step, or a server rule that is not valid): the case is reported as FAIL with the step index, and the run goes on to the next case. `--check-cases` exits 2 when it finds a problem. `--all-steps` keeps running a case after a failed step, so that every step is checked; the summary line counts the runner steps that were compared and that failed.
 
 **The null runner** (`runners/null/runner.py`) answers every step with an empty result. It must fail every case. That is the RED proof of phase step S2.
 
@@ -34,7 +34,7 @@ The driver exits 0 only when every case that ran passed. `--all-steps` keeps run
 3. It sends the case's runner steps one at a time and compares each reply with the step's `expect`. Between runner steps it runs its own driver steps (server rules, file changes, request checks).
 4. A case passes when every step passes. At the end the driver closes the runner's stdin; the runner then closes its client and exits.
 
-The runner gets a clean environment: no `OPENTIDECONSTANTS_*` and no proxy variables, `XDG_CACHE_HOME` and `LOCALAPPDATA` inside the case's temporary directory, plus the case's `env`.
+The runner gets a clean environment: no `OPENTIDECONSTANTS_*` and no proxy variables; `HOME` (and `USERPROFILE`), `XDG_CACHE_HOME` and `LOCALAPPDATA` inside the case's temporary directory, so no default cache directory is shared between cases or with the real home directory; plus the case's `env`. The first runner start (the probe that reads the hello) gets the same isolation.
 
 ## The runner protocol
 
@@ -71,6 +71,8 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 {"ok": false, "error": {"code": "checksum_mismatch", "message": "...", "fields": {"file": "...", "expected": "...", "actual": "..."}}}
 ```
 
+- `ok` must be a JSON boolean. With `ok: false`, `error` must be an object, and `fields`, when present, an object. Any other shape is a malformed reply and fails the step.
+- A step with no `expect` (a set-up step) still fails the case when its reply is malformed or `ok: false`.
 - `code` is the stable error code (§4.8). The runner catches the SDK's **base error class only** (`OpenTideConstants::Error`, `OpenTideConstantsError`) and reports its `.code`. Any other exception is a runner failure: report it with code `"uncaught:<ClassName>"`, which fails the case. In C, map `otc_status` to the code.
 - `fields` holds the error's detail attributes, with their snake_case names: `url`, `status` (network), `file`, `expected`, `actual` (checksum_mismatch), `path` (file_exists, io). C fills them from `otc_error` (`http_status` is `status`).
 - An op that only does something (`close`, `hold_release`) replies `{"ok": true, "result": {}}`.
@@ -89,7 +91,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 
 | Op | Args | Public API call | Result |
 |---|---|---|---|
-| `open` | client options (`release`, `file`, `cache_dir`, `offline`, `mode`, `base_url`, `timeout`, `proxy`, `user_agent`, `on_network_error`, `auto_update`, `update_interval`, `verify_on_open`) | close the current client, open a new one (C: `otc_fetch_*` then `otc_open_file`) | `{loaded_from, datestamp, format_version}` |
+| `open` | client options (`release`, `file`, `cache_dir`, `offline`, `mode`, `base_url`, `timeout`, `proxy`, `ca_file`, `user_agent`, `on_network_error`, `auto_update`, `update_interval`, `verify_on_open`) | close the current client, open a new one (C: `otc_fetch_*` then `otc_open_file`) | `{loaded_from, datestamp, format_version}` |
 | `close` | | `close` | `{}` |
 | `hold_release` | `name` | keep `client.release` under `name` | `{}` |
 | `loaded_from` | | `client.loaded_from` | `{loaded_from}` |
@@ -168,7 +170,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
  ]}
 ```
 
-- **`matrix`**: the driver runs the case once per open variant and puts an `open` step first. The variants are `@json`, `@json.gz` (eager), `@jsonl` (eager), `@jsonl-stream`, each opening `fixtures/<root>/OTC_<release><ext>` with `file:`, and `@server` (eager, `release` pinned, from the fixture server into a new cache). The open step expects `loaded_from` `file` (or `download`) and the datestamp, plus the case's `open_expect`.
+- **`matrix`**: the driver runs the case once per open variant and puts an `open` step first. The variants are `@json`, `@json.gz` (eager), `@jsonl` (eager), `@jsonl-stream`, each opening `fixtures/<root>/OTC_<release><ext>` with `file:`, and `@server` (eager, `release` pinned, from the fixture server into a new cache; it needs `fs` and `fetch`, because it passes `cache_dir`). The open step expects `loaded_from` `file` (or `download`) and the datestamp, plus the case's `open_expect`.
 - **`expect`**: the keys other than `error`, `error_fields` and `tolerance` must be keys of the result, with equal values. `tolerance` (default 1e-9) is the largest absolute difference allowed for every number in the step. Strings and ids must be exactly equal. `{"error": code}` expects an error with that code; `error_fields` checks the error's `fields`.
 - **Matchers** may stand in for a value: `{"$contains": s}`, `{"$regex": re}`, `{"$type": "object" | "array" | "string" | "number" | "boolean" | "null"}`, `{"$len_min": n}`, `{"$all": [matchers]}`.
 - **Placeholders** in args, expectations and driver steps: `${fixtures}` (the absolute path of `conformance/fixtures`), `${server}` (`http://127.0.0.1:<port>`), `${proxy}` (the recording proxy URL), `${tmp}` (the case's temporary directory), `${cache}` (`${tmp}/cache`).
@@ -177,10 +179,10 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 
 | Step | What it does |
 |---|---|
-| `server_rules` `{rules}` | Sets the fixture server's scripted rules (see `server.py`): `status` (404, 500, 429 with `Retry-After`, `times`), `short_body` (Content-Length larger than the body, then close), `truncate` (a consistent but short body), `slow` (body after `delay_s`), `file`, `json` (serve one value of a fixture JSON file). Cleared at the start of each case. |
-| `server_stop` / `server_start` | Stops the server; a tripwire on the same port records any connection. Restarted at the end of each case. |
+| `server_rules` `{rules}` | Sets the fixture server's scripted rules (see `server.py`): `status` (404, 500, 429 with `Retry-After`, `times`), `short_body` (Content-Length larger than the body, then close), `truncate` (a consistent but short body), `slow` (body after `delay_s`), `file`, `json` (serve one value of a fixture JSON file). Every rule field is checked when the rules are set (and by `--check-cases`); a bad rule is a harness error. A rule that fails when a request comes (for example a JSON pointer that does not resolve) gets a 500, and the request log entry has an `error`. A `json` rule whose file is missing gets a 404. Cleared at the start of each case. |
+| `server_stop` / `server_start` | Stops the server and closes its open (keep-alive) connections; a tripwire on the same port records any new connection, and a request that still reaches the server on an old connection is also a tripwire entry with no response. Restarted at the end of each case. |
 | `clear_log` | Clears the server, tripwire and proxy logs. |
-| `assert_requests` | Counts logged requests: `source` (`server`, `proxy`, `tripwire`, `any`), `match` (regex on the path), `status`, `header` (`{name: regex}`; with `all: true` every request must match), `has_query`, then `count` / `min` / `max`, and `min_gap_s` between them. |
+| `assert_requests` | Counts logged requests (a proxy entry for a failed upstream has status 502 and the reason in `error`): `source` (`server`, `proxy`, `tripwire`, `any`), `match` (regex on the path), `status`, `header` (`{name: regex}`; with `all: true` every request must match), `has_query`, then `count` / `min` / `max`, and `min_gap_s` between them. |
 | `copy`, `write`, `delete`, `mkdir`, `corrupt` | File set-up. `corrupt` flips one bit of the byte at `offset`. |
 | `assert_files` | `dir` has the names in `present`, not those in `absent`, exactly `exactly`; `no_tmp` = no `.tmp-*` file left. |
 | `assert_sha256` | A file's SHA-256 equals (or with `negate`, differs from) a hex digest or another file's. |
