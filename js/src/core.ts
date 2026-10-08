@@ -8,7 +8,7 @@ import {
     headerFromMeta, indexJsonl, parseJson, parseSha256, releaseFromJson, releaseFromJsonl, type LineReader, type StreamIndex,
 } from "./loader.js";
 import type { CacheStore, HttpResponse, Platform } from "./platform.js";
-import type { Release } from "./release.js";
+import { storedIndex, usableIndex, type Release } from "./release.js";
 import type { FileInfo, Logger, Mode, OnNetworkError } from "./types.js";
 
 export interface Ctx {
@@ -367,24 +367,26 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         throw new ChecksumError(`${n.jsonl}: size ${have}, expected ${want}`, { file: n.jsonl, expected: verified.files[n.jsonl]?.sha256 ?? null, actual: null });
     }
     const jsonlSha = verified.files[n.jsonl]?.sha256 ?? null;
+    const header = headerFromMeta(meta);
     let index: StreamIndex | null = null;
     const ib = dir.read("index-v1.json");
     if (ib) {
         try {
             const v: unknown = JSON.parse(dec.decode(ib));
-            if (isObject(v) && v["version"] === 1 && jsonlSha !== null && v["jsonl_sha256"] === jsonlSha && Array.isArray(v["entries"])) {
-                index = v as unknown as StreamIndex;
-            }
+            const entries = usableIndex(v, d, jsonlSha, have, new Set(header.conventions.map((c) => String(c["convention_id"]))),
+                new Set(header.licences.map((l) => String(l["licence_id"]))));
+            if (entries) index = { entries };
         } catch {
-            /* rebuilt below */
+            /* a stale or broken index is rebuilt below */
         }
     }
     let jsonl: Uint8Array | null = null;
     if (!index) {
         jsonl = sized(n.jsonl);
-        const { entries } = indexJsonl(headerFromMeta(meta), jsonl, false);
-        index = { version: 1, jsonl_sha256: jsonlSha, entries };
-        dir.writeIndex(enc.encode(JSON.stringify(index)));
+        const { entries } = indexJsonl(header, jsonl, false);
+        index = { entries };
+        // .verified gives the .jsonl digest the index records; without it there is no index to write
+        if (jsonlSha !== null) dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
     }
     const lr = dir.lineReader(n.jsonl);
     if (lr) return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close });

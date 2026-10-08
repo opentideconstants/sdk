@@ -48,10 +48,8 @@ export function headerFromMeta(bytes: Uint8Array): ReleaseHeader {
     return parseHeader(doc);
 }
 
-/** @internal The stream index (spec 6.2): one entry per line, plus the .jsonl SHA-256 it was built from. */
+/** @internal A stream index read from index-v1.json (spec 6.2). */
 export interface StreamIndex {
-    version: 1;
-    jsonl_sha256: string | null;
     entries: IndexEntry[];
 }
 
@@ -67,7 +65,9 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         let end = bytes.indexOf(0x0a, start);
         if (end === -1) end = bytes.length;
         lineNo++;
-        const line = bytes.subarray(start, end);
+        // the length leaves out the line end: \n, or \r\n (spec 6.2)
+        const body = end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
+        const line = bytes.subarray(start, body);
         if (utf8.decode(line).trim() !== "") {
             let doc: Json;
             try {
@@ -75,7 +75,7 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
             } catch (e) {
                 throw new InvalidReleaseError(`line ${lineNo} of the .jsonl file is not JSON`, { cause: e });
             }
-            entries.push(indexDoc(doc, header, start, end - start, convs, lics));
+            entries.push(indexDoc(doc, header, start, body - start, convs, lics));
             if (keep) docs.push(deepFreeze(doc) as JsonObject);
         }
         start = end + 1;
