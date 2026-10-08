@@ -77,7 +77,7 @@ class Convention:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d["convention_id"], E.enum_or_raw(E.PhaseReference, d.get("phase_reference")),
                    d.get("utc_offset_hours"), d.get("v0_model"), E.enum_or_raw(E.NodalHandling, d.get("nodal_handling")),
                    freeze(d.get("nodal_formula_ids")), d.get("constituent_table_version"), d.get("tables_sha256"),
@@ -95,7 +95,7 @@ class Licence:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d["licence_id"], d.get("spdx"), d.get("provider"), d.get("citation"), d.get("attribution"),
                    d.get("url"), freeze(d))
 
@@ -114,7 +114,7 @@ class Constituent:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d["name"], d.get("source_name"), d.get("doodson"), d.get("speed_deg_per_hour"), d.get("amplitude_m"),
                    d.get("phase_deg"), d.get("amp_uncertainty_m"), d.get("phase_uncertainty_deg"), d.get("kept_reason"),
                    freeze(d))
@@ -127,7 +127,7 @@ class QcFlag:
     values: Any
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(E.enum_or_raw(E.QcFlagName, d.get("flag")), d.get("verdict"), freeze(d.get("values")))
 
 
@@ -138,7 +138,7 @@ class DroppedConstituent:
     detail: Optional[str]
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d.get("name"), E.enum_or_raw(E.DroppedReason, d.get("dropped_reason")), d.get("detail"))
 
 
@@ -166,7 +166,7 @@ class Provenance:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         d = d or {}
         return cls(d.get("build_commit"), d.get("adapter_version"), freeze(d.get("input_sha256")),
                    freeze(d.get("time_base")), d.get("selection_reason"), freeze(d.get("decision")), freeze(d))
@@ -193,7 +193,7 @@ class Validation:
     previous_release: Optional[Mapping[str, Any]]
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         prev = d.get("previous_release")
         if prev is not None:
             prev = MappingProxyType({k: prev.get(k) for k in _PREVIOUS})
@@ -214,7 +214,7 @@ class SubordinateOffsets:
     licence_id: Optional[str]
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d.get("reference_station_id"), d.get("time_offset_high_min"), d.get("time_offset_low_min"),
                    d.get("height_offset_high"), d.get("height_offset_low"),
                    E.enum_or_raw(E.HeightAdjustedType, d.get("height_adjusted_type")), d.get("licence_id"))
@@ -246,7 +246,7 @@ class ConstantSet:
         """The constituents the fit kept, in file order. Built on first use (spec §6.1)."""
         c = self._constituents
         if c is None:
-            c = tuple(Constituent.parse(x) for x in (self.raw.get("constituents") or ()))
+            c = tuple(Constituent._parse(x) for x in (self.raw.get("constituents") or ()))
             object.__setattr__(self, "_constituents", c)
         return c
 
@@ -267,7 +267,7 @@ class Tombstone:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
-    def parse(cls, d):
+    def _parse(cls, d):
         return cls(d["station_id"], d.get("name"), E.enum_or_raw(E.StationStatus, d.get("status")),
                    d.get("removed_in"), d.get("removed_reason"), freeze(d))
 
@@ -344,7 +344,7 @@ def build_station(d, conventions, licences, kind):
     try:
         sid = d["station_id"]
         rid = d.get("recommended_set_id")
-        rows = tuple(Validation.parse(v) for v in (d.get("validation") or ()))
+        rows = tuple(Validation._parse(v) for v in (d.get("validation") or ()))
         sets = []
         for cs in d.get("constant_sets") or ():
             conv = conventions.get(cs.get("convention_id"))
@@ -364,9 +364,9 @@ def build_station(d, conventions, licences, kind):
                                                      span.get("good_samples")),
                 None if datum is None else Datum(datum.get("msl_offset_m"), freeze(dict(datum.get("named") or {}))),
                 E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
-                tuple(QcFlag.parse(f) for f in cs.get("qc_flags") or ()),
-                tuple(DroppedConstituent.parse(x) for x in cs.get("dropped_constituents") or ()),
-                set_id == rid, conv, lic, Provenance.parse(cs.get("provenance")),
+                tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
+                tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
+                set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
                 freeze(cs)))
         rec = [s for s in sets if s.set_id == rid]
@@ -383,7 +383,7 @@ def build_station(d, conventions, licences, kind):
             sid, d.get("name"), d.get("country"), float(d["lat"]), float(d["lon"]),
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
             d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, d.get("status")),
-            None if off is None else SubordinateOffsets.parse(off), rows, rec[0] if rec else None, freeze(d),
+            None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
             ordered)
     except InvalidReleaseError:
         raise

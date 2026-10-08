@@ -144,8 +144,8 @@ class Release:
         self._release = rel
         self._files = tuple(files)
         try:
-            self._conventions = tuple(Convention.parse(c) for c in meta.get("conventions") or ())
-            self._licences = tuple(Licence.parse(x) for x in meta.get("licences") or ())
+            self._conventions = tuple(Convention._parse(c) for c in meta.get("conventions") or ())
+            self._licences = tuple(Licence._parse(x) for x in meta.get("licences") or ())
         except (KeyError, TypeError, AttributeError) as e:
             raise InvalidReleaseError(f"conventions or licences: {e!r}") from e
         self._conv_by_id = {c.convention_id: c for c in self._conventions}
@@ -322,7 +322,7 @@ class Release:
             return self._tomb_objs[station_id]
         with self._lock:
             d = self._read_line(e)
-        return Tombstone.parse(d)
+        return Tombstone._parse(d)
 
     def station_by_alias(self, system: str, alias_id: str) -> Optional[Station]:
         _check_type("system", system, (str,), allow_none=False)
@@ -486,7 +486,7 @@ class Release:
         return (f"Tidal constants: OpenTideConstants {self.datestamp}, {ident}, CC BY 4.0. Sources: "
                 + "; ".join(parts))
 
-    def close(self) -> None:
+    def _close(self) -> None:
         self._closed = True
         fh, self._fh = self._fh, None
         if fh is not None:
@@ -515,8 +515,8 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
     if name.endswith(".jsonl"):
         meta = _json(_read_bytes(meta_path_for(path)), str(meta_path_for(path)))
         _check_meta(meta, str(meta_path_for(path)))
-        conv = {c.convention_id: c for c in (Convention.parse(c) for c in meta.get("conventions") or ())}
-        lic = {x.licence_id: x for x in (Licence.parse(c) for c in meta.get("licences") or ())}
+        conv = {c.convention_id: c for c in (Convention._parse(c) for c in meta.get("conventions") or ())}
+        lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path)
             return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path)
@@ -546,8 +546,8 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
 
 def _eager(meta, docs, files) -> Release:
     try:
-        conv = {c.convention_id: c for c in (Convention.parse(c) for c in meta.get("conventions") or ())}
-        lic = {x.licence_id: x for x in (Licence.parse(c) for c in meta.get("licences") or ())}
+        conv = {c.convention_id: c for c in (Convention._parse(c) for c in meta.get("conventions") or ())}
+        lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
         entries = [_entry(d) for d in docs]
     except (KeyError, TypeError, AttributeError) as e:
         raise InvalidReleaseError(f"bad station or reference data: {e!r}") from e
@@ -558,7 +558,7 @@ def _eager(meta, docs, files) -> Release:
         if d.get("status") == "active":
             stations[d["station_id"]] = build_station(d, conv, lic, kinds.get(d["station_id"]))
         elif d.get("status") == "removed":
-            tombs[d["station_id"]] = Tombstone.parse(d)
+            tombs[d["station_id"]] = Tombstone._parse(d)
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs)
 
 
@@ -618,4 +618,3 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path]):
     return entries
 
 
-__all__ = ["Release", "load_document", "SUPPORTED_FORMAT_MAJORS", "file_sha256", "os"]

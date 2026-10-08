@@ -133,10 +133,12 @@ class Http:
             sha = hashlib.sha256()
             size = 0
             parts = []
+            raw_size = 0
             while True:
                 chunk = resp.read(CHUNK)
                 if not chunk:
                     break
+                raw_size += len(chunk)
                 if dec is not None:
                     chunk = dec.decompress(chunk)
                 sha.update(chunk)
@@ -145,6 +147,9 @@ class Http:
                     sink.write(chunk)
                 else:
                     parts.append(chunk)
+            clen = rh.get("content-length")
+            if clen is not None and clen.isdigit() and int(clen) != raw_size:
+                raise http.client.IncompleteRead(b"", int(clen) - raw_size)
             if dec is not None:
                 tail = dec.flush()
                 if not dec.eof:
@@ -198,5 +203,3 @@ class Http:
 def gunzip(data: bytes) -> bytes:
     return gzip.decompress(data)
 
-
-__all__ = ["Http", "Response", "gunzip", "socket"]

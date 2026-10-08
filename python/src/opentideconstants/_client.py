@@ -127,7 +127,7 @@ class OpenTideConstants:
         with self._lock:
             self._closed = True
             if self._release is not None:
-                self._release.close()
+                self._release._close()
 
     # ------------------------------------------------------------------ attributes
 
