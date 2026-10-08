@@ -207,7 +207,8 @@ class Runner:
         if op in ("station_count", "tombstone_count", "citation"):
             return {op: getattr(self.release(req), op)}
         if op == "stats":
-            return {"stats": plain(self.release(req).stats)}
+            st = self.release(req).stats
+            return {"stats": pick(st, ["type", "kind", "country", "source", "qc_status"])}
         if op == "constituent_names":
             return {"names": list(self.release(req).constituent_names)}
         if op == "conventions":
