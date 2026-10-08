@@ -7,7 +7,7 @@ Synthetic OpenTideConstants releases for the SDK conformance suite (SDK spec §7
 Do not edit these files by hand. Change `conformance/tools/build_fixtures.py`, then run:
 
 ```
-uv run conformance/tools/build_fixtures.py           # writes good/, bad/ and fixtures.json
+uv run conformance/tools/build_fixtures.py           # writes good/, order/, bad/ and fixtures.json
 uv run conformance/tools/build_fixtures.py --check   # regenerates, compares byte for byte, validates, checks every bad fixture
 ```
 
@@ -20,6 +20,7 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | Directory | What it holds | Expected outcome |
 |---|---|---|
 | `good/` | releases `20991231` and `20991231.2` (two releases on the same day), with `OTC_latest.json`, `OTC_latest-f0.json` and `OTC_index.json` pointing to `20991231.2` | both load |
+| `order/` | releases `20991231.2` and `20991231.10`, with the pointers on `20991231.10`: numeric counter order (.10 after .2) differs from string order (§4.3.1). Same content as `good/`'s `20991231.2` apart from the datestamp | both load |
 | `bad/wrong-sha256/` | every station data file differs from its SHA-256 (same size, one byte changed) | `checksum_mismatch` |
 | `bad/truncated/` | the `.json`, `.json.gz` and `.jsonl` files are cut to half their size | `checksum_mismatch` |
 | `bad/pointer-mismatch/` | the files match `.sha256`, but the pointer and the index give other SHA-256 values | `checksum_mismatch` |
