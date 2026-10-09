@@ -712,8 +712,17 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         curl_easy_setopt(h, CURLOPT_URL, url);
         curl_easy_setopt(h, CURLOPT_USERAGENT, ua);
         curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
+        /* redirects (spec 5.7, CR D1): at most 5, only http and https, and never from
+         * https to http */
         curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
+#if LIBCURL_VERSION_NUM >= 0x075500
+        curl_easy_setopt(h, CURLOPT_PROTOCOLS_STR, "http,https");
+        curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https");
+#else
+        curl_easy_setopt(h, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+        curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS, https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+#endif
         curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0));
         curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999));
