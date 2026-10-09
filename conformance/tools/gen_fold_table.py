@@ -105,14 +105,17 @@ def main():
             "Run it with uv, which picks the Python version in the script header."
         )
     text = render(build())
+    # Compare and write bytes: text mode reads CRLF as LF and writes CRLF on
+    # Windows, and the SDK copies of the table are compared byte for byte.
+    data = text.encode("utf-8")
     if args.check:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else None
-        if current != text:
+        current = OUT.read_bytes() if OUT.exists() else None
+        if current != data:
             print(f"{OUT} differs from a fresh generation")
             return 1
         print(f"{OUT} matches a fresh generation ({len(json.loads(text)['map'])} entries, Unicode {UNICODE_VERSION})")
         return 0
-    OUT.write_text(text, encoding="utf-8")
+    OUT.write_bytes(data)
     print(f"wrote {OUT} ({len(json.loads(text)['map'])} entries, Unicode {UNICODE_VERSION})")
     return 0
 
