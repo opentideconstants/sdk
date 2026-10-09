@@ -27,6 +27,13 @@ on:
 permissions:
   contents: read
 
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   cross:
     name: ${{ matrix.os }}
