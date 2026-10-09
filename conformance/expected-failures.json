@@ -88,14 +88,6 @@
    "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
   },
   {
-   "case": "cache/releases-dir-unreadable-offline",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-10",
-   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
-  },
-  {
    "case": "cache/verified-row-not-object-pinned-online",
    "runners": [
     "c-fetch"
@@ -106,7 +98,6 @@
   {
    "case": "cache/verified-unreadable-offline",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK-R2-10",

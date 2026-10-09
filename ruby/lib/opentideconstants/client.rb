@@ -429,7 +429,7 @@ class OpenTideConstants
     end
 
     # The cached .meta.json of release d ({} when it is not there or not a
-    # JSON object; FileError when it cannot be read).
+    # JSON object; CacheError when it cannot be read).
     def cached_meta(d)
         text = cache.read_file(File.join(cache.release_dir(d), "OTC_#{d}.meta.json"))
         doc = text ? JSON.parse(text.force_encoding(Encoding::UTF_8)) : {}

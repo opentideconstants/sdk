@@ -115,7 +115,8 @@ class OpenTideConstants
         # ---- pointer files
 
         # [body, etag] of a cached pointer or index file, or nil when it is not
-        # cached. A file that exists but cannot be read is io (spec §4.8).
+        # cached. A file that exists but cannot be read is cache, never absent
+        # (spec §5.2 step 6).
         def read_pointer(name)
             path = File.join(pointer_dir, name)
             body = read_file(path)
@@ -124,14 +125,14 @@ class OpenTideConstants
             [body.force_encoding(Encoding::UTF_8), etag&.strip]
         end
 
-        # The bytes of a cache file, nil when it is not there, FileError when
-        # it cannot be read.
+        # The bytes of a cache file, nil when it is not there, CacheError when
+        # it cannot be read (spec §5.2 step 6: cache, never absent).
         def read_file(path)
             File.binread(path)
         rescue Errno::ENOENT, Errno::ENOTDIR
             nil
         rescue SystemCallError, IOError => e
-            raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+            raise CacheError, "cannot read #{path}: #{e.message}"
         end
 
         # Writes a pointer or index file and its ETag as a pair, under
@@ -161,7 +162,7 @@ class OpenTideConstants
         # The parsed .verified of a release, or nil when the directory is not
         # trusted: no .verified, or one that is not a JSON object whose files
         # rows are objects with a string or null sha256 and url and an integer
-        # or null size (R2-088). A .verified that cannot be read is io (spec §4.8).
+        # or null size (R2-088). A .verified that cannot be read is cache.
         def verified(datestamp)
             text = read_file(File.join(release_dir(datestamp), ".verified"))
             return nil unless text
@@ -228,8 +229,11 @@ class OpenTideConstants
             Dir.children(releases_dir)
                .select { |d| d.match?(DATESTAMP_RE) && File.file?(File.join(releases_dir, d, ".verified")) }
                .sort_by { |d| Cache.datestamp_key(d) }.reverse
-        rescue SystemCallError
+        rescue Errno::ENOENT, Errno::ENOTDIR
             []
+        rescue SystemCallError => e
+            # an unreadable cache is not an empty one (R2-091, spec §5.2 step 6)
+            raise CacheError, "cannot list #{releases_dir}: #{e.message}"
         end
 
         # Datestamp directories that have no .verified: a download that failed
@@ -238,8 +242,10 @@ class OpenTideConstants
             return [] unless File.directory?(releases_dir)
             Dir.children(releases_dir)
                .select { |d| d.match?(DATESTAMP_RE) && !File.exist?(File.join(releases_dir, d, ".verified")) }
-        rescue SystemCallError
+        rescue Errno::ENOENT, Errno::ENOTDIR
             []
+        rescue SystemCallError => e
+            raise CacheError, "cannot list #{releases_dir}: #{e.message}"
         end
 
         # Removes a release directory (spec §4.3 prune). It takes the release
