@@ -147,3 +147,61 @@ def test_json_set_rejects_a_pointer_without_a_leading_slash(tmp_path):
 def test_validate_rule_rejects(rule):
     with pytest.raises(ValueError):
         server.validate_rule(0, rule)
+
+
+# --- K9: a proxy target with a bad port is a logged 400
+
+def test_proxy_bad_port_is_a_logged_400():
+    proxy = RecordingProxy().start()
+    try:
+        conn = http.client.HTTPConnection(proxy.host, proxy.port, timeout=10)
+        conn.request("GET", "http://127.0.0.1:99999/x")
+        r = conn.getresponse()
+        r.read()
+        assert r.status == 400, r.status
+        assert [e["status"] for e in proxy.log.entries()] == [400], proxy.log.entries()
+    finally:
+        proxy.shutdown()
+
+
+# --- K71: running is True before the serving thread starts (a request right after resume() is served)
+
+def test_running_is_set_before_the_thread_starts(monkeypatch):
+    srv = FixtureServer()
+    seen = []
+    real = server.threading.Thread
+
+    class Probe(real):
+        def start(self):
+            seen.append(srv.running)
+            super().start()
+
+    monkeypatch.setattr(server.threading, "Thread", Probe)
+    srv.start()
+    try:
+        assert seen and seen[0] is True, seen
+    finally:
+        monkeypatch.undo()
+        srv.shutdown()
+
+
+# --- K63: an error after the headers went out is a harness error; no second response, no second log entry
+
+def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
+    srv, _ = pair
+    srv.set_rules([{"match": "jsonl$", "action": "slow", "delay_s": 0}])
+
+    def boom(_):
+        raise RuntimeError("broken after the headers")
+    monkeypatch.setattr(server.time, "sleep", boom)
+    conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
+    conn.request("GET", JSONL)
+    r = conn.getresponse()
+    assert r.status == 200
+    with pytest.raises((http.client.IncompleteRead, OSError)):
+        r.read()
+    conn.close()
+    monkeypatch.undo()
+    statuses = [e["status"] for e in srv.log.entries()]
+    assert statuses == [200], statuses
+    assert srv.errors, "the error after the headers was not reported to the driver"

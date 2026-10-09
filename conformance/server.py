@@ -227,6 +227,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         if "content-length" not in {k.lower() for k in (headers or {})}:
             self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self._started = True
         if not head and body:
             self.wfile.write(body)
 
@@ -248,12 +249,18 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         rule = self.fx.take_rule(path)
+        self._started = False
         try:
             self._serve(path, rule, head)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:  # a rule that cannot be applied: log it and answer 500, do not drop the connection
             msg = f"{type(e).__name__}: {e}"
+            if self._started:  # a response is already under way: no second status line or log entry; end it here
+                print(f"fixture server: error while sending {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
+                self.fx.errors.append(f"error while sending {path} with rule {rule!r}: {msg}")
+                self.close_connection = True
+                return
             print(f"fixture server: cannot serve {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
             self.fx.errors.append(f"cannot serve {path} with rule {rule!r}: {msg}")
             self._record(500, rule.get("name") if rule else None, error=msg)
@@ -304,6 +311,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("ETag", tag)
             self.send_header("Content-Length", "0")
             self.end_headers()
+            self._started = True
             return
         ctype = "application/json" if served.endswith((".json", ".jsonl")) else (
             "application/gzip" if served.endswith(".gz") else "text/plain")
@@ -329,6 +337,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             for k, v in {**CORS_HEADERS, **headers, "Content-Length": str(len(body))}.items():
                 self.send_header(k, v)
             self.end_headers()
+            self._started = True
             self.wfile.flush()
             time.sleep(float(rule.get("delay_s", 5)))
             if not head:
@@ -390,8 +399,8 @@ class FixtureServer:
         self._httpd.fixture = self  # type: ignore[attr-defined]
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        self.running = True  # before the thread: a request right after start() or resume() is served, not a tripwire hit
         self._thread.start()
-        self.running = True
         return self
 
     def _track(self, conn, add):
@@ -544,11 +553,17 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             return
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection", "connection", "keep-alive")}
+        try:
+            port = parts.port or 80
+        except ValueError as e:
+            self._record(400, target, error=f"bad port: {e}")
+            self.send_error(400, "bad port")
+            return
         conn = None
         try:
             try:
                 host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
-                conn = http.client.HTTPConnection(host, parts.port or 80, timeout=120)
+                conn = http.client.HTTPConnection(host, port, timeout=120)
                 conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
                 resp = conn.getresponse()
             except (OSError, ValueError, http.client.HTTPException) as e:
