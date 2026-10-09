@@ -105,3 +105,14 @@ def test_resume_failure_does_not_escape_run_case(tmp_path, monkeypatch):
         srv.shutdown()
         proxy.shutdown()
     assert failures and stats["harness_errors"] == 1 and stats.get("abort"), (failures, stats)
+
+
+# --- K68: --check-cases rejects an unknown matcher, a bad matcher argument and a mixed $-object
+
+@pytest.mark.parametrize("value", [{"$contain": "x"}, {"$regex": "("}, {"$type": "int"}, {"$len_min": "2"},
+                                   {"$all": {"$contains": "x"}}, {"$any_of": "x"}, {"$contains": "x", "other": 1},
+                                   [{"$conatins": "x"}]])
+def test_check_cases_rejects_bad_matchers(tmp_path, value):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "citation", "expect": {"citation": value}}]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and "PROBLEM" in r.stdout and "Traceback" not in r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-400:])

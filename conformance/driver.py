@@ -186,6 +186,47 @@ def match(exp, act, tol, path="result"):
     raise CaseError(f"cannot match {exp!r}")
 
 
+MATCHERS = {"$contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
+TYPE_NAMES = {"object", "array", "string", "number", "boolean", "null"}
+
+
+def matcher_problems(v, path):
+    """Lint an expected value: every matcher must be a known one with an argument of the right type, and a
+    non-matcher object must not have a key that starts with "$" (a typo of a matcher would compare as data)."""
+    out = []
+    if isinstance(v, list):
+        for i, x in enumerate(v):
+            out += matcher_problems(x, f"{path}[{i}]")
+    elif isinstance(v, dict):
+        dollar = [k for k in v if isinstance(k, str) and k.startswith("$")]
+        if dollar and len(v) != 1:
+            return [f"{path}: an object with a $ key must be one matcher, got keys {sorted(v)}"]
+        if not dollar:
+            for k, x in v.items():
+                out += matcher_problems(x, f"{path}.{k}")
+            return out
+        (op, arg), = v.items()
+        if op not in MATCHERS:
+            return [f"{path}: unknown matcher {op}"]
+        if op in ("$contains", "$regex") and not isinstance(arg, str):
+            out.append(f"{path}: {op} needs a string")
+        elif op == "$regex":
+            try:
+                re.compile(arg)
+            except re.error as e:
+                out.append(f"{path}: $regex {arg!r} is not a regular expression: {e}")
+        elif op == "$type" and arg not in TYPE_NAMES:
+            out.append(f"{path}: $type must be one of {sorted(TYPE_NAMES)}, got {arg!r}")
+        elif op == "$len_min" and (isinstance(arg, bool) or not isinstance(arg, int) or arg < 0):
+            out.append(f"{path}: $len_min needs a non-negative integer, got {arg!r}")
+        elif op in ("$all", "$any_of"):
+            if not isinstance(arg, list) or not arg:
+                out.append(f"{path}: {op} needs a non-empty list")
+            else:
+                out += matcher_problems(arg, f"{path}.{op}")
+    return out
+
+
 def reply_problems(reply):
     """Check the shape of a runner reply (README "The runner protocol"); return problems."""
     if not isinstance(reply, dict) or "ok" not in reply:
@@ -355,6 +396,7 @@ def check_cases(cases):
             for exp in [st.get("expect")] + list((st.get("expect_if_missing") or {}).values()):
                 if exp is None:
                     continue
+                problems += [f"{where}: {p}" for p in matcher_problems(exp, "expect")]
                 if "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
                     problems.append(f"{where}: an empty result satisfies this expectation")
             if st.get("expect") is not None:
