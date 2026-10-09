@@ -61,12 +61,17 @@ jobs:
           python -m build python --outdir dist
           ls dist
           test -f dist/opentideconstants-*-py3-none-any.whl
-      - name: Install the wheel in a clean python:3.10-slim container and run the quickstart against the fixture server
+      - name: The wheel carries supported-formats.json (spec 7.4)
+        run: |
+          python -m zipfile -l dist/opentideconstants-*-py3-none-any.whl > wheel-files.txt
+          grep "opentideconstants/supported-formats.json" wheel-files.txt
+      - name: Install the wheel in a clean python:3.10-slim container, run the unit tests on it, and run the quickstart against the fixture server
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim sh -c '
             set -e
             pip install --no-index --quiet /dist/opentideconstants-*-py3-none-any.whl
             cd /tmp
+            OTC_TEST_INSTALLED=1 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s /repo/python/tests -v
             python /repo/conformance/server.py --port 8765 --proxy-port 8766 >/tmp/server.log 2>&1 &
             sleep 2
             OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:8765/good/ python /repo/python/examples/quickstart.py
