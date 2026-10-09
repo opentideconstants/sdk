@@ -83,7 +83,10 @@ typedef enum otc_status {
 /* The stable error code of a status ("checksum_mismatch", ...); "ok" for OTC_OK. */
 OTC_API const char *otc_status_code(otc_status status);
 
-/* Error detail for calls with no release handle (spec 4.8). */
+/* Error detail for calls with no release handle (spec 4.8). The library
+ * writes into it only when struct_size is at least the size it knows (set
+ * it with otc_error_init()); a smaller struct is left alone, never written
+ * past (spec 6.4 ABI). */
 typedef struct otc_error {
     size_t     struct_size;        /* set by otc_error_init() */
     otc_status status;

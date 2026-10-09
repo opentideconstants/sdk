@@ -1094,10 +1094,10 @@ done:
 
 otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_release **out)
 {
-    otc_error *err = (opts && opts->struct_size >= sizeof *opts) ? opts->error : NULL;
+    otc_error *err = (opts && opts->struct_size >= sizeof *opts) ? otc__err_usable(opts->error) : NULL;
     otc_release *r;
     otc_status st;
-    if (err) otc_error_init(err);
+    otc__err_reset(err);
     if (!out || !path) {
         otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "path and out must not be NULL");
         return OTC_E_INVALID_ARGUMENT;
@@ -1122,7 +1122,7 @@ otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_rel
             return OTC_E_NOMEM;
         }
         otc__mutex_init(&r->lock);
-        if (err) otc_error_init(err);
+        otc__err_reset(err);
         st = open_impl(path, opts, err, r, 0);
     }
     if (st != OTC_OK) {

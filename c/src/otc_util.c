@@ -58,10 +58,22 @@ static void copy_trunc(char *dst, size_t cap, const char *src)
     dst[n] = '\0';
 }
 
+otc_error *otc__err_usable(otc_error *err)
+{
+    return (err && err->struct_size >= sizeof *err) ? err : NULL;
+}
+
+void otc__err_reset(otc_error *err)
+{
+    if (!otc__err_usable(err)) return;   /* a smaller struct (an older caller, or not initialised) is left alone */
+    memset(err, 0, sizeof *err);
+    err->struct_size = sizeof *err;
+}
+
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...)
 {
     va_list ap;
-    if (!err) return;
+    if (!otc__err_usable(err)) return;
     err->status = st;
     if (file) copy_trunc(err->file, sizeof err->file, file);
     va_start(ap, fmt);
@@ -733,7 +745,8 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     const char *expected = NULL, *name;
     size_t n = 0, i;
     otc_status st;
-    if (err) otc_error_init(err);
+    err = otc__err_usable(err);
+    otc__err_reset(err);
     if (!path) {
         otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "path is NULL");
         return OTC_E_INVALID_ARGUMENT;

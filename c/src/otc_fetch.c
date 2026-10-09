@@ -499,7 +499,7 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     c->err = &c->own;
     if (o && o->struct_size < sizeof *o) return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "otc_fetch_options: struct_size is too small");
     c->o = o;
-    if (o && o->error) c->err = o->error;
+    if (o && otc__err_usable(o->error)) c->err = o->error;   /* else the detail stays in own: never written past */
     otc_error_init(c->err);
     if (!g_curl_ok) return fail(c, OTC_E_NETWORK, NULL, "curl_global_init failed");
     if (o && o->cache_dir) root = otc__strdup(o->cache_dir);
@@ -2273,7 +2273,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     otc_loaded_from lf = OTC_LOADED_FROM_UNSET;
     char *ds = NULL, msg[512];
     otc_status last = OTC_OK, st;
-    otc_error *oerr = (oopts && oopts->struct_size >= sizeof *oopts) ? oopts->error : NULL;
+    otc_error *oerr = (oopts && oopts->struct_size >= sizeof *oopts) ? otc__err_usable(oopts->error) : NULL;
     if (out) *out = NULL;
     st = ctx_init(&c, fopts);
     if (st == OTC_OK && !out) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "out is NULL");

@@ -109,6 +109,12 @@ double otc__jnum(const cJSON *obj, const char *key);
 /* A whole, non-negative number member, or -1 (missing, not a number, or with a fraction). */
 int64_t otc__jint(const cJSON *obj, const char *key);
 const cJSON *otc__jget(const cJSON *obj, const char *key);
+/* An otc_error the library may write: err when its struct_size is the size the
+ * library knows, else NULL (spec 6.4: a smaller struct is never written past). */
+otc_error *otc__err_usable(otc_error *err);
+/* Clears a usable err (otc_error_init for the library's own use); else nothing. */
+void otc__err_reset(otc_error *err);
+/* Records an error in a usable err; else nothing. */
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...);
 int otc__strcmp_null(const char *a, const char *b);
 int otc__ends_with(const char *s, const char *suffix);
