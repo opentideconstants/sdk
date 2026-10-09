@@ -82,7 +82,9 @@ void otc__mutex_destroy(otc__mutex *m);
 
 /* cJSON_Parse* writes a process-wide error slot on every call (cJSON.c,
  * global_error), so concurrent parses race. Every parse in the library goes
- * through this wrapper, which holds one process-wide lock while it parses. */
+ * through this wrapper, which holds one process-wide lock while it parses.
+ * text[len] must be '\0'. The whole text must be one JSON value (whitespace
+ * around it is fine): anything after the value fails the parse. */
 cJSON *otc__json_parse(const char *text, size_t len);
 
 /* ----------------------------------------------------------------- helpers */

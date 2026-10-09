@@ -224,7 +224,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
 {
     cJSON *v;
     AcquireSRWLockExclusive(&g_parse_lock);
-    v = cJSON_ParseWithLength(text, len);
+    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     ReleaseSRWLockExclusive(&g_parse_lock);
     return v;
 }
@@ -234,7 +234,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
 {
     cJSON *v;
     pthread_mutex_lock(&g_parse_lock);
-    v = cJSON_ParseWithLength(text, len);
+    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     pthread_mutex_unlock(&g_parse_lock);
     return v;
 }

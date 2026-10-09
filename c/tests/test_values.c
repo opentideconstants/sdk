@@ -1,6 +1,8 @@
 /* PK07 value checks on the real library.
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
- *      not cut to an integer: it reads as missing (-1). */
+ *      not cut to an integer: it reads as missing (-1).
+ * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
+ *      text after a line's object is invalid_release, not ignored. */
 #include "otc_test.h"
 
 static otc_release *open_lines(const char *lines, char **dir_out)
@@ -39,5 +41,24 @@ int main(void)
     otc_station_free(st);
     otc_close(rel);
     free(dir);
+    /* C98 */
+    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\n \t \n" TEST_STATION("OTC-X-2", "Two") "\n", &dir);
+    CHECK(rel != NULL && otc_release_station_count(rel) == 2);
+    otc_close(rel);
+    free(dir);
+    {
+        char *d2 = test_tmpdir(), *path;
+        otc_release *r2 = NULL;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(d2, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") " trailing\n");
+        path = test_join(d2, "OTC_20990101.jsonl");
+        CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_E_INVALID_RELEASE);
+        otc_close(r2);
+        test_write(d2, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") "{}\n");
+        CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_E_INVALID_RELEASE);
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
     return test_done("test_values");
 }

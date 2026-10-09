@@ -437,8 +437,18 @@ static otc_status index_line(builder *b, const char *line, size_t len, uint64_t 
     return st;
 }
 
-/* Calls fn for every line of the file that is not empty, with its offset and
- * its length without the line end (\n, or \r\n). *line_no counts every line. */
+/* 1 when a line is empty or only spaces and tabs (the other SDKs skip such lines too). */
+static int blank(const char *line, size_t len)
+{
+    size_t i;
+    for (i = 0; i < len; i++)
+        if (line[i] != ' ' && line[i] != '\t') return 0;
+    return 1;
+}
+
+/* Calls fn for every line of the file that is not blank, with its offset and
+ * its length without the line end (\n, or \r\n); line[len] is '\0'. *line_no
+ * counts every line. */
 typedef otc_status (*line_fn)(void *ctx, const char *line, size_t len, uint64_t offset);
 
 static otc_status scan_lines(otc__file *f, size_t *line_no, line_fn fn, void *ctx)
@@ -459,7 +469,8 @@ static otc_status scan_lines(otc__file *f, size_t *line_no, line_fn fn, void *ct
                 size_t len = n;
                 (*line_no)++;
                 while (len > 0 && line[len - 1] == '\r') len--;
-                if (len > 0) st = fn(ctx, line, len, line_start);
+                line[len] = '\0';
+                if (!blank(line, len)) st = fn(ctx, line, len, line_start);
                 n = 0;
                 line_start = off + i + 1;
             } else {
@@ -477,7 +488,8 @@ static otc_status scan_lines(otc__file *f, size_t *line_no, line_fn fn, void *ct
     if (st == OTC_OK && n > 0) {
         (*line_no)++;
         while (n > 0 && line[n - 1] == '\r') n--;
-        if (n > 0) st = fn(ctx, line, n, line_start);
+        line[n] = '\0';
+        if (!blank(line, n)) st = fn(ctx, line, n, line_start);
     }
     free(buf);
     free(line);
