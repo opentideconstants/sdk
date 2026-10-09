@@ -48,7 +48,7 @@ const VALIDATION = ["set_id", "reference_source", "reference_station", "referenc
 const PREVIOUS = ["time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
 const OFFSETS = ["reference_station_id", "time_offset_high_min", "time_offset_low_min", "height_offset_high",
     "height_offset_low", "height_adjusted_type", "licence_id"];
-const TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason"];
+const TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason", "merged_into", "detail"];
 
 function iso(t) {
     if (t == null) return null;
@@ -76,7 +76,7 @@ function encSet(cs) {
         record_span: span == null ? null : { start: iso(span.start), end: iso(span.end), good_samples: span.good_samples },
         datum: datum == null ? null : { msl_offset_m: datum.msl_offset_m, named: datum.named },
         qc_status: cs.qc_status,
-        qc_flags: cs.qc_flags.map((f) => ({ flag: f.flag, verdict: f.verdict, values: f.values })),
+        qc_flags: cs.qc_flags.map((f) => pick(f, ["flag", "reason", "values"])),
         dropped_constituents: cs.dropped_constituents.map((d) => ({ name: d.name, dropped_reason: d.dropped_reason, detail: d.detail })),
         time_base: encTimeBase(need(cs, "time_base")),
         is_recommended: cs.isRecommended,
@@ -114,7 +114,6 @@ function encBuild(b) {
     };
 }
 
-const EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"];
 
 // TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects.
 function encTimeBase(t) {
@@ -122,10 +121,10 @@ function encTimeBase(t) {
     const corr = need(t, "correction");
     return {
         code: need(t, "code"), reason: need(t, "reason"), declared: need(t, "declared"), published: need(t, "published"),
-        correction: corr == null ? null : { from: corr.from ?? null, to: corr.to ?? null },
+        correction: corr == null ? null : { ...corr },
         months_dropped: [...need(t, "months_dropped")], decided_in: need(t, "decided_in"),
         decided_build_commit: need(t, "decided_build_commit"),
-        evidence: [...need(t, "evidence")].map((e) => pick(e, EVIDENCE)),
+        evidence: [...need(t, "evidence")].map((e) => ({ ...e })),
     };
 }
 
@@ -312,6 +311,7 @@ export function makeRunner(sdk) {
             if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
                 const fields = {};
                 for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
+                if (e.tombstone != null) fields.tombstone = pick(e.tombstone, TOMBSTONE);
                 return { ok: false, error: { code: e.code, message: String(e.message), fields } };
             }
             const name = e && e.constructor ? e.constructor.name : typeof e;

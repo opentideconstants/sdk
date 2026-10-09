@@ -260,19 +260,21 @@ class Runner
           "run_id" => b.run_id, "tool_versions" => b.tool_versions && b.tool_versions.to_h { |k, v| [k.to_s, v] } }
     end
 
-    def hget(h, k)
-        h.key?(k) ? h[k] : h[k.to_sym]
+    # Encode what the SDK returns: a Hash with its own keys, or a typed object by its fields. A missing key is not filled in.
+    def as_returned(v, fields)
+        return nil if v.nil?
+        return v.to_h { |k, x| [k.to_s, x.is_a?(Symbol) ? x.to_s : x] } if v.is_a?(Hash)
+        fields.to_h { |f| x = v.public_send(f); [f, x.is_a?(Symbol) ? x.to_s : x] }
     end
 
     # TimeBase: typed fields; correction is an object {from, to} or nil; evidence is a list of objects.
     def time_base(t)
         return nil if t.nil?
-        corr = t.correction
         { "code" => s(t.code), "reason" => t.reason, "declared" => t.declared, "published" => t.published,
-          "correction" => corr && { "from" => hget(corr, "from"), "to" => hget(corr, "to") },
+          "correction" => as_returned(t.correction, %w[from to]),
           "months_dropped" => t.months_dropped.to_a, "decided_in" => t.decided_in,
           "decided_build_commit" => t.decided_build_commit,
-          "evidence" => t.evidence.map { |e| %w[comparator_kind comparator_id distance_km lag_min detail].to_h { |k| [k, hget(e, k)] } } }
+          "evidence" => t.evidence.map { |e| as_returned(e, %w[comparator_kind comparator_id distance_km lag_min detail]) } }
     end
 
     def stats(st)
@@ -292,7 +294,8 @@ class Runner
 
     def tombstone(t)
         { "station_id" => t.station_id, "name" => t.name, "status" => s(t.status),
-          "removed_in" => t.removed_in, "removed_reason" => t.removed_reason }
+          "removed_in" => t.removed_in, "removed_reason" => s(t.removed_reason), "merged_into" => t.merged_into,
+          "detail" => t.detail }
     end
 
     def constant_set(set)
@@ -304,7 +307,7 @@ class Runner
           "record_span" => span && { "start" => time(span.start), "end" => time(span.end), "good_samples" => span.good_samples },
           "datum" => datum && { "msl_offset_m" => datum.msl_offset_m, "named" => datum.named },
           "qc_status" => s(set.qc_status),
-          "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "verdict" => f.verdict, "values" => f.values } },
+          "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "reason" => f.reason, "values" => f.values } },
           "dropped_constituents" => set.dropped_constituents.map { |d| { "name" => d.name, "dropped_reason" => s(d.dropped_reason), "detail" => d.detail } },
           "time_base" => time_base(set.time_base),
           "is_recommended" => set.recommended?, "convention_id" => set.convention.convention_id,

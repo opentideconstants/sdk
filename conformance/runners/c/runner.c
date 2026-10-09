@@ -282,7 +282,6 @@ DEF_STR(s_prov_selection_reason, otc_set_provenance_selection_reason, otc_set)
 DEF_STR(s_prov_decision, otc_set_provenance_decision_json, otc_set)
 DEF_STR(s_span_start, otc_record_span_start, otc_record_span)
 DEF_STR(s_span_end, otc_record_span_end, otc_record_span)
-DEF_STR(s_flag_verdict, otc_qc_flag_verdict, otc_qc_flag)
 DEF_STR(s_flag_values, otc_qc_flag_values_json, otc_qc_flag)
 DEF_STR(s_drop_name, otc_dropped_name, otc_dropped)
 DEF_STR(s_drop_detail, otc_dropped_detail, otc_dropped)
@@ -376,6 +375,8 @@ static cJSON *enc_tombstone(const otc_tombstone_t *t, int *bad)
     cJSON_AddItemToObject(o, "status", j_enum(otc_station_status_name(otc_tombstone_status(t))));
     cJSON_AddItemToObject(o, "removed_in", j_take(s_tb_removed_in(t, bad)));
     cJSON_AddItemToObject(o, "removed_reason", j_take(s_tb_removed_reason(t, bad)));
+    /* merged_into and detail (spec 4.4: otc_tombstone_merged_into, otc_tombstone_detail) are not in the C library
+     * yet: left out, so the tombstone steps fail until the C work for format 1.0 maps them. */
     return o;
 }
 
@@ -427,7 +428,8 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         cJSON *fo = cJSON_CreateObject();
         if (otc_set_qc_flag_at(set, i, &f) != OTC_OK) { *bad = 1; cJSON_Delete(fo); break; }
         cJSON_AddItemToObject(fo, "flag", j_enum(otc_qc_flag_kind_name(otc_qc_flag_flag(f))));
-        cJSON_AddItemToObject(fo, "verdict", j_take(s_flag_verdict(f, bad)));
+        /* reason (spec 4.6 QcFlag) has no C accessor yet: left out, so the constant_set steps fail until the C
+         * library reads format 1.0 and this runner maps it. */
         cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad)));
         cJSON_AddItemToArray(flags, fo);
     }
@@ -774,7 +776,7 @@ static void op_query(request *q, reply *r)
         cJSON_AddItemToObject(o, "created", j_take(s_rel_created(R, &bad)));
         cJSON_AddItemToObject(o, "format_version", j_take(s_rel_format_version(R, &bad)));
         /* zenodo_version_doi (spec 4.3) has no C accessor yet: the key is left out, so a case that checks it fails
-         * with "missing" until the C library reads format 0.6 and this runner maps it. */
+         * with "missing" until the C library reads format 1.0 and this runner maps it. */
         cJSON_AddItemToObject(o, "concept_doi", j_take(s_rel_concept_doi(R, &bad)));
         for (i = 0; i < n; i++) {
             char k[256], v[256];
@@ -1185,7 +1187,7 @@ static cJSON *enc_release_info(const otc_release_info *ri, int *bad)
     cJSON_AddItemToObject(o, "format_version", otc_release_info_format_version(ri, buf, sizeof buf, &need) == OTC_OK
                                                    ? cJSON_CreateString(buf) : cJSON_CreateNull());
     /* concept_doi, zenodo_version_doi and content_sha256 (spec 3) have no C accessors yet: left out, so the
-     * cases that check a ReleaseInfo fail until the C library reads format 0.6 and this runner maps them. */
+     * cases that check a ReleaseInfo fail until the C library reads format 1.0 and this runner maps them. */
     for (i = 0; i < n; i++) {
         const otc_file_info *fi = NULL;
         if (otc_release_info_file_at(ri, i, &fi) != OTC_OK) { *bad = 1; break; }

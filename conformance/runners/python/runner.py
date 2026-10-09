@@ -69,8 +69,11 @@ def enc_station(s):
     }
 
 
+TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason", "merged_into", "detail"]
+
+
 def enc_tombstone(t):
-    return None if t is None else pick(t, ["station_id", "name", "status", "removed_in", "removed_reason"])
+    return None if t is None else pick(t, TOMBSTONE)
 
 
 def enc_set(cs):
@@ -81,7 +84,7 @@ def enc_set(cs):
         **pick(cs, ["set_id", "source", "source_type", "quantity", "source_record_id", "source_version", "qc_status"]),
         "record_span": None if span is None else pick(span, ["start", "end", "good_samples"]),
         "datum": None if datum is None else pick(datum, ["msl_offset_m", "named"]),
-        "qc_flags": [pick(f, ["flag", "verdict", "values"]) for f in cs.qc_flags],
+        "qc_flags": [pick(f, ["flag", "reason", "values"]) for f in cs.qc_flags],
         "dropped_constituents": [pick(d, ["name", "dropped_reason", "detail"]) for d in cs.dropped_constituents],
         "time_base": enc_time_base(cs.time_base),
         "is_recommended": cs.is_recommended,
@@ -131,11 +134,18 @@ def enc_time_base(t):
     if t is None:
         return None
     out = pick(t, TIME_BASE)
-    corr = plain(t.correction)
-    out["correction"] = None if corr is None else {"from": corr.get("from"), "to": corr.get("to")}
+    out["correction"] = as_returned(t.correction, ["from_", "to"])
     out["months_dropped"] = plain(list(t.months_dropped))
-    out["evidence"] = [{k: e.get(k) for k in EVIDENCE} for e in plain(list(t.evidence))]
+    out["evidence"] = [as_returned(e, EVIDENCE) for e in t.evidence]
     return out
+
+
+def as_returned(v, fields):
+    """Encode what the SDK returns: a mapping with its own keys, or a typed object by its fields (Python names a
+    reserved word with a trailing underscore, spec 4.1). A missing key is not filled in."""
+    if v is None or hasattr(v, "items"):
+        return plain(v)
+    return {f.rstrip("_"): plain(getattr(v, f)) for f in fields}
 
 
 def enc_validation(rows):
@@ -366,6 +376,11 @@ def main():
                     v = getattr(e, f, None)
                     if v is not None:
                         fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+                if getattr(e, "tombstone", None) is not None:
+                    try:
+                        fields["tombstone"] = enc_tombstone(e.tombstone)
+                    except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
+                        fields["tombstone"] = f"uncaught:{type(te).__name__}"
                 reply = {"ok": False, "error": {"code": e.code, "message": str(e), "fields": fields}}
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)
