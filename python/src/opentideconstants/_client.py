@@ -52,9 +52,9 @@ def _parse_sha256(text: str):
 
 
 def _split_file_name(name: str):
-    """OTC_<D><ext> -> (D, ext) or (None, None)."""
+    """OTC_<D><ext> -> (D, ext), with D a valid datestamp; else (None, None) (spec §4.2, CR D18)."""
     for ext in (".json.gz", ".jsonl", ".json"):
-        if name.startswith("OTC_") and name.endswith(ext):
+        if name.startswith("OTC_") and name.endswith(ext) and DATESTAMP_RE.match(name[4:-len(ext)]):
             return name[4:-len(ext)], ext
     return None, None
 
@@ -167,20 +167,15 @@ class OpenTideConstants:
         name = path.name
         d, ext = _split_file_name(name)
         if ext is None:
-            if name.endswith(".jsonl"):
-                ext = ".jsonl"
-            elif name.endswith(".json.gz"):
-                ext = ".json.gz"
-            else:
-                ext = ".json"
+            raise InvalidArgumentError(f"file must be named OTC_<datestamp>.json, .json.gz or .jsonl, not {name!r}")
         if not path.exists():
             raise FileError(f"cannot open {path}: no such file", path=str(path))
         opened = [path] + ([meta_path_for(path)] if ext == ".jsonl" else [])
         for p in opened:
             if not p.exists():
                 raise FileError(f"cannot open {p}: no such file", path=str(p))
-        sha_path = path.with_name(f"OTC_{d}.sha256") if d is not None else None
-        if sha_path is not None and sha_path.exists():
+        sha_path = path.with_name(f"OTC_{d}.sha256")
+        if sha_path.exists():
             rows = _parse_sha256(self._read_text(sha_path))
             for p in opened:
                 self._check_file(p, rows.get(p.name))
@@ -316,7 +311,11 @@ class OpenTideConstants:
         except (ValueError, UnicodeDecodeError) as e:
             raise InvalidReleaseError(f"{name}: not JSON") from e
 
-    def _info(self, entry, url) -> ReleaseInfo:
+    def _info(self, entry, url, what="the pointer") -> ReleaseInfo:
+        ds = entry.get("datestamp") if isinstance(entry, dict) else None
+        if not isinstance(ds, str) or not DATESTAMP_RE.match(ds):
+            # a server-supplied datestamp names cache paths: never use one that is not a datestamp (spec §4.2, §5.4)
+            raise InvalidReleaseError(f"{what}: bad datestamp {ds!r}")
         try:
             files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
                                            f.get("sha256")) for f in entry.get("files") or ()),
@@ -325,7 +324,7 @@ class OpenTideConstants:
                                entry.get("zenodo_version_doi"), entry.get("content_sha256"), files,
                                entry.get("min_reader_version"))
         except (KeyError, TypeError, AttributeError) as e:
-            raise InvalidReleaseError(f"bad pointer entry: {e!r}") from e
+            raise InvalidReleaseError(f"{what}: bad entry: {e!r}") from e
 
     def _fetch_index(self) -> List[ReleaseInfo]:
         got = self._get_json_conditional("OTC_index.json")
@@ -339,7 +338,9 @@ class OpenTideConstants:
             entries = doc["releases"]
         except (KeyError, TypeError) as e:
             raise InvalidReleaseError("OTC_index.json: releases is missing") from e
-        infos = [self._info(e, url) for e in entries]
+        if not isinstance(entries, list):
+            raise InvalidReleaseError("OTC_index.json: releases is not a list")
+        infos = [self._info(e, url, "OTC_index.json") for e in entries]
         return sorted(infos, key=lambda i: datestamp_key(i.datestamp), reverse=True)
 
     def _latest_info(self) -> ReleaseInfo:

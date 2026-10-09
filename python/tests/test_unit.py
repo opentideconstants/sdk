@@ -72,6 +72,25 @@ class ObjectsTest(unittest.TestCase):
 FIXTURES = ROOT / "conformance" / "fixtures"
 
 
+class CacheDatestampTest(unittest.TestCase):
+    """Datestamps that name cache paths (spec §4.2, §5.4; review PK01 B1-4, P2)."""
+
+    def test_cached_skips_a_name_with_a_trailing_newline(self):
+        import tempfile
+        from opentideconstants._cache import Cache
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("20991231", "20991230\n"):
+                d = Path(tmp) / "v1" / "releases" / name
+                d.mkdir(parents=True)
+                (d / ".verified").write_text('{"files": {}}', encoding="utf-8")
+            self.assertEqual(Cache(Path(tmp)).cached(), ["20991231"])
+
+    def test_bad_datestamp_key_is_an_sdk_error(self):
+        for bad in ("2024.x", "../../x", "20991231\n", "20991231.1234567890"):
+            with self.assertRaises(otc.InvalidReleaseError):
+                datestamp_key(bad)
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

@@ -12,16 +12,20 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from ._errors import CacheError
+from ._errors import CacheError, InvalidReleaseError
 
 LAYOUT = "v1"
-DATESTAMP_RE = re.compile(r"^[0-9]{8}(\.[2-9]|\.[1-9][0-9]+)?$")
+# spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
+DATESTAMP_RE = re.compile(r"\A[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?\Z")
 LOCK_POLL_S = 0.5
 LOCK_STALE_S = 120.0
 
 
 def datestamp_key(d: str):
-    """Sort key: the date, then the counter; no counter means counter 1 (spec §4.3.1)."""
+    """Sort key: the date, then the counter; no counter means counter 1 (spec §4.3.1). A string that is not a
+    datestamp is InvalidReleaseError (it came from a release, a pointer or an index)."""
+    if not isinstance(d, str) or not DATESTAMP_RE.match(d):
+        raise InvalidReleaseError(f"not a datestamp: {d!r}")
     date, _, counter = d.partition(".")
     return (date, int(counter) if counter else 1)
 
@@ -86,6 +90,9 @@ class Cache:
         return ensure_dir(p) if create else p
 
     def release_dir(self, datestamp: str, create=False) -> Path:
+        if not isinstance(datestamp, str) or not DATESTAMP_RE.match(datestamp):
+            # never build a path from a string that is not a datestamp (spec §5.4: nothing outside the cache)
+            raise InvalidReleaseError(f"not a datestamp: {datestamp!r}")
         p = self.base / "releases" / datestamp
         return ensure_dir(p) if create else p
 

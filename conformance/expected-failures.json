@@ -221,7 +221,6 @@
    "case": "rules/pk01/counter-too-long",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -231,7 +230,6 @@
   {
    "case": "rules/pk01/file-bad-name",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -241,7 +239,6 @@
   {
    "case": "rules/pk01/index-bad-datestamp",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -251,7 +248,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-counter01",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -260,7 +256,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dashed",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -269,7 +264,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dotdot",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -278,7 +272,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-newline",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
