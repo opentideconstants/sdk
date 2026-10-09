@@ -1,8 +1,8 @@
 {
  "description": "OpenTideConstants SDK API manifest (SDK spec section 4). Every public operation, attribute, argument, default, enum value and error code, by its snake_case name. Each SDK's CI turns the names into its own form by the naming rules below and compares them with its public surface; a missing or an extra name fails CI.",
- "suite_version": "0.1",
+ "suite_version": "1.0",
  "supported_format_majors": [
-  0
+  1
  ],
  "naming": {
   "canonical": "snake_case",
@@ -329,6 +329,20 @@
      ],
      "c": "otc_fetch_check_for_update",
      "typescript_async": true
+    },
+    {
+     "name": "newer_format_major",
+     "kind": "attribute",
+     "returns": "integer|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_newer_format_major",
+     "note": "set by check_for_update: the format major of OTC_latest.json when it is newer than every supported major, else null (spec 7.4)"
     },
     {
      "name": "update",
@@ -1212,7 +1226,7 @@
      "kind": "method",
      "args": [
       {
-       "name": "include_excluded",
+       "name": "include_no_constants",
        "type": "boolean",
        "required": false,
        "positional": false,
@@ -1228,7 +1242,7 @@
       "c"
      ],
      "c": "otc_station_set_count/otc_station_set_at",
-     "note": "recommended first, then by set_id; by default leaves out the sets with no usable constants (qc_status excluded, and no_constants from schema 0.6); include_excluded lists them too"
+     "note": "recommended first, then by set_id; leaves out no_constants sets unless include_no_constants is true"
     },
     {
      "name": "constant_set",
@@ -1391,7 +1405,7 @@
      "type": "enum",
      "nullable": false,
      "enum": "qc_status",
-     "note": "schema 0.6: ok, flagged, no_constants; the deprecated accepted and fallback; excluded (format 0.5 and before)"
+     "note": "ok, flagged or no_constants"
     },
     {
      "name": "qc_flags",
@@ -1412,7 +1426,7 @@
      "kind": "field",
      "type": "TimeBase",
      "nullable": true,
-     "note": "schema 0.6; null when the set has none (a set not fitted from a gauge record, or data before 0.6)"
+     "note": "null when the set has none (every gauge set has one)"
     },
     {
      "name": "is_recommended",
@@ -1715,13 +1729,6 @@
    "c": "otc_set_provenance",
    "members": [
     {
-     "name": "build_commit",
-     "kind": "field",
-     "type": "string",
-     "nullable": true,
-     "note": "deprecated: the same value as build.build_commit"
-    },
-    {
      "name": "adapter_version",
      "kind": "field",
      "type": "string",
@@ -1732,13 +1739,6 @@
      "kind": "field",
      "type": "string[]",
      "nullable": true
-    },
-    {
-     "name": "time_base",
-     "kind": "field",
-     "type": "object",
-     "nullable": true,
-     "note": "{verdict, correction, comparators}"
     },
     {
      "name": "selection_reason",
@@ -1758,14 +1758,14 @@
      "kind": "field",
      "type": "ProvenanceBuild",
      "nullable": true,
-     "note": "schema 0.6 provenance.build. For data with no build object (format 0.5 and before) it is filled from the deprecated top-level provenance.build_commit, with the other fields null. With neither, the spec leaves null or an object of nulls open; the suite accepts both"
+     "note": "provenance.build; format 1.0 requires it (with build_commit), so it is null only for malformed input (the load does not fail, spec 7.3)"
     },
     {
      "name": "carried_from_release",
      "kind": "field",
      "type": "datestamp",
      "nullable": true,
-     "note": "schema 0.6: the release whose constants a carried-over set keeps (qc_flags carried_over)"
+     "note": "the release whose constants a carried-over set keeps (qc_flags carried_over; spec 7.4)"
     },
     {
      "name": "raw",
@@ -1779,13 +1779,13 @@
   },
   "ProvenanceBuild": {
    "c": "otc_provenance_build",
-   "description": "The build-only fields of a set's provenance (schema 0.6 provenance.build).",
+   "description": "The build-only fields of a set's provenance (provenance.build).",
    "members": [
     {
      "name": "build_commit",
      "kind": "field",
      "type": "string",
-     "nullable": true
+     "nullable": false
     },
     {
      "name": "built_at",
@@ -1815,7 +1815,7 @@
   },
   "TimeBase": {
    "c": "otc_time_base",
-   "description": "The time-base annotation of the record behind a set (schema 0.6 constant_set.time_base). Not in 0.5 data, which has the free-text provenance.time_base.",
+   "description": "The time-base annotation of the record behind a set (constant_set.time_base, spec 4.5).",
    "members": [
     {
      "name": "code",
@@ -1848,7 +1848,7 @@
      "kind": "field",
      "type": "object",
      "nullable": true,
-     "note": "{from, to}; only with code corrected"
+     "note": "{from, to}, both time-base labels; null unless code is corrected"
     },
     {
      "name": "months_dropped",
@@ -1874,7 +1874,7 @@
      "kind": "field",
      "type": "object[]",
      "nullable": false,
-     "note": "each {comparator_kind, comparator_id, distance_km, lag_min, detail}; [] if none"
+     "note": "each {comparator_kind, comparator_id, distance_km, lag_min, detail}; distance_km, lag_min and detail null when absent; [] if none"
     }
    ]
   },
@@ -2171,14 +2171,14 @@
      "kind": "field",
      "type": "map<string,integer>",
      "nullable": false,
-     "note": "sets by source"
+     "note": "counts only sets with constants (qc_status ok or flagged)"
     },
     {
      "name": "qc_status",
      "kind": "field",
      "type": "map<string,integer>",
      "nullable": false,
-     "note": "sets by qc_status"
+     "note": "counts every listed set, no_constants under its own key"
     }
    ]
   }
@@ -2208,10 +2208,7 @@
   "qc_status": [
    "ok",
    "flagged",
-   "no_constants",
-   "accepted",
-   "fallback",
-   "excluded"
+   "no_constants"
   ],
   "loaded_from": [
    "download",
@@ -2555,12 +2552,12 @@
  "constants": {
   "SUPPORTED_FORMAT_MAJORS": {
    "value": [
-    0
+    1
    ],
    "c": "OTC_FORMAT_MAJOR"
   },
   "SUPPORTED_FORMAT_VERSION": {
-   "value": "0.6",
+   "value": "1.0",
    "c": "OTC_FORMAT_VERSION",
    "note": "the newest format version this SDK reads (spec 7.4); equals supported_format_version in the package's supported-formats.json"
   },
