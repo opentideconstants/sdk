@@ -23,6 +23,7 @@
 
 #include <curl/curl.h>
 #include <errno.h>
+#include <stddef.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -497,7 +498,15 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     init_once();
     otc_error_init(&c->own);
     c->err = &c->own;
-    if (o && o->struct_size < sizeof *o) return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "otc_fetch_options: struct_size is too small");
+    if (o && o->struct_size < sizeof *o) {
+        /* the error field is at the same place in every layout that has it: the caller
+         * still learns why (C56) */
+        if (o->struct_size >= offsetof(otc_fetch_options, error) + sizeof o->error && otc__err_usable(o->error)) {
+            c->err = o->error;
+            otc_error_init(c->err);
+        }
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "otc_fetch_options: struct_size is too small");
+    }
     c->o = o;
     if (o && otc__err_usable(o->error)) c->err = o->error;   /* else the detail stays in own: never written past */
     otc_error_init(c->err);

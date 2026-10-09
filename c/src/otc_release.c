@@ -3,6 +3,8 @@
  * (SDK spec 4.2, 4.3, 4.6, 5.3, 6.2, 6.4, 7.3, 7.4). */
 #include "otc_internal.h"
 
+#include <stddef.h>
+
 /* --------------------------------------------------------------- options */
 
 void otc_open_options_init(otc_open_options *opts)
@@ -1094,7 +1096,9 @@ done:
 
 otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_release **out)
 {
-    otc_error *err = (opts && opts->struct_size >= sizeof *opts) ? otc__err_usable(opts->error) : NULL;
+    /* the error field is at the same place in every layout that has it (C56) */
+    otc_error *err = (opts && opts->struct_size >= offsetof(otc_open_options, error) + sizeof opts->error)
+                         ? otc__err_usable(opts->error) : NULL;
     otc_release *r;
     otc_status st;
     otc__err_reset(err);
@@ -1104,6 +1108,7 @@ otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_rel
     }
     *out = NULL;
     if (opts && opts->struct_size < sizeof *opts) {
+        otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
         return OTC_E_INVALID_ARGUMENT;
     }
     r = (otc_release *)calloc(1, sizeof *r);

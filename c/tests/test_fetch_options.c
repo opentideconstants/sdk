@@ -3,7 +3,9 @@
  * means the defaults (connect 10 s, read 60 s).
  * D19: a ca_file that does not exist is io, and a base_url or proxy that is
  * not an absolute http(s) URL is invalid_argument, at the first call and
- * before any network access (they never fall back to the cache). */
+ * before any network access (they never fall back to the cache).
+ * C56: when struct_size is too small, the caller's error (whose field is
+ * there in every layout) still says why. */
 #include "otc_test.h"
 
 #include <math.h>
@@ -50,6 +52,18 @@ int main(void)
     fo.base_url = "http://127.0.0.1:9/";
     fo.proxy = "not a url";
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    /* C56 */
+    {
+        otc_fetch_options small;
+        otc_error e2;
+        otc_fetch_options_init(&small);
+        memset(&e2, 0x5A, sizeof e2);
+        otc_error_init(&e2);
+        small.error = &e2;
+        small.struct_size = sizeof small - 1;
+        CHECK_STATUS(otc_fetch_latest(&small, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+        CHECK(e2.status == OTC_E_INVALID_ARGUMENT && strstr(e2.message, "struct_size") != NULL);
+    }
     free(cache);
     return test_done("test_fetch_options");
 }
