@@ -40,11 +40,11 @@ class OpenTideConstants
     def initialize(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil,
                    timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache,
                    auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false)
-        # A file client reads no pointer, so these options would be silently
-        # ignored (CR D31). offline: true is still allowed with file: it is
-        # what download uses on a file client (case download/offline-not-cached).
-        if file && (release != :latest || on_network_error != :use_cache)
-            raise InvalidArgumentError, "file cannot be combined with release or on_network_error"
+        # A file client reads no pointer and opens no socket, so these options
+        # would be silently ignored (CR D31, spec §4.2). The variable
+        # OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+        if file && (release != :latest || offline != false || on_network_error != :use_cache)
+            raise InvalidArgumentError, "file cannot be combined with release, offline or on_network_error"
         end
         @requested = check_release_arg(release)
         @mode = check_enum(mode, MODES, "mode").to_sym

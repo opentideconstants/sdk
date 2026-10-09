@@ -736,14 +736,16 @@
    "requires": [
     "fs"
    ],
+   "env": {
+    "OPENTIDECONSTANTS_OFFLINE": "1"
+   },
    "steps": [
     {
      "op": "open",
      "args": {
       "file": "${fixtures}/good/OTC_20991231.2.jsonl",
       "base_url": "${server}/good/",
-      "cache_dir": "${cache}",
-      "offline": true
+      "cache_dir": "${cache}"
      },
      "expect": {
       "loaded_from": "file"

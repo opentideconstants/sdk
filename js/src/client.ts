@@ -161,6 +161,11 @@ export class OpenTideConstants {
         const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
         const file = optStr(options.file, "file");
+        // A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
+        // spec 4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+        if (file !== null && (release !== "latest" || (optBool(options.offline, "offline") ?? false) || onNetworkError !== "use_cache")) {
+            throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
+        }
         const suffix = optStr(options.userAgent, "userAgent");
 
         const node = isNode() ? await import("./node.js") : null;

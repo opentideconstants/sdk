@@ -88,6 +88,10 @@ class OpenTideConstants:
         for name, v in (("offline", offline), ("auto_update", auto_update), ("verify_on_open", verify_on_open)):
             if not isinstance(v, bool):
                 raise InvalidArgumentError(f"{name} must be a boolean")
+        # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
+        # spec §4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+        if file is not None and (release != "latest" or offline or on_network_error != "use_cache"):
+            raise InvalidArgumentError("file cannot be combined with release, offline or on_network_error")
         for name, v in (("timeout", timeout), ("update_interval", update_interval)):
             if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
                                   or v <= 0):

@@ -2445,6 +2445,69 @@
    ]
   },
   {
+   "id": "rules/pk07/file-offline",
+   "title": "file with offline true: invalid_argument (D31)",
+   "spec": "4.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "cache_dir": "${cache}",
+      "offline": true
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk07/file-release",
+   "title": "file with a pinned release: invalid_argument (D31)",
+   "spec": "4.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "cache_dir": "${cache}",
+      "release": "20991231.2"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk07/file-on-network-error",
+   "title": "file with on_network_error raise: invalid_argument (D31)",
+   "spec": "4.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk07/formats-empty",
    "title": "download with formats []: invalid_argument",
    "spec": "4.3.2",

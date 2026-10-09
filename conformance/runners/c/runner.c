@@ -788,6 +788,12 @@ static void op_open(request *q, reply *r)
         set_error(r, "invalid_argument", "on_network_error must be raise or use_cache");
         return;
     }
+    /* C has no client object: otc_open_file takes no fetch options. The runner models the client, so it applies the
+     * rule of spec 4.2 (CR D31) itself: a file client cannot take release, offline or on_network_error */
+    if (file && ((release && strcmp(release, "latest")) || arg_bool(&q->a, "offline", false) || (one && strcmp(one, "use_cache")))) {
+        set_error(r, "invalid_argument", "file cannot be combined with release, offline or on_network_error");
+        return;
+    }
     close_current();
     client_free();
     g_client.cache_dir = dup_or_null(arg_str(&q->a, "cache_dir"));

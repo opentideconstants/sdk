@@ -1302,9 +1302,11 @@ def group_download():
                     [open_latest_no_cache(G), dl(err("invalid_argument"), release="2099", to=B)], requires=[]))
     out.append(case("download/not-found", "a datestamp the server does not have: release_not_found", "4.3.2",
                     [open_latest_no_cache(G), dl(err("release_not_found"), release="20991230", to=B)], requires=[]))
+    # offline through the environment: offline=True together with file is invalid_argument (CR D31), and the
+    # variable is not an option, so it does not conflict (spec 4.2)
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",
-                    [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}", offline=True),
-                     dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"]))
+                    [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}"),
+                     dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"], env={"OPENTIDECONSTANTS_OFFLINE": "1"}))
     return out
 
 
@@ -1566,6 +1568,13 @@ def group_rules():
     # PK07: arguments
     out.append(case("rules/pk07/timeout-zero", "timeout 0: invalid_argument", "4.2, 4.8",
                     [latest(err("invalid_argument"), timeout=0)], requires=["fs"]))
+    # CR D31 (spec 4.2): a file client reads no pointer and opens no socket, so these options would be ignored
+    for cid, title, extra in (("file-offline", "file with offline true", {"offline": True}),
+                              ("file-release", "file with a pinned release", {"release": d2}),
+                              ("file-on-network-error", "file with on_network_error raise", {"on_network_error": "raise"})):
+        out.append(case(f"rules/pk07/{cid}", f"{title}: invalid_argument (D31)", "4.2",
+                        [step("open", err("invalid_argument"), file=f"{FIX}/good/OTC_{d2}.jsonl", cache_dir="${cache}", **extra)],
+                        requires=["fs"]))
     B = "${tmp}/bundle"
     out.append(case("rules/pk07/formats-empty", "download with formats []: invalid_argument", "4.3.2",
                     [open_latest_no_cache(G), net(step("download", err("invalid_argument"), release=d2, to=B, formats=[]), fs=True)], requires=[]))
