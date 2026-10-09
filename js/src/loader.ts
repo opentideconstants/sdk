@@ -3,7 +3,7 @@ import { formatMajor, isDatestamp, readerReads, supportedFormat, SUPPORTED_FORMA
 import { InvalidReleaseError, ReaderTooOldError, UnsupportedFormatError } from "./errors.js";
 import { deepFreeze, isObject, type Json, type JsonObject } from "./json.js";
 import {
-    Release, checkLinks, indexDoc, indexStations, parseHeader, resolveKinds,
+    Release, checkLinks, indexDoc, indexStations, lineView, parseHeader, resolveKinds,
     type IndexEntry, type ReleaseHeader, type StationSource,
 } from "./release.js";
 import type { FileInfo } from "./types.js";
@@ -169,6 +169,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     } else {
         const read: LineReader = opts.reader ?? ((o, l) => (jsonl as Uint8Array).subarray(o, o + l));
         const fromIndex = Boolean(opts.index);
+        const convs = new Set(header.conventions.map((c) => String(c["convention_id"])));
+        const lics = new Set(header.licences.map((l) => String(l["licence_id"])));
         // a line read through the index must be the entry's line: whole, JSON, and the same station_id (CR D4)
         const bad = (why: string, cause?: unknown): InvalidReleaseError => {
             const where = fromIndex ? "index-v1.json" : "the .jsonl index";
@@ -187,6 +189,17 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
                 }
                 if (!isObject(v)) throw bad(`the line of ${e.station_id} is not a JSON object`);
                 if (v["station_id"] !== e.station_id) throw bad(`the line at offset ${e.offset} is ${JSON.stringify(v["station_id"])}, not ${e.station_id}`);
+                if (fromIndex) {
+                    // the checks of the full pass, and the line gives its entry's status, references and sets (PK-R2-07)
+                    let got: IndexEntry;
+                    try {
+                        got = indexDoc(v, header, e.offset, e.length, convs, lics);
+                    } catch (x) {
+                        if (x instanceof InvalidReleaseError) throw bad(`the line of ${e.station_id} fails a check: ${x.message}`, x);
+                        throw x;
+                    }
+                    if (lineView(got.stored) !== lineView(e.stored)) throw bad(`the line of ${e.station_id} does not give the status, references and sets of its entry`);
+                }
                 return deepFreeze(v);
             },
             close: opts.close ?? (() => undefined),

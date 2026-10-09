@@ -210,21 +210,41 @@ def _entry(d, offset=None, length=None):
     }
 
 
+def integral(v):
+    """v as an int when it is a JSON integer or a number with an integral value (12.0), else None (CR2 DR10)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and math.isfinite(v) and v.is_integer():
+        return int(v)
+    return None
+
+
+def _line_view(e):
+    """The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
+    status, the references and the sets. The other keys are used as the index gives them (spec §6.2)."""
+    return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
+            e.get("offsets_licence_id"),
+            [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()),) for cs in e.get("sets") or ()])
+
+
 def _usable_index(idx, name, sha256, size, conv, lic):
-    """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2)."""
+    """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2). An integer
+    key may be written as a number with an integral value (CR2 DR10)."""
     def is_int(v):
-        return isinstance(v, int) and not isinstance(v, bool)
+        return integral(v) is not None
 
     def is_num(v):
         return v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
 
-    if not isinstance(idx, dict) or not is_int(idx.get("index_version")) or idx["index_version"] != INDEX_VERSION:
+    if not isinstance(idx, dict) or integral(idx.get("index_version")) != INDEX_VERSION:
         return None
     if idx.get("jsonl") != name or name != f"OTC_{idx.get('datestamp')}.jsonl" or idx.get("jsonl_sha256") != sha256 \
-            or not is_int(idx.get("jsonl_size")) or idx["jsonl_size"] != size or not isinstance(idx.get("stations"), list):
+            or not is_int(idx.get("jsonl_size")) or integral(idx["jsonl_size"]) != size or not isinstance(idx.get("stations"), list):
         return None
     out = []
-    end = 0
+    start = 0  # the least offset the next entry may have
     for e in idx["stations"]:
         if not isinstance(e, dict) or not is_int(e.get("offset")) or not is_int(e.get("length")) \
                 or not isinstance(e.get("station_id"), str) or not isinstance(e.get("status"), str) \
@@ -232,12 +252,14 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
                 or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list):
             return None
+        e = {**e, "offset": integral(e["offset"]), "length": integral(e["length"])}
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
             return None
-        # the bounds check (CR D4): a line inside the file, after the one before it
-        if e["length"] <= 0 or e["offset"] < end or e["offset"] + e["length"] > size:
+        # the bounds check (CR D4): a line inside the file, and after the line before it and its line end, so
+        # that no two entries overlap (CR2 DR9)
+        if e["length"] <= 0 or e["offset"] < start or e["offset"] + e["length"] > size:
             return None
-        end = e["offset"] + e["length"]
+        start = e["offset"] + e["length"] + 1
         if e["status"] == "active" and (not _is_finite(e["lat"]) or not _is_finite(e["lon"])
                                         or abs(e["lat"]) > 90 or abs(e["lon"]) > 180):
             return None
@@ -503,6 +525,8 @@ class Release:
             if not isinstance(d, dict) or d.get("station_id") != e["station_id"]:
                 raise InvalidReleaseError(f"the line at offset {e['offset']} of {self._jsonl} is not "
                                           f"{e['station_id']}")
+            if self._index_path is not None:
+                self._check_line(d, e)
         except InvalidReleaseError as ex:
             # the index does not match the file (CR D4): name it and drop it, so the next open rebuilds it
             if self._index_path is not None:
@@ -515,6 +539,18 @@ class Release:
                 raise InvalidReleaseError(f"{self._index_path.name} does not match the release: {ex}") from ex
             raise
         return d
+
+    def _check_line(self, d, e):
+        """A line read through the stream index gets the checks of the full pass, and it must give its entry's
+        status, references and sets (spec §6.2, CR D4, PK-R2-07)."""
+        try:
+            _validate_refs(d, self._conv_by_id, self._lic_by_id)
+            got = _entry(d, e["offset"], e["length"])
+        except (KeyError, TypeError, AttributeError) as ex:
+            raise InvalidReleaseError(f"the line of {e['station_id']}: {ex!r}") from ex
+        if _line_view(got) != _line_view(e):
+            raise InvalidReleaseError(f"the line of {e['station_id']} does not give the status, references and "
+                                      f"sets of its entry")
 
     def station(self, station_id: str) -> Optional[Station]:
         self._check_open()
@@ -882,8 +918,8 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
                "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
         try:
             atomic_write(index_path, json.dumps(doc, ensure_ascii=False).encode("utf-8"))
-        except OSError:
-            pass  # the index only saves work; the release loads without it
+        except OSError as e:  # the index only saves work: the release loads without it (spec §6.2)
+            _log.warning("cannot write %s: %s", index_path, e)
     return entries
 
 

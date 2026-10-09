@@ -726,7 +726,15 @@ class OpenTideConstants
         return nil unless File.file?(path)
         idx = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
         jsonl = "OTC_#{d}.jsonl"
-        return nil unless idx.is_a?(Hash) && idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
+        return nil unless idx.is_a?(Hash)
+        # An integer key may be written as a number with an integral value, 12.0 (CR2 DR10).
+        %w[index_version jsonl_size].each { |k| idx[k] = Reader.integral(idx[k]) if idx.key?(k) }
+        if idx["stations"].is_a?(Array)
+            idx["stations"].each do |e|
+                %w[offset length].each { |k| e[k] = Reader.integral(e[k]) if e.is_a?(Hash) && e.key?(k) }
+            end
+        end
+        return nil unless idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
         return nil unless idx["datestamp"] == d && idx["jsonl"] == jsonl
         return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
         return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
@@ -738,12 +746,14 @@ class OpenTideConstants
     end
 
     # The bounds check of a fresh index (spec §6.2, CR D4): each length > 0,
-    # offset + length <= the .jsonl size, and offsets strictly increasing.
+    # offset + length <= the .jsonl size, and each offset at least the
+    # previous offset + the previous length + 1, so that no two entries
+    # overlap (CR2 DR9).
     def index_in_bounds?(entries, size)
-        last = -1
+        start = 0
         entries.all? do |e|
-            ok = e["length"].positive? && e["offset"] > last && e["offset"] + e["length"] <= size
-            last = e["offset"]
+            ok = e["length"].positive? && e["offset"] >= start && e["offset"] + e["length"] <= size
+            start = e["offset"] + e["length"] + 1
             ok
         end
     end

@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ._errors import CacheError, InvalidReleaseError
+from ._release import integral
 
 LAYOUT = "v1"
 # spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
@@ -124,8 +125,10 @@ class Cache:
             return None
         for rec in doc["files"].values():
             if not isinstance(rec, dict) or not _opt(rec.get("sha256"), str) or not _opt(rec.get("url"), str) \
-                    or not _opt(rec.get("size"), int) or isinstance(rec.get("size"), bool):
+                    or (rec.get("size") is not None and integral(rec.get("size")) is None):
                 return None
+            if rec.get("size") is not None:
+                rec["size"] = integral(rec["size"])  # 1024.0 is the integer 1024 (CR2 DR10)
         for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp"):
             if not _opt(doc.get(k), str):
                 return None

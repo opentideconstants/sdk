@@ -1235,3 +1235,18 @@ class Format10Test(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreamIndexWriteTest(unittest.TestCase):
+    def test_a_failure_to_write_the_index_is_logged(self):
+        """Spec §6.2: a failure to write the index is logged, not raised (PK-R2-07, R2-064)."""
+        import tempfile
+        from opentideconstants._release import load_document
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "not-a-dir").write_text("x")
+            bad = Path(tmp) / "not-a-dir" / "index-v1.json"
+            with self.assertLogs("opentideconstants", "WARNING") as logs:
+                rel = load_document(GOOD / "OTC_20991231.2.jsonl", "stream", [], index_path=bad)
+            self.assertEqual(rel.station("OTC-T-0001").station_id, "OTC-T-0001")
+            rel._close()
+            self.assertTrue(any("index-v1.json" in m for m in logs.output), logs.output)

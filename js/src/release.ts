@@ -331,6 +331,16 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     });
 }
 
+/**
+ * @internal The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
+ * status, the references and the sets. The other keys are used as the index gives them (spec 6.2).
+ */
+export function lineView(s: StoredEntry): string {
+    const sets = Array.isArray(s.sets) ? s.sets : [];
+    return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
+        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents])]);
+}
+
 /** @internal The in-memory entry of a stored index entry (spec 6.2). */
 export function entryFromStored(s: StoredEntry): IndexEntry {
     const rec = s.recommended_set_id === null ? undefined : s.sets.find((cs) => cs.set_id === s.recommended_set_id);
@@ -365,7 +375,7 @@ export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha25
 /**
  * @internal The entries of a fresh index-v1.json, or null when it is stale or cannot be used (spec 6.2).
  * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed, every entry in
- * bounds (length > 0, offset + length <= jsonl_size, offsets increasing; CR D4), and every reference resolving
+ * bounds (length > 0, offset + length <= jsonl_size, no two entries overlapping; CR D4, CR2 DR9), and every reference resolving
  * exactly as a pass over the lines would check it (indexDoc). The derived values (name_folded, kind) must be the
  * ones this SDK computes, so an index another writer got wrong is rebuilt, not trusted.
  */
@@ -379,13 +389,13 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
     const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
     const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0;
     const out: IndexEntry[] = [];
-    let lastOffset = -1;
+    let start = 0; // the least offset the next entry may have: after the line before it and its line end (CR2 DR9)
     for (const e of stations) {
         if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
         const offset = e["offset"];
         const length = e["length"];
-        if (length <= 0 || offset + length > jsonlSize || offset <= lastOffset) return null;
-        lastOffset = offset;
+        if (length <= 0 || offset + length > jsonlSize || offset < start) return null;
+        start = offset + length + 1;
         if (!ENTRY_STR.every((k) => k in e && strOrNull(e[k])) || !("lat" in e) || !("lon" in e) || !numOrNull(e["lat"]) || !numOrNull(e["lon"])) return null;
         const name = e["name"];
         if (e["name_folded"] !== (typeof name === "string" ? foldName(name) : null)) return null;

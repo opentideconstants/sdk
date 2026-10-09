@@ -95,9 +95,7 @@ function nodeDir(node: NodeMod, dir: string): SyncDir {
         read: (name) => node.readIfExists(p(name)),
         size: (name) => node.statSize(p(name)),
         lineReader: (name) => node.openLineReader(p(name)),
-        writeIndex: (bytes) => {
-            try { node.writeAtomicSync(p("index-v1.json"), bytes); } catch { /* the index is rebuilt next time */ }
-        },
+        writeIndex: (bytes) => node.writeAtomicSync(p("index-v1.json"), bytes),
         removeIndex: () => node.removeFileSync(p("index-v1.json")),
     };
 }

@@ -21,13 +21,14 @@ class OpenTideConstants
         # A small per-station summary, used by the filters and the indexes.
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
-                           :aliases, :pos, :len, :station, keyword_init: true)
+                           :aliases, :pos, :len, :station, :view, keyword_init: true)
 
         attr_reader :datestamp, :created, :format_version, :concept_doi, :zenodo_version_doi, :source_versions,
                     :build_commit, :changelog_url, :files, :conventions, :licences, :constituent_names
 
         # meta: the release document without its stations. stations: an
-        # enumerator of [raw_station, pos, len]. files: [FileInfo]. checks:
+        # enumerator of [raw_station, pos, len, view]; view (Reader.line_view)
+        # when the station came from index-v1.json, else nil. files: [FileInfo]. checks:
         # {path => expected sha256} for #verify. io: the open .jsonl file in
         # stream mode (or nil). zenodo_version_doi: from the pointer or index
         # entry of this datestamp (the release document does not hold it).
@@ -427,6 +428,7 @@ class OpenTideConstants
             unless raw.is_a?(Hash) && raw["station_id"] == e.station_id
                 bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : "is not a station line")
             end
+            check_line!(raw, e) if e.view
             build_station(raw, e.kind)
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
@@ -440,6 +442,23 @@ class OpenTideConstants
             msg = "#{source}: the line at byte #{e.pos} for #{e.station_id} #{what}"
             @on_bad_index&.call(msg)
             raise InvalidReleaseError, msg
+        end
+
+        # A line read through the stream index gets the checks of the full
+        # pass, and it must give the status, references and sets of its entry
+        # (spec §6.2, CR D4, PK-R2-07); otherwise bad_line!.
+        def check_line!(raw, e)
+            begin
+                Release.check_station!(raw)
+                aliases = raw["aliases"]
+                unless aliases.nil? || (aliases.is_a?(Hash) && aliases.values.all? { |v| v.is_a?(String) || (v.is_a?(Array) && v.all?(String)) })
+                    raise InvalidReleaseError, "station #{e.station_id}: aliases must map a system to a String id or a list of them"
+                end
+            rescue InvalidReleaseError => err
+                bad_line!(e, "fails a check: #{err.message}")
+            end
+            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len)) == e.view
+            bad_line!(e, "does not give the status, references and sets of its entry")
         end
 
         def parse_station(line)
@@ -475,7 +494,7 @@ class OpenTideConstants
             @set_ids = Set.new
             @set_sources = []
             @set_qc = []
-            stations.each do |raw, pos, len|
+            stations.each do |raw, pos, len, view|
                 raise InvalidReleaseError, "a station is not an object" unless raw.is_a?(Hash)
                 sid = raw["station_id"]
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
@@ -489,6 +508,7 @@ class OpenTideConstants
                 end
                 Release.check_station!(raw)
                 entries << entry_for(raw, pos, len, names)
+                entries.last.view = view
                 raws[sid] = raw if @mode == :eager
             end
             entries.sort_by!(&:station_id)

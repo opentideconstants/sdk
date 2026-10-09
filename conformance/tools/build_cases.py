@@ -1608,6 +1608,82 @@ def group_cross(R2):
                      drv("assert_index", path=idx, jsonl=jl, datestamp=d)],
                     roles=roles, timeout_s=90))
     out += cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir)
+    out += cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir)
+    return out
+
+
+def reference_index(jsonl, datestamp):
+    """The reference index-v1.json of a .jsonl file (conformance/stream_index.py)."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import stream_index
+    finally:
+        sys.path.pop(0)
+    return stream_index.build(jsonl, datestamp)
+
+
+def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
+    """Cross-SDK cases of review round 2, package PK-R2-07: the stream index path agrees with the full pass
+    (spec 6.2; CR2 DR9, DR10)."""
+    out = []
+    d = R2.datestamp
+    ref = reference_index(FIXTURES / "good" / f"OTC_{d}.jsonl", d)["stations"]
+    reader_open = as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream"))
+    # DR9: an entry that starts at the previous offset + the previous length overlaps nothing in bytes, but it
+    # leaves no room for the line end, so it is not the start of a line. Every reader finds the index stale.
+    a, b = ref[0], ref[1]
+    out.append(case("cross/index-overlap", "an index entry starts at the previous offset + the previous length (no byte for the line end): the index is stale, so it is rebuilt, and the query is right (CR2 DR9)", "6.2",
+                    fill + [drv("json_set", path=idx, pointer="/stations/1/offset", value=a["offset"] + a["length"])] + offline + [
+                        reader_open,
+                        as_("reader", step("station", {"station": enc_station(R2, R2.by_id[b["station_id"]])}, station_id=b["station_id"])),
+                        as_("reader", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
+                    roles=roles))
+    # DR10: an integer key written as a number with an integral value (12.0) is that integer. The index stays
+    # fresh: a marked entry shows in the reader's answers, a line is read through the float offset, and the
+    # file is not rewritten.
+    jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
+    pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
+    out.append(case("cross/index-float-ints", "index_version, jsonl_size and an entry's offset and length written as 1.0, 25846.0, ...: the index is fresh, so it is used and not rewritten (CR2 DR10)", "6.2",
+                    fill + [drv("json_set", path=idx, pointer="/index_version", value=1.0),
+                            drv("json_set", path=idx, pointer="/jsonl_size", value=float(jsize)),
+                            drv("json_set", path=idx, pointer="/stations/0/offset", value=float(a["offset"])),
+                            drv("json_set", path=idx, pointer="/stations/0/length", value=float(a["length"])),
+                            drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
+                        reader_open,
+                        as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
+                        as_("reader", step("station", {"station": enc_station(R2, R2.by_id[a["station_id"]])}, station_id=a["station_id"])),
+                        as_("reader", step("close")),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"), no_requests],
+                    roles=roles))
+    # An entry whose sets disagree with its line (a convention that resolves, but is not the line's; a
+    # constituent left out): reading the line is invalid_release naming index-v1.json, which is deleted, and
+    # the next open rebuilds it.
+    bad_index = {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}
+    conv = a["sets"][0]["convention_id"]
+    other = next(c["convention_id"] for c in R2.doc["conventions"] if c["convention_id"] != conv)
+    for label, title, pointer, value in [
+            ("index-set-mismatch", f"an entry's sets[0].convention_id is {other}, the line's is {conv}", "/stations/0/sets/0/convention_id", other),
+            ("index-constituent-dropped", "an entry's sets[0] leaves out the last constituent name of the line", "/stations/0/sets/0/constituents", a["sets"][0]["constituents"][:-1])]:
+        out.append(case(f"cross/{label}", f"{title} (the index is still fresh): reading the line is invalid_release naming index-v1.json, which is deleted; the next open rebuilds it (CR D4)", "6.2",
+                        fill + [drv("json_set", path=idx, pointer=pointer, value=value)] + offline + [
+                            reader_open,
+                            as_("reader", step("station", bad_index, station_id=a["station_id"])),
+                            drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
+                            reader_open,
+                            as_("reader", step("station", {"station": enc_station(R2, R2.by_id[a["station_id"]])}, station_id=a["station_id"])),
+                            as_("reader", step("close")),
+                            drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
+                        roles=roles))
+    msize = (FIXTURES / "good" / f"OTC_{d}.meta.json").stat().st_size
+    out.append(case("cross/verified-float-size", "a .verified whose file sizes are written as 25846.0: the release is cached, and the reader opens it offline (CR2 DR10)", "5.4",
+                    fill + [drv("json_set", path=f"{rdir}/.verified", pointer=f"/files/OTC_{d}.jsonl/size", value=float(jsize)),
+                            drv("json_set", path=f"{rdir}/.verified", pointer=f"/files/OTC_{d}.meta.json/size", value=float(msize))] + offline + [
+                        reader_open,
+                        as_("reader", step("station_count", {"station_count": len(R2.active)})),
+                        as_("reader", step("cached_releases", {"datestamps": [d]})), no_requests],
+                    roles=roles))
     return out
 
 
@@ -1624,7 +1700,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                             drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0]),
                             drv("assert_json", path=idx, match={"/stations/0/station_id": ids[1], "/stations/1/station_id": ids[0]})] + offline + [
                         reader_open,
-                        as_("reader", step("station", err("invalid_release"), station_id=ids[0])),
+                        as_("reader", step("station", {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}, station_id=ids[0])),
+                        drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
                         no_requests],
                     roles=roles))
     jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
@@ -1720,6 +1797,76 @@ FOLD_D12 = [
     ("parallel", {}, ["OTC-T-0166"]),                    # Paral·lel: the middle dot is removed
     ("saint malo", {"match": "exact"}, ["OTC-T-0167"]),  # Saint<NBSP>Malo: NBSP is a space
 ]
+
+
+def rules_r2_pk07():
+    """PK-R2-07: a line read through a fresh stream index gets the checks of the full pass (spec 6.2, CR D4). A
+    cached, verified bad release whose index-v1.json (the reference builder's) is fresh: the open uses the
+    index, and the query that reads the bad line is invalid_release naming index-v1.json, which is deleted;
+    the next open makes the pass, which fails too."""
+    out = []
+    d = "20991231"
+    rdir = f"${{cache}}/v1/releases/{d}"
+    names = [f"OTC_{d}.jsonl", f"OTC_{d}.meta.json", f"OTC_{d}.sha256"]
+    bad_index = {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}
+
+    def changed_line(root):
+        good = (FIXTURES / "good" / f"OTC_{d}.jsonl").read_bytes().splitlines()
+        bad = (FIXTURES / root / f"OTC_{d}.jsonl").read_bytes().splitlines()
+        return next(i for i, (x, y) in enumerate(zip(good, bad)) if x != y)
+
+    for label, root, sets in [
+            ("qc-flags", "bad/qc-flags-not-array", {}),
+            # the index names a convention that resolves, the line one that does not
+            ("unresolved-convention", "bad/unresolved-convention", {"convention_id": "otc-greenwich-v1"})]:
+        idx = reference_index(FIXTURES / root / f"OTC_{d}.jsonl", d)
+        i = changed_line(root)
+        sid = idx["stations"][i]["station_id"]
+        if sets:
+            j = next(k for k, cs in enumerate(idx["stations"][i]["sets"])
+                     if any(cs[x] != v for x, v in sets.items()))
+            idx["stations"][i]["sets"][j].update(sets)
+        idx["by"] = "opentideconstants-conformance/1.0"
+        verified = {"files": {n: {"sha256": hashlib.sha256((FIXTURES / root / n).read_bytes()).hexdigest(),
+                                  "size": (FIXTURES / root / n).stat().st_size, "url": None} for n in names},
+                    "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+        out.append(case(f"rules/r2-pk07/index-line-{label}", f"{root} cached with a fresh index-v1.json: the open uses the index; reading {sid}'s line is invalid_release naming index-v1.json, which is deleted; the next open fails the full pass", "6.2",
+                        [drv("copy", files=[f"{FIX}/{root}/{n}" for n in names], to=rdir),
+                         drv("write", path=f"{rdir}/.verified", text=json.dumps(verified, sort_keys=True)),
+                         drv("write", path=f"{rdir}/index-v1.json", text=json.dumps(idx, ensure_ascii=False)),
+                         net(step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                         step("station", bad_index, station_id=sid),
+                         drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
+                         step("open", err("invalid_release"), release=d, cache_dir="${cache}", offline=True, mode="stream")],
+                        requires=["fs", "fetch", "stream"]))
+    # The index is named from the .jsonl file, not from release.datestamp (CR2 DR23: no cross-file check): a
+    # verified release whose .meta.json gives another datestamp gets an index for its own file name, which the
+    # next open finds fresh and does not rewrite.
+    d2 = "20991231.2"
+    rdir2 = f"${{cache}}/v1/releases/{d2}"
+    meta = json.loads((FIXTURES / "good" / f"OTC_{d2}.meta.json").read_text(encoding="utf-8"))
+    meta["release"]["datestamp"] = "20991230"
+    meta_text = json.dumps(meta, ensure_ascii=False, indent=1) + "\n"
+    jl = (FIXTURES / "good" / f"OTC_{d2}.jsonl").read_bytes()
+    digests = {f"OTC_{d2}.jsonl": hashlib.sha256(jl).hexdigest(), f"OTC_{d2}.meta.json": hashlib.sha256(meta_text.encode("utf-8")).hexdigest()}
+    sizes = {f"OTC_{d2}.jsonl": len(jl), f"OTC_{d2}.meta.json": len(meta_text.encode("utf-8"))}
+    sums = "".join(f"{digests[n]}  {n}\n" for n in sorted(digests))
+    verified = {"files": {n: {"sha256": digests[n], "size": sizes[n], "url": None} for n in digests}
+                | {f"OTC_{d2}.sha256": {"sha256": hashlib.sha256(sums.encode()).hexdigest(), "size": len(sums), "url": None}},
+                "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+    reopen = net(step("open", {"loaded_from": "cache", "datestamp": "20991230"}, release=d2, cache_dir="${cache}", offline=True, mode="stream"))
+    out.append(case("rules/r2-pk07/index-named-from-file", "a cached release whose .meta.json gives release.datestamp 20991230: the stream index the SDK writes names the file's release (20991231.2), and the next open uses it without rewriting it (CR2 DR23)", "6.2",
+                    [drv("copy", files=[f"{FIX}/good/OTC_{d2}.jsonl"], to=rdir2),
+                     drv("write", path=f"{rdir2}/OTC_{d2}.meta.json", text=meta_text),
+                     drv("write", path=f"{rdir2}/OTC_{d2}.sha256", text=sums),
+                     drv("write", path=f"{rdir2}/.verified", text=json.dumps(verified, sort_keys=True)),
+                     reopen, step("close"),
+                     drv("assert_index", path=f"{rdir2}/index-v1.json", jsonl=f"{rdir2}/OTC_{d2}.jsonl", datestamp=d2),
+                     drv("copy", files=[f"{rdir2}/index-v1.json"], to="${tmp}/index-copy"),
+                     reopen, step("station_count", {"station_count": len(Rel("good", d2).active)}), step("close"),
+                     drv("assert_sha256", path=f"{rdir2}/index-v1.json", equals="${tmp}/index-copy/index-v1.json")],
+                    requires=["fs", "fetch", "stream"]))
+    return out
 
 
 def group_rules():
@@ -2045,6 +2192,7 @@ def group_rules():
                             requires=["fs"] + req))
     out += r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned)
     out += rules_r2_pk05()
+    out += rules_r2_pk07()
     return out
 
 

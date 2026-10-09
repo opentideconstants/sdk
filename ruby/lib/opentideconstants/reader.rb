@@ -153,7 +153,7 @@ class OpenTideConstants
             end
             lines = Enumerator.new do |y|
                 if index
-                    index.each { |e| y << [raw_from_index(e, io), e["offset"], e["length"]] }
+                    index.each { |e| y << [raw_from_index(e, io), e["offset"], e["length"], line_view(e)] }
                 else
                     pos = 0
                     io.each_line do |line|
@@ -213,6 +213,21 @@ class OpenTideConstants
               "offsets_licence_id" => str.call(off, "licence_id"), "recommended_set_id" => rec_id, "sets" => sets }
         end
 
+        # The keys of an index entry that a line read through the index must
+        # give as they are (PK-R2-07): the status, the references and the
+        # sets. The other keys are used as the index gives them (spec §6.2).
+        def line_view(e)
+            sets = e["sets"].is_a?(Array) ? e["sets"] : []
+            [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
+             sets.map { |cs| SET_KEYS.map { |k| cs[k] } + [cs["constituents"]] }]
+        end
+
+        # v as an Integer when it is a JSON integer or a number with an
+        # integral value (12.0); any other value as it is (CR2 DR10).
+        def integral(v)
+            v.is_a?(Float) && v.finite? && v == v.floor ? v.to_i : v
+        end
+
         # True when e has every key of an index entry with the right type (spec §6.2).
         def index_entry_ok?(e)
             return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)
@@ -235,6 +250,9 @@ class OpenTideConstants
                 raw = parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
                 unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]
                     raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} is not #{e['station_id']}"
+                end
+                unless line_view(index_entry(raw, e["offset"], e["length"])) == line_view(e)
+                    raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} does not give the entry of #{e['station_id']}"
                 end
                 return raw
             end

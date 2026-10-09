@@ -814,3 +814,60 @@ test("PK-R2-05: Object.prototype names are data: an alias system __proto__ and a
         await c.close();
     }
 });
+
+test("PK-R2-07 / CR D4: a line read through the index that does not match its entry is invalid_release naming index-v1.json, and the index is dropped", async () => {
+    const { headerFromMeta, indexJsonl, releaseFromJsonl } = await import("../dist/loader.js");
+    const meta = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.meta.json"));
+    const jsonl = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.jsonl"));
+    const open = (mutate) => {
+        const { entries } = indexJsonl(headerFromMeta(meta), jsonl, false);
+        const e = entries.find((x) => x.station_id === "OTC-T-0001");
+        e.stored = mutate(JSON.parse(JSON.stringify(e.stored)));
+        let dropped = 0;
+        const rel = releaseFromJsonl(meta, null, { eager: false, files: [], index: { entries }, reader: (o, l) => jsonl.subarray(o, o + l), dropIndex: () => { dropped++; } });
+        return { rel, dropped: () => dropped };
+    };
+    const ok = open((s) => s);
+    assert.equal(ok.rel.station("OTC-T-0001").station_id, "OTC-T-0001");
+    assert.equal(ok.dropped(), 0);
+    for (const [what, mutate] of [
+        ["a set's convention", (s) => { s.sets[0].convention_id = "otc-greenwich-v1"; return s; }],
+        ["a constituent left out", (s) => { s.sets[0].constituents.pop(); return s; }],
+        ["the recommended set", (s) => { s.recommended_set_id = s.sets[1].set_id; return s; }],
+    ]) {
+        const r = open(mutate);
+        assert.throws(() => r.rel.station("OTC-T-0001"), (e) => isCode("invalid_release")(e) && e.message.includes("index-v1.json"), what);
+        assert.equal(r.dropped(), 1, what);
+    }
+});
+
+test("CR2 DR9 / DR10: usableIndex rejects an entry with no byte for the previous line end, and reads 12.0 as 12", async () => {
+    const { usableIndex } = await import("../dist/release.js");
+    const entry = (o) => ({ offset: 0, length: 10, station_id: "S", status: "removed", name: null, name_folded: null,
+        country: null, type: null, lat: null, lon: null, kind: null, aliases: {}, reference_station_id: null,
+        offsets_licence_id: null, recommended_set_id: null, sets: [], ...o });
+    const doc = (stations, o) => ({ index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations, ...o });
+    const use = (stations, o = {}) => usableIndex(doc(stations, o), "20991231", "ab", 100, new Set(), new Set());
+    assert.ok(use([entry({}), entry({ station_id: "T", offset: 11 })]), "the next line starts after the line end");
+    assert.equal(use([entry({}), entry({ station_id: "T", offset: 10 })]), null, "no byte for the line end");
+    assert.equal(use([entry({ length: 50 }), entry({ station_id: "T", offset: 10 })]), null, "overlapping entries");
+    assert.ok(use([entry({ offset: 0.0, length: 10.0 })], { index_version: 1.0, jsonl_size: 100.0 }), "integral floats");
+});
+
+test("PK-R2-07 / spec 6.2: a failure to write the index is logged, not raised", async () => {
+    const { loadCached } = await import("../dist/core.js");
+    const d = "20991231.2";
+    const read = (n) => { try { return fs.readFileSync(path.join(GOOD, n)); } catch { return null; } };
+    const files = Object.fromEntries([`OTC_${d}.jsonl`, `OTC_${d}.meta.json`].map((n) => [n, { sha256: "ab", size: read(n).length, url: null }]));
+    const warnings = [];
+    const dir = {
+        read: (n) => (n === "index-v1.json" ? null : read(n)),
+        size: (n) => read(n)?.length ?? null,
+        lineReader: () => null,
+        writeIndex: () => { throw new Error("EROFS: read-only file system"); },
+        removeIndex: () => undefined,
+    };
+    const rel = loadCached(dir, { files, verified_at: "x", by: "x", datestamp: d, format_version: null }, d, "stream", (m) => warnings.push(m));
+    assert.equal(rel.station("OTC-T-0001").station_id, "OTC-T-0001");
+    assert.ok(warnings.some((m) => m.includes("index-v1.json") && m.includes("EROFS")), JSON.stringify(warnings));
+});
