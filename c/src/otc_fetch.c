@@ -1192,7 +1192,6 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     }
     cJSON_ArrayForEach(f, files) {
         const char *name = otc__jstr(f, "name"), *u = otc__jstr(f, "url"), *sha = otc__jstr(f, "sha256");
-        const cJSON *size = otc__jget(f, "size");
         otc_file_info *fi = &ri->files[n];
         if (!name) {
             ri->n_files = n;
@@ -1202,7 +1201,7 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
         fi->name = otc__strdup(name);
         fi->url = url_resolve(doc_url, u ? u : name);
         fi->sha256 = sha ? otc__strdup(sha) : NULL;
-        fi->size = cJSON_IsNumber(size) ? (int64_t)size->valuedouble : -1;
+        fi->size = otc__jint(f, "size");   /* a whole number in range, else unknown (-1); never a bad cast */
         n++;
         if (!fi->name || !fi->url || (sha && !fi->sha256)) {
             ri->n_files = n;
@@ -1692,11 +1691,10 @@ static otc_status files_from_verified(fctx *c, const char *ds, otc_file_info **o
     if (!arr) { cJSON_Delete(v); return fail(c, OTC_E_NOMEM, NULL, "out of memory"); }
     cJSON_ArrayForEach(f, files) {
         const char *u = otc__jstr(f, "url"), *sha = otc__jstr(f, "sha256");
-        const cJSON *size = otc__jget(f, "size");
         arr[n].name = otc__strdup(f->string);
         arr[n].url = u ? otc__strdup(u) : NULL;
         arr[n].sha256 = sha ? otc__strdup(sha) : NULL;
-        arr[n].size = cJSON_IsNumber(size) ? (int64_t)size->valuedouble : -1;
+        arr[n].size = otc__jint(f, "size");
         n++;
         if (!arr[n - 1].name || (u && !arr[n - 1].url) || (sha && !arr[n - 1].sha256)) {
             free_file_infos(arr, n);
@@ -1721,11 +1719,10 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
     otc_status st = OTC_OK;
     for (i = 0; suffixes[i] && st == OTC_OK; i++) {
         char name[NAME_CAP], *p = rel_file(c, ds, suffixes[i]);
-        const cJSON *rec, *size;
+        const cJSON *rec;
         snprintf(name, sizeof name, "OTC_%s%s", ds, suffixes[i]);
         rec = otc__jget(files, name);
-        size = otc__jget(rec, "size");
-        if (p && cJSON_IsNumber(size) && otc__path_size(p) != (int64_t)size->valuedouble)
+        if (p && otc__jint(rec, "size") >= 0 && otc__path_size(p) != otc__jint(rec, "size"))
             st = fail_checksum(c, p, otc__jstr(rec, "sha256"), "", "the size does not match .verified");
         free(p);
     }
