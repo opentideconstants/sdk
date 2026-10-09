@@ -225,6 +225,8 @@ typedef struct builder {
     size_t       line_no;
     size_t      *cn_slots;   /* open addressing over rel->cnames: index + 1, 0 = empty */
     size_t       cn_slots_cap;
+    char       **set_ids;    /* every set_id of the active stations, checked once across the release */
+    size_t       n_set_ids, cap_set_ids;
 } builder;
 
 #define GROW(ptr, n, cap)                                                        \
@@ -333,7 +335,8 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
             e->n_sources++;
         }
     }
-    if (rec_id && !strcmp(rec_id, set_id)) {
+    /* the first set with the recommended id (a repeated set_id is refused when every line is in) */
+    if (rec_id && !strcmp(rec_id, set_id) && !e->has_rec) {
         e->has_rec = 1;
         e->rec_quantity = otc__parse_quantity(otc__jstr(set, "quantity"));
         if (otc__jstr(set, "source_type") && !(e->rec_source_type = otc__strdup(otc__jstr(set, "source_type"))))
@@ -410,15 +413,13 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             if (ol && !otc__find_licence(r, ol)) return bad_line(b, "subordinate_offsets.licence_id does not resolve");
         }
         cJSON_ArrayForEach(s, sets) {
-            const cJSON *t;
             const char *sid = otc__jstr(s, "set_id");
-            for (t = sets->child; sid && t != s; t = t->next) {   /* spec 6.1 (CR D5): a set_id once per station */
-                if (!otc__strcmp_null(otc__jstr(t, "set_id"), sid)) {
-                    st = bad_line(b, "a set_id appears twice in the station");
-                    break;
-                }
+            if (sid) {   /* spec 6.1 (CR D5): a set_id once in the release; checked when every line is in */
+                GROW(b->set_ids, b->n_set_ids, b->cap_set_ids);
+                if (!(b->set_ids[b->n_set_ids] = otc__strdup(sid))) return OTC_E_NOMEM;
+                b->n_set_ids++;
             }
-            if (st != OTC_OK || (st = index_set(b, s, e, rec_id)) != OTC_OK) break;
+            if ((st = index_set(b, s, e, rec_id)) != OTC_OK) break;
         }
         if (st == OTC_OK && rec_id && !e->has_rec) st = bad_line(b, "recommended_set_id does not resolve");
         if (st == OTC_OK) {
@@ -1105,6 +1106,14 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
             goto done;
         }
     }
+    if (b.n_set_ids > 1) qsort(b.set_ids, b.n_set_ids, sizeof *b.set_ids, cname_cmp);
+    for (i = 1; i < b.n_set_ids; i++) {
+        if (!strcmp(b.set_ids[i - 1], b.set_ids[i])) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, path, "the set_id %s appears twice in the release", b.set_ids[i]);
+            st = OTC_E_INVALID_RELEASE;
+            goto done;
+        }
+    }
     if (r->n_cnames > 1) qsort(r->cnames, r->n_cnames, sizeof *r->cnames, cname_cmp);
     for (i = 0; i < r->n_st; i++) r->st[i].kind = resolve_kind(r, &r->st[i], 0);
     otc__kv_sort(&r->source_counts);
@@ -1112,6 +1121,8 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     st = build_files(r, dir, names, digests, n_rows, jsonl_name, path_base(meta_path));
 done:
     free(b.cn_slots);
+    for (i = 0; i < b.n_set_ids; i++) free(b.set_ids[i]);
+    free(b.set_ids);
     otc__free_rows(names, digests, n_rows);
     free(meta_text);
     free(base);

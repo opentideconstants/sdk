@@ -1,7 +1,7 @@
 /* PK06: repeated ids fail the open with invalid_release (spec 6.1, CR D5):
  * C36 - a station_id across active stations and tombstones, a repeated
  * tombstone id, a repeated (system, alias id) pair, a repeated convention_id
- * or licence_id; C5 - a repeated set_id in a station. C39: a link that does
+ * or licence_id; C5 - a repeated set_id in a station or across the release. C39: a link that does
  * not resolve fails the open too (recommended_set_id, the offsets'
  * reference_station_id and licence_id; spec 4.5, CR D5). */
 #include "otc_test.h"
@@ -51,6 +51,15 @@ int main(void)
                             "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
                             "\"recommended_set_id\":\"s\",\"constant_sets\":["
                             "{\"set_id\":\"s\",\"source\":\"a\",\"source_type\":\"official\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"},"
+                            "{\"set_id\":\"s\",\"source\":\"b\",\"source_type\":\"model\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n"),
+                 OTC_E_INVALID_RELEASE);
+    /* C5 (PK-R2-09): a set_id is unique across the release, so two stations cannot share one */
+    CHECK_STATUS(open_lines(meta,
+                            "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
+                            "\"recommended_set_id\":\"s\",\"constant_sets\":["
+                            "{\"set_id\":\"s\",\"source\":\"a\",\"source_type\":\"official\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n"
+                            "{\"station_id\":\"OTC-X-2\",\"status\":\"active\",\"name\":\"B\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
+                            "\"recommended_set_id\":\"s\",\"constant_sets\":["
                             "{\"set_id\":\"s\",\"source\":\"b\",\"source_type\":\"model\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n"),
                  OTC_E_INVALID_RELEASE);
     /* C39 */

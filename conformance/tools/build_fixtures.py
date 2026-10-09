@@ -809,7 +809,21 @@ def _quantity_null(doc):
     del _station(doc, "OTC-T-0019")["constant_sets"][0]["quantity"]
 
 
+def _set_id_across_stations(doc):
+    st = _station(doc, "OTC-T-0002")
+    old, new = "OTC-T-0002/gesla-fit", "OTC-T-0001/gesla-fit"   # not recommended; OTC-T-0001 has a set with this id
+    for cs in st["constant_sets"]:
+        if cs["set_id"] == old:
+            cs["set_id"] = new
+    for v in st.get("validation", []):
+        if v["set_id"] == old:
+            v["set_id"] = new
+
+
 BAD += [
+    ("set-id-across-stations", "invalid_release", "OTC-T-0002's second set has the set_id OTC-T-0001/gesla-fit, a set_id of "
+     "OTC-T-0001: a set_id is unique across the release, not only within a station (D5)",
+     changed_doc(_set_id_across_stations), None),
     ("quantity-null", "load", "OTC-T-0020's recommended set has quantity null and OTC-T-0019's has no quantity (malformed 1.0); "
      "it must load, and both stations have kind other (orchestrator S3)",
      changed_doc(_quantity_null), None),

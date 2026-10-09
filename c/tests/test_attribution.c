@@ -13,7 +13,7 @@
     "{\"licence_id\":\"d\",\"provider\":\"P\",\"attribution\":\"A2\"}]}"
 
 #define ST(id, lic) "{\"station_id\":\"" id "\",\"status\":\"active\",\"name\":\"N\",\"lat\":1,\"lon\":1,\"type\":\"reference\"," \
-    "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"x\",\"quantity\":\"water_level\"," \
+    "\"recommended_set_id\":\"" id "/s\",\"constant_sets\":[{\"set_id\":\"" id "/s\",\"source\":\"x\",\"quantity\":\"water_level\"," \
     "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"" lic "\"}]}\n"
 
 int main(void)

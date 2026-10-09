@@ -1772,6 +1772,13 @@ def rules_r2_pk09():
                      step("close"),
                      drv("assert_index", path=f"{qdir}/index-v1.json", jsonl=f"{qdir}/OTC_20991231.jsonl", datestamp="20991231")],
                     requires=["fs", "stream"]))
+    # D5: a set_id appears once in the release, also across stations
+    for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                           (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+        label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+        out.append(case(f"rules/r2-pk09/set-id-across-stations{label}", f"two stations have a set with the same set_id, opened as {ext} ({mode}): invalid_release at open (D5)",
+                        "6.1, 4.8", [step("open", err("invalid_release"), file=f"{FIX}/bad/set-id-across-stations/OTC_20991231{ext}", mode=mode)],
+                        requires=["fs"] + req))
     return out
 
 

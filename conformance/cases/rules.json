@@ -4519,6 +4519,92 @@
      "datestamp": "20991231"
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk09/set-id-across-stations-json",
+   "title": "two stations have a set with the same set_id, opened as .json (eager): invalid_release at open (D5)",
+   "spec": "6.1, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-id-across-stations/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/set-id-across-stations-json-gz",
+   "title": "two stations have a set with the same set_id, opened as .json.gz (eager): invalid_release at open (D5)",
+   "spec": "6.1, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-id-across-stations/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/set-id-across-stations-jsonl",
+   "title": "two stations have a set with the same set_id, opened as .jsonl (eager): invalid_release at open (D5)",
+   "spec": "6.1, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-id-across-stations/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/set-id-across-stations-jsonl-stream",
+   "title": "two stations have a set with the same set_id, opened as .jsonl (stream): invalid_release at open (D5)",
+   "spec": "6.1, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-id-across-stations/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
   }
  ]
 }
