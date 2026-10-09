@@ -230,3 +230,32 @@ def test_file_rule_headers(pair):
     r = conn.getresponse()
     body = r.read()
     assert r.getheader("Content-Encoding") == "gzip" and body == (CONF / "fixtures" / "good" / "OTC_20991231.2.json.gz").read_bytes()
+
+
+# --- R2-142: a file or json rule whose fixture is missing (or outside fixtures/) is a harness error, never a plain 404
+
+BAD_FILES = ["good/no-such-file.json", "../driver.py", "/etc/hosts", "good"]
+
+
+@pytest.mark.parametrize("action", ["file", "json"])
+@pytest.mark.parametrize("name", BAD_FILES)
+def test_rule_with_a_missing_fixture_is_rejected(action, name):
+    with pytest.raises(ValueError, match="fixture"):
+        server.validate_rule(0, {"match": "x", "action": action, "file": name})
+
+
+@pytest.mark.parametrize("action", ["file", "json"])
+def test_rule_whose_fixture_goes_missing_is_a_500_and_an_error(pair, monkeypatch, action):
+    srv, _ = pair
+    monkeypatch.setattr(server, "validate_rule", lambda i, r: None)   # the rule got past the check (the file went away)
+    srv.set_rules([{"match": "OTC_latest", "action": action, "file": "good/no-such-file.json"}])
+    r, _ = _get(srv, "/good/OTC_latest.json")
+    assert r.status == 500, r.status
+    assert len(srv.errors) == 1 and "no-such-file.json" in srv.errors[0], srv.errors
+    assert [e["status"] for e in srv.log.entries()] == [500] and srv.log.entries()[0]["error"], srv.log.entries()
+
+
+def test_plain_missing_file_is_still_a_404(pair):
+    srv, _ = pair
+    r, _ = _get(srv, "/good/no-such-file.json")
+    assert r.status == 404 and srv.errors == [], (r.status, srv.errors)

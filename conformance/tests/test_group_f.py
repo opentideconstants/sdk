@@ -433,3 +433,16 @@ def test_bad_driver_step_fields_are_case_errors(tmp_path, step, word):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
     assert re.search(r"^FAIL  a  \[step 1 \w+\] harness error", r.stdout, re.M) and "PASS  b" in r.stdout, r.stdout[-800:]
     assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])
+
+
+# --- R2-142: a case whose rule names a missing fixture is a harness error, even when the SDK step expects a 404
+
+def test_rule_with_a_missing_fixture_fails_the_case_as_a_harness_error(tmp_path):
+    rule = {"match": "OTC_latest", "action": "file", "file": "good/no-such-file.json"}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"driver": "server_rules", "rules": [rule]}, fetch("/good/OTC_latest.json")]},
+                                   {"id": "b", "steps": [OK_STEP]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and re.search(r"^PROBLEM a step 0: .*no-such-file", r.stdout, re.M), r.stdout[-400:]
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert re.search(r"^FAIL  a  .*harness error", r.stdout, re.M) and "PASS  b" in r.stdout, r.stdout[-800:]
+    assert r.returncode == 2, (r.returncode, r.stdout[-800:])

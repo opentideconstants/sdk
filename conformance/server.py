@@ -30,7 +30,8 @@ What it does:
       with "set": {"/datestamp": "x", ...}, the served value is changed at those pointers first
     A file rule takes "headers" too (sent with the file, for example Content-Encoding).
   Rules are tried in order; the first active match applies. "times" null = always.
-  A rule that cannot be applied when a request comes (for example a JSON pointer that does not resolve) gets a
+  A file or json rule's fixture must be a file under fixtures/ (validate_rule checks it). A rule that cannot be
+  applied when a request comes (a JSON pointer that does not resolve, a fixture that went missing) gets a
   500, a log entry with an "error", and a line in errors; the driver fails the case with a harness error.
 - Records every request (method, path, query, headers, status, time) in a log.
 - stop() closes the HTTP listener and every open (keep-alive) connection, and
@@ -120,9 +121,19 @@ def validate_rule(i, r):
     for ptr in r.get("set") or {}:
         if not pointer_parts(ptr):    # each key of set is a pointer below the served value
             raise ValueError(f"rule {i}: set needs pointers below the value, got {ptr!r}")
+    if r["action"] in ("file", "json") and fixture_path(r["file"]) is None:
+        raise ValueError(f"rule {i}: fixture file {r['file']!r} is not a file under conformance/fixtures")
     times = r.get("times")
     if times is not None and (isinstance(times, bool) or not isinstance(times, int) or times < 1):
         raise ValueError(f"rule {i}: times must be an integer of 1 or more, or null, got {times!r}")
+
+
+def fixture_path(rel):
+    """The fixture file at rel (relative to conformance/fixtures), or None when it is missing, not a file, or outside."""
+    target = (FIXTURES / rel.lstrip("/")).resolve()
+    if FIXTURES.resolve() not in target.parents or not target.is_file():
+        return None
+    return target
 
 
 def pointer_parts(pointer):
@@ -276,10 +287,16 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
                 pass
 
     def _load(self, rel):
-        target = (FIXTURES / rel.lstrip("/")).resolve()
-        if FIXTURES.resolve() not in target.parents or not target.is_file():
-            return None
-        return target.read_bytes()
+        target = fixture_path(rel)
+        return None if target is None else target.read_bytes()
+
+    def _load_rule_file(self, rule):
+        """A file or json rule's fixture. A missing one is a rule that cannot be applied (a 500 and a harness error),
+        never a plain 404 that a case expecting not_found or network would accept."""
+        data = self._load(rule["file"])
+        if data is None:
+            raise FileNotFoundError(f"the rule's fixture file {rule['file']!r} is not a file under conformance/fixtures")
+        return data
 
     def _serve(self, path, rule, head):
         action = rule["action"] if rule else None
@@ -293,22 +310,19 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         served = path  # the name that decides the Content-Type
         if action == "file":
-            data = self._load(rule["file"])
+            data = self._load_rule_file(rule)
             served = rule["file"]
         elif action == "json":
-            raw = self._load(rule["file"])
-            if raw is None:
-                data = None
-            else:
-                value = json_pointer(json.loads(raw), rule.get("pointer", ""))
-                for ptr, v in (rule.get("set") or {}).items():
-                    parts = pointer_parts(ptr)
-                    parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
-                    if isinstance(parent, list):
-                        parent[array_index(parts[-1], len(parent))] = v
-                    else:
-                        parent[parts[-1]] = v
-                data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
+            raw = self._load_rule_file(rule)
+            value = json_pointer(json.loads(raw), rule.get("pointer", ""))
+            for ptr, v in (rule.get("set") or {}).items():
+                parts = pointer_parts(ptr)
+                parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
+                if isinstance(parent, list):
+                    parent[array_index(parts[-1], len(parent))] = v
+                else:
+                    parent[parts[-1]] = v
+            data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
             served = "x.json"
         else:
             data = self._load(path)
