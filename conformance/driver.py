@@ -232,6 +232,8 @@ def match(exp, act, tol, path="result"):
         (op, arg), = exp.items()
         if op == "$contains":
             return [] if isinstance(act, str) and arg in act else [f"{path}: {act!r} does not contain {arg!r}"]
+        if op == "$not_contains":   # a string that does not hold arg (for example a secret in an error message)
+            return [] if isinstance(act, str) and arg not in act else [f"{path}: {act!r} contains {arg!r} (or is not a string)"]
         if op == "$regex":
             return [] if isinstance(act, str) and re.search(arg, act) else [f"{path}: {act!r} does not match /{arg}/"]
         if op == "$type":
@@ -277,7 +279,7 @@ def match(exp, act, tol, path="result"):
     raise CaseError(f"cannot match {exp!r}")
 
 
-MATCHERS = {"$contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
+MATCHERS = {"$contains", "$not_contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
 TYPE_NAMES = {"object", "array", "string", "number", "boolean", "null"}
 
 
@@ -299,7 +301,7 @@ def matcher_problems(v, path):
         (op, arg), = v.items()
         if op not in MATCHERS:
             return [f"{path}: unknown matcher {op}"]
-        if op in ("$contains", "$regex") and not isinstance(arg, str):
+        if op in ("$contains", "$not_contains", "$regex") and not isinstance(arg, str):
             out.append(f"{path}: {op} needs a string")
         elif op == "$regex":
             try:

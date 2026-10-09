@@ -587,3 +587,18 @@ def test_restore_writable_reaches_under_an_unlistable_directory(tmp_path):
                     p.chmod(0o700)
                 except OSError:
                     pass
+
+
+# --- $not_contains (for PK-R2-12's net/proxy-credentials-redacted: an error message must not hold the secret)
+
+def test_not_contains_matcher(tmp_path):
+    assert driver.match({"$not_contains": "secret"}, "invalid proxy socks5://u:***@h", 0) == []
+    assert driver.match({"$not_contains": "secret"}, "invalid proxy socks5://u:secret@h", 0)
+    assert driver.match({"$not_contains": "secret"}, None, 0)   # not a string: a mismatch, never a pass
+    st = {"op": "open", "args": {"proxy": "socks5://u:secret@h"}, "expect": {"error": "invalid_argument", "error_message": {"$not_contains": "secret"}}}
+    cases = write_cases(tmp_path, [{"id": "a", "requires": ["fetch"], "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 0, r.stdout[-400:]
+    bad = {"op": "citation", "expect": {"citation": {"$not_contains": 5}}}
+    r = run_driver("--check-cases", "--cases", str(write_cases(tmp_path, [{"id": "b", "steps": [bad]}], name="b.json")))
+    assert r.returncode == 2 and "$not_contains needs a string" in r.stdout, r.stdout[-400:]
