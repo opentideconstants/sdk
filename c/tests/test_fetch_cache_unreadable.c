@@ -23,7 +23,7 @@ int main(void)
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     /* one that cannot be read is not empty */
     chmod(p, 0000);
-    if (access(p, R_OK) == 0) {
+    if (test_read_perms_ignored()) {
         chmod(p, 0755);
         free(cache);
         return test_skip("test_fetch_cache_unreadable", "file permissions do not stop this process");

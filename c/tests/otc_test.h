@@ -92,15 +92,76 @@ static int test_skip(const char *name, const char *why)
     return TEST_SKIP_RC;
 }
 
-/* 1 when file permissions do not stop this process (root): the parts of a test
- * that make a file unreadable or unwritable are then skipped. */
-static int test_is_root(void)
+/* Whether file permissions stop this process, found by trying, not from the uid:
+ * root without CAP_DAC_OVERRIDE is stopped, and a user with it is not (and
+ * access() answers for the real uid without capabilities, so it cannot tell).
+ * The parts of a test that need an unwritable or unreadable directory skip
+ * when these give 1. Each probe uses a fresh directory and is done once. */
+#ifndef _WIN32
+#include <dirent.h>
+
+/* chmod that must work: a probe or test that cannot set the mode is broken */
+static void test_chmod(const char *path, mode_t mode)
+{
+    if (chmod(path, mode) != 0) { perror(path); exit(2); }
+}
+
+static void test_probe_done(char *dir, char *file)
+{
+    test_chmod(dir, 0755);
+    if (file) remove(file);
+    if (rmdir(dir) != 0) { perror(dir); exit(2); }
+    free(file);
+    free(dir);
+}
+#endif
+
+/* 1 when this process can make a file in a 0555 directory. */
+static int test_write_perms_ignored(void)
 {
 #ifdef _WIN32
     return 0;
 #else
-    return geteuid() == 0;
+    static int known = -1;
+    char *dir, *file;
+    FILE *f;
+    if (known >= 0) return known;
+    dir = test_tmpdir();
+    file = test_join(dir, "probe");
+    test_chmod(dir, 0555);
+    f = fopen(file, "wb");
+    known = f != NULL;
+    if (f) fclose(f);
+    test_probe_done(dir, file);
+    return known;
 #endif
+}
+
+/* 1 when this process can list a 0000 directory. */
+static int test_read_perms_ignored(void)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    static int known = -1;
+    char *dir;
+    DIR *d;
+    if (known >= 0) return known;
+    dir = test_tmpdir();
+    test_chmod(dir, 0000);
+    d = opendir(dir);
+    known = d != NULL;
+    if (d) closedir(d);
+    test_probe_done(dir, NULL);
+    return known;
+#endif
+}
+
+/* The old name, kept for its callers (a 0555 directory that must stop a
+ * removal): it is test_write_perms_ignored and no longer looks at the uid. */
+static int test_is_root(void)
+{
+    return test_write_perms_ignored();
 }
 
 /* The conformance fixture server's base URL. Under run_with_server.sh

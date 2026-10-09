@@ -29,7 +29,7 @@ int main(void)
     free(pdir);
     pdir = test_join(cache, "v1/pointer");
     mkdir(pdir, 0555);
-    if (access(pdir, W_OK) == 0) {
+    if (test_write_perms_ignored()) {
         free(pdir);
         free(cache);
         return test_skip("test_fetch_pointer_readonly", "file permissions do not stop this process");

@@ -29,7 +29,7 @@ int main(void)
     /* C55 */
     p = test_join(to, "OTC_20991231.2.jsonl");
     chmod(p, 0000);
-    if (access(p, R_OK) != 0) {
+    if (!test_read_perms_ignored()) {
         memset(paths, 0, sizeof paths);
         CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_E_IO);
         CHECK(strstr(err.file, "OTC_20991231.2.jsonl") != NULL);
