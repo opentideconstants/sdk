@@ -42,18 +42,43 @@ if(OTC_WITH_FETCH)
     # The otc_fetch module (SDK spec 5, 6.4): libcurl, only in this module.
     find_package(CURL REQUIRED)
     list(APPEND OTC_SOURCES src/otc_fetch.c)
-    # the .pc names libcurl.pc only when pkg-config has one; CMake may have found
-    # curl without it (its FindCURL module, a macOS SDK .tbd): then -lcurl (B4-4)
+    # The .pc names libcurl.pc only when a plain pkg-config finds it. CMake's
+    # pkg_check_modules also searches CMAKE_PREFIX_PATH, and a consumer's
+    # pkg-config does not, so `Requires: libcurl` could not resolve (R2-242).
+    # Otherwise the .pc names the library CMake linked: -L<its folder> -lcurl,
+    # or -lcurl alone from a default folder (a macOS SDK .tbd, B4-4). A
+    # static-only libcurl needs `pkg-config --static`, because its own
+    # dependencies are in libcurl.pc's Libs.private.
     find_package(PkgConfig QUIET)
+    set(_otc_pc_curl_rc 1)
     if(PKG_CONFIG_FOUND)
-        pkg_check_modules(OTC_PC_CURL QUIET libcurl)
+        execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --exists libcurl
+            RESULT_VARIABLE _otc_pc_curl_rc OUTPUT_QUIET ERROR_QUIET)
     endif()
-    if(OTC_PC_CURL_FOUND)
+    if(_otc_pc_curl_rc EQUAL 0)
         set(OTC_PC_REQUIRES_PRIVATE "libcurl")
         set(OTC_PC_CURL_LIBS "")
     else()
         set(OTC_PC_REQUIRES_PRIVATE "")
+        set(_otc_curl_file "")
+        get_target_property(_otc_curl_configs CURL::libcurl IMPORTED_CONFIGURATIONS)
+        foreach(_otc_prop IMPORTED_LOCATION IMPORTED_LOCATION_RELEASE IMPORTED_LOCATION_NOCONFIG)
+            if(NOT _otc_curl_file)
+                get_target_property(_otc_curl_file CURL::libcurl ${_otc_prop})
+            endif()
+        endforeach()
+        if(NOT _otc_curl_file AND _otc_curl_configs)
+            list(GET _otc_curl_configs 0 _otc_cfg)
+            get_target_property(_otc_curl_file CURL::libcurl IMPORTED_LOCATION_${_otc_cfg})
+        endif()
         set(OTC_PC_CURL_LIBS "-lcurl")
+        if(_otc_curl_file)
+            get_filename_component(_otc_curl_dir "${_otc_curl_file}" DIRECTORY)
+            if(NOT _otc_curl_dir IN_LIST CMAKE_C_IMPLICIT_LINK_DIRECTORIES
+               AND NOT (CMAKE_OSX_SYSROOT AND _otc_curl_dir MATCHES "^${CMAKE_OSX_SYSROOT}/"))
+                set(OTC_PC_CURL_LIBS "-L${_otc_curl_dir} -lcurl")
+            endif()
+        endif()
     endif()
 else()
     list(APPEND OTC_SOURCES src/otc_fetch_stub.c)
@@ -224,12 +249,13 @@ else()
 endif()
 if(BUILD_SHARED_LIBS)
     set(OTC_PC_REQUIRES "")
-    # macOS: the dylib's install name is @rpath/..., so the app needs an rpath to
-    # the library's folder, or dyld aborts at load (B4-1)
-    if(APPLE)
-        set(OTC_PC_LIBS "-Wl,-rpath,\${libdir}")
-    else()
+    # The app needs an rpath to the library's folder: on macOS the dylib's
+    # install name is @rpath/..., so dyld aborts at load (B4-1); on Linux the
+    # loader does not find a library outside its default folders (R2-242).
+    if(WIN32)
         set(OTC_PC_LIBS "")
+    else()
+        set(OTC_PC_LIBS "-Wl,-rpath,\${libdir}")
     endif()
     set(OTC_PC_LIBS_PRIVATE "${OTC_PC_SYSLIBS}")
 else()
@@ -238,11 +264,19 @@ else()
     set(OTC_PC_LIBS "${OTC_PC_SYSLIBS}")
     set(OTC_PC_LIBS_PRIVATE "")
 endif()
+# A sanitizer build needs the sanitizer runtime wherever it is linked, as the
+# PUBLIC link option above says for CMake consumers (R2-242).
+if(OTC_SANITIZE_LINK)
+    string(STRIP "${OTC_PC_LIBS} ${OTC_SANITIZE_LINK}" OTC_PC_LIBS)
+endif()
 # The .pc is relocatable: prefix is found from the .pc's own folder, so
 # `cmake --install --prefix X` (or a moved install) still gives the right
 # paths. An absolute CMAKE_INSTALL_LIBDIR / INCLUDEDIR is used as it is (C72).
+# With an absolute LIBDIR the .pc's folder says nothing about the prefix, so
+# the prefix is the one of the install itself, written at install time: a
+# relative INCLUDEDIR then follows `cmake --install --prefix X` (R2-242).
 if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
-    set(OTC_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
+    set(OTC_PC_PREFIX "@OTC_INSTALL_PREFIX@")
     set(OTC_PC_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
 else()
     string(REGEX REPLACE "[^/]+" ".." OTC_PC_UP "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
@@ -254,5 +288,10 @@ if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
 else()
     set(OTC_PC_INCLUDEDIR "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
-configure_file(opentideconstants.pc.in opentideconstants.pc @ONLY)
+configure_file(opentideconstants.pc.in opentideconstants.pc.in @ONLY)
+install(CODE "
+    set(OTC_INSTALL_PREFIX \"\${CMAKE_INSTALL_PREFIX}\")
+    configure_file(\"${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc.in\"
+        \"${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc\" @ONLY)
+")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
