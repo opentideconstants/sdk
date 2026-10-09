@@ -821,21 +821,14 @@ static const char *path_base(const char *path)
 }
 
 /* Checks the meta document: format major, release object, conventions, licences. */
-static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *err)
+/* text: the bytes of the meta file, read once (and hashed from the same bytes). */
+static otc_status load_meta(otc_release *r, const char *meta_path, const char *text, size_t len, otc_error *err)
 {
-    char *text = NULL;
-    size_t len = 0;
     const char *fv;
     const cJSON *convs, *lics, *c;
     long major;
     size_t i;
-    otc_status st = otc__read_all(meta_path, &text, &len);
-    if (st != OTC_OK) {
-        otc__err_set(err, st, meta_path, "cannot read %s", meta_path);
-        return st;
-    }
     r->meta = otc__json_parse(text, len);
-    free(text);
     if (!r->meta || !cJSON_IsObject(r->meta)) {
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s is not a JSON object", meta_path);
         return OTC_E_INVALID_RELEASE;
@@ -946,20 +939,14 @@ static otc_status build_files(otc_release *r, const char *dir, char **names, cha
     return OTC_OK;
 }
 
-static otc_status check_digest(const char *path, const char *name, char **names, char **digests, size_t n,
-                               otc_error *err)
+/* hex: the SHA-256 of the bytes the library uses (the open handle, or the bytes read). */
+static otc_status check_digest(const char *path, const char *name, const char *hex, char **names, char **digests,
+                               size_t n, otc_error *err)
 {
-    char hex[65];
     const char *expected = NULL;
     size_t i;
-    otc_status st;
     for (i = 0; i < n; i++)
         if (!strcmp(names[i], name)) expected = digests[i];
-    st = otc__sha256_file(path, hex);
-    if (st != OTC_OK) {
-        otc__err_set(err, st, path, "cannot read %s", path);
-        return st;
-    }
     if (!expected || strcmp(expected, hex) != 0) {
         otc__err_set(err, OTC_E_CHECKSUM, path, "SHA-256 of %s does not match its .sha256 row", name);
         if (err) {
@@ -976,9 +963,9 @@ static otc_status check_digest(const char *path, const char *name, char **names,
 static otc_status open_impl(const char *path, const otc_open_options *opts, otc_error *err, otc_release *r,
                             int use_index)
 {
-    char *base = NULL, *meta_path = NULL, *sha_path = NULL, *dir = NULL;
+    char *base = NULL, *meta_path = NULL, *sha_path = NULL, *dir = NULL, *meta_text = NULL;
     char **names = NULL, **digests = NULL;
-    size_t n_rows = 0, i;
+    size_t n_rows = 0, i, meta_len = 0;
     const char *jsonl_name = path_base(path);
     otc_status st;
     builder b;
@@ -1008,12 +995,21 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         st = OTC_E_IO;
         goto done;
     }
+    /* the .jsonl is opened once and the meta file read once: the bytes that are hashed are
+     * the bytes that are used, so a file swapped after the check is never read (C3) */
+    st = otc__file_open(path, &r->file);
+    if (st != OTC_OK) { otc__err_set(err, st, path, "cannot open %s", path); goto done; }
+    st = otc__read_all(meta_path, &meta_text, &meta_len);
+    if (st != OTC_OK) { otc__err_set(err, st, meta_path, "cannot read %s", meta_path); goto done; }
     /* checksums first (spec 5.3): a corrupt or truncated file is checksum_mismatch */
     if (otc__path_size(sha_path) >= 0) {
+        char hex[65];
         st = otc__sha256_rows(sha_path, &names, &digests, &n_rows);
         if (st != OTC_OK) { otc__err_set(err, st, sha_path, "cannot read %s", sha_path); goto done; }
-        if ((st = check_digest(path, jsonl_name, names, digests, n_rows, err)) != OTC_OK) goto done;
-        if ((st = check_digest(meta_path, path_base(meta_path), names, digests, n_rows, err)) != OTC_OK) goto done;
+        if ((st = otc__sha256_handle(r->file, hex)) != OTC_OK) { otc__err_set(err, st, path, "cannot read %s", path); goto done; }
+        if ((st = check_digest(path, jsonl_name, hex, names, digests, n_rows, err)) != OTC_OK) goto done;
+        otc__sha256_mem(meta_text, meta_len, hex);
+        if ((st = check_digest(meta_path, path_base(meta_path), hex, names, digests, n_rows, err)) != OTC_OK) goto done;
         r->loaded_from = OTC_LOADED_FROM_FILE;
     } else if (opts && opts->require_checksum) {
         otc__err_set(err, OTC_E_IO, sha_path, "require_checksum: %s does not exist", sha_path);
@@ -1022,10 +1018,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     } else {
         r->loaded_from = OTC_LOADED_FROM_FILE_UNVERIFIED;
     }
-    if ((st = load_meta(r, meta_path, err)) != OTC_OK) goto done;
-
-    st = otc__file_open(path, &r->file);
-    if (st != OTC_OK) { otc__err_set(err, st, path, "cannot open %s", path); goto done; }
+    if ((st = load_meta(r, meta_path, meta_text, meta_len, err)) != OTC_OK) goto done;
     memset(&b, 0, sizeof b);
     b.rel = r;
     b.err = err;
@@ -1035,7 +1028,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         const char *sha = NULL;
         for (i = 0; i < n_rows; i++)
             if (!strcmp(names[i], jsonl_name)) sha = digests[i];
-        st = index_from_file(&b, dir, jsonl_name, sha, otc__path_size(path));
+        st = index_from_file(&b, dir, jsonl_name, sha, otc__file_size(r->file));
         if (st != OTC_E_NOT_FOUND) r->index_used = 1;
         if (st != OTC_OK && st != OTC_E_NOT_FOUND) goto done; /* the caller opens again without the index */
     }
@@ -1090,6 +1083,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     st = build_files(r, dir, names, digests, n_rows, jsonl_name, path_base(meta_path));
 done:
     otc__free_rows(names, digests, n_rows);
+    free(meta_text);
     free(base);
     free(dir);
     free(meta_path);

@@ -562,37 +562,58 @@ otc_status otc__read_all(const char *path, char **out, size_t *len)
 
 /* ----------------------------------------------------------------- SHA-256 */
 
-otc_status otc__sha256_file(const char *path, char hex[65])
+static void to_hex(const uint8_t *hash, char hex[65])
 {
     static const char digits[] = "0123456789abcdef";
-    otc__file *f = NULL;
-    struct Sha_256 ctx;
-    uint8_t hash[SIZE_OF_SHA_256_HASH];
-    unsigned char *buf;
-    uint64_t off = 0;
-    int64_t size;
     size_t i;
-    otc_status st = otc__file_open(path, &f);
-    if (st != OTC_OK) return st;
-    size = otc__file_size(f);
-    buf = (unsigned char *)malloc(65536);
-    if (!buf || size < 0) { free(buf); otc__file_close(f); return buf ? OTC_E_IO : OTC_E_NOMEM; }
-    sha_256_init(&ctx, hash);
-    while (off < (uint64_t)size) {
-        size_t n = (uint64_t)size - off > 65536 ? 65536 : (size_t)((uint64_t)size - off);
-        if (otc__file_pread(f, buf, n, off) != 0) { free(buf); otc__file_close(f); return OTC_E_IO; }
-        sha_256_write(&ctx, buf, n);
-        off += n;
-    }
-    sha_256_close(&ctx);
-    free(buf);
-    otc__file_close(f);
     for (i = 0; i < SIZE_OF_SHA_256_HASH; i++) {
         hex[2 * i] = digits[hash[i] >> 4];
         hex[2 * i + 1] = digits[hash[i] & 15];
     }
     hex[64] = '\0';
+}
+
+otc_status otc__sha256_handle(otc__file *f, char hex[65])
+{
+    struct Sha_256 ctx;
+    uint8_t hash[SIZE_OF_SHA_256_HASH];
+    unsigned char *buf;
+    uint64_t off = 0;
+    int64_t size = otc__file_size(f);
+    if (size < 0) return OTC_E_IO;
+    buf = (unsigned char *)malloc(65536);
+    if (!buf) return OTC_E_NOMEM;
+    sha_256_init(&ctx, hash);
+    while (off < (uint64_t)size) {
+        size_t n = (uint64_t)size - off > 65536 ? 65536 : (size_t)((uint64_t)size - off);
+        if (otc__file_pread(f, buf, n, off) != 0) { free(buf); return OTC_E_IO; }
+        sha_256_write(&ctx, buf, n);
+        off += n;
+    }
+    sha_256_close(&ctx);
+    free(buf);
+    to_hex(hash, hex);
     return OTC_OK;
+}
+
+void otc__sha256_mem(const void *data, size_t len, char hex[65])
+{
+    struct Sha_256 ctx;
+    uint8_t hash[SIZE_OF_SHA_256_HASH];
+    sha_256_init(&ctx, hash);
+    sha_256_write(&ctx, data, len);
+    sha_256_close(&ctx);
+    to_hex(hash, hex);
+}
+
+otc_status otc__sha256_file(const char *path, char hex[65])
+{
+    otc__file *f = NULL;
+    otc_status st = otc__file_open(path, &f);
+    if (st != OTC_OK) return st;
+    st = otc__sha256_handle(f, hex);
+    otc__file_close(f);
+    return st;
 }
 
 void otc__free_rows(char **names, char **digests, size_t n)
