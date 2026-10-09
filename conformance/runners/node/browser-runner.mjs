@@ -168,6 +168,9 @@ const closed = !pageGone && await page.evaluate(() => window.__otc.runner.shutdo
     process.stderr.write(`close failed at shutdown: ${e && e.stack ? e.stack : e}\n`);
     return false;
 });
-await browser.close();
+// No browser.close() here: it waits for Chromium's own graceful exit, which has no bound and took more than the
+// driver's 10 s on a busy machine (the case then failed with "exited with status None"). The browser is disposable
+// and the exit status depends only on the SDK's close() above, so the runner exits now: Playwright's process
+// "exit" handler kills the browser's process group (SIGKILL) and removes its temporary profile synchronously.
 server.close();
 process.exit(closed ? 0 : 1);
