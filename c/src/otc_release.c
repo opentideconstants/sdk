@@ -3,6 +3,7 @@
  * (SDK spec 4.2, 4.3, 4.6, 5.3, 6.2, 6.4, 7.3, 7.4). */
 #include "otc_internal.h"
 
+#include <errno.h>
 #include <stddef.h>
 
 /* --------------------------------------------------------------- options */
@@ -164,7 +165,8 @@ otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64
     base = path_base(rel->path);
     dir = otc__strndup(rel->path, (size_t)(base - rel->path));
     ix = dir ? otc__join(dir, "index-v1.json") : NULL;
-    removed = ix && otc__remove_file(ix) == 0;
+    /* another thread that read the same line may have deleted it first */
+    removed = ix && (otc__remove_file(ix) == 0 || errno == ENOENT);
     free(ix);
     free(dir);
     return otc__fail(rel, OTC_E_INVALID_RELEASE,
