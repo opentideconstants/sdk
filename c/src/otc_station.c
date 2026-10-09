@@ -544,9 +544,20 @@ otc_status otc_set_provenance_build(const otc_set *s, const otc_provenance_build
     {                                                                                          \
         return b ? otc__copy_str(otc__jstr(b->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
+/* A build time; one that is not an RFC 3339 time with real calendar fields is
+ * not found (null), and the station still loads (spec 4.6, CR2 DR6). */
+#define BUILD_TIME(NAME, KEY)                                                                  \
+    otc_status NAME(const otc_provenance_build *b, char *buf, size_t len, size_t *needed)      \
+    {                                                                                          \
+        const char *v;                                                                         \
+        char t[21];                                                                            \
+        if (!b) return OTC_E_INVALID_ARGUMENT;                                                 \
+        v = otc__jstr(b->json, KEY);                                                           \
+        return otc__copy_str(v && otc__utc_time(v, t) ? v : NULL, buf, len, needed);           \
+    }
 BUILD_STR(otc_provenance_build_build_commit, "build_commit")
-BUILD_STR(otc_provenance_build_built_at, "built_at")
-BUILD_STR(otc_provenance_build_fetched_at, "fetched_at")
+BUILD_TIME(otc_provenance_build_built_at, "built_at")
+BUILD_TIME(otc_provenance_build_fetched_at, "fetched_at")
 BUILD_STR(otc_provenance_build_run_id, "run_id")
 
 otc_status otc_provenance_build_tool_versions_json(const otc_provenance_build *b, char *buf, size_t len,
