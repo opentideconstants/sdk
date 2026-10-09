@@ -80,46 +80,72 @@ end
 class ChecksumSwapTest < Minitest::Test
     include TestSupport
     OTC = OpenTideConstants
+    D = "20991231.2".freeze
 
-    # Swaps the file at path for other bytes right after it is hashed (the
-    # window between the hash and the read).
+    # Runs the block with a hook on SHA-256: the moment a hash of path's
+    # bytes is complete (any Digest::SHA256 hexdigest, of a String or of an
+    # IO), path is replaced by a file with the other bytes (a rename, as
+    # another process would replace it). Returns how many times the swap ran.
     def with_swap_after_hash(path, other)
+        target = Digest::SHA256.hexdigest(File.binread(path))
+        swaps = 0
+        swap = lambda do |hex|
+            return unless hex == target && swaps.zero?
+            swaps += 1
+            tmp = "#{path}.swap"
+            File.binwrite(tmp, other)
+            File.rename(tmp, path)
+        end
         hook = Module.new do
-            define_method(:sha256_file) do |p|
-                result = super(p)
-                File.binwrite(p, other) if p == path
-                result
-            end
-            define_method(:file) do |p|
-                result = super(p)
-                File.binwrite(p, other) if p == path
+            define_method(:hexdigest) do |*args|
+                result = super(*args)
+                swap.call(result)
                 result
             end
         end
-        OTC::Release.singleton_class.prepend(hook)
-        Digest::SHA256.singleton_class.prepend(hook)
+        Digest::SHA256.singleton_class.prepend(hook) # Digest::SHA256.hexdigest(bytes)
+        Digest::SHA256.prepend(hook)                 # Digest::SHA256.new / .file(p), then #hexdigest
         yield
+        swaps
     ensure
         # A prepended module cannot be taken out again; emptying it undoes the hook.
-        hook.send(:remove_method, :sha256_file)
-        hook.send(:remove_method, :file)
+        hook.send(:remove_method, :hexdigest)
+    end
+
+    # What a load gives: the datestamp and every station, as read.
+    def content(c)
+        [c.release.datestamp, c.stations.map(&:raw)]
     end
 
     def test_a_file_swapped_after_its_hash_is_not_loaded
         %w[json json.gz jsonl].each do |ext|
-            dir = tmpdir
-            %W[OTC_20991231.2.#{ext} OTC_20991231.2.sha256 OTC_20991231.2.meta.json].each { |n| FileUtils.cp(fixture("good", n), dir) }
-            path = File.join(dir, "OTC_20991231.2.#{ext}")
+            original = fixture("good", "OTC_#{D}.#{ext}")
             # Same release, other bytes: the older release's file under this name.
-            other = File.binread(fixture("good", "OTC_20991231.#{ext}"))
+            other = fixture("good", "OTC_20991231.#{ext}")
+            want = OTC.new(file: original).then { |r| content(r).tap { r.close } }
+            dir = tmpdir
+            %W[OTC_#{D}.#{ext} OTC_#{D}.sha256 OTC_#{D}.meta.json].each { |n| FileUtils.cp(fixture("good", n), dir) }
+            path = File.join(dir, "OTC_#{D}.#{ext}")
             c = nil
-            with_swap_after_hash(path, other) do
+            swaps = with_swap_after_hash(path, File.binread(other)) do
                 c = OTC.new(file: path)
-            rescue OTC::ChecksumError, OTC::Error
-                c = nil
+            rescue OTC::ChecksumError
+                c = nil # the swapped bytes were refused: also correct
             end
-            assert(c.nil? || c.release.datestamp == "20991231.2", "#{ext}: loaded swapped bytes as #{c&.release&.datestamp}")
-            c&.close
+            assert_equal 1, swaps, "#{ext}: the file was not swapped after its hash (the hook did not fire)"
+            refute_equal File.binread(original), File.binread(path), "#{ext}: the file on disk is not the swapped one"
+            next unless c
+
+            got = content(c)
+            c.close
+            # Positive control: the swapped bytes load to other content, so a load of them is seen.
+            refute_equal want[1], OTC.new(file: other).then { |r| content(r)[1].tap { r.close } }
+            assert_equal want, got, "#{ext}: loaded the bytes that replaced the hashed file"
+        rescue Errno::EACCES
+            # Windows does not rename over a file that is open (the .jsonl is
+            # hashed through an open handle).
+            raise unless Gem.win_platform?
+            skip "#{ext}: cannot replace an open file on Windows"
         end
     end
 end
