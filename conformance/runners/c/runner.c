@@ -86,6 +86,7 @@ static struct {
     double   last_check;
     otc_status auto_update_status;   /* the failure of the last automatic update (C69), OTC_OK if none */
     int      auto_update_nomove;     /* it said "updated" but named no newer release: last_error is uncaught */
+    int      pointer_reached;        /* a check reached the latest pointer since the open: last_error is null (CR2 DR4) */
 } g_client = {.timeout_s = OTC_TIMEOUT_DEFAULT, .formats = OTC_FORMATS_DEFAULT};   /* no client yet: the defaults */
 
 static double now_s(void)
@@ -1060,7 +1061,7 @@ static void op_query(request *q, reply *r)
         }
         if (g_client.auto_update_status != OTC_OK)
             cJSON_AddStringToObject(o, "code", otc_status_code(g_client.auto_update_status));
-        else if (otc_release_loaded_from(R) == OTC_LOADED_FROM_CACHE_AFTER_ERROR)
+        else if (otc_release_loaded_from(R) == OTC_LOADED_FROM_CACHE_AFTER_ERROR && !g_client.pointer_reached)
             cJSON_AddStringToObject(o, "code", otc_status_code(otc_last_error_status(R)));
         else
             cJSON_AddNullToObject(o, "code");
@@ -1641,6 +1642,15 @@ static otc_status swap_to(const char *ds, otc_error *err)
     return OTC_OK;
 }
 
+/* A check (latest, check_for_update, update, an automatic update) reached the latest pointer: the client's
+ * last_error is null from now on, and loaded_from does not change (spec 4.3, CR2 DR4). */
+static void pointer_reached(void)
+{
+    g_client.auto_update_status = OTC_OK;
+    g_client.auto_update_nomove = 0;
+    g_client.pointer_reached = 1;
+}
+
 /* otc_fetch_update, then the new release replaces the current one (spec 4.3 "update"). *nomove is set when the
  * library says it updated but the runner cannot find a new datestamp in the path it got (never "updated" then). */
 static otc_status do_update(const char *from, int *updated, char *to, size_t to_len, otc_error *err, int *nomove)
@@ -1728,6 +1738,7 @@ static void op_fetch(request *q, reply *r)
         bool found = true;
         if (!strcmp(q->op, "latest")) rc = otc_fetch_latest_info(&fo, &ri);
         else rc = otc_fetch_check_for_update(&fo, ds, &ri, &found);
+        if (rc == OTC_OK) pointer_reached();
         cJSON_AddItemToObject(r->result, "release", rc == OTC_OK && found && ri ? enc_release_info(ri, &bad) : cJSON_CreateNull());
         otc_release_info_free(ri);
     } else if (!strcmp(q->op, "update")) {
@@ -1743,7 +1754,10 @@ static void op_fetch(request *q, reply *r)
         cJSON_AddBoolToObject(r->result, "updated", updated);
         cJSON_AddStringToObject(r->result, "from", ds);
         cJSON_AddStringToObject(r->result, "to", to);
-        if (rc == OTC_OK) g_client.last_check = now_s();
+        if (rc == OTC_OK) {
+            g_client.last_check = now_s();
+            pointer_reached();
+        }
     } else if (!strcmp(q->op, "download")) {
         const char *to = arg_str(&q->a, "to"), *release = arg_str(&q->a, "release");
         const cJSON *fmts = q->a.obj ? cJSON_GetObjectItemCaseSensitive(q->a.obj, "formats") : NULL, *f;
@@ -1834,6 +1848,7 @@ static void maybe_auto_update(void)
     rc = do_update(ds, &updated, to, sizeof to, &err, &nomove);
     /* offline (the option or OPENTIDECONSTANTS_OFFLINE, which the library reads) the check does not run (spec 5.6) */
     if (rc == OTC_E_OFFLINE_UNAVAILABLE) return;
+    if (rc == OTC_OK && !nomove) pointer_reached();
     if (rc != OTC_OK || nomove) {
         /* keep the current release; the failure is the client's last_error, as in the other SDKs (C69) */
         if (nomove) g_client.auto_update_nomove = 1;

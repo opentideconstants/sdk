@@ -1108,14 +1108,22 @@ export class Release {
         return Object.freeze([...this.iterStations(filters)]);
     }
 
-    /** Iterate active stations ordered by station_id. Bad filters fail here, not at the first next(). */
+    /**
+     * Iterate active stations ordered by station_id. Bad filters fail here, not at the first next(). Each step checks
+     * that the release is not closed, also for an iterator made before close (CR2 DR32).
+     */
     iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
         this.#open();
         const f = checkFilters(filters);
         const active = this.#active;
+        const open = () => this.#open();
         const station = (e: IndexEntry) => this.#station(e);
         return (function* () {
-            for (const e of active) if (matches(e, f)) yield station(e);
+            for (const e of active) {
+                open();
+                if (matches(e, f)) yield station(e);
+            }
+            open();
         })();
     }
 

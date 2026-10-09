@@ -444,30 +444,40 @@ class Release:
     def files(self) -> Tuple[FileInfo, ...]:
         return self._files
 
+    # After close the metadata above (datestamp, created, format_version, citation, files) stays readable; every query
+    # below is io "the release is closed" (spec §4.2, CR D21, CR2 DR32).
+
     @property
     def conventions(self) -> Tuple[Convention, ...]:
+        self._check_open()
         return self._conventions
 
     def convention(self, convention_id: str) -> Optional[Convention]:
+        self._check_open()
         return self._conv_by_id.get(convention_id)
 
     @property
     def licences(self) -> Tuple[Licence, ...]:
+        self._check_open()
         return self._licences
 
     def licence(self, licence_id: str) -> Optional[Licence]:
+        self._check_open()
         return self._lic_by_id.get(licence_id)
 
     @property
     def station_count(self) -> int:
+        self._check_open()
         return len(self._entries)
 
     @property
     def tombstone_count(self) -> int:
+        self._check_open()
         return len(self._tombs)
 
     @property
     def constituent_names(self) -> Tuple[str, ...]:
+        self._check_open()
         if self._constituent_names is None:
             names = {n for e in self._entries for s in e.get("sets") or () for n in s.get("constituents") or ()}
             self._constituent_names = tuple(sorted(names))
@@ -475,6 +485,7 @@ class Release:
 
     @property
     def stats(self) -> Stats:
+        self._check_open()
         if self._stats is None:
             def count(values):
                 out = {}
@@ -633,9 +644,16 @@ class Release:
                      self._filtered(country, type, kind, source, source_type))
 
     def iter_stations(self, *, country=None, type=None, kind=None, source=None, source_type=None) -> Iterator[Station]:  # noqa: A002
-        """The same stations as stations(), one at a time. The arguments are checked when it is called."""
+        """The same stations as stations(), one at a time. The arguments are checked when it is called; each step
+        checks that the release is not closed (CR2 DR32)."""
         entries = self._filtered(country, type, kind, source, source_type)
-        return (self._station_from_entry(e) for e in entries)
+
+        def steps():
+            for e in entries:
+                self._check_open()
+                yield self._station_from_entry(e)
+            self._check_open()
+        return steps()
 
     def search(self, *, name, limit=None, match=None, country=None, type=None, kind=None, source=None,  # noqa: A002
                source_type=None) -> Tuple[Station, ...]:
@@ -723,6 +741,7 @@ class Release:
                                        f"{self.datestamp}")
 
     def reference_station(self, station: Station) -> Optional[Station]:
+        self._check_open()
         self._own_station(station, "reference_station")
         off = station.subordinate_offsets
         if not station.is_subordinate or off is None or off.reference_station_id is None:
@@ -730,6 +749,7 @@ class Release:
         return self.station(off.reference_station_id)
 
     def subordinates_of(self, station: Station) -> Tuple[Station, ...]:
+        self._check_open()
         self._own_station(station, "subordinates_of")
         return tuple(self.station(s) for s in sorted(self._subs.get(station.station_id, ())))
 

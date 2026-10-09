@@ -401,16 +401,24 @@ export class OpenTideConstants {
 
     #autoUpdateNow(node: NodeMod): void {
         const ctx = this.#ctx;
-        const res = node.runBlocking(new URL("./auto-update-worker.js", import.meta.url), {
-            baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
-            userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
-        });
+        let res: BlockingResult;
+        try {
+            res = node.runBlocking(new URL("./auto-update-worker.js", import.meta.url), {
+                baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
+                userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
+            });
+        } catch (e) {
+            // the worker could not start (no Worker, SharedArrayBuffer or Atomics.wait): never escapes the query (R2-125)
+            this.#autoUpdateFailed(e);
+            return;
+        }
         // a failed check keeps the current release, logs, and records the error as lastError (spec 4.3, 5.6; T29)
         if (!res.ok || typeof res.datestamp !== "string") {
             this.#lastError = errorFromWorker(res);
             log(ctx, "warn", `automatic update check failed: ${res.message ?? "unknown error"}`);
             return;
         }
+        this.#reachedPointer();
         const from = this.#release.datestamp;
         if (compareDatestamps(res.datestamp, from) <= 0) {
             log(ctx, "debug", `automatic update check: ${from} is current`);
@@ -426,9 +434,22 @@ export class OpenTideConstants {
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
-            if (e instanceof OpenTideConstantsError) this.#lastError = e;
-            log(ctx, "warn", `automatic update failed: ${e instanceof Error ? e.message : String(e)}`);
+            this.#autoUpdateFailed(e);
         }
+    }
+
+    /**
+     * An automatic update that failed keeps the current release, logs the failure with its stack, and records it as
+     * lastError: an SDK error as it is, anything else as io with the original as its cause (spec 5.6, CR2 DR5). A
+     * failure here is local (the worker did the network part), so it is never network.
+     */
+    #autoUpdateFailed(e: unknown): void {
+        const err = e instanceof OpenTideConstantsError ? e
+            : new FileError(`automatic update failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
+                { path: this.#cacheRoot ?? "", cause: e });
+        this.#lastError = err;
+        const stack = e instanceof Error && e.stack ? e.stack : String(e);
+        log(this.#ctx, "warn", `automatic update failed: ${err.message}\n${stack}`);
     }
 
     #swap(rel: Release, from: LoadedFrom): void {
@@ -441,6 +462,11 @@ export class OpenTideConstants {
         this.#all = [...this.#all.filter((r) => r.deref() !== undefined), new WeakRef(rel)];
     }
 
+    /** A check (manual or automatic) that reaches the latest pointer clears lastError; loadedFrom does not change (spec 4.3, CR2 DR4). */
+    #reachedPointer(): void {
+        this.#lastError = null;
+    }
+
     /** After close, every query and release-management call is io (spec 4.2, CR D21). */
     #check(): void {
         if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
@@ -448,9 +474,9 @@ export class OpenTideConstants {
 
     // ------------------------------------------------------------------ release management (spec 4.3)
 
-    /** The loaded release. */
+    /** The loaded release. After close it stays readable: the closed Release, whose metadata stays readable (CR2 DR32). */
     get release(): Release {
-        return this.#current();
+        return this.#closed ? this.#release : this.#current();
     }
 
     /** Where the loaded release came from. */
@@ -458,7 +484,10 @@ export class OpenTideConstants {
         return this.#loadedFrom;
     }
 
-    /** The error that made the client fall back to the cache, or null. */
+    /**
+     * The error that made the client fall back to the cache, or the failure of the last automatic update; null after
+     * any check (manual or automatic) reaches the latest pointer, or when there is none (spec 4.3, CR2 DR4).
+     */
     get lastError(): OpenTideConstantsError | null {
         return this.#lastError;
     }
@@ -514,7 +543,9 @@ export class OpenTideConstants {
     async latest(): Promise<ReleaseInfo> {
         this.#check();
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
-        return toInfo(await getPointer(this.#ctx));
+        const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
+        return toInfo(entry);
     }
 
     /**
@@ -531,6 +562,7 @@ export class OpenTideConstants {
         let tooNew: OpenTideConstantsError | null = null;
         try {
             read = await readPointer(ctx);
+            this.#reachedPointer();
         } catch (e) {
             if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
             tooNew = e;
@@ -574,8 +606,13 @@ export class OpenTideConstants {
         if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
+        // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
+        this.#check();
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
         const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false);
+        if (this.#closed) got.rel._close();
+        this.#check();
         this.#swap(got.rel, got.from);
         log(this.#ctx, "info", `updated from ${from} to ${entry.datestamp}`);
         return Object.freeze({ updated: true, from, to: entry.datestamp });

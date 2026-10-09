@@ -954,6 +954,151 @@ class LifecycleTest(unittest.TestCase):
         c._maybe_auto_update()
 
 
+class AutoUpdateFailureTest(unittest.TestCase):
+    """A failure in an automatic update never escapes the query; it is logged with its stack and kept in last_error
+    as an SDK error with the original as its cause: network for a transport failure, else io (spec §5.6, CR2 DR5)."""
+
+    def _client(self, exc):
+        import time
+        c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"))
+        c._file = None  # behave as a latest client for the automatic update
+        c._auto_update, c._update_interval = True, 0.001
+
+        def boom():
+            raise exc
+        c._update = boom
+        time.sleep(0.01)
+        return c
+
+    def _check(self, exc, cls):
+        c = self._client(exc)
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs:
+                self.assertEqual(c.station("OTC-T-0001").station_id, "OTC-T-0001")
+            err = c.last_error
+            self.assertIsInstance(err, cls)
+            self.assertIs(err.__cause__, exc)
+            self.assertTrue(any("Traceback" in line and type(exc).__name__ in line for line in logs.output),
+                            "the failure is logged without its stack")
+        finally:
+            c.close()
+
+    def test_a_non_sdk_failure_is_io_with_its_cause(self):
+        self._check(RuntimeError("not an SDK error"), otc.FileError)
+
+    def test_a_raw_transport_failure_is_network_with_its_cause(self):
+        self._check(ConnectionResetError("reset by peer"), otc.NetworkError)
+
+    def test_an_sdk_failure_is_kept_as_it_is_and_logged_with_its_stack(self):
+        exc = otc.ReleaseNotFoundError("no pointer")
+        c = self._client(exc)
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs:
+                c.station("OTC-T-0001")
+            self.assertIs(c.last_error, exc)
+            self.assertTrue(any("Traceback" in line for line in logs.output))
+        finally:
+            c.close()
+
+
+class AfterCloseTest(unittest.TestCase):
+    """After close: metadata stays readable; every query and iterator step is io (spec §4.2, CR D21, CR2 DR32)."""
+
+    def test_metadata_readable_and_queries_io(self):
+        for mode in ("eager", "stream"):
+            c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode)
+            sub = c.station("OTC-T-0003")
+            ref = c.reference_station(sub)
+            rel = c.release
+            c.close()
+            self.assertIs(c.release, rel, "the release property stays readable after close")
+            self.assertEqual((rel.datestamp, rel.format_version), ("20991231.2", "1.0"))
+            self.assertIsNotNone(rel.created)
+            self.assertIn("20991231.2", rel.citation)
+            self.assertIsInstance(rel.files, tuple)
+            calls = {
+                "reference_station": lambda: rel.reference_station(sub),
+                "subordinates_of": lambda: rel.subordinates_of(ref),
+                "client.reference_station": lambda: c.reference_station(sub),
+                "client.subordinates_of": lambda: c.subordinates_of(ref),
+                "stats": lambda: rel.stats,
+                "station_count": lambda: rel.station_count,
+                "tombstone_count": lambda: rel.tombstone_count,
+                "constituent_names": lambda: rel.constituent_names,
+                "conventions": lambda: rel.conventions,
+                "convention": lambda: rel.convention("x"),
+                "licences": lambda: rel.licences,
+                "licence": lambda: rel.licence("x"),
+                "attribution": lambda: rel.attribution(),
+                "iter_stations": lambda: next(iter(rel.iter_stations())),
+            }
+            for name, call in calls.items():
+                with self.assertRaises(otc.FileError, msg=f"{mode} {name}") as cm:
+                    call()
+                self.assertIn("closed", str(cm.exception))
+
+    def test_an_iterator_made_before_close_fails_at_its_next_step(self):
+        for mode in ("eager", "stream"):
+            c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode)
+            it = c.iter_stations()
+            next(it)
+            c.close()
+            with self.assertRaises(otc.FileError, msg=mode):
+                next(it)
+
+
+class UpdateCloseRaceTest(unittest.TestCase):
+    """R2-128: a close that runs after update() checked that the client is open, and before it took the lock, wins:
+    update is io, and no release is swapped in after close."""
+
+    def test_close_between_the_check_and_the_lock(self):
+        import tempfile
+        idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+        script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
+        srv = _Server(script=script)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                c = otc.OpenTideConstants(base_url=srv.url, cache_dir=tmp, mode="stream")
+                old = c.release
+                del script["/OTC_latest-f1.json"]
+                orig = c._check_open
+
+                def check_then_close():
+                    orig()
+                    c._check_open = orig
+                    c.close()
+                c._check_open = check_then_close
+                with self.assertRaises(otc.FileError):
+                    c.update()
+                self.assertIs(c.release, old, "update swapped in a release after close")
+        finally:
+            srv.close()
+
+
+class OfflineEnvTest(unittest.TestCase):
+    """OPENTIDECONSTANTS_OFFLINE: 1, true, yes, on in any case after a trim, and it wins over offline=False (CR D15)."""
+
+    def test_values_and_precedence(self):
+        import tempfile
+        saved = os.environ.get("OPENTIDECONSTANTS_OFFLINE")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                for v in ("1", " TRUE ", "Yes", "on"):
+                    os.environ["OPENTIDECONSTANTS_OFFLINE"] = v
+                    for kw in ({}, {"offline": False}):
+                        with self.assertRaises(otc.OfflineError, msg=f"{v!r} {kw}"):
+                            otc.OpenTideConstants(cache_dir=tmp, base_url="http://127.0.0.1:9/", **kw)
+                for v in ("no", " 0 "):
+                    os.environ["OPENTIDECONSTANTS_OFFLINE"] = v
+                    with self.assertRaises(otc.NetworkError, msg=repr(v)):
+                        otc.OpenTideConstants(cache_dir=tmp, base_url="http://127.0.0.1:9/", timeout=1)
+        finally:
+            if saved is None:
+                os.environ.pop("OPENTIDECONSTANTS_OFFLINE", None)
+            else:
+                os.environ["OPENTIDECONSTANTS_OFFLINE"] = saved
+
+
 class DownloadTest(unittest.TestCase):
     """download() writes all of a release or nothing (spec §4.3.2; review PK14)."""
 

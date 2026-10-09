@@ -285,6 +285,404 @@
    ]
   },
   {
+   "id": "update/last-error-cleared-auto",
+   "title": "an automatic update fails (last_error network); the next automatic check reaches the pointer and finds nothing newer: last_error is null, loaded_from unchanged (CR2 DR4)",
+   "spec": "4.3, 5.6",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "auto_update": true,
+      "update_interval": 1
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "driver": "sleep",
+     "s": 1.5
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "$type": "object"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "driver": "sleep",
+     "s": 1.5
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "$type": "object"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": null
+     }
+    },
+    {
+     "op": "loaded_from",
+     "expect": {
+      "loaded_from": "download"
+     }
+    }
+   ]
+  },
+  {
+   "id": "update/last-error-cleared-latest",
+   "title": "loaded_from cache_after_error, then latest reaches the pointer: last_error is null, and loaded_from stays cache_after_error (CR2 DR4)",
+   "spec": "4.3",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "op": "latest",
+     "expect": {
+      "release": {
+       "datestamp": "20991231.2",
+       "format_version": "1.0",
+       "concept_doi": "10.5072/zenodo.1",
+       "zenodo_version_doi": "10.5072/zenodo.2",
+       "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+       "files": [
+        {
+         "name": "OTC_20991231.2.json",
+         "url": "${server}/good/OTC_20991231.2.json",
+         "size": 29814,
+         "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+        },
+        {
+         "name": "OTC_20991231.2.json.gz",
+         "url": "${server}/good/OTC_20991231.2.json.gz",
+         "size": 4474,
+         "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+        },
+        {
+         "name": "OTC_20991231.2.jsonl",
+         "url": "${server}/good/OTC_20991231.2.jsonl",
+         "size": 25827,
+         "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+        },
+        {
+         "name": "OTC_20991231.2.meta.json",
+         "url": "${server}/good/OTC_20991231.2.meta.json",
+         "size": 3974,
+         "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+        },
+        {
+         "name": "OTC_20991231.2.sha256",
+         "url": "${server}/good/OTC_20991231.2.sha256",
+         "size": 353,
+         "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+        }
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": null
+     }
+    },
+    {
+     "op": "loaded_from",
+     "expect": {
+      "loaded_from": "cache_after_error"
+     }
+    }
+   ]
+  },
+  {
+   "id": "update/last-error-cleared-check-for-update",
+   "title": "loaded_from cache_after_error, then check_for_update reaches the pointer: last_error is null, and loaded_from stays cache_after_error (CR2 DR4)",
+   "spec": "4.3",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "op": "check_for_update",
+     "expect": {
+      "release": null
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": null
+     }
+    },
+    {
+     "op": "loaded_from",
+     "expect": {
+      "loaded_from": "cache_after_error"
+     }
+    }
+   ]
+  },
+  {
+   "id": "update/last-error-cleared-update",
+   "title": "loaded_from cache_after_error, then update reaches the pointer: last_error is null, and loaded_from stays cache_after_error (CR2 DR4)",
+   "spec": "4.3",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "op": "update",
+     "expect": {
+      "updated": false,
+      "from": "20991231.2",
+      "to": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": null
+     }
+    },
+    {
+     "op": "loaded_from",
+     "expect": {
+      "loaded_from": "cache_after_error"
+     }
+    }
+   ]
+  },
+  {
    "id": "update/auto-off",
    "title": "without auto_update the loaded release never changes",
    "spec": "5.6",

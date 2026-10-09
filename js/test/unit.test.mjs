@@ -894,3 +894,96 @@ test("PK-R2-07 / spec 6.2: a failure to write the index is logged, not raised", 
     assert.equal(rel.station("OTC-T-0001").station_id, "OTC-T-0001");
     assert.ok(warnings.some((m) => m.includes("index-v1.json") && m.includes("EROFS")), JSON.stringify(warnings));
 });
+
+/** A local server for conformance/fixtures/good; over maps a file name to [status, body]; onRequest sees each name. */
+async function serveGood(over = {}, onRequest = () => undefined) {
+    const srv = http.createServer((req, res) => {
+        const name = decodeURIComponent(new URL(req.url, "http://x").pathname.slice(1));
+        onRequest(name);
+        if (name in over) {
+            res.writeHead(over[name][0]);
+            res.end(over[name][1]);
+            return;
+        }
+        let body = null;
+        try { body = fs.readFileSync(path.join(GOOD, name)); } catch { /* 404 */ }
+        res.writeHead(body ? 200 : 404);
+        res.end(body ?? "");
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    return { srv, url: `http://127.0.0.1:${srv.address().port}/` };
+}
+
+const olderPointer = () => JSON.stringify(JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8")).releases.find((e) => e.datestamp === "20991231"));
+
+test("R2-125/CR2 DR5: an update worker that cannot start never escapes a query: lastError is io with the cause, logged with its stack", async () => {
+    const { srv, url } = await serveGood();
+    const lines = [];
+    const logger = { debug() {}, info() {}, warn: (m) => lines.push(m) };
+    const c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), autoUpdate: true, updateInterval: 0.001, logger });
+    const saved = globalThis.SharedArrayBuffer;
+    try {
+        await new Promise((r) => setTimeout(r, 20));
+        globalThis.SharedArrayBuffer = class { constructor() { throw new TypeError("no SharedArrayBuffer here"); } };
+        assert.equal(c.station("OTC-T-0001").station_id, "OTC-T-0001");
+        assert.ok(c.lastError instanceof otc.FileError, String(c.lastError));
+        assert.equal(c.lastError.cause?.message, "no SharedArrayBuffer here");
+        assert.ok(lines.some((l) => l.includes("no SharedArrayBuffer here") && /\n\s+at /.test(l)), lines.join("\n---\n"));
+    } finally {
+        globalThis.SharedArrayBuffer = saved;
+        c.close();
+        srv.close();
+    }
+});
+
+test("CR2 DR32: after close, metadata and client.release stay readable; queries and an iterator made before close are io", async () => {
+    for (const mode of ["eager", "stream"]) {
+        const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), mode });
+        const rel = c.release;
+        const sub = c.station("OTC-T-0003");
+        const ref = c.referenceStation(sub);
+        const it = c.iterStations();
+        it.next();
+        c.close();
+        assert.equal(c.release, rel, `${mode}: client.release after close`);
+        assert.deepEqual([rel.datestamp, rel.format_version], ["20991231.2", "1.0"]);
+        assert.ok(rel.created);
+        assert.match(rel.citation, /20991231\.2/);
+        assert.ok(Array.isArray(rel.files));
+        assert.throws(() => it.next(), isCode("io"), `${mode}: an iterator made before close`);
+        assert.throws(() => rel.referenceStation(sub), isCode("io"), mode);
+        assert.throws(() => rel.subordinatesOf(ref), isCode("io"), mode);
+        assert.throws(() => rel.stats, isCode("io"), mode);
+    }
+});
+
+test("R2-128: a close while update() waits for the network wins: update is io and no release is swapped in", async () => {
+    const over = { "OTC_latest-f1.json": [200, olderPointer()] };
+    const { srv, url } = await serveGood(over);
+    try {
+        const c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), mode: "stream" });
+        const old = c.release;
+        delete over["OTC_latest-f1.json"];
+        const p = c.update();
+        c.close();
+        await assert.rejects(p, isCode("io"));
+        assert.equal(c.release, old, "update swapped in a release after close");
+    } finally {
+        srv.close();
+    }
+});
+
+test("R2-128: a close while update() downloads the new release wins: update is io and the new release is not swapped in", async () => {
+    let c = null;
+    const over = { "OTC_latest-f1.json": [200, olderPointer()] };
+    const { srv, url } = await serveGood(over, (name) => { if (name === "OTC_20991231.2.sha256") c?.close(); });
+    try {
+        c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), mode: "stream" });
+        const old = c.release;
+        delete over["OTC_latest-f1.json"];
+        await assert.rejects(c.update(), isCode("io"));
+        assert.equal(c.release, old, "update swapped in a release after close");
+    } finally {
+        srv.close();
+    }
+});

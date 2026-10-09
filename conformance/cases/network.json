@@ -1044,6 +1044,127 @@
    ]
   },
   {
+   "id": "net/offline-env-trim-case",
+   "title": "OPENTIDECONSTANTS_OFFLINE=' Yes ' (case and spaces) works like offline: true (CR D15)",
+   "spec": "4.2, 5.5",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2",
+      "format_version": "1.0"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner",
+     "env": {
+      "OPENTIDECONSTANTS_OFFLINE": " Yes "
+     }
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "net/offline-env-wins-over-option",
+   "title": "OPENTIDECONSTANTS_OFFLINE=On with offline: false: the variable wins, no socket (CR D15)",
+   "spec": "4.2, 5.5",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2",
+      "format_version": "1.0"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner",
+     "env": {
+      "OPENTIDECONSTANTS_OFFLINE": "On"
+     }
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "offline": false
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
    "id": "net/offline-pinned-not-cached",
    "title": "offline, a pinned release that is not cached: offline_unavailable",
    "spec": "5.5",

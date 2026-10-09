@@ -15,8 +15,9 @@ class OpenTideConstants
     # Where the release came from: :download, :cache, :cache_after_error, :file or :file_unverified.
     attr_reader :loaded_from
     # The error behind loaded_from :cache_after_error, or the error of the
-    # last automatic update that failed (spec §5.6); nil after an update
-    # succeeds, or when there is none.
+    # last automatic update that failed (spec §5.6); nil after any check
+    # (manual or automatic) reaches the latest pointer, or when there is none
+    # (CR2 DR4).
     attr_reader :last_error
     # The format major of a release on the server that this SDK cannot read
     # (newer than every supported major), as check_for_update last saw it; or nil.
@@ -139,6 +140,10 @@ class OpenTideConstants
         # it does not switch to a newer cached release either (CR D6).
         raise OfflineError, "offline: update needs the latest pointer" if @offline
         @lock.synchronize do
+            # Again under the lock: a close that ran since the check above
+            # wins, so no release is swapped in after close that nothing
+            # would close (R2-128).
+            check_open!
             from = @release.datestamp
             entry, url = resolve_latest
             unless newer?(entry["datestamp"], from)
@@ -272,6 +277,9 @@ class OpenTideConstants
     # when a release of a supported major exists, else unsupported_format.
     def resolve_latest
         entry, url = fetch_latest_pointer
+        # A check that reaches the pointer clears last_error; loaded_from does
+        # not change (spec §4.3, CR2 DR4).
+        @last_error = nil
         return [entry, url] if readable_entry?(entry)
         index_url = @base_url + "OTC_index.json"
         doc = fetch_pointer_doc("OTC_index.json", missing: :nil)
@@ -344,14 +352,31 @@ class OpenTideConstants
         return if monotonic - @last_check < @update_interval
         begin
             update!
-        rescue Error => e
-            @last_check = monotonic
-            @last_error = e
-            log(:warn, "automatic update failed: #{e.message}")
         rescue StandardError => e
             @last_check = monotonic
-            @last_error = Error.new("automatic update failed: #{e.class}: #{e.message}")
-            log(:warn, @last_error.message)
+            @last_error = auto_update_error(e)
+            log(:warn, "automatic update failed: #{@last_error.message}\n#{Array(e.backtrace).join("\n")}")
+        end
+    end
+
+    # Transport failures that a non-SDK exception in the automatic update can
+    # be (the HTTP layer wraps them; this is the safety net).
+    TRANSPORT_ERRORS = [SocketError, Timeout::Error, EOFError, Errno::ECONNREFUSED, Errno::ECONNRESET,
+                        Errno::ECONNABORTED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT, Errno::EPIPE,
+                        OpenSSL::SSL::SSLError, Net::ProtocolError, Net::HTTPBadResponse].freeze
+    private_constant :TRANSPORT_ERRORS
+
+    # The last_error of an automatic update that failed (spec §5.6, CR2
+    # DR5): an SDK error as it is; any other failure as an SDK error whose
+    # cause is the original: network for a transport failure, else io.
+    def auto_update_error(e)
+        return e if e.is_a?(Error)
+        msg = "automatic update failed: #{e.class}: #{e.message}"
+        begin
+            # raised here, inside the rescue of e, so Ruby sets its #cause to e
+            raise(TRANSPORT_ERRORS.any? { |k| e.is_a?(k) } ? NetworkError.new(msg) : FileError.new(msg))
+        rescue Error => wrapped
+            wrapped
         end
     end
 

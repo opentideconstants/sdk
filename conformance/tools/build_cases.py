@@ -1098,6 +1098,15 @@ def group_network():
                     [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": "1"}), drv("server_stop"), drv("clear_log"),
                      open_latest({"loaded_from": "cache", "datestamp": d2}), drv("assert_requests", source="any", count=0)],
                     requires=["fs"]))
+    # CR D15 (CR2 G8): the variable is read without regard to case and after a trim, and it wins over offline: false
+    out.append(case("net/offline-env-trim-case", "OPENTIDECONSTANTS_OFFLINE=' Yes ' (case and spaces) works like offline: true (CR D15)", "4.2, 5.5",
+                    [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": " Yes "}), drv("server_stop"), drv("clear_log"),
+                     open_latest({"loaded_from": "cache", "datestamp": d2}), drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
+    out.append(case("net/offline-env-wins-over-option", "OPENTIDECONSTANTS_OFFLINE=On with offline: false: the variable wins, no socket (CR D15)", "4.2, 5.5",
+                    [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": "On"}), drv("server_stop"), drv("clear_log"),
+                     open_latest({"loaded_from": "cache", "datestamp": d2}, offline=False), drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
     out.append(case("net/offline-pinned-not-cached", "offline, a pinned release that is not cached: offline_unavailable", "5.5",
                     [open_latest(), drv("restart_runner"), drv("server_stop"), drv("clear_log"),
                      net(step("open", err("offline_unavailable"), release=d1, offline=True, base_url=G, cache_dir="${cache}")),
@@ -1246,12 +1255,82 @@ def group_update():
                      # the first query must already see the new release: OTC-T-0021 is active in 20991231, removed in .2
                      step("station", {"station": None}, station_id="OTC-T-0021"),
                      step("release_metadata", {"datestamp": d2})], requires=["fs"]))
+    # CR2 DR4: any check that reaches the pointer (manual or automatic) clears last_error; loaded_from does not change
+    info2 = enc_release_info("good", d2, G)
+    fail_ptr = [{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]
+    auto_failed = [open_latest_step(G, auto_update=True, update_interval=1),
+                   drv("server_rules", rules=fail_ptr), drv("sleep", s=1.5),
+                   step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0001"),
+                   step("last_error", {"code": "network"}),
+                   drv("server_rules", rules=[])]
+    out.append(case("update/last-error-cleared-auto", "an automatic update fails (last_error network); the next automatic check reaches the pointer and finds nothing newer: last_error is null, loaded_from unchanged (CR2 DR4)", "4.3, 5.6",
+                    auto_failed + [drv("sleep", s=1.5),
+                                   step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0001"),
+                                   step("last_error", {"code": None}),
+                                   step("loaded_from", {"loaded_from": "download"})],
+                    requires=["fs"], timeout_s=120))
+    after_error = [open_latest_step(G), drv("restart_runner"), drv("server_rules", rules=fail_ptr),
+                   net(step("open", {"loaded_from": "cache_after_error", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
+                   step("last_error", {"code": "network"}),
+                   drv("server_rules", rules=[])]
+    for op, expect in [("latest", {"release": info2}), ("check_for_update", {"release": None}),
+                       ("update", {"updated": False, "from": d2, "to": d2})]:
+        out.append(case(f"update/last-error-cleared-{op.replace('_', '-')}", f"loaded_from cache_after_error, then {op} reaches the pointer: last_error is null, and loaded_from stays cache_after_error (CR2 DR4)", "4.3",
+                        after_error + [net(step(op, expect)),
+                                       step("last_error", {"code": None}),
+                                       step("loaded_from", {"loaded_from": "cache_after_error"})],
+                        requires=["fs"], timeout_s=120))
     out.append(case("update/auto-off", "without auto_update the loaded release never changes", "5.6",
                     [drv("server_rules", rules=old_pointer),
                      net(step("open", {"datestamp": d1}, base_url=G, cache_dir="${cache}", update_interval=1)),
                      drv("server_rules", rules=[]), drv("sleep", s=2.5),
                      step("station", {"station": enc_station(R1, R1.by_id["OTC-T-0021"])}, station_id="OTC-T-0021"),
                      step("release_metadata", {"datestamp": d1})], requires=["fs"]))
+    return out
+
+
+def group_lifecycle(R2):
+    """Close (spec 4.2 Close row, CR D21, CR2 DR32). A Release held from before close is closed with the client. Its
+    in-memory metadata stays readable; every query and iterator fails with io "the release is closed". C has no
+    client object, and otc_close frees the release, so a call after it is undefined: the case needs eager, which C
+    does not have."""
+    out = []
+    closed = {"error": "io", "error_message": {"$contains": "closed"}}
+    alias_st = next(s for s in R2.active if s.get("aliases"))
+    system, ids = next(iter(alias_st["aliases"].items()))
+    alias_id = ids[0] if isinstance(ids, list) else ids
+    sub = next(s for s in R2.active if s["type"] == "subordinate" and s.get("subordinate_offsets"))
+    ref_id = sub["subordinate_offsets"]["reference_station_id"]
+    on = "before"
+    queries = [
+        step("station", closed, on=on, station_id="OTC-T-0001"),
+        step("require_station", closed, on=on, station_id="OTC-T-0001"),
+        step("tombstone", closed, on=on, station_id="OTC-T-0005"),
+        step("station_by_alias", closed, on=on, system=system, alias_id=alias_id),
+        step("stations", closed, on=on),
+        step("iter_stations", closed, on=on),
+        step("search", closed, on=on, name="a"),
+        step("near", closed, on=on, lat=0.0, lon=0.0, radius_km=20000),
+        step("nearest", closed, on=on, lat=0.0, lon=0.0),
+        step("reference_station", closed, on=on, station_id=sub["station_id"]),
+        step("subordinates_of", closed, on=on, station_id=ref_id),
+        step("attribution", closed, on=on),
+        step("attribution", closed, on=on, station_ids=["OTC-T-0001"]),
+        step("stats", closed, on=on),
+        step("station_count", closed, on=on),
+        step("tombstone_count", closed, on=on),
+        step("constituent_names", closed, on=on),
+        step("conventions", closed, on=on),
+        step("convention", closed, on=on, convention_id="kartverket-utc1-v1"),
+        step("licences", closed, on=on),
+        step("licence", closed, on=on, licence_id=R2.doc["licences"][0]["licence_id"]),
+    ]
+    out.append(mcase("lifecycle/after-close", "after close, a Release held from before keeps its metadata (datestamp, created, format_version, citation, files) and every query and iterator is io \"the release is closed\", in eager and stream mode (CR D21, CR2 DR32)", "4.2",
+                     [step("hold_release", None, name=on), step("close"),
+                      step("release_metadata", enc_release_meta(R2), on=on),
+                      step("citation", {"citation": citation(R2)}, on=on),
+                      step("release_files", {"files": {"$type": "array"}}, on=on)] + queries,
+                     requires=["eager"]))
     return out
 
 
@@ -2569,6 +2648,7 @@ GROUPS = {
     "v1": lambda R2, R1: group_v1(),
     "format": lambda R2, R1: group_format(),
     "rules": lambda R2, R1: group_rules(),
+    "lifecycle": lambda R2, R1: group_lifecycle(R2),
 }
 
 
