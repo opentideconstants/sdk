@@ -390,8 +390,8 @@ class OpenTideConstants
 
     # Checks a pointer or index entry from the server (spec §4.2, §5.2): an
     # object with a valid datestamp, and files (if any) whose elements are
-    # objects with a String name and, if given, a String url and sha256 and
-    # an Integer size. Returns the entry.
+    # objects with a String name, a String sha256, an Integer size of 0 or
+    # more (CR2 DR12) and, if given, a String url. Returns the entry.
     def check_entry!(entry, source)
         raise InvalidReleaseError, "#{source}: an entry is not an object" unless entry.is_a?(Hash)
         d = entry["datestamp"]
@@ -400,8 +400,8 @@ class OpenTideConstants
         return entry if files.nil?
         raise InvalidReleaseError, "#{source}: files of #{d} is not a list" unless files.is_a?(Array)
         files.each do |f|
-            next if f.is_a?(Hash) && f["name"].is_a?(String) && [f["url"], f["sha256"]].all? { |v| v.nil? || v.is_a?(String) } &&
-                    (f["size"].nil? || f["size"].is_a?(Integer))
+            next if f.is_a?(Hash) && f["name"].is_a?(String) && (f["url"].nil? || f["url"].is_a?(String)) &&
+                    f["sha256"].is_a?(String) && f["size"].is_a?(Integer) && f["size"] >= 0
             raise InvalidReleaseError, "#{source}: a files entry of #{d} is malformed: #{f.inspect[0, 120]}"
         end
         entry
@@ -508,7 +508,7 @@ class OpenTideConstants
             log(:debug, "#{name}: 304, the cached copy is current")
             cached[0]
         when 200
-            doc = parse_pointer_body(url, res.body)
+            doc = parse_pointer_body(name, url, res.body)
             store_pointer(name, res.body, res.etag)
             log(:debug, "#{name}: 200")
             doc
@@ -525,18 +525,36 @@ class OpenTideConstants
     end
 
     # The cached copy of a pointer or index file as [doc, etag], or nil. A
-    # copy that is not JSON counts as none, so its ETag is not sent.
+    # copy that is not JSON of the right shape counts as none, so its ETag is
+    # not sent.
     def cached_pointer(name)
         cached = cache.read_pointer(name)
-        cached && [JSON.parse(cached[0]), cached[1]]
+        return nil unless cached
+        doc = JSON.parse(cached[0])
+        return [doc, cached[1]] if pointer_shape?(name, doc)
+        log(:warn, "the cached #{name} is not JSON of the right shape; ignoring it")
+        nil
     rescue JSON::ParserError, EncodingError
         log(:warn, "the cached #{name} is not JSON; ignoring it")
         nil
     end
 
-    # A 200 pointer or index body that is not JSON is a network error (CR D8).
-    def parse_pointer_body(url, body)
-        JSON.parse(body.dup.force_encoding(Encoding::UTF_8))
+    # The shape of a pointer (an object with a datestamp and a files list) or
+    # of the index (an object with a releases list). A wrong value inside a
+    # body of the right shape is invalid_release later (CR2 DR13).
+    def pointer_shape?(name, doc)
+        return false unless doc.is_a?(Hash)
+        return doc["releases"].is_a?(Array) if name == "OTC_index.json"
+        doc.key?("datestamp") && doc["files"].is_a?(Array)
+    end
+
+    # A 200 pointer or index body that is not JSON (CR D8), or is JSON of the
+    # wrong shape (CR2 DR13), is a network error. It is checked before the
+    # body is cached, so it never replaces the cached copy.
+    def parse_pointer_body(name, url, body)
+        doc = JSON.parse(body.dup.force_encoding(Encoding::UTF_8))
+        return doc if pointer_shape?(name, doc)
+        raise NetworkError.new("#{url}: HTTP 200 with JSON of the wrong shape for #{name}", url: url, status: 200)
     rescue JSON::ParserError, EncodingError => e
         raise NetworkError.new("#{url}: HTTP 200 with a body that is not JSON (#{e.message[0, 100]})", url: url, status: 200)
     end

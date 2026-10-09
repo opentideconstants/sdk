@@ -7,6 +7,9 @@ class OpenTideConstants
     # Fetching and checking release files (spec §5.2 step 4) and
     # OpenTideConstants#download (spec §4.3.2). Internal.
     class Downloader
+        # The start of one valid sha256sum row, on the raw bytes (CR2 DR13).
+        SHA256_ROW = /\A\s*\h{64}[ \t]+\*?\S/n.freeze
+
         # GETs OTC_{D}.sha256 and checks it against the pointer entry, if any.
         # Returns [{name => sha256}, bytes].
         def self.fetch_sha256(client, d, entry, pointer_url)
@@ -17,6 +20,11 @@ class OpenTideConstants
             raise ReleaseNotFoundError, "release #{d} not found (#{url}: HTTP 404)" if res.status == 404
             raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status) unless res.status == 200
             bytes = res.body
+            # A 200 body with no "<sha256>  <name>" row (a captive portal or a
+            # proxy page) is a network error, checked first (CR2 DR13).
+            unless bytes.each_line.any? { |l| l.b.match?(SHA256_ROW) }
+                raise NetworkError.new("#{url}: HTTP 200 with no \"<sha256>  <name>\" row", url: url, status: 200)
+            end
             # The file itself is checked against the pointer before it is parsed.
             if pf && pf["sha256"] && pf["sha256"].downcase != res.sha256
                 raise ChecksumError.new("#{name} does not match the pointer", file: name, expected: pf["sha256"], actual: res.sha256)

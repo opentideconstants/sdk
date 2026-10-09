@@ -11,7 +11,7 @@ static int g_not_json, g_304, g_200;
 static void log_fn(void *u, int level, const char *msg)
 {
     (void)u;
-    if (level == 2 && strstr(msg, "OTC_latest-f1.json is not JSON; fetching it again")) g_not_json++;
+    if (level == 2 && strstr(msg, "OTC_latest-f1.json is not JSON of the right shape; fetching it again")) g_not_json++;
     if (strstr(msg, "pointer OTC_latest-f1.json: 304")) g_304++;
     if (strstr(msg, "pointer OTC_latest-f1.json: 200")) g_200++;
 }

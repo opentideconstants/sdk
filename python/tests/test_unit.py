@@ -755,19 +755,19 @@ class ChecksumTest(unittest.TestCase):
         finally:
             srv.close()
 
-    def test_pointer_without_the_json_digest_still_verifies(self):
-        def edit(doc):
-            for f in doc["files"]:
-                if f["name"] == "OTC_20991231.2.json":
-                    f["sha256"] = None
-        srv = self.pointer(edit)
-        try:
-            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
-            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), verify_on_open=True) as c:
-                self.assertEqual(c.loaded_from, "cache")
-                self.assertTrue(c.verify())
-        finally:
-            srv.close()
+    def test_pointer_without_the_json_digest_is_invalid_release(self):
+        # CR2 DR12: a file entry with no string sha256 or no integer size >= 0 is invalid_release at parse
+        for key, value in [("sha256", None), ("size", None), ("size", "123"), ("size", -1)]:
+            def edit(doc):
+                for f in doc["files"]:
+                    if f["name"] == "OTC_20991231.2.json":
+                        f[key] = value
+            srv = self.pointer(edit)
+            try:
+                with self.assertRaises(otc.InvalidReleaseError, msg=f"{key}={value!r}"):
+                    otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), on_network_error="raise")
+            finally:
+                srv.close()
 
     def test_truncated_cached_file_names_both_digests_and_is_removed(self):
         srv = _Server()

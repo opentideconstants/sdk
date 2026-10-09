@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import secrets
 import threading
 import time
@@ -39,14 +40,32 @@ def _major(fv) -> Optional[int]:
     return None if k is None else k[0]
 
 
-def _parse_sha256(text: str):
+_SHA256_ROW = re.compile(rb"[0-9a-fA-F]{64}[ \t]+\*?\S")
+
+
+def _has_sha256_row(data: bytes) -> bool:
+    """True if a .sha256 body has at least one '<sha256>  <name>' row. A 200 body with none (a captive portal, a proxy
+    page) is a network error, not a bad release (spec §5.2 step 5, CR2 DR13)."""
+    return any(_SHA256_ROW.match(line.strip()) for line in data.splitlines())
+
+
+def _parse_sha256(data: bytes, what: str = ".sha256"):
+    """The rows of a .sha256 file: name -> digest. A file that is not UTF-8, or that names a file twice, is
+    invalid_release, so that row order never decides a check (spec §5.3, CR2 DR14)."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise InvalidReleaseError(f"{what}: not UTF-8 ({e})") from e
     rows = {}
     for line in text.splitlines():
         if line.strip():
             parts = line.split(None, 1)
             if len(parts) != 2:
                 raise InvalidReleaseError(f"bad .sha256 line: {line!r}")
-            rows[parts[1].strip().lstrip("*")] = parts[0].lower()
+            name = parts[1].strip().lstrip("*")
+            if name in rows:
+                raise InvalidReleaseError(f"{what}: {name} is listed twice")
+            rows[name] = parts[0].lower()
     return rows
 
 
@@ -244,7 +263,7 @@ class OpenTideConstants:
                 raise FileError(f"cannot open {p}: no such file", path=str(p))
         sha_path = path.with_name(f"OTC_{d}.sha256")
         if sha_path.exists():
-            rows = _parse_sha256(self._read_text(sha_path))
+            rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
             for p in opened:
                 self._check_file(p, rows.get(p.name))
             files = [FileInfo(n, None, (path.parent / n).stat().st_size if (path.parent / n).exists() else None, rows[n])
@@ -258,9 +277,9 @@ class OpenTideConstants:
         self._set(rel, lf)
 
     @staticmethod
-    def _read_text(p: Path) -> str:
+    def _read_bytes(p: Path) -> bytes:
         try:
-            return p.read_text(encoding="utf-8")
+            return p.read_bytes()
         except OSError as e:
             raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
 
@@ -400,12 +419,22 @@ class OpenTideConstants:
 
     # ---- pointer and index
 
+    @staticmethod
+    def _json_shape_ok(name: str, doc) -> bool:
+        """The shape of a pointer (an object with a datestamp and a files array) or of the index (an object with a
+        releases array). A wrong value inside a body of the right shape is invalid_release later (CR2 DR13)."""
+        if not isinstance(doc, dict):
+            return False
+        if name == "OTC_index.json":
+            return isinstance(doc.get("releases"), list)
+        return "datestamp" in doc and isinstance(doc.get("files"), list)
+
     def _get_json_conditional(self, name: str):
         """GET a changing file (pointer or index) with If-None-Match; returns (doc, url) or None on 404.
 
-        A 200 body is parsed before it is cached, so a body that is not JSON (a captive portal) never replaces a
-        good cached copy; it is a network error (spec §5.2 step 5, CR D8). A failure to write the cache is logged,
-        not raised (CR D8)."""
+        A 200 body is parsed and its shape checked before it is cached, so a body that is not JSON (a captive
+        portal), or JSON of the wrong shape, never replaces a good cached copy; it is a network error (spec §5.2
+        step 5, CR D8, CR2 DR13). A failure to write the cache is logged, not raised (CR D8)."""
         url = self._url(name)
         body, etag = self._cache.read_pointer(name)
         headers = {"If-None-Match": etag} if body is not None and etag else {}
@@ -417,18 +446,24 @@ class OpenTideConstants:
         if r.status == 304:
             self._log.debug("pointer %s: 304", name)
             try:
-                return json.loads(body.decode("utf-8")), url
+                doc = json.loads(body.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
-                # the cached copy is broken: drop it and read the file again with no If-None-Match
-                self._log.warning("cached %s is not JSON; reading it again", name)
-                self._cache.drop_pointer(name)
-                return self._get_json_conditional(name)
+                doc = None
+            if self._json_shape_ok(name, doc):
+                return doc, url
+            # the cached copy is broken: drop it and read the file again with no If-None-Match
+            self._log.warning("cached %s is not JSON of the right shape; reading it again", name)
+            self._cache.drop_pointer(name)
+            return self._get_json_conditional(name)
         self._log.debug("pointer %s: 200", name)
         try:
             doc = json.loads(r.body.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as e:
             raise NetworkError(f"{url}: the 200 body is not JSON (a captive portal or a proxy page?)", url=url,
                                status=r.status) from e
+        if not self._json_shape_ok(name, doc):
+            raise NetworkError(f"{url}: the 200 body is JSON of the wrong shape (a proxy page?)", url=url,
+                               status=r.status)
         try:
             ensure_dir(self._cache.root)
             self._cache.write_pointer(name, r.body, r.headers.get("etag"))
@@ -446,9 +481,16 @@ class OpenTideConstants:
             # never guess a version (spec §7.4, CR D9)
             raise InvalidReleaseError(f"{what}: {ds}: format_version {fv!r} or min_reader_version {mrv!r} "
                                       f"is not MAJOR.MINOR")
+        for f in entry.get("files") or ():
+            # every file entry has a string sha256 and an integer size >= 0, as the schema requires (CR2 DR12)
+            size = f.get("size") if isinstance(f, dict) else None
+            if isinstance(f, dict) and (not isinstance(f.get("sha256"), str) or not isinstance(size, int)
+                                        or isinstance(size, bool) or size < 0):
+                raise InvalidReleaseError(f"{what}: {ds}: the entry for {f.get('name')!r} needs a string sha256 "
+                                          f"and an integer size of 0 or more")
         try:
-            files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
-                                           f["sha256"].lower() if isinstance(f.get("sha256"), str) else None)
+            files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f["size"],
+                                           f["sha256"].lower())
                                   for f in entry.get("files") or ()),
                                  key=lambda f: f.name))
             return ReleaseInfo(entry["datestamp"], entry.get("format_version"), entry.get("concept_doi"),
@@ -515,14 +557,15 @@ class OpenTideConstants:
         r = self._http.get(url)
         if r.status == 404:
             raise ReleaseNotFoundError(f"release {datestamp} not found ({url})")
+        if not _has_sha256_row(r.body):
+            # checked before the digest: a captive portal or a proxy page is the network, not a bad release (CR2 DR13)
+            raise NetworkError(f"{url}: the 200 body has no '<sha256>  <name>' row (a captive portal or a proxy "
+                               f"page?)", url=url, status=r.status)
         ent = listed.get(name)
         if ent is not None and ent.sha256 is not None and r.sha256 != ent.sha256:
             raise ChecksumError(f"{name}: SHA-256 {r.sha256} does not match the pointer's {ent.sha256}", file=name,
                                 expected=ent.sha256, actual=r.sha256)
-        try:
-            return r.body, _parse_sha256(r.body.decode("utf-8"))
-        except UnicodeDecodeError as e:
-            raise InvalidReleaseError(f"{url}: not text") from e
+        return r.body, _parse_sha256(r.body, name)
 
     @staticmethod
     def _check_pointer(info: Optional[ReleaseInfo], rows) -> None:
@@ -591,6 +634,9 @@ class OpenTideConstants:
                     data_name = f"{base}.jsonl"
                 elif f"{base}.json.gz" in rows:
                     gzn, jn = f"{base}.json.gz", f"{base}.json"
+                    if jn not in rows:
+                        # the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
+                        raise ChecksumError(f"{jn} is not listed in {base}.sha256", file=jn, expected=None, actual=None)
                     tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, gz=True)
                     wanted.append((gzn, tmp_gz))  # removed in the finally below if anything fails
                     try:
@@ -604,7 +650,7 @@ class OpenTideConstants:
                         self._log.warning("cannot remove %s: %s", tmp_gz, e)
                     import hashlib
                     actual = hashlib.sha256(raw).hexdigest()
-                    if jn in rows and actual != rows[jn]:
+                    if actual != rows[jn]:
                         raise ChecksumError(f"{jn}: SHA-256 {actual} does not match {rows[jn]}", file=jn,
                                             expected=rows[jn], actual=actual)
                     tmp = tmp_name(d)
@@ -826,7 +872,7 @@ class OpenTideConstants:
             sha_path = self._cache.release_dir(ds) / f"OTC_{ds}.sha256"
         if not sha_path.exists():
             raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
-        rows = _parse_sha256(self._read_text(sha_path))
+        rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
         for p in opened:
             if not p.is_file():
                 raise FileError(f"cannot read {p}: no such file", path=str(p))
@@ -908,11 +954,9 @@ class OpenTideConstants:
             sp = cdir / f"{base}.sha256"
             try:
                 sha_body = sp.read_bytes()
-                rows = _parse_sha256(sha_body.decode("utf-8"))
             except OSError as e:
                 raise FileError(f"cannot read {sp}: {e}", path=str(sp), cause=e) from e
-            except UnicodeDecodeError as e:
-                raise InvalidReleaseError(f"{sp}: not text") from e
+            rows = _parse_sha256(sha_body, str(sp))
         elif self._offline:
             raise OfflineError(f"offline, and release {ds} is not in the cache")
         else:
