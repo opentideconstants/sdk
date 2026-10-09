@@ -918,16 +918,18 @@ static void op_verify(request *q, reply *r)
     cJSON_AddTrueToObject(r->result, "verified");
 }
 
+/* One Stats map. An entry the library fails to give sets *bad: a smaller map would pass as wrong stats. */
 static void stats_map(cJSON *o, const char *key, const otc_stats *s,
                       size_t (*count_fn)(const otc_stats *),
-                      otc_status (*at_fn)(const otc_stats *, size_t, const char **, int64_t *))
+                      otc_status (*at_fn)(const otc_stats *, size_t, const char **, int64_t *), int *bad)
 {
     cJSON *m = cJSON_CreateObject();
     size_t i, n = count_fn(s);
     for (i = 0; i < n; i++) {
         const char *k = NULL;
         int64_t c = 0;
-        if (at_fn(s, i, &k, &c) == OTC_OK) cJSON_AddNumberToObject(m, k, (double)c);
+        if (at_fn(s, i, &k, &c) != OTC_OK || !k) { *bad = 1; break; }
+        cJSON_AddNumberToObject(m, k, (double)c);
     }
     cJSON_AddItemToObject(o, key, m);
 }
@@ -992,11 +994,11 @@ static void op_query(request *q, reply *r)
         rc = otc_release_stats(R, &s);
         if (rc != OTC_OK) { set_status(r, rc, "otc_release_stats"); return; }
         so = cJSON_CreateObject();
-        stats_map(so, "type", s, otc_stats_type_count, otc_stats_type_at);
-        stats_map(so, "kind", s, otc_stats_kind_count, otc_stats_kind_at);
-        stats_map(so, "country", s, otc_stats_country_count, otc_stats_country_at);
-        stats_map(so, "source", s, otc_stats_source_count, otc_stats_source_at);
-        stats_map(so, "qc_status", s, otc_stats_qc_status_count, otc_stats_qc_status_at);
+        stats_map(so, "type", s, otc_stats_type_count, otc_stats_type_at, &bad);
+        stats_map(so, "kind", s, otc_stats_kind_count, otc_stats_kind_at, &bad);
+        stats_map(so, "country", s, otc_stats_country_count, otc_stats_country_at, &bad);
+        stats_map(so, "source", s, otc_stats_source_count, otc_stats_source_at, &bad);
+        stats_map(so, "qc_status", s, otc_stats_qc_status_count, otc_stats_qc_status_at, &bad);
         otc_stats_free(s);
         cJSON_AddItemToObject(o, "stats", so);
     } else if (!strcmp(op, "constituent_names")) {
