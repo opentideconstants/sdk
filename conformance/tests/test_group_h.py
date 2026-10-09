@@ -399,3 +399,11 @@ def test_unencodable_tombstone_changes_the_code(lang):
     rc, hello, out, err = talk(lang, [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}])
     reply = strict(out[1])
     assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+# --- R57: a stats field the SDK returns as nil is a failure, not {}
+
+def test_ruby_nil_stats_field_is_an_error():
+    rc, hello, out, err = talk("ruby", [OPEN, {"op": "stats"}], mode="stats-nil")
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply

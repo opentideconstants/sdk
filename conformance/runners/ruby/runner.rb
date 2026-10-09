@@ -307,7 +307,9 @@ class Runner
 
     def stats(st)
         %i[type kind country source qc_status].to_h do |k|
-            [k.to_s, (st.public_send(k) || {}).to_h { |v, n| [v.to_s, n] }]
+            counts = st.public_send(k)
+            raise TypeError, "stats.#{k} is #{counts.inspect}, not a Hash" unless counts.is_a?(Hash) # never {} for nil
+            [k.to_s, counts.to_h { |v, n| [v.to_s, n] }]
         end
     end
 
