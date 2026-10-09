@@ -2810,6 +2810,166 @@
    ]
   },
   {
+   "id": "net/releases-offline-index-unreadable",
+   "title": "releases() offline when the cached OTC_index.json cannot be read: cache, not offline_unavailable",
+   "spec": "4.3, 4.8, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2",
+      "format_version": "1.0"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/pointer/OTC_index.json",
+     "mode": "000"
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "cache"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/pointer/OTC_index.json",
+     "mode": "644"
+    }
+   ]
+  },
+  {
    "id": "net/releases-offline-no-index",
    "title": "releases() offline with no cached index: offline_unavailable",
    "spec": "4.3",

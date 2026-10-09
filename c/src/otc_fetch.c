@@ -2863,11 +2863,14 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
 static otc_status cached_index(fctx *c, otc_status missing_st, const char *missing_msg, otc_release_info ***v,
                                size_t *n)
 {
-    char *dir = pointer_dir(c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = p ? slurp(p) : NULL;
+    char *dir = pointer_dir(c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = NULL;
     char *url = url_resolve(c->base_url, "OTC_index.json");
+    /* a cached index that is there but cannot be read is cache, never "not cached" (spec 5.2, CR2 DR16) */
+    otc_status rst = p ? slurp_st(p, &t) : OTC_E_NOMEM;
     cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
     otc_status st;
-    if (!dir || !p || !url) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    if (!dir || !p || !url || rst == OTC_E_NOMEM) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    else if (rst != OTC_OK) st = fail(c, OTC_E_CACHE, p, "cannot read the cached %s", p);
     else if (!t) st = fail(c, missing_st, NULL, "%s", missing_msg);
     else if (!doc) st = fail(c, OTC_E_INVALID_RELEASE, p, "cached OTC_index.json: not JSON");
     else {

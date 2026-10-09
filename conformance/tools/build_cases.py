@@ -1005,6 +1005,17 @@ def group_load():
                      drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text="\n \t\r\n" + crlf + "\f\v\n\n"),
                      step("open", {"loaded_from": "file", "datestamp": d}, file=f"${{tmp}}/rel/OTC_{d}.jsonl"),
                      step("verify", {"verified": True})], requires=["fs"]))
+    # CR2 DR34 (spec 5.3, 4.8): C otc_open_file with require_checksum and no OTC_{D}.sha256 next to the file is
+    # checksum_mismatch "no OTC_{D}.sha256 next to the file", the answer of verify (D20); with the .sha256 it loads
+    jl_meta = [f"{G}/OTC_{d}.jsonl", f"{G}/OTC_{d}.meta.json"]
+    out.append(case("load/require-checksum-missing", "C: require_checksum and no .sha256 next to the file: checksum_mismatch \"no OTC_{D}.sha256 next to the file\"; with the .sha256 the file loads, checked (CR2 DR34)", "5.3, 4.8",
+                    [drv("copy", files=jl_meta, to="${tmp}/rel"),
+                     step("open", {**err("checksum_mismatch"), "error_message": {"$contains": f"no OTC_{d}.sha256 next to the file"}},
+                          file=f"${{tmp}}/rel/OTC_{d}.jsonl", require_checksum=True),
+                     step("open", {"loaded_from": "file_unverified", "datestamp": d}, file=f"${{tmp}}/rel/OTC_{d}.jsonl"),
+                     drv("copy", files=[f"{G}/OTC_{d}.sha256"], to="${tmp}/rel"),
+                     step("open", {"loaded_from": "file", "datestamp": d}, file=f"${{tmp}}/rel/OTC_{d}.jsonl", require_checksum=True)],
+                    requires=["fs", "require_checksum"]))
     out.append(case("load/valid-datestamp-not-found", "release 20991231.10 matches the pattern but does not exist: release_not_found", "4.2, 4.8",
                     [net(step("open", err("release_not_found"), release="20991231.10", base_url=f"{SRV}/good/", cache_dir="${cache}"))], requires=["fs"]))
     return out
@@ -1256,6 +1267,12 @@ def group_network():
                     [open_latest(), net(step("releases", {"releases": [info2, info1]})), drv("restart_runner"), drv("server_stop"), drv("clear_log"),
                      open_latest({"loaded_from": "cache"}, offline=True), net(step("releases", {"releases": [info2, info1]})),
                      drv("assert_requests", source="any", count=0)], requires=["fs"]))
+    # api.json erratum (CR2 PK-R2-10, DR16): a cached file that cannot be read is cache, so releases() lists cache
+    ci = "${cache}/v1/pointer/OTC_index.json"
+    out.append(case("net/releases-offline-index-unreadable", "releases() offline when the cached OTC_index.json cannot be read: cache, not offline_unavailable", "4.3, 4.8, 5.2",
+                    [open_latest(), net(step("releases", {"releases": [info2, info1]})), drv("restart_runner"), drv("server_stop"),
+                     open_latest({"loaded_from": "cache"}, offline=True), drv("chmod", path=ci, mode="000"),
+                     net(step("releases", err("cache"))), drv("chmod", path=ci, mode="644")], requires=["fs"]))
     out.append(case("net/releases-offline-no-index", "releases() offline with no cached index: offline_unavailable", "4.3",
                     [open_latest(), drv("restart_runner"), drv("server_stop"),
                      open_latest({"loaded_from": "cache"}, offline=True), net(step("releases", err("offline_unavailable")))], requires=["fs"]))

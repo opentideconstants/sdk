@@ -1039,6 +1039,66 @@
    ]
   },
   {
+   "id": "load/require-checksum-missing",
+   "title": "C: require_checksum and no .sha256 next to the file: checksum_mismatch \"no OTC_{D}.sha256 next to the file\"; with the .sha256 the file loads, checked (CR2 DR34)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs",
+    "require_checksum"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl",
+      "require_checksum": true
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_message": {
+       "$contains": "no OTC_20991231.2.sha256 next to the file"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "loaded_from": "file_unverified",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.sha256"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl",
+      "require_checksum": true
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    }
+   ]
+  },
+  {
    "id": "load/valid-datestamp-not-found",
    "title": "release 20991231.10 matches the pattern but does not exist: release_not_found",
    "spec": "4.2, 4.8",

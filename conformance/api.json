@@ -285,7 +285,8 @@
      "errors": [
       "network",
       "offline_unavailable",
-      "invalid_release"
+      "invalid_release",
+      "cache"
      ],
      "languages": [
       "ruby",
@@ -2527,7 +2528,7 @@
    "code": "cache",
    "class": "CacheError",
    "c": "OTC_E_CACHE",
-   "when": "the cache cannot be written (permissions, disk full, a failed rename), or a stale lock cannot be removed after 3 attempts; a failure to write the cached pointer is logged, not this error",
+   "when": "the cache cannot be written (permissions, disk full, a failed rename), or a stale lock cannot be removed after 3 attempts; a failure to write the cached pointer is logged, not this error; also a cached file that is there but cannot be read (CR2 DR16), for example the cached OTC_index.json that releases reads offline",
    "fields": [
     "removed"
    ],
