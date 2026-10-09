@@ -2364,7 +2364,7 @@
    "code": "network",
    "class": "NetworkError",
    "c": "OTC_E_NETWORK",
-   "when": "DNS, TLS, connection or timeout failure, or HTTP 5xx after the retries",
+   "when": "DNS, TLS, connection or timeout failure, an HTTP 5xx after the retries, or a body shorter than its Content-Length; also on_network_error raise with an empty cache, a 200 pointer or index whose body is not JSON (a captive portal), more than 5 redirects, a redirect from https to http, and a 404 for a data file that OTC_{D}.sha256 lists (status 404, \"file listed in OTC_{D}.sha256 is missing on the server\")",
    "fields": [
     "url",
     "status"
@@ -2406,7 +2406,7 @@
    "code": "checksum_mismatch",
    "class": "ChecksumError",
    "c": "OTC_E_CHECKSUM",
-   "when": "a SHA-256 or size does not match, or the pointer and the .sha256 file disagree",
+   "when": "a SHA-256 or size does not match, or the pointer and the .sha256 file disagree; also verify on a client with loaded_from file_unverified (\"no OTC_{D}.sha256 next to the file\")",
    "fields": [
     "file",
     "expected",
@@ -2449,7 +2449,7 @@
    "code": "invalid_release",
    "class": "InvalidReleaseError",
    "c": "OTC_E_INVALID_RELEASE",
-   "when": "not JSON, a required field missing, or a reference does not resolve",
+   "when": "not JSON, a required field missing, or a reference does not resolve; also a repeated station_id across active stations and tombstones, a repeated tombstone id, a repeated (system, alias id) pair, a repeated set_id, convention_id or licence_id, a format_version or min_reader_version present but not MAJOR.MINOR, a string with an unpaired UTF-16 surrogate, a datestamp counter longer than 9 digits from the server, and a stream index entry whose line has a different station_id (the message names index-v1.json)",
    "fields": [],
    "languages": [
     "ruby",
@@ -2503,7 +2503,7 @@
    "code": "cache",
    "class": "CacheError",
    "c": "OTC_E_CACHE",
-   "when": "the cache cannot be written",
+   "when": "the cache cannot be written (permissions, disk full, a failed rename), or a stale lock cannot be removed after 3 attempts; a failure to write the cached pointer is logged, not this error",
    "fields": [],
    "languages": [
     "ruby",
@@ -2541,7 +2541,7 @@
    "code": "io",
    "class": "FileError",
    "c": "OTC_E_IO",
-   "when": "a local file cannot be opened or read",
+   "when": "a local file cannot be opened or read; a ca_file that does not exist or cannot be read; any call on a client after close (\"the release is closed\")",
    "fields": [
     "path",
     "cause"
@@ -2557,7 +2557,7 @@
    "code": "invalid_argument",
    "class": "InvalidArgumentError",
    "c": "OTC_E_INVALID_ARGUMENT",
-   "when": "a bad datestamp, lat or lon out of range, a negative radius, an empty query, or a NULL handle",
+   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution",
    "fields": [],
    "languages": [
     "ruby",
