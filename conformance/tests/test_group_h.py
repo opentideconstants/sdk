@@ -86,3 +86,22 @@ def test_driver_rejects_non_json_numbers_from_a_runner(tmp_path):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases),
                    env={"FAKE_REPLY": '{"ok": true, "result": {"count": Infinity}}'})
     assert "FAIL  a" in r.stdout and "not JSON" in r.stdout, r.stdout[-500:]
+
+
+# --- a value the runner cannot encode, or an error while it encodes an SDK error, is an error reply
+
+@pytest.mark.parametrize("lang,mode", [("python", "object"), ("ruby", "object"), ("node", "bigint")])
+def test_unencodable_value_is_an_error_reply(lang, mode):
+    rc, hello, out, err = talk(lang, [OPEN, {"op": "station_count"}, {"op": "loaded_from"}], mode=mode)
+    assert len(out) == 3, (rc, out, err[-500:])
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    assert strict(out[2])["ok"] is True
+
+
+def test_ruby_error_encoding_failure_is_an_error_reply():
+    rc, hello, out, err = talk("ruby", [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}, {"op": "loaded_from"}],
+                               mode="error-field-raises")
+    assert len(out) == 3, (rc, out, err[-500:])
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply

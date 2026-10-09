@@ -5,6 +5,10 @@ module OpenTideConstants
     unless MODE == "no-error-class"
         class Error < StandardError
             attr_reader :code, :tombstone
+            def url
+                raise "url is broken" if MODE == "error-field-raises"
+                nil
+            end
             def initialize(msg, code: :fake, tombstone: nil)
                 super(msg)
                 @code = code
@@ -20,7 +24,7 @@ module OpenTideConstants
         def datestamp = "20991231.2"
         def format_version = "1.0"
         def station_count
-            { "inf" => Float::INFINITY, "nan" => Float::NAN }.fetch(MODE, 20)
+            { "inf" => Float::INFINITY, "nan" => Float::NAN, "object" => Object.new }.fetch(MODE, 20)
         end
         def stats = Stats.new({ reference: 1 }, MODE == "stats-nil" ? nil : { tide: 1 }, {}, {}, {})
         def station(_id) = nil

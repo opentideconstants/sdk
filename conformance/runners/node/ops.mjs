@@ -153,6 +153,9 @@ function finite(v) {
         if (!Number.isFinite(v)) throw new RangeError(`the SDK returned ${v}, which JSON cannot carry`);
         return v;
     }
+    if (typeof v === "bigint" || typeof v === "symbol" || typeof v === "function") {
+        throw new TypeError(`the runner cannot encode a ${typeof v} as JSON`);
+    }
     if (Array.isArray(v)) return v.map(finite);
     if (v !== null && typeof v === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(v))) {
         const out = {};
@@ -339,19 +342,27 @@ export function makeRunner(sdk) {
             return { ok: true, result };
         } catch (e) {
             if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
-                const fields = {};
-                for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
-                if (e.tombstone != null) {
-                    // a tombstone the runner cannot encode fails the step instead of crashing the runner
-                    try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
-                        fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
-                    }
+                try {
+                    return encodeSdkError(e);
+                } catch (x) { // an error while encoding the SDK error is still one reply
+                    return { ok: false, error: { code: `uncaught:${x && x.constructor ? x.constructor.name : typeof x}`, message: `cannot encode the SDK error: ${x}` } };
                 }
-                return { ok: false, error: { code: e.code, message: String(e.message), fields } };
             }
             const name = e && e.constructor ? e.constructor.name : typeof e;
             return { ok: false, error: { code: `uncaught:${name}`, message: String(e && e.stack ? e.stack : e) } };
         }
+    }
+
+    function encodeSdkError(e) {
+        const fields = {};
+        for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
+        if (e.tombstone != null) {
+            // a tombstone the runner cannot encode fails the step instead of crashing the runner
+            try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
+                fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
+            }
+        }
+        return { ok: false, error: { code: e.code, message: String(e.message), fields: finite(fields) } };
     }
 
     async function shutdown() {

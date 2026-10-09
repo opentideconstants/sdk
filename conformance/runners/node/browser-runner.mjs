@@ -52,7 +52,16 @@ function serve() {
     return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
 
-const out = (obj) => process.stdout.write(JSON.stringify(obj) + "\n");
+// One line per reply: a reply the runner cannot encode becomes an uncaught: reply.
+const out = (obj) => {
+    let line;
+    try {
+        line = JSON.stringify(obj);
+    } catch (e) {
+        line = JSON.stringify({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `cannot encode the reply: ${e.message}` } });
+    }
+    process.stdout.write(line + "\n");
+};
 
 const server = await serve();
 const origin = `http://127.0.0.1:${server.address().port}`;

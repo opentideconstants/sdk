@@ -15,7 +15,16 @@ const argv = process.argv.slice(2);
 const sdkArg = argv.indexOf("--sdk") >= 0 ? argv[argv.indexOf("--sdk") + 1] : path.join(here, "..", "..", "..", "js", "dist", "index.js");
 const sdkSpec = sdkArg.startsWith(".") || path.isAbsolute(sdkArg) ? pathToFileURL(path.resolve(sdkArg)).href : sdkArg;
 
-const out = (obj) => process.stdout.write(JSON.stringify(obj) + "\n");
+// One line per reply: a reply the runner cannot encode becomes an uncaught: reply.
+const out = (obj) => {
+    let line;
+    try {
+        line = JSON.stringify(obj);
+    } catch (e) {
+        line = JSON.stringify({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `cannot encode the reply: ${e.message}` } });
+    }
+    process.stdout.write(line + "\n");
+};
 
 let sdk;
 try {

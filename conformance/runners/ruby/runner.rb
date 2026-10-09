@@ -38,7 +38,11 @@ class Runner
         target = req["on"] ? @held.fetch(req["on"]) : nil
         { "ok" => true, "result" => finite(dispatch(op, args, target)) }
     rescue SDK_ERROR => e
-        { "ok" => false, "error" => encode_error(e) }
+        begin
+            { "ok" => false, "error" => encode_error(e) }
+        rescue StandardError, ScriptError => x # an error while encoding the SDK error is still one reply
+            { "ok" => false, "error" => { "code" => "uncaught:#{x.class}", "message" => "cannot encode the SDK error: #{x.message}" } }
+        end
     rescue StandardError, ScriptError => e
         { "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "#{e.message} #{e.backtrace&.first(3)&.join(' | ')}" } }
     end
@@ -59,7 +63,8 @@ class Runner
             v.nan? ? nil : v
         when Hash then v.to_h { |k, x| [k, finite(x)] }
         when Array then v.map { |x| finite(x) }
-        else v
+        when String, Integer, true, false, nil then v
+        else raise TypeError, "the runner cannot encode a #{v.class} as JSON"
         end
     end
 
@@ -261,7 +266,7 @@ class Runner
                 "uncaught:#{te.class}"
             end
         end
-        { "code" => e.code.to_s, "message" => e.message.to_s, "fields" => fields }
+        { "code" => e.code.to_s, "message" => e.message.to_s, "fields" => finite(fields) }
     end
 
     def file_info(f)
@@ -395,6 +400,11 @@ $stdin.each_line do |line|
         { "ok" => false, "error" => { "code" => "uncaught:#{req.is_a?(Exception) ? req.class : 'BadRequest'}",
                                       "message" => "bad request line: #{msg}" } }
     end
-    $stdout.write(JSON.generate(reply) + "\n")
+    line_out = begin
+        JSON.generate(reply)
+    rescue StandardError => e # a reply the runner cannot encode is still one line
+        JSON.generate({ "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "cannot encode the reply: #{e.message}" } })
+    end
+    $stdout.write(line_out + "\n")
 end
 runner.close

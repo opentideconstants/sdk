@@ -357,7 +357,9 @@ def finite(v):
         return {k: finite(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [finite(x) for x in v]
-    return v
+    if v is None or isinstance(v, (str, int)):
+        return v
+    raise TypeError(f"the runner cannot encode a {type(v).__name__} as JSON")
 
 
 ERROR_FIELDS = ("url", "status", "file", "expected", "actual", "path")
@@ -394,25 +396,43 @@ def main():
             except Exception:
                 pass
             if base is not None and isinstance(e, base):
-                fields = {}
-                for f in ERROR_FIELDS:
-                    v = getattr(e, f, None)
-                    if v is not None:
-                        fields[f] = v if isinstance(v, (int, str, float)) else str(v)
-                if getattr(e, "tombstone", None) is not None:
-                    try:
-                        fields["tombstone"] = enc_tombstone(e.tombstone)
-                    except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
-                        fields["tombstone"] = f"uncaught:{type(te).__name__}"
-                reply = {"ok": False, "error": {"code": e.code, "message": str(e), "fields": fields}}
+                reply = encode_sdk_error(e)
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)
                 reply = {"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": str(e)}}
-        out.write(json.dumps(reply, allow_nan=False) + "\n")
-        out.flush()
+        write_reply(out, reply)
     if runner.client is not None:
         runner.client.close()
     return 0
+
+
+def encode_sdk_error(e):
+    """The reply for an SDK error. An error while the runner encodes it is an uncaught: reply."""
+    try:
+        fields = {}
+        for f in ERROR_FIELDS:
+            v = getattr(e, f, None)
+            if v is not None:
+                fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+        if getattr(e, "tombstone", None) is not None:
+            try:
+                fields["tombstone"] = enc_tombstone(e.tombstone)
+            except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
+                fields["tombstone"] = f"uncaught:{type(te).__name__}"
+        return {"ok": False, "error": {"code": e.code, "message": str(e), "fields": finite(fields)}}
+    except Exception as x:  # noqa: BLE001
+        print(f"cannot encode the SDK error {type(e).__name__}: {type(x).__name__}: {x}", file=sys.stderr)
+        return {"ok": False, "error": {"code": f"uncaught:{type(x).__name__}", "message": f"cannot encode the SDK error: {x}"}}
+
+
+def write_reply(out, reply):
+    """Write one reply line; a reply that is not JSON-encodable becomes an uncaught: reply (still one line)."""
+    try:
+        line = json.dumps(reply, allow_nan=False)
+    except (TypeError, ValueError) as e:
+        line = json.dumps({"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": f"cannot encode the reply: {e}"}})
+    out.write(line + "\n")
+    out.flush()
 
 
 if __name__ == "__main__":
