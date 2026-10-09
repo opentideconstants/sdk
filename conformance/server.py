@@ -27,6 +27,8 @@ What it does:
     {"match": RE, "action": "slow", "delay_s": 5}         headers at once, the body after delay_s seconds
     {"match": RE, "action": "file", "file": "good/OTC_20991231.jsonl"}       serve another fixture file
     {"match": RE, "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}   serve one JSON value of a fixture (RFC 6901 pointer)
+      with "set": {"/datestamp": "x", ...}, the served value is changed at those pointers first
+    A file rule takes "headers" too (sent with the file, for example Content-Encoding).
   Rules are tried in order; the first active match applies. "times" null = always.
   A rule that cannot be applied when a request comes (for example a JSON pointer that does not resolve) gets a
   500, a log entry with an "error", and a line in errors; the driver fails the case with a harness error.
@@ -77,10 +79,10 @@ PREFLIGHT_HEADERS = {
 ACTIONS = {"status", "short_body", "truncate", "slow", "file", "json"}
 # action -> required fields and their types; then the optional fields of any rule
 _REQUIRED = {"status": {"status": int}, "file": {"file": str}, "json": {"file": str}, "truncate": {"bytes": int}}
-_OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str}
+_OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str, "set": dict}
 # the optional fields each action reads (any other key is a typo, and would be ignored without this check)
 _ACTION_OPTIONAL = {"status": {"headers", "body"}, "short_body": {"delta"}, "truncate": set(), "slow": {"delay_s"},
-                    "file": set(), "json": {"pointer"}}
+                    "file": {"headers"}, "json": {"pointer", "set"}}
 _COMMON = {"match", "action", "times", "name"}
 # the smallest value of each number field
 _MINIMUM = {"status": 100, "delta": 1, "delay_s": 0, "bytes": 0}
@@ -115,6 +117,9 @@ def validate_rule(i, r):
         raise ValueError(f"rule {i}: status must be an HTTP status (100-599), got {r['status']!r}")
     if isinstance(r.get("pointer"), str):
         pointer_parts(r["pointer"])  # ValueError for a pointer that is not RFC 6901
+    for ptr in r.get("set") or {}:
+        if not pointer_parts(ptr):    # each key of set is a pointer below the served value
+            raise ValueError(f"rule {i}: set needs pointers below the value, got {ptr!r}")
     times = r.get("times")
     if times is not None and (isinstance(times, bool) or not isinstance(times, int) or times < 1):
         raise ValueError(f"rule {i}: times must be an integer of 1 or more, or null, got {times!r}")
@@ -292,8 +297,18 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             served = rule["file"]
         elif action == "json":
             raw = self._load(rule["file"])
-            data = None if raw is None else (
-                json.dumps(json_pointer(json.loads(raw), rule.get("pointer", "")), indent=1, sort_keys=True) + "\n").encode()
+            if raw is None:
+                data = None
+            else:
+                value = json_pointer(json.loads(raw), rule.get("pointer", ""))
+                for ptr, v in (rule.get("set") or {}).items():
+                    parts = pointer_parts(ptr)
+                    parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
+                    if isinstance(parent, list):
+                        parent[array_index(parts[-1], len(parent))] = v
+                    else:
+                        parent[parts[-1]] = v
+                data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
             served = "x.json"
         else:
             data = self._load(path)
@@ -315,7 +330,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         ctype = "application/json" if served.endswith((".json", ".jsonl")) else (
             "application/gzip" if served.endswith(".gz") else "text/plain")
-        headers = {"ETag": tag, "Content-Type": ctype}
+        headers = {"ETag": tag, "Content-Type": ctype, **(rule.get("headers") or {} if action == "file" else {})}
         body = data
         accept = self.headers.get("Accept-Encoding", "")
         if "gzip" in accept.lower() and not served.endswith(".gz") and action not in ("short_body", "truncate"):

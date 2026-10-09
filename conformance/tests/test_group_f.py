@@ -304,3 +304,26 @@ def test_committed_expected_failures_are_clean():
     r = run_driver("--check-cases")
     bad = [l for l in r.stdout.splitlines() if l.startswith("PROBLEM") and "expected-failures" in l]
     assert not bad and "case check:" in r.stdout, bad[:5] or r.stdout[-400:]
+
+
+# --- harness support for the review round 1 cases: chmod, assert_tree, an error matcher
+
+def test_chmod_and_assert_tree(tmp_path):
+    import stat
+    d = tmp_path / "c"
+    (d / "v1" / "x").mkdir(parents=True)
+    (d / "v1" / "x" / "f").write_text("x")
+    assert driver.act_assert_tree({"dir": str(d), "allow": ["v1", "v1/**"]}) == []
+    (d / "ESCAPED").mkdir()
+    assert driver.act_assert_tree({"dir": str(d), "allow": ["v1", "v1/**"]})
+    problems, _ = driver.run_action({"driver": "chmod", "path": str(d / "v1"), "mode": "555"}, {}, None, None)
+    assert not problems and stat.S_IMODE((d / "v1").stat().st_mode) == 0o555
+    driver.restore_writable(tmp_path)
+    assert stat.S_IMODE((d / "v1").stat().st_mode) & 0o200
+
+
+def test_error_expectation_may_be_a_matcher():
+    exp = {"error": {"$any_of": ["io", "checksum_mismatch"]}}
+    assert driver.evaluate(exp, {"ok": False, "error": {"code": "io"}}) == []
+    assert driver.evaluate(exp, {"ok": False, "error": {"code": "network"}})
+    assert driver.evaluate(exp, {"ok": True, "result": {}})

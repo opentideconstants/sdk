@@ -205,3 +205,28 @@ def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
     statuses = [e["status"] for e in srv.log.entries()]
     assert statuses == [200], statuses
     assert srv.errors, "the error after the headers was not reported to the driver"
+
+
+# --- harness support for the review round 1 cases
+
+def test_json_rule_set_patches_the_value(pair):
+    srv, _ = pair
+    srv.set_rules([{"match": "latest-f1", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+                    "set": {"/datestamp": "../../x", "/files/0/sha256": "AB"}}])
+    conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
+    conn.request("GET", "/good/OTC_latest-f1.json")
+    doc = json.loads(conn.getresponse().read())
+    assert doc["datestamp"] == "../../x" and doc["files"][0]["sha256"] == "AB", doc
+    with pytest.raises(ValueError):
+        server.validate_rule(0, {"match": "x", "action": "json", "file": "f", "set": {"no-slash": 1}})
+
+
+def test_file_rule_headers(pair):
+    srv, _ = pair
+    srv.set_rules([{"match": r"\.json\.gz$", "action": "file", "file": "good/OTC_20991231.2.json.gz",
+                    "headers": {"Content-Encoding": "gzip"}}])
+    conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
+    conn.request("GET", "/good/OTC_20991231.2.json.gz")
+    r = conn.getresponse()
+    body = r.read()
+    assert r.getheader("Content-Encoding") == "gzip" and body == (CONF / "fixtures" / "good" / "OTC_20991231.2.json.gz").read_bytes()

@@ -85,7 +85,7 @@ OPS = {
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
                   "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir",
-                  "assert_index", "json_set"}
+                  "assert_index", "json_set", "chmod", "assert_tree"}
 PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
 # A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
 # fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
@@ -320,7 +320,10 @@ def evaluate(expect, reply):
             return [f"expected error {expect['error']!r}, got a result {json.dumps(reply.get('result'))[:200]}"]
         e = reply["error"]
         out = []
-        if e.get("code") != expect["error"]:
+        if is_matcher(expect["error"]):   # several codes allowed (for example {"$any_of": ["io", "checksum_mismatch"]})
+            if match(expect["error"], e.get("code", _MISSING), tol, "error.code"):
+                out.append(f"expected error {json.dumps(expect['error'])}, got error {e.get('code')!r} ({str(e.get('message'))[:200]})")
+        elif e.get("code") != expect["error"]:
             out.append(f"expected error {expect['error']!r}, got error {e.get('code')!r} ({str(e.get('message'))[:200]})")
         fields = e.get("fields") or {}
         for k, v in (expect.get("error_fields") or {}).items():
@@ -469,10 +472,12 @@ def api_error_problems(cases, errors_by_op):
             exps = [st.get("expect")] + list((st.get("expect_if_missing") or {}).values())
             for exp in exps:
                 if isinstance(exp, dict) and "error" in exp:
-                    code = exp["error"]
-                    if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
-                        problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
-                                        f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
+                    e = exp["error"]
+                    codes = e["$any_of"] if isinstance(e, dict) and isinstance(e.get("$any_of"), list) else [e]
+                    for code in codes:
+                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
+                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
+                                            f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
     return problems
 
 
@@ -795,6 +800,26 @@ def act_assert_files(a):
     return out
 
 
+def act_assert_tree(a):
+    """Every file and directory under dir (relative, with /) must match one of the allow globs (fnmatch)."""
+    d = Path(a["dir"])
+    if not d.is_dir():
+        return [] if a.get("may_be_missing") else [f"{d}: not a directory"]
+    bad = sorted(p.relative_to(d).as_posix() for p in d.rglob("*")
+                 if not any(fnmatch.fnmatchcase(p.relative_to(d).as_posix(), g) for g in a["allow"]))
+    return [f"{d}: paths outside {a['allow']}: {bad[:10]}"] if bad else []
+
+
+def restore_writable(root):
+    """Give the owner write and search permission again under root (after chmod steps), so it can be removed."""
+    for p in [Path(root), *Path(root).rglob("*")]:
+        try:
+            if not p.is_symlink():
+                p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
+        except OSError:
+            pass
+
+
 def run_action(st, ctx, srv, proxy):
     """Run a driver action. Returns (problems, restart_env or None)."""
     a = subst(st, ctx)
@@ -835,6 +860,10 @@ def run_action(st, ctx, srv, proxy):
         p.write_bytes(bytes(data))
     elif kind == "assert_files":
         return act_assert_files(a), None
+    elif kind == "assert_tree":
+        return act_assert_tree(a), None
+    elif kind == "chmod":   # POSIX permissions: mode is an octal string such as "555"
+        Path(a["path"]).chmod(int(str(a["mode"]), 8))
     elif kind == "assert_sha256":
         p = Path(a["path"])
         if not p.is_file():
@@ -1027,6 +1056,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 tails.append(t if role == "main" else f"[{role}]\n{t}")
         stderr_tail = "\n".join(tails)
         if not keep_tmp:
+            restore_writable(tmp)   # a chmod step may have left a directory read-only
             shutil.rmtree(tmp, ignore_errors=True)
     return failures, stderr_tail
 
