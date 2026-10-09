@@ -19,7 +19,11 @@ check fails when, for any language:
 An SDK that does not declare SUPPORTED_FORMAT_VERSION yet predates format 1.0: it reads only the format 0.x
 drafts (0.5 at most) and does not read release.min_reader_version. For such an SDK the only accepted value is
 0.5; the SDK work for format 1.0 declares SUPPORTED_FORMAT_VERSION and moves the file to 1.0 with it.
-The declaration is read from the source with a regular expression, so the check needs no toolchain.
+This allowance is temporary: removing it (so an undeclared version fails) is an exit item of the K7 language
+work, before any SDK release 1.0.0.
+The declaration is read from the source, so the check needs no toolchain: every assignment to
+SUPPORTED_FORMAT_VERSION (C: #define OTC_FORMAT_VERSION), with a value in single or double quotes. A
+declaration whose value is not such a literal (a computed value) cannot be checked, so it fails.
 """
 from __future__ import annotations
 
@@ -33,17 +37,27 @@ VERSION_RE = r"[0-9]+\.[0-9]+"
 PRE_10 = "0.5"  # the newest format an SDK with no SUPPORTED_FORMAT_VERSION reads (a 0.x draft)
 KEYS = {"language", "version", "supported_format_version"}
 
+# Any assignment: optional keywords and a type annotation before "=" (never "=="), the value up to the line end.
+ASSIGN = r'^[^\n#/]*\bSUPPORTED_FORMAT_VERSION\b\s*(?::[^=\n]+)?=(?!=)\s*([^\n]*)$'
 # language: (package version: file, regex), (declared supported format version: glob, regex)
 LANGUAGES = {
     "python": (("python/src/opentideconstants/_client.py", r'^__version__\s*=\s*"([^"]+)"'),
-               ("python/src/opentideconstants/**/*.py", rf'^\s*SUPPORTED_FORMAT_VERSION\s*(?::[^=]+)?=\s*"({VERSION_RE})"')),
+               ("python/src/opentideconstants/**/*.py", ASSIGN)),
     "ruby": (("ruby/lib/opentideconstants/version.rb", r'^\s*VERSION\s*=\s*"([^"]+)"'),
-             ("ruby/lib/**/*.rb", rf'^\s*SUPPORTED_FORMAT_VERSION\s*=\s*"({VERSION_RE})"')),
+             ("ruby/lib/**/*.rb", ASSIGN)),
     "js": (("js/package.json", r'^\s*"version"\s*:\s*"([^"]+)"'),
-           ("js/src/**/*.ts", rf'^\s*export\s+const\s+SUPPORTED_FORMAT_VERSION\b[^=]*=\s*"({VERSION_RE})"')),
+           ("js/src/**/*.ts", ASSIGN)),
     "c": (("c/include/opentideconstants.h", r'^#define\s+OTC_VERSION\s+"([^"]+)"'),
-          ("c/include/*.h", rf'^#define\s+OTC_FORMAT_VERSION\s+"({VERSION_RE})"')),
+          ("c/include/*.h", r'^\s*#\s*define\s+OTC_FORMAT_VERSION\b\s*([^\n]*)$')),
 }
+
+
+def literal(rhs):
+    """The version in a declaration's value: a quoted MAJOR.MINOR literal (Ruby may add .freeze), else None."""
+    v = re.sub(r"\s*(//.*|#.*)$", "", rhs.strip()).rstrip(";").strip()
+    v = re.sub(r"\.freeze$", "", v)
+    m = re.fullmatch(rf"""(['"])({VERSION_RE})\1""", v)
+    return m.group(2) if m else None
 
 
 def find_all(pattern_glob, regex):
@@ -77,6 +91,11 @@ def check_language(lang):
     if not isinstance(sfv, str) or not re.fullmatch(VERSION_RE, sfv):
         errs.append(f"{lang}: supported_format_version {sfv!r} is not MAJOR.MINOR")
     declared = find_all(dglob, dre)
+    unparsed = [(f, rhs) for f, rhs in declared if literal(rhs) is None]
+    if unparsed:
+        errs.append(f"{lang}: cannot read SUPPORTED_FORMAT_VERSION as a quoted MAJOR.MINOR literal: {unparsed}")
+        return errs, None
+    declared = [(f, literal(rhs)) for f, rhs in declared]
     values = sorted({v for _, v in declared})
     if len(values) > 1:
         errs.append(f"{lang}: SUPPORTED_FORMAT_VERSION is declared with different values: {declared}")
