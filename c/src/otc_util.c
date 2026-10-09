@@ -292,8 +292,11 @@ otc_status otc__copy_str(const char *src, char *buf, size_t len, size_t *needed)
     if (!buf) return OTC_E_INVALID_ARGUMENT;
     if (len < n) {
         if (len) {
-            memcpy(buf, src, len - 1);
-            buf[len - 1] = '\0';
+            /* cut on a whole UTF-8 character: never leave the lead bytes of a cut one */
+            size_t k = len - 1;
+            while (k > 0 && ((unsigned char)src[k] & 0xC0) == 0x80) k--;
+            memcpy(buf, src, k);
+            memset(buf + k, 0, len - k);   /* the rest of the buffer too: buf[len - 1] is always the NUL */
         }
         return OTC_E_BUFFER_TOO_SMALL;
     }

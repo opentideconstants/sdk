@@ -7,6 +7,8 @@
  *      also not one whose kind is unknown (spec 4.4).
  * C35: a validation row without previous_release has NaN and -1 there, as
  *      for any missing number and count, not zeros.
+ * C13: a string cut to fit a small buffer (BUFFER_TOO_SMALL) ends on a whole
+ *      UTF-8 character, never inside one.
  * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
  *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
 #include "otc_test.h"
@@ -101,6 +103,20 @@ int main(void)
     if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
         CHECK(otc_station_kind(st) == OTC_KIND_UNSET);
         if (otc_station_kind(st) != OTC_KIND_UNSET) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
+    }
+    otc_station_free(st);
+    otc_close(rel);
+    free(dir);
+    /* C13 */
+    rel = open_lines(TEST_STATION("OTC-X-1", "\xc3\x98st") "\n", &dir);
+    st = NULL;
+    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+        char b[4];
+        size_t need = 0;
+        CHECK_STATUS(otc_station_name(st, b, 2, &need), OTC_E_BUFFER_TOO_SMALL);
+        CHECK(need == 5 && b[0] == '\0');
+        CHECK_STATUS(otc_station_name(st, b, 4, &need), OTC_E_BUFFER_TOO_SMALL);
+        CHECK(!strcmp(b, "\xc3\x98s"));
     }
     otc_station_free(st);
     otc_close(rel);
