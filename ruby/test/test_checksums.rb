@@ -26,7 +26,7 @@ class ChecksumTest < Minitest::Test
     # R38: the .sha256 file is checked against the pointer before it is
     # parsed, so a substituted file is checksum_mismatch, not a parse error.
     def test_sha256_file_is_checked_against_the_pointer_first
-        srv = serve(File.join(FIXTURES, "good"), "OTC_#{D}.sha256" => [200, {}, "SHA256 (x) = y\n"])
+        srv = serve(File.join(FIXTURES, "good"), "OTC_#{D}.sha256" => [200, {}, "#{'0' * 64}  x\n"])
         err = assert_raises(OTC::ChecksumError) { OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, on_network_error: :raise) }
         assert_includes err.message, "does not match the pointer"
     end

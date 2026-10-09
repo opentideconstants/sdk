@@ -5652,6 +5652,66 @@
    ]
   },
   {
+   "id": "rules/r2-pk06/sha256-200-html-download",
+   "title": "download of a release whose OTC_{D}.sha256 answers 200 with an HTML page: network, and nothing is written (DR13)",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 200,
+       "body": "<html>captive portal</html>",
+       "headers": {
+        "Content-Type": "text/html"
+       }
+      }
+     ]
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_tree",
+     "dir": "${tmp}/bundle",
+     "allow": [],
+     "may_be_missing": true
+    }
+   ]
+  },
+  {
    "id": "rules/r2-pk06/pointer-file-no-sha256-latest",
    "title": "latest from bad/pointer-file-no-sha256 (the pointer's OTC_{D}.sha256 entry has no sha256): invalid_release (DR12)",
    "spec": "5.3",

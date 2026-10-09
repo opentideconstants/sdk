@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 import weakref
@@ -36,6 +37,15 @@ _ON_ERR = ("use_cache", "raise")
 def _major(fv) -> Optional[int]:
     k = version_key(fv)
     return None if k is None else k[0]
+
+
+_SHA256_ROW = re.compile(rb"[0-9a-fA-F]{64}[ \t]+\*?\S")
+
+
+def _has_sha256_row(data: bytes) -> bool:
+    """True if a .sha256 body has at least one '<sha256>  <name>' row. A 200 body with none (a captive portal, a proxy
+    page) is a network error, not a bad release (spec §5.2 step 5, CR2 DR13)."""
+    return any(_SHA256_ROW.match(line.strip()) for line in data.splitlines())
 
 
 def _parse_sha256(text: str):
@@ -347,12 +357,22 @@ class OpenTideConstants:
 
     # ---- pointer and index
 
+    @staticmethod
+    def _json_shape_ok(name: str, doc) -> bool:
+        """The shape of a pointer (an object with a datestamp and a files array) or of the index (an object with a
+        releases array). A wrong value inside a body of the right shape is invalid_release later (CR2 DR13)."""
+        if not isinstance(doc, dict):
+            return False
+        if name == "OTC_index.json":
+            return isinstance(doc.get("releases"), list)
+        return "datestamp" in doc and isinstance(doc.get("files"), list)
+
     def _get_json_conditional(self, name: str):
         """GET a changing file (pointer or index) with If-None-Match; returns (doc, url) or None on 404.
 
-        A 200 body is parsed before it is cached, so a body that is not JSON (a captive portal) never replaces a
-        good cached copy; it is a network error (spec §5.2 step 5, CR D8). A failure to write the cache is logged,
-        not raised (CR D8)."""
+        A 200 body is parsed and its shape checked before it is cached, so a body that is not JSON (a captive
+        portal), or JSON of the wrong shape, never replaces a good cached copy; it is a network error (spec §5.2
+        step 5, CR D8, CR2 DR13). A failure to write the cache is logged, not raised (CR D8)."""
         url = self._url(name)
         body, etag = self._cache.read_pointer(name)
         headers = {"If-None-Match": etag} if body is not None and etag else {}
@@ -364,18 +384,24 @@ class OpenTideConstants:
         if r.status == 304:
             self._log.debug("pointer %s: 304", name)
             try:
-                return json.loads(body.decode("utf-8")), url
+                doc = json.loads(body.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
-                # the cached copy is broken: drop it and read the file again with no If-None-Match
-                self._log.warning("cached %s is not JSON; reading it again", name)
-                self._cache.drop_pointer(name)
-                return self._get_json_conditional(name)
+                doc = None
+            if self._json_shape_ok(name, doc):
+                return doc, url
+            # the cached copy is broken: drop it and read the file again with no If-None-Match
+            self._log.warning("cached %s is not JSON of the right shape; reading it again", name)
+            self._cache.drop_pointer(name)
+            return self._get_json_conditional(name)
         self._log.debug("pointer %s: 200", name)
         try:
             doc = json.loads(r.body.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as e:
             raise NetworkError(f"{url}: the 200 body is not JSON (a captive portal or a proxy page?)", url=url,
                                status=r.status) from e
+        if not self._json_shape_ok(name, doc):
+            raise NetworkError(f"{url}: the 200 body is JSON of the wrong shape (a proxy page?)", url=url,
+                               status=r.status)
         try:
             ensure_dir(self._cache.root)
             self._cache.write_pointer(name, r.body, r.headers.get("etag"))
@@ -462,6 +488,10 @@ class OpenTideConstants:
         r = self._http.get(url)
         if r.status == 404:
             raise ReleaseNotFoundError(f"release {datestamp} not found ({url})")
+        if not _has_sha256_row(r.body):
+            # checked before the digest: a captive portal or a proxy page is the network, not a bad release (CR2 DR13)
+            raise NetworkError(f"{url}: the 200 body has no '<sha256>  <name>' row (a captive portal or a proxy "
+                               f"page?)", url=url, status=r.status)
         ent = listed.get(name)
         if ent is not None and ent.sha256 is not None and r.sha256 != ent.sha256:
             raise ChecksumError(f"{name}: SHA-256 {r.sha256} does not match the pointer's {ent.sha256}", file=name,

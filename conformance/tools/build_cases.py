@@ -1808,6 +1808,13 @@ def r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinne
     out.append(case(f"{P}/sha256-200-html-pinned", "a pinned uncached release whose OTC_{D}.sha256 answers 200 with an HTML page: network (DR13)", "5.2",
                     [drv("server_rules", rules=sha_rule), pinned(d2, err("network"), on_network_error="raise")],
                     requires=["fs"]))
+    out.append(case(f"{P}/sha256-200-html-download", "download of a release whose OTC_{D}.sha256 answers 200 with an HTML page: network, and nothing is written (DR13)", "4.3.2, 5.2",
+                    [step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G,
+                          cache_dir="${cache}"),
+                     drv("server_rules", rules=sha_rule),
+                     net(step("download", err("network"), release=d2, to="${tmp}/bundle"), fs=True),
+                     drv("assert_tree", dir="${tmp}/bundle", allow=[], may_be_missing=True)],
+                    requires=["fs"]))
     # DR12: a pointer or index file entry with no string sha256 or no integer size >= 0
     PF = f"{SRV}/bad/pointer-file-no-sha256/"
     out.append(case(f"{P}/pointer-file-no-sha256-latest", "latest from bad/pointer-file-no-sha256 (the pointer's OTC_{D}.sha256 entry has no sha256): invalid_release (DR12)", "5.3",

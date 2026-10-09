@@ -1336,6 +1336,16 @@ static otc_status slurp_st(const char *path, char **out)
     return otc__read_all(path, out, NULL);
 }
 
+/* The shape of a pointer (an object with a datestamp and a files array) or
+ * of OTC_index.json (an object with a releases array). A wrong value inside a
+ * body of the right shape is OTC_E_INVALID_RELEASE later (CR2 DR13). */
+static int shape_ok(const char *name, const cJSON *doc)
+{
+    if (!cJSON_IsObject(doc)) return 0;
+    if (!strcmp(name, "OTC_index.json")) return cJSON_IsArray(otc__jget(doc, "releases"));
+    return otc__jget(doc, "datestamp") != NULL && cJSON_IsArray(otc__jget(doc, "files"));
+}
+
 /*
  * A file that changes (pointer, index): GET with If-None-Match from the
  * stored ETag; 200 stores the body and the ETag atomically. *doc = NULL and
@@ -1353,10 +1363,11 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     memset(&r, 0, sizeof r);
     if (!dir || !path || !etag_path || !url) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto done; }
     body = slurp(path);
-    if (body) {   /* a cached copy that is not JSON is never revalidated (a 304 would keep it): fetch it again */
+    if (body) {   /* a cached copy that is not JSON of the right shape is never revalidated (a 304 would keep it):
+                   * fetch it again */
         cJSON *probe = otc__json_parse(body, strlen(body));
-        if (!probe) {
-            logf_(c, 2, "the cached %s is not JSON; fetching it again", path);
+        if (!probe || !shape_ok(name, probe)) {
+            logf_(c, 2, "the cached %s is not JSON of the right shape; fetching it again", path);
             free(body);
             body = NULL;
         }
@@ -1383,6 +1394,11 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
         *doc = otc__json_parse(r.body ? (const char *)r.body : "", r.len);
         if (!*doc) {
             st = fail(c, OTC_E_NETWORK, url, "%s: the 200 response is not JSON (a captive portal or proxy page?)", url);
+            if (c->err) c->err->http_status = 200;
+            goto done;
+        }
+        if (!shape_ok(name, *doc)) {   /* CR2 DR13: JSON of the wrong shape stands in for the network too */
+            st = fail(c, OTC_E_NETWORK, url, "%s: the 200 response is JSON of the wrong shape (a proxy page?)", url);
             if (c->err) c->err->http_status = 200;
             goto done;
         }
@@ -1985,6 +2001,12 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     if (st != OTC_OK) goto out;
     if ((st = otc__sha256_rows(sha_tmp, &names, &digests, &n_rows)) != OTC_OK) {
         st = fail(c, st == OTC_E_NOMEM ? st : OTC_E_CACHE, sha_tmp, "cannot read %s", sha_tmp);
+        goto out;
+    }
+    if (n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row (a captive portal) stands in for the network */
+        st = fail(c, OTC_E_NETWORK, sha_url, "%s: the 200 response has no \"<sha256>  <name>\" row (a captive portal or proxy page?)",
+                  sha_url);
+        if (c->err) c->err->http_status = 200;
         goto out;
     }
     if ((st = check_pointer(c, info, names, digests, n_rows, sha_name, sums_hex)) != OTC_OK) goto out;
@@ -2746,6 +2768,12 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         if (st != OTC_OK) goto out;
     }
     if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) { fail(&c, st, NULL, "out of memory"); goto out; }
+    if (!cached && n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row stands in for the network */
+        st = fail(&c, OTC_E_NETWORK, NULL, "OTC_%s.sha256: the 200 response has no \"<sha256>  <name>\" row (a captive portal or proxy page?)",
+                  ds);
+        if (c.err) c.err->http_status = 200;
+        goto out;
+    }
     {
         struct Sha_256 s;
         uint8_t h[SIZE_OF_SHA_256_HASH];

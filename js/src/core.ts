@@ -155,9 +155,20 @@ export function readable(e: { format_version: string | null; min_reader_version?
 }
 
 /**
+ * The shape of a pointer (an object with a datestamp and a files array) or of OTC_index.json (an object with a
+ * releases array). A wrong value inside a body of the right shape is invalid_release later (CR2 DR13).
+ */
+function shapeOk(name: string, doc: unknown): boolean {
+    if (!isObject(doc)) return false;
+    if (name === "OTC_index.json") return Array.isArray(doc["releases"]);
+    return "datestamp" in doc && Array.isArray(doc["files"]);
+}
+
+/**
  * A GET of a changing file (the pointer or OTC_index.json) with If-None-Match and the stored ETag; 304 reads the
- * stored copy. Null on 404. The body must be JSON before it is stored: a 200 that is not JSON (a captive portal, a
- * proxy error page) is a network error (spec 5.2 step 5, CR D8), and the good stored copy stays. The body and its
+ * stored copy. Null on 404. The body must be JSON of the right shape before it is stored: a 200 that is not JSON (a
+ * captive portal, a proxy error page), or is JSON of the wrong shape, is a network error (spec 5.2 step 5, CR D8,
+ * CR2 DR13), and the good stored copy stays. The body and its
  * ETag are written under pointer/.lock, the ETag removed first and written last, so no body is paired with
  * another body's ETag (spec 5.4). A failure to store them is logged, not raised (CR D8).
  */
@@ -176,8 +187,10 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
         try {
             cachedDoc = JSON.parse(dec.decode(cached));
         } catch {
-            cached = null; // a broken stored copy is the same as none: no If-None-Match, so the server sends a 200
+            cachedDoc = undefined;
         }
+        // a broken stored copy is the same as none: no If-None-Match, so the server sends a 200
+        if (!shapeOk(name, cachedDoc)) cached = null;
     }
     // the ETag is read before and after the body; a writer in between means they may not pair, so send none
     if (!cached || (await readEtag()) !== etag) etag = null;
@@ -193,6 +206,9 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
         doc = JSON.parse(dec.decode(res.body));
     } catch (e) {
         throw new NetworkError(`${url}: the 200 response is not JSON (a captive portal or a proxy page?)`, { url, status: res.status, cause: e });
+    }
+    if (!shapeOk(name, doc)) {
+        throw new NetworkError(`${url}: the 200 response is JSON of the wrong shape (a proxy page?)`, { url, status: res.status });
     }
     if (store) {
         try {
@@ -393,6 +409,11 @@ function checkBytes(name: string, actualSha: string, size: number, expectSha: st
     }
 }
 
+/** True if a .sha256 body has at least one "<sha256>  <name>" row (CR2 DR13). Read as latin1, so any byte is a char. */
+function hasSha256Row(body: Uint8Array): boolean {
+    return new TextDecoder("latin1").decode(body).split(/\r?\n/).some((l) => /^\s*[0-9a-fA-F]{64}[ \t]+\*?\S/.test(l));
+}
+
 /** Fetch OTC_{D}.sha256 and check it against the pointer entry. */
 export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | null): Promise<{ bytes: Uint8Array; rows: Map<string, string> }> {
     const n = names(d);
@@ -400,6 +421,10 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
     const res = await httpGet(ctx, url);
     if (res.status === 404) throw new ReleaseNotFoundError(`release ${d} not found at ${ctx.baseUrl}`);
     if (res.status !== 200) throw new NetworkError(`HTTP ${res.status}: ${url}`, { url, status: res.status });
+    if (!hasSha256Row(res.body)) {
+        // checked before the digest: a captive portal or a proxy page is the network, not a bad release (CR2 DR13)
+        throw new NetworkError(`${url}: the 200 response has no "<sha256>  <name>" row (a captive portal or a proxy page?)`, { url, status: res.status });
+    }
     if (entry) {
         // OTC_{D}.sha256 is itself listed in the pointer: check it first (spec 5.2 step 4.1, PK11 T78)
         const own = entry.files.find((f) => f.name === n.sha);

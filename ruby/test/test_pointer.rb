@@ -38,8 +38,10 @@ class PointerEntryTest < Minitest::Test
         srv = serve(File.join(FIXTURES, "good"), over)
         c = client_on(srv)
         good_files = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json")))["files"]
+        # files that is not a list is the wrong shape: a network error (CR2 DR13)
+        over["OTC_latest-f1.json"] = pointer(files: "not a list")
+        assert_equal "network", assert_raises(OTC::NetworkError) { c.latest }.code
         bads = [
-            "not a list",
             ["OTC_20991231.2.json"],
             [5],
             [good_files[0].merge("url" => 42)],
@@ -55,14 +57,17 @@ class PointerEntryTest < Minitest::Test
         c&.close
     end
 
-    def test_index_without_releases_is_invalid_release
+    def test_index_without_releases_is_network_a_bad_entry_invalid_release
         over = {}
         srv = serve(File.join(FIXTURES, "good"), over)
         c = client_on(srv)
-        [{}, { "releases" => "x" }, { "releases" => [5] }].each do |doc|
+        # no releases list is the wrong shape: a network error (CR2 DR13); a bad entry is invalid_release
+        [{}, { "releases" => "x" }].each do |doc|
             over["OTC_index.json"] = [200, {}, JSON.generate(doc)]
-            assert_raises(OTC::InvalidReleaseError, doc.inspect) { c.releases }
+            assert_raises(OTC::NetworkError, doc.inspect) { c.releases }
         end
+        over["OTC_index.json"] = [200, {}, JSON.generate({ "releases" => [5] })]
+        assert_raises(OTC::InvalidReleaseError) { c.releases }
     ensure
         c&.close
     end
