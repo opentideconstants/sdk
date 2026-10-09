@@ -310,10 +310,40 @@ test("T41/T18/T95/D4: usableIndex rejects out-of-bounds, unordered, wrongly fold
 
 test("T46: a convention or licence that is not an object, and a repeated licence_id, are invalid_release", async () => {
     const { parseHeader } = await import("../dist/release.js");
-    const h = (o) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }], licences: [{ licence_id: "l" }], ...o });
+    const h = (o) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }], licences: [{ licence_id: "l", attribution: "L" }], ...o });
     assert.ok(parseHeader(h({})));
     assert.throws(() => parseHeader(h({ conventions: [{ convention_id: "c" }, 5] })), isCode("invalid_release"));
-    assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l" }, { licence_id: "l" }] })), isCode("invalid_release"));
+    assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l", attribution: "L" }, { licence_id: "l", attribution: "L" }] })), isCode("invalid_release"));
+});
+
+test("CR2 DR2: a licence attribution that is not a string, or a provider that is neither a string nor null, is invalid_release", async () => {
+    const { parseHeader } = await import("../dist/release.js");
+    const h = (l) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [], licences: [{ licence_id: "l", ...l }] });
+    assert.ok(parseHeader(h({ provider: "P", attribution: "A" })));
+    assert.ok(parseHeader(h({ provider: null, attribution: "A" })), "a null provider is allowed (CR D2 b)");
+    for (const l of [{ provider: "P", attribution: null }, { provider: "P" }, { provider: "P", attribution: 5 }, { provider: 7, attribution: "A" }]) {
+        assert.throws(() => parseHeader(h(l)), isCode("invalid_release"), JSON.stringify(l));
+    }
+});
+
+test("R2-008: attribution never drops a licence it cannot find: invalid_release, not a shorter CC BY text", async () => {
+    const { parseHeader, indexStations, Release } = await import("../dist/release.js");
+    const doc = {
+        format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }],
+        licences: [{ licence_id: "a", provider: "A", attribution: "A text" }, { licence_id: "o", provider: "O", attribution: "O text" }],
+        stations: [
+            { station_id: "R", status: "active", type: "reference", lat: 0, lon: 0, recommended_set_id: "R/s",
+                constant_sets: [{ set_id: "R/s", source: "x", quantity: "water_level", qc_status: "ok", convention_id: "c", licence_id: "a", constituents: [] }] },
+            { station_id: "S", status: "active", type: "subordinate", lat: 0, lon: 0, recommended_set_id: null,
+                subordinate_offsets: { reference_station_id: "R", licence_id: "o" } },
+        ],
+    };
+    const entries = indexStations(parseHeader(doc), doc.stations);
+    // a header that lost licence o after the entries were checked against it: the guard, not reachable from data
+    const header = parseHeader({ ...doc, licences: [doc.licences[0]] });
+    const r = new Release(header, entries, { doc: (_e, i) => doc.stations[i], close: () => undefined }, [], true, null);
+    assert.match(r.attribution(), /Sources: A: A text$/);
+    assert.throws(() => r.attribution([r.station("S")]), isCode("invalid_release"));
 });
 
 const GOOD = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;

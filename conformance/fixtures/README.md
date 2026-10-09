@@ -55,6 +55,8 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `bad/sha256-invalid-utf8/` | `OTC_20991231.sha256` has a row whose name is not UTF-8 | `invalid_release` (CR2 DR14) |
 | `bad/sha256-no-json-row/` | `OTC_20991231.sha256` and the pointer list the `.json.gz` but not the `.json` (the `.json` file is still there) | `checksum_mismatch` "not listed" in eager mode (CR2 DR15); stream mode loads |
 | `bad/pointer-file-no-sha256/` | the pointer and index entry for `OTC_20991231.sha256` have no `sha256` (the pointers and the index fail `otc-index-1.0`) | `invalid_release` (CR2 DR12) |
+| `bad/licence-attribution-null/`, `bad/licence-attribution-not-string/`, `bad/licence-provider-not-string/` | the `eot20` licence's `attribution` is null, or the number 5; its `provider` is the number 7 (schema-invalid) | `invalid_release` (CR2 DR2) |
+| `bad/licence-provider-null/` | the `eot20` licence and a new licence `anon` have a null `provider` (malformed 1.0; valid once a provider is put back) | loads; the attribution prints each one's text alone, unmerged (CR D2 b) |
 
 The reference reader checks that the files of one release agree (`.json.gz` with `.json`, `.jsonl` and `.meta.json` with `.json`). The SDKs do not (decision D37): each file is checked against `OTC_{D}.sha256`, so a release whose files disagree is a pipeline defect, and only the reference reader has cases for it. Each rule of the reference reader decides the outcome of at least one bad fixture, so turning a rule off fails `--check` (review round 1, B2-T1). Three rules repeat another check and cannot be turned off alone: the SHA-256 of `OTC_{D}.sha256` against the pointer (step 4.2 hashes it again), and the schema checks of the `.meta.json` and the `.jsonl` lines (they must equal the `.json`, which is validated in full). The pointer and too-new-file checks are covered by builder mutants (a wrong per-major pointer, a `.jsonl` that differs in a too-new release).
 
@@ -119,4 +121,5 @@ Roots for the cross-SDK value rules of review round 1 (each loads):
 | `values-kept-reason/` | a constituent `kept_reason` of 48 bytes (the schema sets no maxLength) |
 | `values-source-name/` | a constituent `source_name` of 31 characters that are 62 UTF-8 bytes |
 | `fold/` | station names for the fold rules of D12 (final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP) |
+| `chain/` | release `20991231.2`: subordinate stations with offsets only one, two and three links from their reference station `OTC-T-0171`, each link with its own offsets licence (`harbour-c` has the provider of `harbour-a`); `OTC-T-0175`, a subordinate with its own recommended set on that chain; `OTC-T-0176`, whose reference station is `OTC-T-0175`, where the attribution walk stops (CR2 DR1) |
 | `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |

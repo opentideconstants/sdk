@@ -39,7 +39,7 @@ int main(void)
     /* through the API */
     test_write(dir, "OTC_20990101.meta.json",
                "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"2099-12-31T02:00:00.5+02:00\"},"
-               "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\"}]}");
+               "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"attribution\":\"A\"}]}");
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") "\n");
     path = test_join(dir, "OTC_20990101.jsonl");
     CHECK_STATUS(otc_open_file(path, NULL, &rel), OTC_OK);

@@ -14,7 +14,7 @@ import zlib
 from collections import OrderedDict
 from pathlib import Path
 from types import MappingProxyType
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple
 
 from . import _enums as E
 from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError, StationNotFoundError,
@@ -28,6 +28,7 @@ SUPPORTED_FORMAT_VERSION = "1.0"
 EARTH_R_KM = 6371.0088
 INDEX_VERSION = 1
 LRU_SIZE = 256
+_MAX_LINKS = 16  # the reference links a walk follows (spec §6.2 kind, §4.6 attribution)
 _USABLE = ("ok", "flagged")  # qc_status of a set with constants (spec §4.3); QcStatus members compare equal
 DATA_URL = "https://data.opentideconstants.org/"
 _log = logging.getLogger("opentideconstants")
@@ -322,6 +323,11 @@ class Release:
             self._licences = tuple(Licence._parse(x) for x in meta.get("licences") or ())
         except (KeyError, TypeError, AttributeError) as e:
             raise InvalidReleaseError(f"conventions or licences: {e!r}") from e
+        for x in self._licences:
+            # the attribution text prints both (spec §4.6, CR2 DR2); a null provider is allowed (CR D2 b)
+            if not isinstance(x.attribution, str) or not (x.provider is None or isinstance(x.provider, str)):
+                raise InvalidReleaseError(f"licence {x.licence_id!r}: attribution must be a string and provider a "
+                                          f"string or null")
         self._conv_by_id = {c.convention_id: c for c in self._conventions}
         self._lic_by_id = {x.licence_id: x for x in self._licences}
         parse_time(rel.get("created"), "release.created")
@@ -685,13 +691,7 @@ class Release:
                                                f"{self.datestamp}")
                 if st.recommended_set is not None:
                     lic_ids.add(st.recommended_set.licence.licence_id)
-                off = st.subordinate_offsets
-                if st.is_subordinate and off is not None:
-                    if off.licence_id:
-                        lic_ids.add(off.licence_id)
-                    ref = self.station(off.reference_station_id) if off.reference_station_id else None
-                    if ref is not None and ref.recommended_set is not None:
-                        lic_ids.add(ref.recommended_set.licence.licence_id)
+                lic_ids.update(self._chain_licences(self._by_id[st.station_id]))
         parts, seen = [], set()
         for lid in sorted(lic_ids):
             lic = self._lic_by_id[lid]  # every licence reference resolves at load
@@ -705,6 +705,30 @@ class Release:
         ident = f"doi:{self.concept_doi}" if self.concept_doi else f"{DATA_URL}OTC_{self.datestamp}.json"
         return (f"Tidal constants: OpenTideConstants {self.datestamp}, {ident}, CC BY 4.0. Sources: "
                 + "; ".join(parts))
+
+    def _chain_licences(self, e) -> List[str]:
+        """The licences of a station's reference chain (spec §4.6, CR2 DR1): the walk follows reference_station_id
+        through at most 16 links (the kind rule of §6.2). It takes the offsets licence of each station on the path,
+        and the licence of the first recommended set it reaches, where it stops. A loop or a missing station ends
+        the walk: the load has checked the links."""
+        out, seen, links = [], {e["station_id"]}, 0
+        while e.get("type") == "subordinate" and (e["reference_station_id"] or e["offsets_licence_id"]):
+            if e["offsets_licence_id"]:
+                out.append(e["offsets_licence_id"])
+            if links == _MAX_LINKS:
+                break
+            ref = self._by_id.get(e["reference_station_id"])
+            if ref is None or ref["station_id"] in seen:
+                break
+            links += 1
+            seen.add(ref["station_id"])
+            rec = next((cs for cs in ref["sets"] if ref["recommended_set_id"] is not None
+                        and cs["set_id"] == ref["recommended_set_id"]), None)
+            if rec is not None:
+                out.append(rec["licence_id"])
+                break
+            e = ref
+        return out
 
     def _close(self) -> None:
         with self._lock:

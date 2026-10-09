@@ -4536,6 +4536,379 @@
    ]
   },
   {
+   "id": "rules/pk15/attribution-chain",
+   "title": "attribution of subordinate stations 1, 2 and 3 links from their reference station: every offsets licence on the path and the first recommended set's licence, where the walk stops (CR2 DR1)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "chain",
+    "release": "20991231.2"
+   },
+   "steps": [
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0172"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Harbour Board A: Offsets: Example Harbour Board A, test data."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0173"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Harbour Board A: Offsets: Example Harbour Board A, test data.; Example Harbour Board B: Offsets: Example Harbour Board B, test data."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0174"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Harbour Board A: Offsets: Example Harbour Board A, test data.; Example Harbour Board B: Offsets: Example Harbour Board B, test data."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0175"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Harbour Board A: Offsets: Example Harbour Board A, test data.; Example Harbour Board B: Offsets: Example Harbour Board B, test data."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0176"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Mapping Authority: Synthetic test data, Example Mapping Authority."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0176",
+       "OTC-T-0174"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Harbour Board A: Offsets: Example Harbour Board A, test data.; Example Harbour Board B: Offsets: Example Harbour Board B, test data.; Example Mapping Authority: Synthetic test data, Example Mapping Authority."
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/attribution-null-provider",
+   "title": "a licence with a null provider prints {attribution} alone, with no prefix, and is never merged with another such licence (CR D2 b)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "bad/licence-provider-null",
+    "release": "20991231"
+   },
+   "steps": [
+    {
+     "op": "attribution",
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Anonymous synthetic test data.; Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": []
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Anonymous synthetic test data.; Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0004"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Example tide model, interpolated by OpenTideConstants tests.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-json",
+   "title": "bad/licence-attribution-null opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-json-gz",
+   "title": "bad/licence-attribution-null opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-jsonl",
+   "title": "bad/licence-attribution-null opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-jsonl-stream",
+   "title": "bad/licence-attribution-null opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-json",
+   "title": "bad/licence-attribution-not-string opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-json-gz",
+   "title": "bad/licence-attribution-not-string opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-jsonl",
+   "title": "bad/licence-attribution-not-string opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-jsonl-stream",
+   "title": "bad/licence-attribution-not-string opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-json",
+   "title": "bad/licence-provider-not-string opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-json-gz",
+   "title": "bad/licence-provider-not-string opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-jsonl",
+   "title": "bad/licence-provider-not-string opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-jsonl-stream",
+   "title": "bad/licence-provider-not-string opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/r2-pk06/pointer-200-wrong-shape-object",
    "title": "the pointer answers 200 with JSON of the wrong shape (object): use_cache falls back with network, the cached pointer is kept, and the next open still works (DR13)",
    "spec": "5.2",

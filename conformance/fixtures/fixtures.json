@@ -102,6 +102,16 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "subordinate stations two and three links from their reference station, for the attribution (CR2 DR1)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "chain"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"
@@ -517,6 +527,48 @@
     "20991231"
    ],
    "root": "bad/index-invalid"
+  },
+  {
+   "defect": "the eot20 licence's attribution is null (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-attribution-null"
+  },
+  {
+   "defect": "the eot20 licence's attribution is the number 5 (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-attribution-not-string"
+  },
+  {
+   "defect": "the eot20 licence's provider is the number 7 (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-provider-not-string"
+  },
+  {
+   "defect": "the eot20 licence and a new licence anon have a null provider (malformed 1.0); it must load (CR D2 b)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-provider-null"
   },
   {
    "defect": "min_reader_version 1.99, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",

@@ -82,7 +82,7 @@ NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
-GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "aliases", "nogz",
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "aliases", "chain", "nogz",
              "bad", "fixtures.json"]
 
 BASE = "20991231"
@@ -723,6 +723,16 @@ def _station(doc, sid):
     return next(s for s in doc["stations"] if s["station_id"] == sid)
 
 
+def _licence(doc, lid):
+    return next(x for x in doc["licences"] if x["licence_id"] == lid)
+
+
+def _null_providers(doc):
+    _licence(doc, "eot20")["provider"] = None
+    doc["licences"].append({"licence_id": "anon", "spdx": "CC-BY-4.0", "provider": None,
+                            "attribution": "Anonymous synthetic test data.", "commercial_use": True})
+
+
 def index_honest(files, sums, entry, reuse):
     """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
     entry = copy.deepcopy(entry)
@@ -832,6 +842,16 @@ BAD = [
      lambda: [release_doc(BASE)], _jsonl_one_byte),
     ("index-invalid", "load", "the release is good, but its OTC_index.json entry has a content_sha256 that is not a digest (the index fails otc-index-1.0)",
      lambda: [release_doc(BASE)], index_content_digest_bad, {"index_invalid": True}),
+    # CR2 DR2: a licence attribution that is not a string, or a provider that is neither a string nor null
+    ("licence-attribution-null", "invalid_release", "the eot20 licence's attribution is null (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(attribution=None)), None),
+    ("licence-attribution-not-string", "invalid_release", "the eot20 licence's attribution is the number 5 (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(attribution=5)), None),
+    ("licence-provider-not-string", "invalid_release", "the eot20 licence's provider is the number 7 (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(provider=7)), None),
+    # CR D2 b: a licence with a null provider (schema-invalid) loads; the attribution prints its text alone, unmerged
+    ("licence-provider-null", "load", "the eot20 licence and a new licence anon have a null provider (malformed 1.0); it must load (CR D2 b)",
+     changed_doc(_null_providers), None),
     ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
      _too_new_broken, None, {"valid_as_1_0": False}),
     # Cross-SDK rules of review round 2 (PK-R2-06: DR12, DR14, DR15).
@@ -1018,6 +1038,47 @@ def aliases_doc():
     return doc
 
 
+CHAIN_D = "20991231.2"
+
+
+def chain_doc():
+    """Subordinate chains for the attribution (CR2 DR1): offsets-only stations two and three links from their
+    reference station, each link with its own offsets licence; a subordinate with its own set on such a chain; and one
+    whose reference station is a subordinate with a recommended set, where the walk stops."""
+    doc = small_doc(CHAIN_D)
+    doc["licences"] = doc["licences"] + [
+        {"licence_id": "harbour-a", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board A",
+         "attribution": "Offsets: Example Harbour Board A, test data.", "commercial_use": True},
+        {"licence_id": "harbour-b", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board B",
+         "attribution": "Offsets: Example Harbour Board B, test data.", "commercial_use": True},
+        # the provider of harbour-a again: one entry per provider, the first by licence_id
+        {"licence_id": "harbour-c", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board A",
+         "attribution": "Offsets: Example Harbour Board A, second licence.", "commercial_use": True},
+    ]
+
+    def sub(sid, name, lat, ref, licence=None, sets=(), recommended=None):
+        off = {"reference_station_id": ref, "time_offset_high_min": 6, "time_offset_low_min": 9,
+               "height_offset_high": 1.02, "height_offset_low": 0.97, "height_adjusted_type": "R"}
+        if licence:
+            off["licence_id"] = licence
+        st = active(sid, name, "MLT", lat, 14.6, "Europe/Malta", list(sets), type_="subordinate", subordinate_offsets=off)
+        st["recommended_set_id"] = recommended
+        return st
+
+    doc["stations"] += [
+        gauge_station("OTC-T-0171", "Chain Reference", "MLT", 35.71, 14.6, "Europe/Malta", 0.5),
+        sub("OTC-T-0172", "Chain Pier One", 35.72, "OTC-T-0171", "harbour-a"),
+        sub("OTC-T-0173", "Chain Pier Two", 35.73, "OTC-T-0172", "harbour-b"),
+        sub("OTC-T-0174", "Chain Pier Three", 35.74, "OTC-T-0173", "harbour-c"),
+        sub("OTC-T-0175", "Chain Model Pier", 35.75, "OTC-T-0173",
+            sets=[cset("OTC-T-0175", "eot20", "eot20", "model", "otc-greenwich-v1", "eot20", simple_constituents(0.5))],
+            recommended="OTC-T-0175/eot20"),
+        sub("OTC-T-0176", "Chain Outer Pier", 35.76, "OTC-T-0175", "kartverket"),
+    ]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
 def no_gz(files, sums, entry, reuse):
     """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
     files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
@@ -1054,6 +1115,9 @@ ROOTS = [
     ("aliases", lambda: [aliases_doc()], {}, (),
      {"releases": [ALIASES_D], "latest": ALIASES_D, "expect": "load", "defect": None,
       "note": "a station with aliases in two systems that format 1.0 added (linz, dmi; DR29)"}),
+    ("chain", lambda: [chain_doc()], {}, (),
+     {"releases": [CHAIN_D], "latest": CHAIN_D, "expect": "load", "defect": None,
+      "note": "subordinate stations two and three links from their reference station, for the attribution (CR2 DR1)"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
@@ -1356,6 +1420,15 @@ def open_release(root, datestamp, schemas):
     return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
 
 
+def _restore_provider(doc):
+    """The repair that makes a null licence provider valid again (CR D2 b): a copy with the provider a string."""
+    doc = copy.deepcopy(doc)
+    for x in doc.get("licences") or ():
+        if isinstance(x, dict) and "provider" in x and x["provider"] is None:
+            x["provider"] = "(null provider)"
+    return doc
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1375,6 +1448,12 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
         doc = restore_build(doc)
         meta = restore_build(meta)
         lines = [restore_station_build(l) for l in lines]
+    # CR D2 b: a licence with a null provider is malformed, but the SDK loads it (the attribution prints its text
+    # alone). The release is checked with a provider put back, so it is the only defect, and the tolerance is listed.
+    nulls = [x.get("licence_id") for x in doc.get("licences") or () if isinstance(x, dict) and "provider" in x and x["provider"] is None]
+    if nulls:
+        tolerated += [f"licence {n}: provider null" for n in nulls]
+        doc, meta = _restore_provider(doc), _restore_provider(meta)
     exact = next((v for k, v in known if k == version), None)
     dropped = []
     if exact is not None:
