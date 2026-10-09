@@ -98,17 +98,44 @@ def validate_rule(i, r):
     for k, t in {**_OPTIONAL, **_REQUIRED.get(r["action"], {})}.items():
         if k in r and (isinstance(r[k], bool) or not isinstance(r[k], t)):
             raise ValueError(f"rule {i}: {k} has the wrong type: {r[k]!r}")
+    if isinstance(r.get("pointer"), str):
+        pointer_parts(r["pointer"])  # ValueError for a pointer that is not RFC 6901
     times = r.get("times")
     if times is not None and (isinstance(times, bool) or not isinstance(times, int)):
         raise ValueError(f"rule {i}: times must be an integer or null, got {times!r}")
 
 
+def pointer_parts(pointer):
+    """The reference tokens of an RFC 6901 JSON pointer: "" is the whole document, and every other pointer starts
+    with "/" ("/" is the member named ""). ValueError for a pointer without the leading "/"."""
+    if not isinstance(pointer, str):
+        raise ValueError(f"a JSON pointer must be a string, got {pointer!r}")
+    if pointer == "":
+        return []
+    if not pointer.startswith("/"):
+        raise ValueError(f"JSON pointer {pointer!r} does not start with /")
+    return [p.replace("~1", "/").replace("~0", "~") for p in pointer[1:].split("/")]
+
+
+def array_index(token, length):
+    """An RFC 6901 array index: digits with no leading zero, inside the array."""
+    if not (token == "0" or (token.isdigit() and token.isascii() and not token.startswith("0"))):
+        raise ValueError(f"{token!r} is not an array index")
+    i = int(token)
+    if i >= length:
+        raise IndexError(f"index {i} is past the end of an array of {length}")
+    return i
+
+
 def json_pointer(doc, pointer):
-    if pointer in ("", "/"):
-        return doc
-    for part in pointer.lstrip("/").split("/"):
-        part = part.replace("~1", "/").replace("~0", "~")
-        doc = doc[int(part)] if isinstance(doc, list) else doc[part]
+    """The value at an RFC 6901 pointer (KeyError, IndexError or ValueError when it does not resolve)."""
+    for part in pointer_parts(pointer):
+        if isinstance(doc, list):
+            doc = doc[array_index(part, len(doc))]
+        elif isinstance(doc, dict):
+            doc = doc[part]
+        else:
+            raise KeyError(f"{part!r}: not an object or array")
     return doc
 
 

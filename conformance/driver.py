@@ -42,7 +42,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from server import FixtureServer, RecordingProxy, validate_rule  # noqa: E402
+from server import FixtureServer, RecordingProxy, array_index, json_pointer, pointer_parts, validate_rule  # noqa: E402
 import stream_index  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
@@ -473,6 +473,12 @@ def check_cases(cases):
                                 re.compile(rx)
                         except (re.error, TypeError) as e:
                             problems.append(f"{where}: assert_requests {name} {rx!r} is not a regular expression: {e}")
+                if st["driver"] == "json_set":
+                    try:
+                        if not pointer_parts(st.get("pointer")):
+                            raise ValueError("json_set cannot replace the whole document")
+                    except ValueError as e:
+                        problems.append(f"{where}: {e}")
                 if st["driver"] == "server_rules":
                     for j, rule in enumerate(st.get("rules", [])):
                         try:
@@ -751,13 +757,13 @@ def run_action(st, ctx, srv, proxy):
             doc = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             return [f"json_set: {p}: cannot read it as JSON ({e})"], None
-        parts = [x.replace("~1", "/").replace("~0", "~") for x in a["pointer"].split("/")[1:]]
-        node = doc
         try:
-            for k in parts[:-1]:
-                node = node[int(k)] if isinstance(node, list) else node[k]
+            parts = pointer_parts(a["pointer"])
+            if not parts:
+                raise ValueError("json_set cannot replace the whole document")
+            node = json_pointer(doc, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
             if isinstance(node, list):
-                node[int(parts[-1])] = a["value"]
+                node[array_index(parts[-1], len(node))] = a["value"]
             elif isinstance(node, dict):
                 node[parts[-1]] = a["value"]
             else:

@@ -104,3 +104,28 @@ def test_plain_file_served_under_a_gz_name_is_gzipped(pair):
     srv.set_rules([{"match": r"x\.json\.gz$", "action": "file", "file": "good/OTC_20991231.2.json"}])
     r, body = _get(srv, "/good/x.json.gz", {"Accept-Encoding": "gzip"})
     assert r.getheader("Content-Encoding") == "gzip" and gzip.decompress(body) == data, r.getheaders()
+
+
+# --- K8: json_pointer and json_set follow RFC 6901
+
+def test_json_pointer_rfc6901():
+    doc = {"": {"a": 1}, "a": {"": 2, "b": [10, 20]}, "c/d": 3, "e~f": 4}
+    assert server.json_pointer(doc, "") is doc
+    assert server.json_pointer(doc, "/") == {"a": 1}
+    assert server.json_pointer(doc, "//a") == 1
+    assert server.json_pointer(doc, "/a/") == 2
+    assert server.json_pointer(doc, "/a/b/1") == 20
+    assert server.json_pointer(doc, "/c~1d") == 3 and server.json_pointer(doc, "/e~0f") == 4
+    for bad in ["a", "a/b", "/a/b/01", "/a/b/-", "/a/b/x"]:
+        with pytest.raises((ValueError, KeyError, IndexError)):
+            server.json_pointer(doc, bad)
+
+
+def test_json_set_rejects_a_pointer_without_a_leading_slash(tmp_path):
+    import driver
+    p = tmp_path / "x.json"
+    p.write_text(json.dumps({"a": {"b": 1}, "b": 0}))
+    problems, _ = driver.run_action({"driver": "json_set", "path": str(p), "pointer": "a/b", "value": 9}, {}, None, None)
+    assert problems and json.loads(p.read_text()) == {"a": {"b": 1}, "b": 0}, (problems, p.read_text())
+    problems, _ = driver.run_action({"driver": "json_set", "path": str(p), "pointer": "/a/b", "value": 9}, {}, None, None)
+    assert not problems and json.loads(p.read_text())["a"]["b"] == 9
