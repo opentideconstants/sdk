@@ -64,7 +64,25 @@ PRELUDE = """/*
 """
 
 
+def check_parts_match_cmake():
+    """PARTS is the CMake library without otc_fetch (C88): the same sources, the vendor
+    wrappers counted as the files they include. A source added to one and not the
+    other stops the tool."""
+    text = (C / "CMakeLists.txt").read_text()
+    m = re.search(r"set\(OTC_SOURCES(.*?)\)", text, re.S)
+    if not m:
+        sys.exit("amalgamate: no set(OTC_SOURCES ...) in c/CMakeLists.txt")
+    cmake = set(m.group(1).split()) | {"src/otc_fetch_stub.c"}
+    wrapped = {"src/otc_vendor_cjson.c": "vendor/cjson/cJSON.c", "src/otc_vendor_sha256.c": "vendor/sha256/sha-256.c"}
+    cmake = {wrapped.get(f, f) for f in cmake}
+    parts = {p for p in PARTS if p.endswith(".c")}
+    if cmake != parts:
+        sys.exit(f"amalgamate: PARTS and the CMake sources differ: only in CMake {sorted(cmake - parts)}, "
+                 f"only in PARTS {sorted(parts - cmake)}")
+
+
 def main():
+    check_parts_match_cmake()
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(C / "dist"))
     a = ap.parse_args()
