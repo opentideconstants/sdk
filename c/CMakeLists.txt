@@ -78,8 +78,12 @@ endif()
 if(NOT WIN32)
     target_link_libraries(opentideconstants PRIVATE m)
 endif()
+# The soname major (SOVERSION) is OTC_ABI_VERSION, 1; it changes only with a
+# breaking ABI change. Before the first release VERSION is 0.x, so it is lower
+# than the soname major (on macOS: current version 0.x, compatibility 1.0); it
+# becomes 1.0.0 at the first release (spec 6.4, 7.2, CR D35).
 set_target_properties(opentideconstants PROPERTIES
-    VERSION ${PROJECT_VERSION} SOVERSION 1 C_VISIBILITY_PRESET hidden)
+    VERSION ${PROJECT_VERSION} SOVERSION ${OTC_HEADER_ABI_VERSION} C_VISIBILITY_PRESET hidden)
 
 if(MSVC)
     set(OTC_WARNINGS /W4 /wd4996)
