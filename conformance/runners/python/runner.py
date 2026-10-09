@@ -418,6 +418,8 @@ def encode_sdk_error(e):
             v = getattr(e, f, None)
             if v is not None:
                 fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+        if isinstance(getattr(e, "removed", None), (list, tuple)):   # CacheError.removed (CR2 DR18)
+            fields["removed"] = [str(d) for d in e.removed]
         code = e.code
         if getattr(e, "tombstone", None) is not None:
             try:

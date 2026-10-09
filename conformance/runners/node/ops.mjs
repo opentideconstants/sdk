@@ -170,7 +170,7 @@ function finite(v) {
     return v;
 }
 
-const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path"];
+const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path", "removed"];
 
 export function makeRunner(sdk) {
     const state = { client: null, held: {} };

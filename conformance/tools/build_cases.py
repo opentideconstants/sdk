@@ -1242,6 +1242,39 @@ def group_cache():
     out.append(case("cache/not-writable", "a cache directory that cannot be created: cache error", "4.8",
                     [drv("write", path="${tmp}/not-a-dir", text="x"),
                      net(step("open", err("cache"), base_url=G, cache_dir="${tmp}/not-a-dir/cache"))], requires=["fs"]))
+    # CR2 DR18 (spec 4.3): prune stops at the first release it cannot remove, and the CacheError reports the releases
+    # removed before it (C: the output array and count). Newest first: D10 (loaded, kept), d2 (removed), d1 (read-only)
+    out.append(case("cache/prune-partial-failure", "prune(keep: 0) removes 20991231.2, then cannot remove 20991231 (read-only): cache error whose removed is [20991231.2]", "4.3, 4.8",
+                    [net(step("open", {"datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
+                     net(step("open", {"datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
+                     net(step("open", {"datestamp": D10}, release=D10, base_url=O, cache_dir="${cache}")),
+                     drv("chmod", path=f"${{cache}}/v1/releases/{d1}", mode="555"),
+                     net(step("prune", err("cache", removed=[d2]), keep=0)),
+                     drv("chmod", path=f"${{cache}}/v1/releases/{d1}", mode="755"),
+                     net(step("cached_releases", {"datestamps": [D10, d1]})),
+                     drv("assert_files", dir="${cache}/v1/releases", absent=[d2], present=[D10, d1])], requires=["fs"]))
+    # CR D33 (spec 4.3): on a client opened with file, cached_releases and prune work on the configured cache (cache_dir,
+    # or the default), never on the file's folder
+    rel = "${tmp}/rel"
+    rel_files = [f"OTC_{d2}.jsonl", f"OTC_{d2}.meta.json", f"OTC_{d2}.sha256"]
+    copy_rel = drv("copy", files=[f"{FIX}/good/{n}" for n in rel_files], to=rel)
+    out.append(case("cache/file-client-uses-cache-dir", "a client opened with file and cache_dir: cached_releases and prune use cache_dir, not the file's folder", "4.3",
+                    both + [copy_rel,
+                            step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{rel}/OTC_{d2}.jsonl", cache_dir="${cache}"),
+                            net(step("cached_releases", {"datestamps": [d2, d1]})),
+                            net(step("prune", {"removed": [d1]}, keep=1)),
+                            net(step("cached_releases", {"datestamps": [d2]})),
+                            drv("assert_files", dir="${cache}/v1/releases", absent=[d1], present=[d2]),
+                            drv("assert_files", dir=rel, exactly=rel_files)], requires=["fs"]))
+    out.append(case("cache/file-client-uses-default-cache", "a client opened with file and no cache_dir: cached_releases and prune use the default cache, not the file's folder", "4.3",
+                    [net(step("open", {"datestamp": d1}, release=d1, base_url=G)),
+                     net(step("open", {"datestamp": d2}, release=d2, base_url=G)),
+                     copy_rel,
+                     step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{rel}/OTC_{d2}.jsonl"),
+                     net(step("cached_releases", {"datestamps": [d2, d1]})),
+                     net(step("prune", {"removed": [d1]}, keep=1)),
+                     net(step("cached_releases", {"datestamps": [d2]})),
+                     drv("assert_files", dir=rel, exactly=rel_files)], requires=["fs"]))
     out.append(case("cache/files-from-verified", "loaded_from cache: release.files comes from .verified", "4.3.1",
                     [open_latest_step(G), drv("restart_runner"), drv("server_stop"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
@@ -1302,6 +1335,30 @@ def group_download():
                     [open_latest_no_cache(G), dl(err("invalid_argument"), release="2099", to=B)], requires=[]))
     out.append(case("download/not-found", "a datestamp the server does not have: release_not_found", "4.3.2",
                     [open_latest_no_cache(G), dl(err("release_not_found"), release="20991230", to=B)], requires=[]))
+    # CR D22 (spec 4.3.2): download of latest honours on_network_error like opening a client
+    ptr500 = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}])
+    out.append(case("download/latest-network-error-use-cache", "download of latest when the pointer answers 500, with use_cache and a cached release: writes the newest cached release", "4.3.2, 5.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": d2}, base_url=G, cache_dir="${cache}")), ptr500,
+                     dl({"paths": default_files}, to=B), drv("assert_files", dir=B, exactly=default_files, no_tmp=True)] + same(default_files),
+                    requires=["fs"], timeout_s=90))
+    out.append(case("download/latest-network-error-raise", "download of latest when the pointer answers 500, with on_network_error raise: network error, and nothing is written", "4.3.2, 5.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": d2}, base_url=G, cache_dir="${cache}", on_network_error="raise")), ptr500,
+                     dl(err("network"), to=B), drv("assert_files", dir=B, absent=default_files, no_tmp=True, may_be_missing=True)],
+                    requires=["fs"], timeout_s=90))
+    out.append(case("download/latest-network-error-no-cache", "download of latest when the pointer answers 500 and the cache is empty: network error even with use_cache", "4.3.2, 5.2",
+                    [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}"), ptr500,
+                     dl(err("network"), to=B), drv("assert_files", dir=B, absent=default_files, no_tmp=True, may_be_missing=True)],
+                    requires=["fs"], timeout_s=90))
+    # CR2 DR17 (spec 4.3.2): all or nothing. A directory where OTC_{D}.meta.json goes makes its rename fail after the
+    # .jsonl (overwrite: true, so its original is set aside) is renamed in; the original .jsonl comes back
+    out.append(case("download/rename-failure-restores", "a rename that fails after another file was renamed in: io error, the replaced original is restored, and no temporary file is left", "4.3.2",
+                    [open_latest_no_cache(G), dl({"paths": default_files}, release=d2, to=B),
+                     drv("corrupt", path=f"{B}/OTC_{d2}.jsonl", offset=10),
+                     drv("delete", path=f"{B}/OTC_{d2}.meta.json"), drv("mkdir", path=f"{B}/OTC_{d2}.meta.json"),
+                     dl(err("io"), release=d2, to=B, overwrite=True),
+                     drv("assert_sha256", path=f"{B}/OTC_{d2}.jsonl", equals=f"{FIX}/good/OTC_{d2}.jsonl", negate=True),
+                     drv("assert_files", dir=B, exactly=default_files, no_tmp=True)] +
+                    same([f"OTC_{d2}.sha256"]), requires=["fs"]))
     # offline through the environment: offline=True together with file is invalid_argument (CR D31), and the
     # variable is not an option, so it does not conflict (spec 4.2)
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",

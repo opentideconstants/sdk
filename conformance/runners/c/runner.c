@@ -1580,6 +1580,12 @@ static void op_fetch(request *q, reply *r)
         }
         rc = otc_fetch_prune(&fo, (size_t)keep, ds[0] ? ds : NULL, v, 256, &count);
         if (rc == OTC_OK) cJSON_AddItemToObject(r->result, "removed", take_strings(v, count, 0, 0));
+        else if (rc == OTC_E_CACHE) {
+            /* CR2 DR18: a failed prune reports the releases removed before the failure in the array and count */
+            set_error_struct(r, rc, &err);
+            cJSON_AddItemToObject(r->fields, "removed", take_strings(v, count < 256 ? count : 256, 0, 0));
+            return;
+        }
     }
     if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
     if (bad) set_error(r, "uncaught:BufferProtocol", "an accessor broke the buffer or list rules");
