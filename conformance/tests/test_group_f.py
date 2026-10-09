@@ -408,3 +408,28 @@ def test_check_cases_finds_an_id_in_both_cases_and_cross(monkeypatch):
     plain[0].pop("roles")
     problems = driver.id_problems(plain, cross)
     assert any("duplicate id" in p and cross[0]["id"] in p for p in problems), problems
+
+
+# --- R2-143, R2-147: a driver step with an unknown or missing field asserts nothing; it is a case-file error, in the
+# lint and in a run (a harness error, never a pass and never an SDK FAIL)
+
+@pytest.mark.parametrize("step,word", [
+    ({"driver": "assert_requests", "match": "x", "cuont": 0}, "cuont"),                     # typo of count
+    ({"driver": "assert_requests", "source": "proxys", "count": 0}, "proxys"),              # no such log
+    ({"driver": "assert_requests", "match": "x"}, "count"),                                 # asserts nothing
+    ({"driver": "assert_requests", "count": "0"}, "count"),                                 # wrong type
+    ({"driver": "assert_files", "dir": "${tmp}", "absnt": ["x"]}, "absnt"),
+    ({"driver": "assert_files", "dir": "${tmp}"}, "present"),                               # asserts nothing
+    ({"driver": "json_set", "path": "${tmp}/f.json", "pointer": "/a"}, "value"),            # R2-147
+    ({"driver": "assert_json", "path": "${tmp}/f.json", "mtach": {"a": 1}}, "mtach"),
+    ({"driver": "clear_log", "source": "proxy"}, "source"),
+    ({"driver": "restart_runner", "env": {"X": 1}}, "env"),
+])
+def test_bad_driver_step_fields_are_case_errors(tmp_path, step, word):
+    steps = [{"driver": "write", "path": "${tmp}/f.json", "text": '{"a": 1}'}, step, OK_STEP]
+    cases = write_cases(tmp_path, [{"id": "a", "steps": steps}, {"id": "b", "steps": [OK_STEP]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and re.search(rf"^PROBLEM a step 1: .*{word}", r.stdout, re.M), (r.returncode, r.stdout[-400:])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert re.search(r"^FAIL  a  \[step 1 \w+\] harness error", r.stdout, re.M) and "PASS  b" in r.stdout, r.stdout[-800:]
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])

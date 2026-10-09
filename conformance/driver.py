@@ -84,10 +84,29 @@ OPS = {
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
-DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
-                  "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir",
-                  "assert_index", "json_set", "chmod", "assert_tree"}
 PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
+# The fields of each driver action (README "Driver steps"): {action: (required {field: type}, optional {field: type})}.
+# Any other field is a typo, and a typo of an assertion field (count, absent) would make the step assert nothing.
+_STR, _LIST, _DICT, _BOOL, _NUM = str, list, dict, bool, (int, float)
+_COUNT = "count"   # a non-negative integer
+DRIVER_FIELDS = {
+    "server_rules": ({"rules": _LIST}, {}), "server_stop": ({}, {}), "server_start": ({}, {}), "clear_log": ({}, {}),
+    "assert_requests": ({}, {"source": _STR, "match": _STR, "status": int, "header": _DICT, "all": _BOOL,
+                             "has_query": _BOOL, "count": _COUNT, "min": _COUNT, "max": _COUNT, "min_gap_s": _NUM}),
+    "copy": ({"files": _LIST, "to": _STR}, {}), "write": ({"path": _STR, "text": _STR}, {}),
+    "delete": ({"path": _STR}, {}), "mkdir": ({"path": _STR}, {}), "corrupt": ({"path": _STR}, {"offset": _COUNT}),
+    "assert_files": ({"dir": _STR}, {"present": _LIST, "absent": _LIST, "exactly": _LIST, "no_tmp": _BOOL,
+                                    "may_be_missing": _BOOL}),
+    "assert_sha256": ({"path": _STR, "equals": _STR}, {"negate": _BOOL}),
+    "assert_json": ({"path": _STR, "match": _DICT}, {}),
+    "sleep": ({"s": _NUM}, {}), "restart_runner": ({}, {"env": _DICT}),
+    "assert_index": ({"path": _STR, "jsonl": _STR, "datestamp": _STR}, {}),
+    "json_set": ({"path": _STR, "pointer": _STR, "value": object}, {}),
+    "chmod": ({"path": _STR, "mode": _STR}, {}),
+    "assert_tree": ({"dir": _STR, "allow": _LIST}, {"may_be_missing": _BOOL}),
+}
+DRIVER_ACTIONS = set(DRIVER_FIELDS)
+REQUEST_SOURCES = {"server", "tripwire", "proxy", "any"}
 # A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
 # fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
 # rule for loopback addresses (Ruby's Net::HTTP has one) can hide that an SDK ignored the proxy.
@@ -571,6 +590,55 @@ def id_problems(expanded, cross):
     return out
 
 
+def _field_ok(v, t):
+    if t is object:
+        return True
+    if t == _COUNT:
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    if t is _BOOL:
+        return isinstance(v, bool)
+    return not isinstance(v, bool) and isinstance(v, t)
+
+
+def driver_step_problems(st):
+    """The fields of one driver step: the known ones only, each of the right type, and enough of them for an
+    assertion step to assert something. Returns problems (empty = good)."""
+    kind = st.get("driver")
+    if kind not in DRIVER_FIELDS:
+        return [f"unknown driver action {kind!r}"]
+    req, opt = DRIVER_FIELDS[kind]
+    out = [f"{kind} needs {k!r}" for k in req if k not in st]
+    unknown = sorted(set(st) - {"driver"} - set(req) - set(opt))
+    if unknown:
+        out.append(f"{kind} has no field(s) {unknown}")
+    for k, t in {**opt, **req}.items():
+        if k in st and not _field_ok(st[k], t):
+            out.append(f"{kind} {k} has the wrong type: {st[k]!r}")
+    lists = {"copy": ["files"], "assert_files": ["present", "absent", "exactly"], "assert_tree": ["allow"]}.get(kind, [])
+    for k in lists:
+        if isinstance(st.get(k), list) and not all(isinstance(x, str) for x in st[k]):
+            out.append(f"{kind} {k} must be a list of strings")
+    for k in (["env"] if kind == "restart_runner" else ["header"] if kind == "assert_requests" else []):
+        if isinstance(st.get(k), dict) and not all(isinstance(x, str) and isinstance(y, str) for x, y in st[k].items()):
+            out.append(f"{kind} {k} must be an object of strings")
+    if kind == "assert_requests":
+        if "source" in st and st["source"] not in REQUEST_SOURCES:
+            out.append(f"assert_requests source must be one of {sorted(REQUEST_SOURCES)}, got {st['source']!r}")
+        if not any(k in st for k in ("count", "min", "max", "min_gap_s")) and not st.get("all"):
+            out.append("assert_requests asserts nothing: it needs count, min, max, min_gap_s or all")
+        if st.get("all") and not st.get("header"):
+            out.append("assert_requests all: true needs a header")
+    if kind == "assert_files" and not any(k in st for k in ("present", "absent", "exactly")) and not st.get("no_tmp"):
+        out.append("assert_files asserts nothing: it needs present, absent, exactly or no_tmp")
+    if kind == "assert_json" and st.get("match") == {}:
+        out.append("assert_json asserts nothing: match is empty")
+    if kind == "sleep" and _field_ok(st.get("s"), _NUM) and st["s"] < 0:
+        out.append(f"sleep s must be 0 or more, got {st['s']!r}")
+    if kind == "chmod" and isinstance(st.get("mode"), str) and not re.fullmatch(r"[0-7]{3,4}", st["mode"]):
+        out.append(f"chmod mode must be an octal string such as \"555\", got {st['mode']!r}")
+    return out
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -613,8 +681,7 @@ def check_cases(cases):
                 if not (FIXTURES / s).exists():
                     problems.append(f"{where}: fixture file {s} does not exist")
             if "driver" in st:
-                if st["driver"] not in DRIVER_ACTIONS:
-                    problems.append(f"{where}: unknown driver action {st['driver']!r}")
+                problems += [f"{where}: {p}" for p in driver_step_problems(st)]
                 if st["driver"] == "assert_requests":
                     for name, rx in [("match", st.get("match"))] + list((st.get("header") or {}).items()):
                         try:
@@ -865,6 +932,9 @@ def restore_writable(root):
 
 def run_action(st, ctx, srv, proxy):
     """Run a driver action. Returns (problems, restart_env or None)."""
+    bad = driver_step_problems(st)
+    if bad:   # a step that would assert nothing, or a typo: the case file is wrong (a harness error), not the SDK
+        raise CaseError(f"driver step: {bad[0]}")
     a = subst(st, ctx)
     kind = a["driver"]
     if kind == "server_rules":
@@ -934,7 +1004,7 @@ def run_action(st, ctx, srv, proxy):
     elif kind == "assert_index":
         return act_assert_index(a), None
     elif kind == "json_set":
-        p = Path(a["path"])
+        p, value = Path(a["path"]), a["value"]   # a missing value is a case-file error (driver_step_problems)
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
@@ -945,9 +1015,9 @@ def run_action(st, ctx, srv, proxy):
                 raise ValueError("json_set cannot replace the whole document")
             node = json_pointer(doc, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
             if isinstance(node, list):
-                node[array_index(parts[-1], len(node))] = a["value"]
+                node[array_index(parts[-1], len(node))] = value
             elif isinstance(node, dict):
-                node[parts[-1]] = a["value"]
+                node[parts[-1]] = value
             else:
                 raise TypeError(type(node).__name__)
         except (KeyError, IndexError, ValueError, TypeError) as e:

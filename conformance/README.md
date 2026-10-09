@@ -200,6 +200,8 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 
 ### Driver steps
 
+The fields of every driver step are checked, by `--check-cases` and again when the step runs (`DRIVER_FIELDS` in `driver.py`): an unknown field (a typo such as `cuont`), a missing or wrong-typed field, an `assert_requests` `source` that is not one of the four logs, and an assertion step that asserts nothing (`assert_requests` with none of `count` / `min` / `max` / `min_gap_s` / `all`, `assert_files` with none of `present` / `absent` / `exactly` / `no_tmp`) are case-file errors: a harness error, never a pass.
+
 | Step | What it does |
 |---|---|
 | `server_rules` `{rules}` | Sets the fixture server's scripted rules (see `server.py`): `status` (404, 500, 429 with `Retry-After`, `times`), `short_body` (Content-Length larger than the body, then close), `truncate` (a consistent but short body), `slow` (body after `delay_s`), `file` (with optional `headers`), `json` (serve one value of a fixture JSON file; `set` changes it at RFC 6901 pointers first). Every rule field is checked when the rules are set (and by `--check-cases`); a bad rule is a harness error. A rule that fails when a request comes (for example a JSON pointer that does not resolve) gets a 500, the request log entry has an `error`, and the case fails with a harness error. A `json` rule whose file is missing gets a 404. Cleared at the start of each case. |
