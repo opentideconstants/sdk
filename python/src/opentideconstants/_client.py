@@ -372,6 +372,15 @@ class OpenTideConstants:
             # a stored ETag that is not a valid header value is not sent (the server sends a 200 and a new one)
             self._log.warning("the cached ETag of %s is not a valid header value; not sending it", name)
             etag = None
+        cached_doc = None
+        if body is not None:
+            try:
+                cached_doc = json.loads(body.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                # a broken stored copy is the same as none: no If-None-Match, so a 304 can never select it
+                self._log.warning("cached %s is not JSON; reading it again", name)
+                self._cache.drop_pointer(name)
+                body = None
         headers = {"If-None-Match": etag} if body is not None and etag else {}
         r = self._http.get(url, headers=headers, accept_gzip=True)
         if r.status == 304 and not headers:
@@ -380,13 +389,7 @@ class OpenTideConstants:
             return None
         if r.status == 304:
             self._log.debug("pointer %s: 304", name)
-            try:
-                return json.loads(body.decode("utf-8")), url
-            except (ValueError, UnicodeDecodeError):
-                # the cached copy is broken: drop it and read the file again with no If-None-Match
-                self._log.warning("cached %s is not JSON; reading it again", name)
-                self._cache.drop_pointer(name)
-                return self._get_json_conditional(name)
+            return cached_doc, url
         self._log.debug("pointer %s: 200", name)
         try:
             doc = json.loads(r.body.decode("utf-8"))

@@ -764,6 +764,26 @@ class ErrorClassificationTest(unittest.TestCase):
             srv.close()
 
 
+    def test_304_on_a_broken_cached_pointer_that_cannot_be_removed_does_not_recurse(self):
+        # R2-094: a 304 for a stored pointer that is not JSON, in a directory where it cannot be deleted, used to
+        # recurse (one GET each time) until a raw RecursionError
+        srv = _Server(script={"/OTC_latest-f1.json": (304, {}, b"")})
+        d = self.cache / "v1" / "pointer"
+        d.mkdir(parents=True)
+        (d / "OTC_latest-f1.json").write_bytes(b"<html>portal</html>")
+        (d / "OTC_latest-f1.json.etag").write_text('"e1"')
+        d.chmod(0o555)
+        try:
+            with self.assertRaises(otc.NetworkError) as cm:
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), on_network_error="raise")
+            self.assertEqual(cm.exception.status, 304)
+            self.assertLessEqual(len(srv.requests), 2)
+            self.assertTrue(all("If-None-Match" not in h for _, h in srv.requests))
+        finally:
+            d.chmod(0o755)
+            srv.close()
+
+
 class LifecycleTest(unittest.TestCase):
     """close(), swapped-out releases and the automatic update (spec §4.2, §4.3, §5.6, CR D21; review PK13)."""
 
