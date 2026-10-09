@@ -36,7 +36,10 @@ class OpenTideConstants
             raise URI::InvalidURIError, "not absolute" unless %w[http https].include?(uri.scheme) && uri.host && !uri.host.empty?
             uri
         rescue URI::Error, ArgumentError => e
-            raise InvalidArgumentError, "#{name} must be an absolute http or https URL, not #{value.inspect} (#{e.message})"
+            # no user or password in the message (CR2 DR21), also where the URI error quotes the value
+            shown = Redact.url(value)
+            raise InvalidArgumentError, "#{name} must be an absolute http or https URL, not #{shown.inspect} " \
+                                        "(#{value.is_a?(String) ? e.message.gsub(value, shown) : e.message})"
         end
 
         def initialize(timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, logger: nil, sleeper: nil)
