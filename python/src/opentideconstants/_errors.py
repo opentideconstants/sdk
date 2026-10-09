@@ -38,7 +38,8 @@ class NetworkError(OpenTideConstantsError):
     code = "network"
 
     def __init__(self, message: str = "", *, url: str | None = None, status: int | None = None):
-        super().__init__(message, url=url, status=status)
+        # the url field is printed by callers too: it never carries the user and password (CR2 DR21b)
+        super().__init__(message, url=redact_url(url) if isinstance(url, str) else url, status=status)
 
 
 class ReleaseNotFoundError(OpenTideConstantsError):

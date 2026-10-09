@@ -517,14 +517,17 @@ static void logf_(const fctx *c, int level, const char *fmt, ...)
 
 static otc_status fail(fctx *c, otc_status st, const char *file, const char *fmt, ...)
 {
-    char raw[512], msg[512];
+    char raw[512], msg[512], rfile[sizeof ((otc_error *)0)->file];
     va_list ap;
     int len;
     va_start(ap, fmt);
     len = vsnprintf(raw, sizeof raw, fmt, ap);
     va_end(ap);
     redact_userinfo(msg, sizeof msg, raw, len < 0 || (size_t)len >= sizeof raw);  /* CR2 DR21 */
-    otc__err_set(c->err, st, file, "%s", msg);
+    /* err->file is the url of a network error, which callers print too: redacted as well (CR2 DR21b). The source
+     * is whole (truncated 0); a userinfo is replaced before it is copied, so a copy cut short never holds one */
+    if (file) redact_userinfo(rfile, sizeof rfile, file, 0);
+    otc__err_set(c->err, st, file ? rfile : NULL, "%s", msg);
     return st;
 }
 

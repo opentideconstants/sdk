@@ -2379,7 +2379,7 @@
   },
   {
    "id": "net/proxy-unreachable-credentials-redacted",
-   "title": "an http proxy that refuses the connection: its user and password are not in the message (DR21)",
+   "title": "an http proxy that refuses the connection: its user and password are not in the message, nor in the error's url field (DR21, DR21b)",
    "spec": "5.7",
    "requires": [
     "fs"
@@ -2398,6 +2398,11 @@
       "error": "network",
       "error_message": {
        "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      },
+      "error_fields": {
+       "url": {
+        "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+       }
       }
      },
      "expect_if_missing": {
@@ -2410,7 +2415,7 @@
   },
   {
    "id": "net/base-url-credentials-redacted",
-   "title": "a base_url with a user and password that fails: they are not in the message (DR21)",
+   "title": "a base_url with a user and password that fails: they are not in the message, nor in the error's url field, which has ***@ in their place (DR21, DR21b)",
    "spec": "4.2, 5.7",
    "requires": [
     "fs"
@@ -2428,6 +2433,18 @@
       "error": "network",
       "error_message": {
        "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      },
+      "error_fields": {
+       "url": {
+        "$all": [
+         {
+          "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+         },
+         {
+          "$contains": "://***@127.0.0.1:1/good/"
+         }
+        ]
+       }
       }
      },
      "expect_if_missing": {

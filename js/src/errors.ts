@@ -64,7 +64,8 @@ export class NetworkError extends OpenTideConstantsError {
 
     constructor(message: string, detail: { url?: string | null; status?: number | null } & CauseOption = {}) {
         super("network", message, detail);
-        this.url = detail.url ?? null;
+        // callers print the url too: it never carries the user and password (CR2 DR21b)
+        this.url = typeof detail.url === "string" ? redactUrl(detail.url) : null;
         this.status = detail.status ?? null;
     }
 }

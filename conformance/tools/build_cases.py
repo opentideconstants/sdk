@@ -1238,12 +1238,15 @@ def group_network():
                                                 "http_proxy": f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1"}),
                      open_latest({"error": "network", "error_message": no_creds}, base_url=GA, on_network_error="raise")],
                     requires=["fs"], timeout_s=120))
-    out.append(case("net/proxy-unreachable-credentials-redacted", "an http proxy that refuses the connection: its user and password are not in the message (DR21)", "5.7",
-                    [open_latest({"error": "network", "error_message": no_creds},
+    out.append(case("net/proxy-unreachable-credentials-redacted", "an http proxy that refuses the connection: its user and password are not in the message, nor in the error's url field (DR21, DR21b)", "5.7",
+                    [open_latest({"error": "network", "error_message": no_creds, "error_fields": {"url": no_creds}},
                                  proxy=f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1", on_network_error="raise")],
                     requires=["fs"], timeout_s=120))
-    out.append(case("net/base-url-credentials-redacted", "a base_url with a user and password that fails: they are not in the message (DR21)", "4.2, 5.7",
-                    [open_latest({"error": "network", "error_message": no_creds},
+    # CR2 DR21b (orchestrator decision 2026-10-09): the structured url field of the network error (C: otc_error.file)
+    # is redacted too, since callers print it: "***@" stands where the user and password were
+    redacted_url = {"$all": [no_creds, {"$contains": "://***@127.0.0.1:1/good/"}]}
+    out.append(case("net/base-url-credentials-redacted", "a base_url with a user and password that fails: they are not in the message, nor in the error's url field, which has ***@ in their place (DR21, DR21b)", "4.2, 5.7",
+                    [open_latest({"error": "network", "error_message": no_creds, "error_fields": {"url": redacted_url}},
                                  base_url=f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1/good/", on_network_error="raise")],
                     requires=["fs"], timeout_s=120))
     # releases / latest / check_for_update

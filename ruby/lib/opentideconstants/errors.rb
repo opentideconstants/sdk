@@ -45,7 +45,8 @@ class OpenTideConstants
 
         def initialize(message = "network error", url: nil, status: nil)
             super(message)
-            @url = url
+            # Callers print the url too: it never carries the user and password (CR2 DR21b).
+            @url = url.is_a?(String) ? Redact.url(url) : url
             @status = status
         end
     end
