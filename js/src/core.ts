@@ -424,12 +424,16 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
     return { bytes: res.body, rows };
 }
 
-/** Download one release file and check its size and SHA-256 (spec 5.2 step 4). */
+/** Download one release file, which the release's .sha256 lists, and check its size and SHA-256 (spec 5.2 step 4). */
 export async function fetchChecked(ctx: Ctx, name: string, rows: Map<string, string>, entry: PointerEntry | null): Promise<Uint8Array> {
     const f = entry?.files.find((x) => x.name === name);
     const url = f?.url ?? new URL(name, ctx.baseUrl).href;
     const res = await httpGet(ctx, url);
-    if (res.status === 404) throw new ReleaseNotFoundError(`${name} not found at ${url}`);
+    if (res.status === 404) {
+        // the release exists (its .sha256 lists the file): a server inconsistency, network with status 404 (CR D32)
+        const d = /^OTC_([0-9]{8}(?:\.[0-9]+)?)\./.exec(name)?.[1] ?? "{D}";
+        throw new NetworkError(`${url}: 404; file listed in OTC_${d}.sha256 is missing on the server`, { url, status: 404 });
+    }
     if (res.status !== 200) throw new NetworkError(`HTTP ${res.status}: ${url}`, { url, status: res.status });
     checkBytes(name, await ctx.platform.sha256(res.body), res.body.length, rows.get(name) ?? null, f?.size ?? null);
     return res.body;
