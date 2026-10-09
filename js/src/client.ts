@@ -3,8 +3,8 @@ import {
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
-    loadCached, log, newestCached, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
-    checkBytes, type Ctx, type PointerEntry, type SyncDir, type Verified,
+    loadCached, log, newestCached, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
+    checkBytes, type Ctx, type PointerEntry, type SyncDir,
 } from "./core.js";
 import {
     CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
@@ -42,6 +42,16 @@ function optSeconds(v: unknown, name: string): number | null {
     if (v === undefined || v === null) return null;
     if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) throw new InvalidArgumentError(`${name} must be a number of seconds greater than 0; got ${JSON.stringify(v)}`);
     return v;
+}
+
+/** True for an absolute http or https URL with a host. */
+function isHttpUrl(v: string): boolean {
+    try {
+        const u = new URL(v);
+        return (u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "";
+    } catch {
+        return false;
+    }
 }
 
 function optStr(v: unknown, name: string): string | null {
@@ -134,12 +144,18 @@ export class OpenTideConstants {
         const offline = optBool(options.offline, "offline") ?? platform.env("OPENTIDECONSTANTS_OFFLINE") === "1";
         let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
         if (!baseUrl.endsWith("/")) baseUrl += "/";
+        // network settings are checked here, before any network access (spec 4.2, CR D19)
+        if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
+        const proxy = optStr(options.proxy, "proxy");
+        if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+        const caFile = optStr(options.caFile, "caFile");
+        if (caFile !== null && node) node.checkReadable(caFile);
         const cacheDir = optStr(options.cacheDir, "cacheDir");
         // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
         const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
         const ctx: Ctx = {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
-            proxy: optStr(options.proxy, "proxy"), caFile: optStr(options.caFile, "caFile"),
+            proxy, caFile,
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
             onNetworkError, logger: options.logger ?? null, mode,
         };
@@ -170,7 +186,15 @@ export class OpenTideConstants {
                 from = await ensureRelease(ctx, entry.datestamp, entry);
                 d = entry.datestamp;
             } catch (e) {
-                const c = e instanceof NetworkError && onNetworkError === "use_cache" ? await newestCached(ctx) : null;
+                let c: string | null = null;
+                if (e instanceof NetworkError && onNetworkError === "use_cache") {
+                    try {
+                        c = await newestCached(ctx);
+                    } catch (fallback) {
+                        // the caller gets the network error; the failed fallback is logged (PK10 T35)
+                        log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                    }
+                }
                 if (!c) throw e;
                 log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using cached release ${c}`);
                 d = c;
@@ -279,7 +303,8 @@ export class OpenTideConstants {
         try {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
             if (!vb) return;
-            const v = JSON.parse(dec.decode(vb)) as Verified;
+            const v = parseVerified(vb, res.datestamp);
+            if (!v) return;
             const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m));
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
@@ -325,7 +350,14 @@ export class OpenTideConstants {
             idx = await getIndex(ctx);
         } catch (e) {
             // a network error with use_cache gives the cached index (spec 5.2 step 5); lastError is not touched
-            const cached = e instanceof NetworkError && ctx.onNetworkError === "use_cache" ? await cachedIndex(ctx) : null;
+            let cached: PointerEntry[] | null = null;
+            if (e instanceof NetworkError && ctx.onNetworkError === "use_cache") {
+                try {
+                    cached = await cachedIndex(ctx);
+                } catch (fallback) {
+                    log(ctx, "warn", `cannot read the cached release index: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                }
+            }
             if (!cached) throw e;
             log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
             return Object.freeze(cached.map(toInfo));

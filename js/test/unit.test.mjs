@@ -253,3 +253,47 @@ test("T22: the station_removed message gives the removed_reason as the file give
     const r = releaseFromJson(enc(doc), []);
     assert.throws(() => r.requireStation("X"), (e) => isCode("station_removed")(e) && /renumbered/.test(e.message));
 });
+
+test("T9/D19: a malformed proxy or baseUrl is invalid_argument, a missing caFile is io, before any network access", async () => {
+    const o = { cacheDir: tmpdir(), baseUrl: "http://127.0.0.1:9/" };
+    await assert.rejects(otc.OpenTideConstants.open({ ...o, proxy: "not a url" }), isCode("invalid_argument"));
+    await assert.rejects(otc.OpenTideConstants.open({ ...o, proxy: "ftp://proxy:21" }), isCode("invalid_argument"));
+    await assert.rejects(otc.OpenTideConstants.open({ ...o, baseUrl: "data.example/" }), isCode("invalid_argument"));
+    await assert.rejects(otc.OpenTideConstants.open({ ...o, caFile: path.join(tmpdir(), "none.pem") }), isCode("io"));
+});
+
+test("T81: .verified is checked key by key, not cast", async () => {
+    const { parseVerified } = await import("../dist/core.js");
+    const b = (v) => new TextEncoder().encode(JSON.stringify(v));
+    assert.equal(parseVerified(b({ files: { a: 5 } }), "20991231"), null);
+    const v = parseVerified(b({ files: { a: { sha256: 7, size: "x", url: 3 } }, datestamp: 5 }), "20991231");
+    assert.deepEqual(v.files.a, { sha256: null, size: null, url: null });
+    assert.equal(v.datestamp, "20991231");
+    assert.throws(() => parseVerified(b({ files: {}, format_version: "1" }), "20991231"), isCode("invalid_release"));
+});
+
+test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
+    const { listDir } = await import("../dist/node.js");
+    const d = tmpdir();
+    fs.chmodSync(d, 0o000);
+    try {
+        assert.throws(() => listDir(d), isCode("cache"));
+    } finally {
+        fs.chmodSync(d, 0o755);
+    }
+    assert.deepEqual(listDir(path.join(d, "missing")), []);
+});
+
+test("T30/T31: no Cache Storage and no DecompressionStream are unsupported, not raw errors or a corrupt file", async () => {
+    const { browserPlatform } = await import("../dist/browser.js");
+    const p = browserPlatform();
+    const store = await p.cache(null);
+    await assert.rejects(store.read("pointer/OTC_index.json"), isCode("unsupported"));
+    const saved = globalThis.DecompressionStream;
+    delete globalThis.DecompressionStream;
+    try {
+        await assert.rejects(p.gunzip(new Uint8Array([31, 139])), isCode("unsupported"));
+    } finally {
+        globalThis.DecompressionStream = saved;
+    }
+});

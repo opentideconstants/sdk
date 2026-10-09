@@ -11,7 +11,7 @@ import * as zlib from "node:zlib";
 import type { Duplex } from "node:stream";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { CACHE_LAYOUT_VERSION, SDK_ID } from "./constants.js";
-import { CacheError, FileError, NetworkError } from "./errors.js";
+import { CacheError, FileError, InvalidArgumentError, NetworkError } from "./errors.js";
 import type { CacheStore, HttpOptions, HttpResponse, LockOptions, Platform, Unlock } from "./platform.js";
 
 export function sha256Sync(bytes: Uint8Array): string {
@@ -51,7 +51,9 @@ export function writeAtomicSync(file: string, bytes: Uint8Array): void {
     try {
         const fd = fs.openSync(tmp, "w", 0o644);
         try {
-            fs.writeSync(fd, bytes);
+            // writeSync may write less than asked (PK10 T11): loop until every byte is written
+            let done = 0;
+            while (done < bytes.length) done += fs.writeSync(fd, bytes, done, bytes.length - done);
             fs.fsyncSync(fd);
         } finally {
             fs.closeSync(fd);
@@ -72,11 +74,13 @@ export function readIfExists(file: string): Uint8Array | null {
     }
 }
 
+/** The size of a file, or null when it does not exist. Any other failure is io (PK10 T34). */
 export function statSize(file: string): number | null {
     try {
         return fs.statSync(file).size;
-    } catch {
-        return null;
+    } catch (e) {
+        if (isErrno(e, "ENOENT") || isErrno(e, "ENOTDIR")) return null;
+        throw new FileError(`cannot read ${file}`, { path: file, cause: e });
     }
 }
 
@@ -159,7 +163,12 @@ class NodeCache implements CacheStore {
     }
 
     async remove(rel: string): Promise<void> {
-        await fsp.rm(this.describe(rel), { force: true });
+        const p = this.describe(rel);
+        try {
+            await fsp.rm(p, { force: true });
+        } catch (e) {
+            throw new CacheError(`cannot remove ${p}`, { path: p, cause: e });
+        }
     }
 
     async removeDir(rel: string): Promise<void> {
@@ -172,10 +181,12 @@ class NodeCache implements CacheStore {
     }
 
     async list(rel: string): Promise<string[]> {
+        const p = this.describe(rel);
         try {
-            return await fsp.readdir(this.describe(rel));
-        } catch {
-            return [];
+            return await fsp.readdir(p);
+        } catch (e) {
+            if (isErrno(e, "ENOENT") || isErrno(e, "ENOTDIR")) return [];
+            throw new CacheError(`cannot read the cache directory ${p}`, { path: p, cause: e });
         }
     }
 
@@ -252,11 +263,32 @@ function noProxy(host: string): boolean {
     return false;
 }
 
+/**
+ * @internal An absolute http or https URL, or null when `v` is not one (CR D19). A proxy from the environment may
+ * leave out the scheme (`host:3128`, as curl reads it); `bareHost` allows that.
+ */
+export function httpUrl(v: string, bareHost = false): URL | null {
+    try {
+        const u = new URL(bareHost && !v.includes("://") ? `http://${v}` : v);
+        return (u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "" ? u : null;
+    } catch {
+        return null;
+    }
+}
+
 function proxyFor(target: URL, explicit: string | null): URL | null {
-    if (explicit) return new URL(explicit);
+    if (explicit) {
+        const u = httpUrl(explicit);
+        if (!u) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${explicit}`);
+        return u;
+    }
     if (noProxy(target.hostname)) return null;
-    const v = target.protocol === "https:" ? envAnyCase("HTTPS_PROXY") : envAnyCase("HTTP_PROXY");
-    return v ? new URL(v.includes("://") ? v : `http://${v}`) : null;
+    const name = target.protocol === "https:" ? "HTTPS_PROXY" : "HTTP_PROXY";
+    const v = envAnyCase(name);
+    if (!v) return null;
+    const u = httpUrl(v, true);
+    if (!u) throw new InvalidArgumentError(`the ${name} environment variable is not a proxy URL: ${v}`);
+    return u;
 }
 
 function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
@@ -265,7 +297,8 @@ function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     const connectMs = (o.timeout ?? 10) * 1000;
     const readMs = (o.timeout ?? 60) * 1000;
     const caPath = o.caFile ?? env("SSL_CERT_FILE");
-    const ca = caPath && target.protocol === "https:" ? fs.readFileSync(caPath) : undefined;
+    // a CA file that cannot be read is io, never a network error to retry (CR D19)
+    const ca = caPath && target.protocol === "https:" ? Buffer.from(readFileOrIo(caPath)) : undefined;
     const fail = (message: string, cause?: unknown) => new NetworkError(`${message}: ${url}`, { url, cause });
 
     return new Promise<HttpResponse>((resolve, reject) => {
@@ -373,11 +406,23 @@ export function mkdirp(dir: string): void {
     }
 }
 
+/** The names in a cache directory, or [] when it does not exist. Any other failure is cache (PK10 T34). */
 export function listDir(dir: string): string[] {
     try {
         return fs.readdirSync(dir);
-    } catch {
-        return [];
+    } catch (e) {
+        if (isErrno(e, "ENOENT") || isErrno(e, "ENOTDIR")) return [];
+        throw new CacheError(`cannot read the cache directory ${dir}`, { path: dir, cause: e });
+    }
+}
+
+/** Throws io unless the file can be read (a ca_file, spec 4.2, CR D19). */
+export function checkReadable(file: string): void {
+    try {
+        fs.accessSync(file, fs.constants.R_OK);
+        if (!fs.statSync(file).isFile()) throw new Error("not a file");
+    } catch (e) {
+        throw new FileError(`cannot read ${file}`, { path: file, cause: e });
     }
 }
 

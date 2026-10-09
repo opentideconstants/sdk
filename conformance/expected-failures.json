@@ -1084,8 +1084,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK10",
    "reason": "step 0 open: expected error {'$any_of': ['io', 'invalid_argument']}, got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"

@@ -1,7 +1,8 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
 import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
-    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, ReleaseNotFoundError, UnsupportedFormatError,
+    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, ReleaseNotFoundError,
+    UnsupportedFormatError,
 } from "./errors.js";
 import { isObject } from "./json.js";
 import {
@@ -290,16 +291,52 @@ export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
     return Number.isNaN(major) ? null : major;
 }
 
+/**
+ * The `.verified` record of release D, checked key by key (spec 5.4, CR D26; PK10 T81): a record that is not JSON or
+ * has no `files` object is the same as none (the release is verified again). A key with the wrong type is the same
+ * as an absent key, and an absent datestamp is D. A version string that is present but not MAJOR.MINOR is
+ * invalid_release (CR D9).
+ */
 export async function readVerified(store: CacheStore, d: string): Promise<Verified | null> {
     const b = await store.read(`${relDir(d)}/.verified`);
-    if (!b) return null;
+    return b ? parseVerified(b, d) : null;
+}
+
+/** The checked `.verified` record from its bytes (see readVerified). */
+export function parseVerified(b: Uint8Array, d: string): Verified | null {
+    let v: unknown;
     try {
-        const v: unknown = JSON.parse(dec.decode(b));
-        if (isObject(v) && isObject(v["files"])) return v as unknown as Verified;
+        v = JSON.parse(dec.decode(b));
     } catch {
-        /* a broken .verified is the same as none */
+        return null;
     }
-    return null;
+    if (!isObject(v) || !isObject(v["files"])) return null;
+    const files: Verified["files"] = {};
+    for (const [name, f] of Object.entries(v["files"])) {
+        if (!isObject(f)) return null;
+        const sha = f["sha256"];
+        const size = f["size"];
+        const url = f["url"];
+        files[name] = {
+            sha256: typeof sha === "string" && /^[0-9a-fA-F]{64}$/.test(sha) ? sha.toLowerCase() : null,
+            size: typeof size === "number" && Number.isInteger(size) && size >= 0 ? size : null,
+            url: typeof url === "string" ? url : null,
+        };
+    }
+    const s = (k: string): string | null | undefined => {
+        const x = v[k];
+        return typeof x === "string" ? x : x === null ? null : undefined;
+    };
+    checkVersion(v["format_version"], `${relDir(d)}/.verified: format_version`);
+    checkVersion(v["min_reader_version"], `${relDir(d)}/.verified: min_reader_version`);
+    const out: Verified = {
+        files, verified_at: s("verified_at") ?? "", by: s("by") ?? "", datestamp: d, format_version: s("format_version") ?? null,
+    };
+    const mrv = s("min_reader_version");
+    if (mrv !== undefined) out.min_reader_version = mrv;
+    const doi = s("zenodo_version_doi");
+    if (doi !== undefined) out.zenodo_version_doi = doi;
+    return out;
 }
 
 const names = (d: string) => ({
@@ -425,6 +462,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
             try {
                 json = await ctx.platform.gunzip(gz);
             } catch (e) {
+                if (e instanceof OpenTideConstantsError) throw e; // for example, no DecompressionStream (PK10 T31)
                 throw new ChecksumError(`${n.gz} does not decompress`, { file: n.gz, expected: rows.get(n.gz) ?? null, actual: null, cause: e });
             }
             const size = entry?.files.find((x) => x.name === n.json)?.size ?? null;
@@ -509,7 +547,11 @@ export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEnt
         }
         const now = await readVerified(store, d);
         if (!now || (now.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
-        await store.write(`${relDir(d)}/.verified`, enc.encode(JSON.stringify({ ...now, zenodo_version_doi: entry.zenodo_version_doi })));
+        // change only this key; keys this SDK does not know (another SDK wrote them) stay as they are
+        const raw = await store.read(`${relDir(d)}/.verified`);
+        const doc: unknown = raw ? JSON.parse(dec.decode(raw)) : null;
+        if (!isObject(doc)) return;
+        await store.write(`${relDir(d)}/.verified`, enc.encode(JSON.stringify({ ...doc, zenodo_version_doi: entry.zenodo_version_doi })));
     } catch (e) {
         log(ctx, "warn", `cannot update the .verified of ${d}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
