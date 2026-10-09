@@ -665,11 +665,21 @@ otc_status otc_set_constituent_at(const otc_set *s, size_t i, const otc_constitu
 }
 otc_status otc_set_constituent(const otc_set *s, const char *name, const otc_constituent_t **out)
 {
+    const cJSON *cons = s ? otc__jget(s->json, "constituents") : NULL, *x;
     size_t i;
     if (!s || !out || !name) return OTC_E_INVALID_ARGUMENT;
     *out = NULL;
-    for (i = 0; i < s->n_cons; i++)
-        if (!strcmp(s->cons[i].name, name)) { *out = &s->cons[i]; return OTC_OK; }
+    /* the name in full, from the line: a constituent with no name is not "" (R2-073), and a name
+     * with a NUL inside is not the part before it (CR2 DR33) */
+    i = 0;
+    if (!cJSON_IsArray(cons)) cons = NULL;
+    cJSON_ArrayForEach(x, cons) {   /* s->cons[i] is the i-th item */
+        if (i < s->n_cons && otc__jstr_is(otc__jstr_item(x, "name"), name)) {
+            *out = &s->cons[i];
+            return OTC_OK;
+        }
+        i++;
+    }
     return OTC_E_NOT_FOUND;
 }
 otc_status otc_constituent_raw_json(const otc_set *s, size_t i, char *buf, size_t len, size_t *needed)

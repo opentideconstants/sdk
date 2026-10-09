@@ -7,7 +7,8 @@
  *  - two set_ids that differ only after a NUL are two sets (R2-071);
  *  - a name under an escaped "name" key keeps its tail (R2-072);
  *  - the stream index keeps the whole strings, and a fresh index with a NUL
- *    is used as it is, not rebuilt (R2-067, R2-069). */
+ *    is used as it is, not rebuilt (R2-067, R2-069);
+ *  - a constituent with no name is not the constituent "" (R2-073). */
 #include "otc_test.h"
 #include "otc_internal.h"
 
@@ -184,6 +185,68 @@ int main(void)
         otc_close(rel);
         free(jl2);
         free(dir2);
+    }
+
+    {   /* R2-073: a constituent with no name (its line is read through a fresh index, which does
+         * not check constituents) is not the constituent "" */
+        static const char NAMED[] = TEST_STATION("OTC-X-4", "Four") "\n";
+        char *dir3 = test_tmpdir(), *jl3, *ix3, h3[65], line[1024], *p;
+        otc_station_t *st = NULL;
+        const otc_set *set = NULL;
+        const otc_constituent_t *c = NULL;
+        cJSON *d3 = NULL, *e3;
+        test_write(dir3, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(dir3, "OTC_20990101.jsonl", NAMED);
+        jl3 = test_join(dir3, "OTC_20990101.jsonl");
+        ix3 = test_join(dir3, "index-v1.json");
+        rel = NULL;
+        otc__sha256_file(jl3, h3);
+        if (otc_open_file(jl3, NULL, &rel) == OTC_OK) d3 = otc__index_doc(rel, h3, "test");
+        otc_close(rel);
+        CHECK(d3 != NULL);
+        /* the same line without the constituent's name */
+        snprintf(line, sizeof line, "%s", NAMED);
+        p = strstr(line, "\"name\":\"M2\",");
+        CHECK(p != NULL);
+        if (p && d3) {
+            memmove(p, p + strlen("\"name\":\"M2\","), strlen(p + strlen("\"name\":\"M2\",")) + 1);
+            test_write(dir3, "OTC_20990101.jsonl", line);
+            otc__sha256_file(jl3, h3);
+            {
+                char *m3 = test_join(dir3, "OTC_20990101.meta.json"), hm[65], s3[512];
+                otc__sha256_file(m3, hm);
+                snprintf(s3, sizeof s3, "%s  OTC_20990101.jsonl\n%s  OTC_20990101.meta.json\n", h3, hm);
+                test_write(dir3, "OTC_20990101.sha256", s3);
+                free(m3);
+            }
+            e3 = cJSON_GetArrayItem(cJSON_GetObjectItem(d3, "stations"), 0);
+            cJSON_ReplaceItemInObject(e3, "length", cJSON_CreateNumber((double)(strlen(line) - 1)));
+            cJSON_ReplaceItemInObject(d3, "jsonl_size", cJSON_CreateNumber((double)strlen(line)));
+            cJSON_ReplaceItemInObject(d3, "jsonl_sha256", cJSON_CreateString(h3));
+            txt = cJSON_PrintUnformatted(d3);
+            f = fopen(ix3, "wb");
+            if (f && txt) fputs(txt, f);
+            if (f) fclose(f);
+            cJSON_free(txt);
+            rel = NULL;
+            CHECK_STATUS(otc_open_file(jl3, NULL, &rel), OTC_OK);
+            if (rel) {
+                CHECK(rel->index_used == 1);
+                CHECK_STATUS(otc_station(rel, "OTC-X-4", &st), OTC_OK);
+            }
+            if (st) CHECK_STATUS(otc_station_recommended_set(st, &set), OTC_OK);
+            if (set) {
+                CHECK(otc_set_constituent_count(set) == 1);
+                CHECK_STATUS(otc_set_constituent(set, "", &c), OTC_E_NOT_FOUND);
+                CHECK(c == NULL);
+            }
+            otc_station_free(st);
+            otc_close(rel);
+        }
+        cJSON_Delete(d3);
+        free(ix3);
+        free(jl3);
+        free(dir3);
     }
 
     free(ixp);
