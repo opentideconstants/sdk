@@ -315,6 +315,12 @@ otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out)
 {
     const cJSON *off;
     if (!st || !out || out->struct_size < sizeof *out) return OTC_E_INVALID_ARGUMENT;
+    /* every field is set, also on NOT_FOUND: no value from an earlier call stays */
+    out->reference_station_id = NULL;
+    out->time_offset_high_min = out->time_offset_low_min = NAN;
+    out->height_offset_high = out->height_offset_low = NAN;
+    out->height_adjusted_type = OTC_HEIGHT_ADJUSTED_TYPE_UNSET;
+    out->licence_id = NULL;
     off = otc__jget(st->root, "subordinate_offsets");
     if (!cJSON_IsObject(off)) return OTC_E_NOT_FOUND;
     out->reference_station_id = otc__jstr(off, "reference_station_id");
