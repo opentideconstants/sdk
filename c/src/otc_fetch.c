@@ -580,6 +580,12 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
         FILE *f = fs_kind(o->ca_file) == 2 ? fs_fopen(o->ca_file, "rb") : NULL;
         if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
         fclose(f);
+    } else if ((v = env_get("SSL_CERT_FILE")) != NULL && v[0]) {
+        /* without ca_file, http_get gives libcurl SSL_CERT_FILE: checked the same way, here
+         * (spec 4.2, 5.7, CR2 DR20) */
+        FILE *f = fs_kind(v) == 2 ? fs_fopen(v, "rb") : NULL;
+        if (!f) return fail(c, OTC_E_IO, v, "cannot read SSL_CERT_FILE %s", v);
+        fclose(f);
     }
     c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
     /* formats: OTC_FORMATS_DEFAULT is jsonl; 0 names no format (CR 4c) */
