@@ -14,14 +14,17 @@ int main(void)
     test_write(dir, "OTC_20990101.meta.json", TEST_META("20990101"));
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") "\n");
     path = test_join(dir, "OTC_20990101.jsonl");
-    stat(path, &want);
+    if (stat(path, &want) != 0) { perror(path); return 2; }
     CHECK_STATUS(otc_open_file(path, NULL, &rel), OTC_OK);
     for (fd = 3; fd < 256; fd++) {
         struct stat sb;
+        int fl;
         if (fstat(fd, &sb) != 0 || sb.st_ino != want.st_ino || sb.st_dev != want.st_dev) continue;
         found = 1;
-        CHECK(fcntl(fd, F_GETFD) & FD_CLOEXEC);
-        if (!(fcntl(fd, F_GETFD) & FD_CLOEXEC)) fprintf(stderr, "fd %d of %s is inherited by child processes\n", fd, path);
+        fl = fcntl(fd, F_GETFD);   /* -1 (all bits set) is a failure, not "close-on-exec" */
+        CHECK(fl != -1 && (fl & FD_CLOEXEC));
+        if (fl == -1) fprintf(stderr, "fcntl(%d, F_GETFD) failed\n", fd);
+        else if (!(fl & FD_CLOEXEC)) fprintf(stderr, "fd %d of %s is inherited by child processes\n", fd, path);
     }
     CHECK(found);
     otc_close(rel);
