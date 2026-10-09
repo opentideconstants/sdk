@@ -1078,8 +1078,8 @@
      "name": "content_sha256",
      "kind": "field",
      "type": "string",
-     "nullable": true,
-     "note": "passed through from the entry; null in an entry written before the 0.6 index schema"
+     "nullable": false,
+     "note": "passed through from the entry (otc-index-1.0 requires it); the SDKs do not use it"
     },
     {
      "name": "files",
@@ -1332,8 +1332,24 @@
     {
      "name": "removed_reason",
      "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "removed_reason",
+     "c": "otc_tombstone_removed_reason"
+    },
+    {
+     "name": "merged_into",
+     "kind": "field",
      "type": "string",
-     "nullable": false
+     "nullable": false,
+     "note": "the OTC station id that holds the removed station's records",
+     "c": "otc_tombstone_merged_into"
+    },
+    {
+     "name": "detail",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
     },
     {
      "name": "raw",
@@ -1373,7 +1389,7 @@
      "type": "enum",
      "nullable": false,
      "enum": "quantity",
-     "note": "schema 0.2 field; the station kind derives from it"
+     "note": "the station kind derives from it"
     },
     {
      "name": "source_record_id",
@@ -1765,7 +1781,7 @@
      "kind": "field",
      "type": "datestamp",
      "nullable": true,
-     "note": "the release whose constants a carried-over set keeps (qc_flags carried_over; spec 7.4)"
+     "note": "spec 4.6: the release whose constants a carried-over set keeps (qc_flags carried_over)"
     },
     {
      "name": "raw",
@@ -1889,16 +1905,18 @@
      "enum": "qc_flag"
     },
     {
-     "name": "verdict",
+     "name": "reason",
      "kind": "field",
      "type": "string",
-     "nullable": true
+     "nullable": false,
+     "note": "a required one-line string"
     },
     {
      "name": "values",
      "kind": "field",
-     "type": "object",
-     "nullable": true
+     "type": "map<string,number|null>",
+     "nullable": true,
+     "note": "maps a name to a number, or null; it holds only numbers"
     }
    ]
   },
@@ -2195,6 +2213,10 @@
   "station_status": [
    "active",
    "removed"
+  ],
+  "removed_reason": [
+   "merged",
+   "duplicate"
   ],
   "source_type": [
    "official",
