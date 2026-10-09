@@ -1,7 +1,8 @@
 /* Small helpers for the C library's own tests (c/tests). Each test is one
- * program that exits 0 when every CHECK holds. A test that needs the
- * conformance fixture server runs under c/tests/run_with_server.sh, which
- * sets OTC_TEST_SERVER (http://127.0.0.1:<port>), OTC_TEST_PROXY and
+ * program that exits 0 when every CHECK holds, and TEST_SKIP_RC (77, ctest's
+ * SKIP_RETURN_CODE) when it skips itself. A test that needs the conformance
+ * fixture server runs under c/tests/run_with_server.sh, which sets
+ * OTC_TEST_SERVER (http://127.0.0.1:<port>), OTC_TEST_PROXY and
  * OTC_TEST_REQUIRE_SERVER=1. */
 #ifndef OTC_TEST_H
 #define OTC_TEST_H
@@ -77,6 +78,18 @@ static void test_write(const char *dir, const char *name, const char *text)
     FILE *f = fopen(p, "wb");
     if (!f || fwrite(text, 1, strlen(text), f) != strlen(text) || fclose(f) != 0) { perror(p); exit(2); }
     free(p);
+}
+
+/* The exit status of a test that skips itself; c/CMakeLists.txt registers it as
+ * SKIP_RETURN_CODE, so ctest reports "Skipped", not "Passed". */
+#define TEST_SKIP_RC 77
+
+/* Prints why NAME is skipped and gives TEST_SKIP_RC: return test_skip(...). */
+static int test_skip(const char *name, const char *why)
+{
+    printf("%s: skipped (%s)\n", name, why);
+    fflush(stdout);
+    return TEST_SKIP_RC;
 }
 
 /* 1 when file permissions do not stop this process (root): the parts of a test

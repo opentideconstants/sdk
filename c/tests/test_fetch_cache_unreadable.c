@@ -24,10 +24,9 @@ int main(void)
     /* one that cannot be read is not empty */
     chmod(p, 0000);
     if (access(p, R_OK) == 0) {
-        printf("test_fetch_cache_unreadable: skipped (running as root)\n");
         chmod(p, 0755);
         free(cache);
-        return 0;
+        return test_skip("test_fetch_cache_unreadable", "file permissions do not stop this process");
     }
     n = 7;
     CHECK_STATUS(otc_fetch_cached_releases(&fo, ds, 4, &n), OTC_E_CACHE);
