@@ -406,7 +406,7 @@ static cJSON *enc_station(const otc_station_t *st, int *bad)
         char sys[256], id[1024];
         size_t need, n;
         cJSON *arr = cJSON_CreateArray();
-        if (otc_station_alias_system_at(st, i, sys, sizeof sys, &need) != OTC_OK) { *bad = 1; break; }
+        if (otc_station_alias_system_at(st, i, sys, sizeof sys, &need) != OTC_OK) { cJSON_Delete(arr); *bad = 1; break; }
         n = otc_station_alias_count(st, sys);
         for (j = 0; j < n; j++) {
             if (otc_station_alias_at(st, sys, j, id, sizeof id, &need) != OTC_OK) { *bad = 1; break; }
