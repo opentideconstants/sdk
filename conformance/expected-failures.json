@@ -616,22 +616,6 @@
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk07/bad-convention-without-id-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:KeyError' ('convention_id')"
-  },
-  {
-   "case": "rules/pk07/bad-convention-without-id-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:KeyError' ('convention_id')"
-  },
-  {
    "case": "rules/pk07/bad-created-not-string-json",
    "runners": [
     "ruby",
@@ -670,41 +654,8 @@
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk07/bad-lat-nan-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
    "case": "rules/pk07/bad-lat-string-json",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -713,7 +664,6 @@
   {
    "case": "rules/pk07/bad-lat-string-json-gz",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -722,7 +672,6 @@
   {
    "case": "rules/pk07/bad-lat-string-jsonl",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -731,7 +680,6 @@
   {
    "case": "rules/pk07/bad-lat-string-jsonl-stream",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -778,7 +726,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -788,7 +735,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -798,7 +744,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -810,44 +755,11 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
   },
   {
    "case": "rules/pk07/formats-empty",
@@ -861,7 +773,6 @@
   {
    "case": "rules/pk07/limit-zero@json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -871,7 +782,6 @@
   {
    "case": "rules/pk07/limit-zero@json.gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -881,7 +791,6 @@
   {
    "case": "rules/pk07/limit-zero@jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -893,7 +802,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -903,7 +811,6 @@
   {
    "case": "rules/pk07/limit-zero@server",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -914,7 +821,6 @@
    "case": "rules/pk07/timeout-zero",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK07",

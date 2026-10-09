@@ -4,6 +4,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -88,8 +89,9 @@ class OpenTideConstants:
             if not isinstance(v, bool):
                 raise InvalidArgumentError(f"{name} must be a boolean")
         for name, v in (("timeout", timeout), ("update_interval", update_interval)):
-            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0):
-                raise InvalidArgumentError(f"{name} must be a non-negative number")
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                                  or v <= 0):
+                raise InvalidArgumentError(f"{name} must be a positive finite number, not {v!r}")
         self._pinned = release if release != "latest" else None
         self._file = None if file is None else Path(file)
         self._mode = mode

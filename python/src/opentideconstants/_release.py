@@ -128,11 +128,24 @@ def _check_type(name, value, types, allow_none=True):
 def _number(name, v, lo=None, hi=None, allow_none=False):
     if v is None and allow_none:
         return None
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or math.isnan(v):
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
         raise InvalidArgumentError(f"{name} must be a number")
-    if (lo is not None and v < lo) or (hi is not None and v > hi):
+    try:
+        f = float(v)
+    except OverflowError as e:
+        raise InvalidArgumentError(f"{name} out of range: {v}") from e
+    if math.isnan(f) or (lo is not None and f < lo) or (hi is not None and f > hi):
         raise InvalidArgumentError(f"{name} out of range: {v}")
-    return float(v)
+    return f
+
+
+def _limit(limit):
+    """limit: None for no limit, or an integer of 1 or more (spec §4.4, CR D36)."""
+    if limit is None:
+        return None
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise InvalidArgumentError(f"limit must be an integer of 1 or more, or None, not {limit!r}")
+    return limit
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -162,6 +175,13 @@ def _n(d, k):
 def _entry(d, offset=None, length=None):
     """The stream index entry of one line (spec §6.2): every key, for active stations and tombstones.
     `kind` is the station's own kind here; _resolve_kinds finishes it."""
+    if not isinstance(d.get("station_id"), str):
+        raise InvalidReleaseError(f"station_id is not a string: {d.get('station_id')!r}")
+    if d.get("status") == "active":
+        for k, bound in (("lat", 90), ("lon", 180)):
+            v = d.get(k)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or abs(v) > bound:
+                raise InvalidReleaseError(f"station {d['station_id']}: {k} is not a number in range: {v!r}")
     off = d.get("subordinate_offsets")
     off = off if isinstance(off, dict) else {}
     rec_id = _s(d, "recommended_set_id")
@@ -218,7 +238,8 @@ def _usable_index(idx, name, sha256, size, conv, lic):
             return None
         end = e["offset"] + e["length"]
         if e["status"] == "active" and (not isinstance(e["lat"], (int, float)) or not isinstance(e["lon"], (int, float))
-                                        or not math.isfinite(e["lat"]) or not math.isfinite(e["lon"])):
+                                        or not math.isfinite(e["lat"]) or not math.isfinite(e["lon"])
+                                        or abs(e["lat"]) > 90 or abs(e["lon"]) > 180):
             return None
         for cs in e["sets"]:
             if not isinstance(cs, dict) or not all(k in cs and (cs[k] is None or isinstance(cs[k], str)) for k in _SET_KEYS) \
@@ -291,6 +312,8 @@ class Release:
         rel = meta.get("release")
         if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
             raise InvalidReleaseError("release.datestamp is missing")
+        if rel.get("source_versions") is not None and not isinstance(rel.get("source_versions"), dict):
+            raise InvalidReleaseError("release.source_versions is not an object")
         self._release = rel
         self._files = tuple(files)
         try:
@@ -535,17 +558,14 @@ class Release:
                      self._filtered(country, type, kind, source, source_type))
 
     def iter_stations(self, *, country=None, type=None, kind=None, source=None, source_type=None) -> Iterator[Station]:  # noqa: A002
-        """The same stations as stations(), one at a time."""
+        """The same stations as stations(), one at a time. The arguments are checked when it is called."""
         entries = self._filtered(country, type, kind, source, source_type)
-        for e in entries:
-            yield self._station_from_entry(e)
+        return (self._station_from_entry(e) for e in entries)
 
     def search(self, *, name, limit=None, match=None, country=None, type=None, kind=None, source=None,  # noqa: A002
                source_type=None) -> Tuple[Station, ...]:
         _check_type("name", name, (str,), allow_none=False)
-        _check_type("limit", limit, (int,))
-        if limit is not None and limit < 0:
-            raise InvalidArgumentError("limit must not be negative")
+        limit = _limit(limit)
         if match is not None and match != "exact":
             raise InvalidArgumentError(f"match must be 'exact', not {match!r}")
         q = fold(name)
@@ -601,9 +621,7 @@ class Release:
         lat = _number("lat", lat, -90, 90)
         lon = _number("lon", lon, -180, 180)
         radius_km = _number("radius_km", radius_km, 0)
-        _check_type("limit", limit, (int,))
-        if limit is not None and limit < 0:
-            raise InvalidArgumentError("limit must not be negative")
+        limit = _limit(limit)
         hits = self._distances(lat, lon, radius_km, dict(country=country, type=type, kind=kind, source=source,
                                                          source_type=source_type))
         if limit is not None:
@@ -682,6 +700,18 @@ def _check_meta(meta, what):
     check_format(meta.get("format_version"), rel.get("min_reader_version"), rel.get("datestamp"))
 
 
+def _refs(meta, what):
+    """convention_id -> Convention and licence_id -> Licence; a malformed entry is invalid_release."""
+    try:
+        convs = [Convention._parse(c) for c in meta.get("conventions") or ()]
+        lics = [Licence._parse(x) for x in meta.get("licences") or ()]
+    except (KeyError, TypeError, AttributeError) as e:
+        raise InvalidReleaseError(f"{what}: a convention or licence is malformed: {e!r}") from e
+    if not all(isinstance(c.convention_id, str) for c in convs) or not all(isinstance(x.licence_id, str) for x in lics):
+        raise InvalidReleaseError(f"{what}: a convention_id or licence_id is not a string")
+    return {c.convention_id: c for c in convs}, {x.licence_id: x for x in lics}
+
+
 def _validate_refs(d, conventions, licences):
     if d.get("status") == "active":
         build_station(d, conventions, licences, None)
@@ -694,8 +724,7 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
     if name.endswith(".jsonl"):
         meta = _json(_read_bytes(meta_path_for(path)), str(meta_path_for(path)))
         _check_meta(meta, str(meta_path_for(path)))
-        conv = {c.convention_id: c for c in (Convention._parse(c) for c in meta.get("conventions") or ())}
-        lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
+        conv, lic = _refs(meta, str(meta_path_for(path)))
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path, index_sha256)
             return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path)
@@ -724,9 +753,8 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
 
 
 def _eager(meta, docs, files) -> Release:
+    conv, lic = _refs(meta, "the release")
     try:
-        conv = {c.convention_id: c for c in (Convention._parse(c) for c in meta.get("conventions") or ())}
-        lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
         entries = [_entry(d) for d in docs]
     except (KeyError, TypeError, AttributeError) as e:
         raise InvalidReleaseError(f"bad station or reference data: {e!r}") from e

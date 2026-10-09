@@ -436,6 +436,72 @@ class RepeatedIdsTest(unittest.TestCase):
         self.assert_invalid(self.write(edit_meta=lambda m: m["licences"].append(dict(m["licences"][0]))))
 
 
+class MalformedInputTest(RepeatedIdsTest):
+    """Malformed data and bad arguments are SDK errors, raised when they happen (spec §4.8, §7.3; review PK07)."""
+
+    def test_constituent_without_a_name_fails_at_load(self):
+        self.assert_invalid(self.write(lambda d: d["constant_sets"][0]["constituents"][0].pop("name")))
+
+    def test_string_months_dropped_fails_at_load(self):
+        self.assert_invalid(self.write(
+            lambda d: d["constant_sets"][0].__setitem__("time_base", {"code": "verified", "months_dropped": "2097-02"})))
+
+    def test_bool_and_out_of_range_lat_fail_at_load(self):
+        self.assert_invalid(self.write(lambda d: d.__setitem__("lat", True)))
+        self.assert_invalid(self.write(lambda d: d.__setitem__("lat", 91.0)))
+        self.assert_invalid(self.write(lambda d: d.__setitem__("lon", -180.5)))
+
+    def test_rfc3339_times(self):
+        from opentideconstants._models import parse_time
+        import datetime as dt
+        want = dt.datetime(2099, 12, 31, 6, 0, 0, 120000, tzinfo=dt.timezone.utc)
+        for v in ("2099-12-31T06:00:00.12Z", "2099-12-31t06:00:00.12z", "2099-12-31T08:00:00.12+02:00",
+                  "2099-12-31T06:00:00.1200000Z", "2099-12-31T08:00:00.12+0200"):
+            self.assertEqual(parse_time(v), want, v)
+        with self.assertRaises(otc.InvalidReleaseError):
+            parse_time("31/12/2099")
+
+    def test_bad_provenance_build_time_does_not_fail_the_station(self):
+        def edit(d):
+            d["constant_sets"][0].setdefault("provenance", {})["build"] = {"built_at": "not a time"}
+        with otc.OpenTideConstants(file=self.write(edit)) as c:
+            st = c.stations()[0]
+            self.assertIsNone(st.constant_sets()[0].provenance.build.built_at)
+
+    def test_huge_int_argument_is_invalid_argument(self):
+        with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
+            with self.assertRaises(otc.InvalidArgumentError):
+                c.near(lat=10 ** 400, lon=0, radius_km=1)
+            with self.assertRaises(otc.InvalidArgumentError):
+                c.near(lat=0, lon=0, radius_km=10 ** 400)
+
+    def test_iter_stations_checks_its_arguments_when_called(self):
+        with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
+            with self.assertRaises(otc.InvalidArgumentError):
+                c.iter_stations(country=5)
+
+    def test_timeout_and_update_interval_must_be_positive_and_finite(self):
+        for kw in ({"timeout": 0}, {"timeout": float("nan")}, {"timeout": float("inf")},
+                   {"update_interval": float("nan")}, {"update_interval": 0}):
+            with self.assertRaises(otc.InvalidArgumentError, msg=kw):
+                otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), **kw)
+
+    def test_objects_are_hashable(self):
+        for mode in ("eager", "stream"):
+            with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode) as c:
+                r = c.release
+                objs = [r.stats, *r.conventions, *r.licences, c.tombstone("OTC-T-0005")]
+                for st in c.stations():
+                    objs.append(st)
+                    objs.extend(st.validation)
+                    for cs in st.constant_sets(include_no_constants=True):
+                        objs += [cs, cs.provenance, cs.provenance.build, cs.time_base, cs.datum, *cs.qc_flags,
+                                 *cs.constituents, *cs.validation]
+                for o in objs:
+                    hash(o)
+                self.assertIn(c.station("OTC-T-0001"), {c.station("OTC-T-0001")})
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 
