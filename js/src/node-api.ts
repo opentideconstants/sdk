@@ -42,6 +42,6 @@ export interface NodeMod {
     checkReadable(file: string): void;
     removeFileSync(file: string): void;
     removeDirSync(dir: string): void;
-    writeInto(dir: string, name: string, bytes: Uint8Array): string;
+    writeAllInto(dir: string, files: readonly (readonly [string, Uint8Array])[], warn: (message: string) => void): string[];
     runBlocking(url: URL, data: unknown, timeoutMs?: number): BlockingResult;
 }

@@ -403,3 +403,165 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
+
+// ---- PK-R2-03: download of latest on a network error (CR D22), all-or-nothing renames (CR2 DR17), and prune's
+// partial failure (CR2 DR18)
+
+import fsCjs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+
+/** A server for conformance/fixtures/good; `script` maps a file name to [status, headers, body]. */
+function fixtureServer(script = {}) {
+    const srv = http.createServer((req, res) => {
+        const name = decodeURIComponent(req.url.split("?")[0]).replace(/^\/+/, "");
+        if (script[name]) {
+            const [status, headers, body] = script[name];
+            res.writeHead(status, headers);
+            res.end(body);
+            return;
+        }
+        let body = null;
+        try { body = fs.readFileSync(path.join(GOOD, path.basename(name))); } catch { /* a 404 */ }
+        res.writeHead(body ? 200 : 404);
+        res.end(body ?? "");
+    });
+    return new Promise((resolve) => srv.listen(0, "127.0.0.1", () => resolve({
+        url: `http://127.0.0.1:${srv.address().port}/`,
+        close: () => new Promise((done) => { srv.closeAllConnections(); srv.close(done); }),
+    })));
+}
+
+// a 200 pointer that is not JSON is a network error at once (spec 5.2 step 5), with no retry
+const captivePortal = (script) => {
+    for (const n of ["OTC_latest-f1.json", "OTC_latest.json"]) script[n] = [200, { "Content-Type": "text/html" }, "<html>portal</html>"];
+};
+const D2 = "20991231.2";
+const BUNDLE = [`OTC_${D2}.jsonl`, `OTC_${D2}.meta.json`, `OTC_${D2}.sha256`];
+
+test("D22: download of latest with a network error and use_cache writes the newest cached release", async () => {
+    const script = {};
+    const srv = await fixtureServer(script);
+    const c = await otc.OpenTideConstants.open({ baseUrl: srv.url, cacheDir: tmpdir() });
+    try {
+        captivePortal(script);
+        const to = path.join(tmpdir(), "bundle");
+        const written = await c.download({ to });
+        assert.deepEqual(written.map((p) => path.basename(p)).sort(), BUNDLE);
+        for (const n of BUNDLE) assert.deepEqual(fs.readFileSync(path.join(to, n)), fs.readFileSync(path.join(GOOD, n)), n);
+    } finally {
+        c.close();
+        await srv.close();
+    }
+});
+
+test("D22: download of latest with a network error raises with onNetworkError raise, or with nothing cached", async () => {
+    const script = {};
+    const srv = await fixtureServer(script);
+    const raising = await otc.OpenTideConstants.open({ baseUrl: srv.url, cacheDir: tmpdir(), onNetworkError: "raise" });
+    const nothing = await otc.OpenTideConstants.open({ file: path.join(GOOD, `OTC_${D2}.jsonl`), baseUrl: srv.url, cacheDir: tmpdir() });
+    try {
+        captivePortal(script);
+        for (const c of [raising, nothing]) {
+            const to = path.join(tmpdir(), "bundle");
+            await assert.rejects(c.download({ to }), isCode("network"));
+            assert.ok(!fs.existsSync(to) || fs.readdirSync(to).length === 0);
+        }
+    } finally {
+        raising.close();
+        nothing.close();
+        await srv.close();
+    }
+});
+
+/** Runs fn with fs.renameSync failing when failing(source basename, destination basename) is true. */
+async function failingRenames(failing, fn) {
+    const real = fsCjs.renameSync;
+    fsCjs.renameSync = (a, b) => {
+        if (failing(path.basename(String(a)), path.basename(String(b)))) throw Object.assign(new Error(`injected ${b}`), { code: "EACCES" });
+        return real(a, b);
+    };
+    syncBuiltinESMExports();
+    try {
+        return await fn();
+    } finally {
+        fsCjs.renameSync = real;
+        syncBuiltinESMExports();
+    }
+}
+const newFileInto = (s, d, name) => d === name && s.startsWith(".tmp-") && !s.startsWith(".tmp-bak-");
+
+/** Downloads D2 into a new folder and changes its .jsonl and .meta.json; returns [client, server, folder, changed bytes]. */
+async function changedBundle() {
+    const srv = await fixtureServer();
+    const c = await otc.OpenTideConstants.open({ release: D2, baseUrl: srv.url, cacheDir: tmpdir() });
+    const to = tmpdir();
+    await c.download({ release: D2, to });
+    const before = {};
+    for (const n of BUNDLE.slice(0, 2)) {
+        fs.writeFileSync(path.join(to, n), `changed ${n}`);
+        before[n] = fs.readFileSync(path.join(to, n));
+    }
+    return [c, srv, to, before];
+}
+
+test("DR17: a rename that fails restores every original that a new file replaced", async () => {
+    const [c, srv, to, before] = await changedBundle();
+    try {
+        const meta = `OTC_${D2}.meta.json`;
+        let err = null;
+        await failingRenames((s, d) => newFileInto(s, d, meta), async () => {
+            await c.download({ release: D2, to, overwrite: true }).catch((e) => { err = e; });
+        });
+        assert.ok(isCode("io")(err), `expected an io error, got ${err}`);
+        assert.equal(err.path, path.join(to, meta));
+        for (const [n, bytes] of Object.entries(before)) assert.deepEqual(fs.readFileSync(path.join(to, n)), bytes, `${n} was not restored`);
+        assert.deepEqual(fs.readdirSync(to).sort(), BUNDLE);
+    } finally {
+        c.close();
+        await srv.close();
+    }
+});
+
+test("DR17: a restore that fails too is listed in the error", async () => {
+    const [c, srv, to, before] = await changedBundle();
+    try {
+        const jsonl = `OTC_${D2}.jsonl`, meta = `OTC_${D2}.meta.json`;
+        let err = null;
+        await failingRenames((s, d) => newFileInto(s, d, meta) || (d === jsonl && s.startsWith(".tmp-bak-")), async () => {
+            await c.download({ release: D2, to, overwrite: true }).catch((e) => { err = e; });
+        });
+        assert.ok(isCode("io")(err), `expected an io error, got ${err}`);
+        assert.ok(err.message.includes(path.join(to, jsonl)), err.message);
+        assert.deepEqual(fs.readFileSync(path.join(to, meta)), before[meta]);
+    } finally {
+        c.close();
+        await srv.close();
+    }
+});
+
+test("DR18: prune stops at the first failure and the cache error lists what it removed", async () => {
+    const root = tmpdir();
+    const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, `OTC_${D2}.jsonl`), cacheDir: root });
+    try {
+        for (const d of ["20991230", "20991231", D2]) {
+            const dir = path.join(root, "v1", "releases", d);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, ".verified"), "{\"files\":{}}");
+        }
+        const ro = path.join(root, "v1", "releases", "20991231");
+        fs.chmodSync(ro, 0o555);
+        let err = null;
+        try {
+            c.prune({ keep: 0 });
+        } catch (e) {
+            err = e;
+        } finally {
+            fs.chmodSync(ro, 0o755);
+        }
+        assert.ok(isCode("cache")(err), `expected a cache error, got ${err}`);
+        assert.deepEqual([...err.removed], [D2]);
+        assert.deepEqual([...c.cachedReleases()], ["20991231", "20991230"]);
+    } finally {
+        c.close();
+    }
+});

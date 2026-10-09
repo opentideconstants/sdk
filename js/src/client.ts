@@ -542,8 +542,24 @@ export class OpenTideConstants {
             if (!c) throw new OfflineError("offline and no release is cached");
             d = c;
         } else {
-            entry = await getPointer(ctx);
-            d = entry.datestamp;
+            try {
+                entry = await getPointer(ctx);
+                d = entry.datestamp;
+            } catch (e) {
+                // onNetworkError as when a client opens latest (spec 4.3.2, CR D22): use_cache writes the newest cached
+                // readable release; raise, or nothing usable cached, raises the network error
+                let c: string | undefined;
+                if (e instanceof NetworkError && ctx.onNetworkError === "use_cache") {
+                    try {
+                        c = (await cachedDatestamps(ctx))[0];
+                    } catch (fallback) {
+                        log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                    }
+                }
+                if (!c) throw e;
+                log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); writing cached release ${c}`);
+                d = c;
+            }
         }
         const n = releaseNames(d);
         const cdir = store.describe(relDir(d));
@@ -581,10 +597,10 @@ export class OpenTideConstants {
             if (ctx.offline) throw new OfflineError(`${name} is not cached and the client is offline`);
             data.set(name, await fetchChecked(ctx, name, rows, entry));
         }
-        const written: string[] = [];
-        for (const name of todo) if (name !== n.sha) written.push(node.writeInto(to, name, data.get(name) as Uint8Array));
-        if (todo.includes(n.sha)) written.push(node.writeInto(to, n.sha, shaBytes as Uint8Array));
-        return Object.freeze(written);
+        // check, then rename, all or nothing (spec 4.3.2, CR2 DR17); OTC_{D}.sha256 goes into place last
+        const files: [string, Uint8Array][] = todo.filter((name) => name !== n.sha).map((name) => [name, data.get(name) as Uint8Array]);
+        if (todo.includes(n.sha)) files.push([n.sha, shaBytes as Uint8Array]);
+        return Object.freeze(node.writeAllInto(to, files, (m) => log(ctx, "warn", m)));
     }
 
     /** Hash the release files again and compare them with OTC_{D}.sha256 (spec 4.3). */
@@ -622,8 +638,9 @@ export class OpenTideConstants {
 
     /**
      * Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. A release
-     * directory that cannot be removed fails with `cache`. Like cachedReleases, it works on the configured cache
-     * also on a client opened with `file` (CR D33).
+     * directory that cannot be removed stops prune with `cache`; the CacheError's `removed` lists the releases removed
+     * before it (CR2 DR18). Like cachedReleases, it works on the configured cache also on a client opened with `file`
+     * (CR D33).
      */
     prune(options: PruneOptions = {}): readonly string[] {
         this.#check();
@@ -638,14 +655,15 @@ export class OpenTideConstants {
         const all = this.cachedReleases();
         const loaded = this.#file ? null : this.#release.datestamp;
         const removed = all.slice(keep).filter((d) => d !== loaded);
-        // a directory that cannot be removed is a cache error; the result lists only what was removed (spec 4.3)
+        // a directory that cannot be removed is a cache error that stops prune; its removed lists the releases removed
+        // before it (spec 4.3, CR2 DR18)
         const done: string[] = [];
         for (const d of removed) {
             const p = store.describe(relDir(d));
             try {
                 node.removeDirSync(p);
             } catch (e) {
-                throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, cause: e });
+                throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, removed: done, cause: e });
             }
             done.push(d);
         }

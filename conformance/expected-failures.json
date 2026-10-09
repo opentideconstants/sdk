@@ -2,22 +2,6 @@
  "description": "Cases that are expected to fail for a runner today: the RED baseline of the cross-SDK behaviour rules that the SDK lanes (review round 1, packages PK01-PK15) have yet to fix. The driver reports a listed case that fails as XFAIL (the run still passes) and a listed case that passes as XPASS (the run fails, so the entry must be removed). A lane that fixes a case removes its entry. See conformance/README.md \"Expected failures\".",
  "entries": [
   {
-   "case": "download/latest-network-error-use-cache",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-03 typescript",
-   "reason": "download() of latest raises the network error instead of writing the newest cached release (CR D22)"
-  },
-  {
-   "case": "cache/prune-partial-failure",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-03 typescript",
-   "reason": "a prune that fails leaves CacheError.removed empty: the releases removed before the failure are only in the message (CR2 DR18)"
-  },
-  {
    "case": "download/rename-failure-restores",
    "runners": [
     "c-fetch"
