@@ -117,15 +117,17 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
 {
     char *buf = (char *)malloc(length + 1);
     cJSON *v;
+    otc_status st;
     *out = NULL;
-    if (!buf) return OTC_E_NOMEM;
+    if (!buf) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (otc__file_pread(rel->file, buf, length, offset) != 0) {
         free(buf);
         return otc__fail(rel, OTC_E_IO, "cannot read %s at offset %lu", rel->path, (unsigned long)offset);
     }
     buf[length] = '\0';
-    v = otc__json_parse(buf, length);
+    st = otc__json_parse_st(buf, length, &v);
     free(buf);
+    if (st == OTC_E_NOMEM) return otc__fail(rel, st, "out of memory");
     if (!v) return otc__fail(rel, OTC_E_INVALID_RELEASE, "a line of %s is not JSON (it changed after open?)", rel->path);
     *out = v;
     return OTC_OK;
@@ -444,8 +446,9 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
 
 static otc_status index_line(builder *b, const char *line, size_t len, uint64_t offset)
 {
-    cJSON *root = otc__json_parse(line, len);
-    otc_status st;
+    cJSON *root;
+    otc_status st = otc__json_parse_st(line, len, &root);
+    if (st == OTC_E_NOMEM) return st;
     if (!root) return bad_line(b, "not JSON");
     if (!cJSON_IsObject(root)) {
         cJSON_Delete(root);
@@ -572,13 +575,16 @@ static int entry_ok(const cJSON *e, int64_t size)
     return 1;
 }
 
-static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as)
+static void put(cJSON *o, const char *key, cJSON *item, int *ok);
+
+static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as, int *ok)
 {
     const cJSON *v = otc__jget(from, key);
-    if (v && !cJSON_IsNull(v)) cJSON_AddItemToObject(to, as, cJSON_Duplicate(v, 1));
+    if (v && !cJSON_IsNull(v)) put(to, as, cJSON_Duplicate(v, 1), ok);
 }
 
-/* The station document the index pass needs, from an index entry. */
+/* The station document the index pass needs, from an index entry; NULL when
+ * memory runs out (a partial document, with a field left out, is never given). */
 static cJSON *line_from_entry(const cJSON *e)
 {
     static const char *const keys[] = {"station_id", "status", "name", "country", "type", "lat", "lon",
@@ -586,27 +592,32 @@ static cJSON *line_from_entry(const cJSON *e)
     cJSON *o = cJSON_CreateObject(), *sets = cJSON_CreateArray();
     const cJSON *cs;
     size_t i;
+    int ok = 1;
     if (!o || !sets) { cJSON_Delete(o); cJSON_Delete(sets); return NULL; }
-    for (i = 0; keys[i]; i++) dup_if_set(o, e, keys[i], keys[i]);
+    for (i = 0; keys[i]; i++) dup_if_set(o, e, keys[i], keys[i], &ok);
     cJSON_ArrayForEach(cs, otc__jget(e, "sets")) {
         cJSON *s = cJSON_CreateObject(), *cons = cJSON_CreateArray();
         const cJSON *n;
         size_t k;
-        for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k]);
+        for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k], &ok);
         cJSON_ArrayForEach(n, otc__jget(cs, "constituents")) {
             cJSON *c = cJSON_CreateObject();
-            cJSON_AddStringToObject(c, "name", n->valuestring);
-            cJSON_AddItemToArray(cons, c);
+            if (cJSON_IsString(n)) put(c, "name", cJSON_CreateString(n->valuestring), &ok);
+            put(cons, NULL, c, &ok);
         }
-        cJSON_AddItemToObject(s, "constituents", cons);
-        cJSON_AddItemToArray(sets, s);
+        put(s, "constituents", cons, &ok);
+        put(sets, NULL, s, &ok);
     }
-    cJSON_AddItemToObject(o, "constant_sets", sets);
+    put(o, "constant_sets", sets, &ok);
     if (otc__jstr(e, "reference_station_id") || otc__jstr(e, "offsets_licence_id")) {
         cJSON *off = cJSON_CreateObject();
-        dup_if_set(off, e, "reference_station_id", "reference_station_id");
-        dup_if_set(off, e, "offsets_licence_id", "licence_id");
-        cJSON_AddItemToObject(o, "subordinate_offsets", off);
+        dup_if_set(off, e, "reference_station_id", "reference_station_id", &ok);
+        dup_if_set(off, e, "offsets_licence_id", "licence_id", &ok);
+        put(o, "subordinate_offsets", off, &ok);
+    }
+    if (!ok) {
+        cJSON_Delete(o);
+        return NULL;
     }
     return o;
 }
@@ -629,7 +640,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
     /* a name with a NUL does not survive cJSON: such an index is read from the .jsonl instead */
     if (otc__json_has_nul(text, len)) goto done;
-    doc = otc__json_parse(text, len);
+    if (otc__json_parse_st(text, len, &doc) == OTC_E_NOMEM) { st = OTC_E_NOMEM; goto done; }
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
     if (otc__strcmp_null(otc__jstr(doc, "datestamp"), ds) || otc__strcmp_null(otc__jstr(doc, "jsonl"), jsonl_name)
@@ -689,11 +700,12 @@ static void put(cJSON *o, const char *key, cJSON *item, int *ok)
 static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint64_t offset)
 {
     ix_ctx *x = (ix_ctx *)ctx;
-    cJSON *d = otc__json_parse(text, len), *o, *sets, *al;
+    cJSON *d, *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
     const char *rec, *name, *kind = NULL;
     int ok = 1;
-    if (!d) return OTC_E_INVALID_RELEASE;
+    otc_status pst = otc__json_parse_st(text, len, &d);
+    if (pst != OTC_OK) return pst;
     o = cJSON_CreateObject();
     sets = cJSON_CreateArray();
     al = cJSON_CreateObject();
@@ -853,7 +865,10 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
     const cJSON *convs, *lics, *c;
     long major;
     size_t i;
-    r->meta = otc__json_parse(text, len);
+    if (otc__json_parse_st(text, len, &r->meta) == OTC_E_NOMEM) {
+        otc__err_set(err, OTC_E_NOMEM, meta_path, "out of memory");
+        return OTC_E_NOMEM;
+    }
     if (!r->meta || !cJSON_IsObject(r->meta)) {
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s is not a JSON object", meta_path);
         return OTC_E_INVALID_RELEASE;
@@ -954,9 +969,10 @@ static otc_status build_files(otc_release *r, const char *dir, char **names, cha
     for (i = 0; i < n; i++) {
         const char *name = n_rows ? names[i] : (i == 0 ? jsonl_name : meta_name);
         char *full = otc__join(dir, name);
+        if (!full) return OTC_E_NOMEM;   /* never "size unknown": the size is there, the path is not */
         r->files[i].name = otc__strdup(name);
         r->files[i].sha256 = n_rows ? otc__strdup(digests[i]) : NULL;
-        r->files[i].size = full ? otc__path_size(full) : -1;
+        r->files[i].size = otc__path_size(full);
         free(full);
         if (!r->files[i].name || (n_rows && !r->files[i].sha256)) return OTC_E_NOMEM;
     }
@@ -1042,8 +1058,9 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         if ((st = check_digest(meta_path, path_base(meta_path), hex, names, digests, n_rows, err)) != OTC_OK) goto done;
         r->loaded_from = OTC_LOADED_FROM_FILE;
     } else if (opts && opts->require_checksum) {
-        otc__err_set(err, OTC_E_IO, sha_path, "require_checksum: %s does not exist", sha_path);
-        st = OTC_E_IO;
+        /* DR34: the same answer as otc_verify_file (D20): nothing to check against is a checksum failure */
+        otc__err_set(err, OTC_E_CHECKSUM, path, "require_checksum: no %s next to the file %s", path_base(sha_path), path);
+        st = OTC_E_CHECKSUM;
         goto done;
     } else {
         r->loaded_from = OTC_LOADED_FROM_FILE_UNVERIFIED;
@@ -1220,6 +1237,7 @@ size_t otc_release_file_count(const otc_release *rel) { return rel ? rel->n_file
 
 otc_status otc_release_file_at(const otc_release *rel, size_t i, const otc_file_info **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_files) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->files[i];
     return OTC_OK;
@@ -1268,7 +1286,7 @@ otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, s
     vdoi = rel->zenodo_version_doi;
     cap = 256 + 2 * strlen(d) + (doi ? strlen(doi) : 0) + (vdoi ? strlen(vdoi) : 0);
     text = (char *)malloc(cap);
-    if (!text) return OTC_E_NOMEM;
+    if (!text) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (doi)
         snprintf(text, cap, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
                  "https://doi.org/%s", d, d, doi);
@@ -1299,7 +1317,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     char *head, *text;
     size_t head_cap;
     otc_status st;
-    if (!rel || (n_ids && !ids)) return OTC_E_INVALID_ARGUMENT;
+    if (!rel || (n_ids && !ids)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_attribution: ids is NULL");
     if (n_ids == 0) ids = NULL;   /* spec 4.6 (CR D2): an empty list is every licence of the release */
     for (i = 0; ids && i < n_ids; i++)   /* an unknown or removed id is an error, never skipped (CR D2) */
         if (!ids[i] || !otc__find_entry(rel, ids[i]))
@@ -1311,7 +1329,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     seen_att = (const char **)calloc(cap, sizeof *seen_att);
     if (!lic || !seen_prov || !seen_att) {
         free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
-        return OTC_E_NOMEM;
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     }
     if (!ids) {
         for (i = 0; i < rel->n_lic; i++) lic[n_lic++] = rel->lic[i].id;
@@ -1331,7 +1349,10 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     doi = otc__jstr(rel->release_obj, "concept_doi");   /* never the version DOI (spec 4.6) */
     head_cap = 160 + 2 * strlen(d) + (doi ? strlen(doi) : 0);
     head = (char *)malloc(head_cap);
-    if (!head) { free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (!head) {
+        free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    }
     if (doi) snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0. Sources: ", d, doi);
     else snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0. Sources: ", d, d);
     /* one entry per licence id (sorted), then one per provider */
@@ -1353,7 +1374,10 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         total += (prov ? strlen(prov) + 2 : 0) + (att ? strlen(att) : 0) + 2;
     }
     text = (char *)malloc(total);
-    if (!text) { free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (!text) {
+        free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    }
     strcpy(text, head);
     free(head);
     for (i = 0; i < n_seen; i++) {
@@ -1383,10 +1407,10 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
     otc_stats *s;
     size_t i;
     otc_status st = OTC_OK;
-    if (!rel || !out) return OTC_E_INVALID_ARGUMENT;
-    *out = NULL;
+    if (out) *out = NULL;
+    if (!rel || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_release_stats: NULL argument");
     s = (otc_stats *)calloc(1, sizeof *s);
-    if (!s) return OTC_E_NOMEM;
+    if (!s) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     for (i = 0; i < rel->n_st && st == OTC_OK; i++) {
         const otc__entry *e = &rel->st[i];
         st = otc__kv_add(&s->type, e->type_s, 1);
@@ -1397,7 +1421,7 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
         st = otc__kv_add(&s->source, rel->source_counts.items[i].key, rel->source_counts.items[i].n);
     for (i = 0; i < rel->qc_counts.n && st == OTC_OK; i++)
         st = otc__kv_add(&s->qc_status, rel->qc_counts.items[i].key, rel->qc_counts.items[i].n);
-    if (st != OTC_OK) { otc_stats_free(s); return st; }
+    if (st != OTC_OK) { otc_stats_free(s); return otc__fail(rel, st, "out of memory"); }
     otc__kv_sort(&s->type);
     otc__kv_sort(&s->kind);
     otc__kv_sort(&s->country);
@@ -1422,6 +1446,8 @@ void otc_stats_free(otc_stats *s)
     size_t otc_stats_##F##_count(const otc_stats *s) { return s ? s->F.n : 0; }                \
     otc_status otc_stats_##F##_at(const otc_stats *s, size_t i, const char **key, int64_t *n)   \
     {                                                                                          \
+        if (key) *key = NULL;   /* a failed call leaves no value behind */                    \
+        if (n) *n = -1;                                                                        \
         if (!s || i >= s->F.n || !key || !n) return OTC_E_INVALID_ARGUMENT;                    \
         *key = s->F.items[i].key;                                                              \
         *n = s->F.items[i].n;                                                                  \
@@ -1439,6 +1465,7 @@ size_t otc_release_convention_count(const otc_release *rel) { return rel ? rel->
 
 otc_status otc_release_convention_at(const otc_release *rel, size_t i, const otc_convention **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_conv) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->conv[i];
     return OTC_OK;
@@ -1446,6 +1473,7 @@ otc_status otc_release_convention_at(const otc_release *rel, size_t i, const otc
 
 otc_status otc_release_convention(const otc_release *rel, const char *id, const otc_convention **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || !id) return OTC_E_INVALID_ARGUMENT;
     *out = otc__find_convention(rel, id);
     return *out ? OTC_OK : OTC_E_NOT_FOUND;
@@ -1492,6 +1520,7 @@ size_t otc_release_licence_count(const otc_release *rel) { return rel ? rel->n_l
 
 otc_status otc_release_licence_at(const otc_release *rel, size_t i, const otc_licence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_lic) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->lic[i];
     return OTC_OK;
@@ -1499,6 +1528,7 @@ otc_status otc_release_licence_at(const otc_release *rel, size_t i, const otc_li
 
 otc_status otc_release_licence(const otc_release *rel, const char *id, const otc_licence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || !id) return OTC_E_INVALID_ARGUMENT;
     *out = otc__find_licence(rel, id);
     return *out ? OTC_OK : OTC_E_NOT_FOUND;
@@ -1559,6 +1589,7 @@ otc_status otc_release_info_content_sha256(const otc_release_info *ri, char *buf
 size_t otc_release_info_file_count(const otc_release_info *ri) { return ri ? ri->n_files : 0; }
 otc_status otc_release_info_file_at(const otc_release_info *ri, size_t i, const otc_file_info **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!ri || !out || i >= ri->n_files) return OTC_E_INVALID_ARGUMENT;
     *out = &ri->files[i];
     return OTC_OK;

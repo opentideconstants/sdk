@@ -2,11 +2,27 @@
  *  - an entry whose line is another station's: the query is invalid_release
  *    (never the wrong station), and index-v1.json is deleted;
  *  - an entry with length 0, or offsets that do not increase: the index is
- *    stale, so the open rebuilds from the .jsonl and the query is right. */
+ *    stale, so the open rebuilds from the .jsonl and the query is right, on
+ *    this open and the next (otc_open_file only reads the index: the fetch
+ *    layer rewrites a stale one, test_fetch_index_stale).
+ * Each helper step that sets a case up must work (else exit 2), so a case
+ * cannot pass because its index was never written as meant. */
 #include "otc_test.h"
 #include "otc_internal.h"
 
 static char *g_dir, *g_jsonl;
+
+static void die(const char *what)
+{
+    fprintf(stderr, "test_index: %s\n", what);
+    exit(2);
+}
+
+static void sha256_or_die(const char *path, char hex[65])
+{
+    hex[0] = '\0';
+    if (otc__sha256_file(path, hex) != OTC_OK || strlen(hex) != 64) die("otc__sha256_file failed");
+}
 
 static void write_index(cJSON *(*tamper)(cJSON *doc))
 {
@@ -14,40 +30,62 @@ static void write_index(cJSON *(*tamper)(cJSON *doc))
     char hex[65], *txt, *ixp;
     cJSON *doc;
     FILE *f;
-    if (otc_open_file(g_jsonl, NULL, &rel) != OTC_OK) { fprintf(stderr, "open failed\n"); exit(2); }
-    otc__sha256_file(g_jsonl, hex);
+    if (otc_open_file(g_jsonl, NULL, &rel) != OTC_OK) die("open failed");
+    sha256_or_die(g_jsonl, hex);
     doc = otc__index_doc(rel, hex, "test");
     otc_close(rel);
+    if (!doc) die("otc__index_doc gave NULL");
     if (tamper) doc = tamper(doc);
     txt = cJSON_PrintUnformatted(doc);
+    if (!txt) die("cJSON_PrintUnformatted gave NULL");
     ixp = test_join(g_dir, "index-v1.json");
     f = fopen(ixp, "wb");
-    fputs(txt, f);
-    fclose(f);
+    if (!f) die("cannot create index-v1.json");
+    if (fputs(txt, f) < 0) die("cannot write index-v1.json");
+    if (fclose(f) != 0) die("cannot close index-v1.json");
     free(ixp);
     cJSON_free(txt);
     cJSON_Delete(doc);
 }
 
-static cJSON *entry(cJSON *doc, int i) { return cJSON_GetArrayItem(cJSON_GetObjectItem(doc, "stations"), i); }
+static cJSON *entry(cJSON *doc, int i)
+{
+    cJSON *e = cJSON_GetArrayItem(cJSON_GetObjectItem(doc, "stations"), i);
+    if (!e) die("the index document has no such station entry");
+    return e;
+}
+
+/* An entry's number KEY; the index document must have it. */
+static double number(cJSON *e, const char *key)
+{
+    cJSON *v = cJSON_GetObjectItem(e, key);
+    if (!cJSON_IsNumber(v)) die("an index entry has no such number");
+    return v->valuedouble;
+}
+
+/* Replaces e's KEY, which must be there. */
+static void replace(cJSON *e, const char *key, cJSON *v)
+{
+    if (!v || !cJSON_ReplaceItemInObject(e, key, v)) die("cannot replace an index entry's value");
+}
 
 static cJSON *swap_ids(cJSON *doc)
 {
-    cJSON_ReplaceItemInObject(entry(doc, 0), "station_id", cJSON_CreateString("OTC-X-2"));
-    cJSON_ReplaceItemInObject(entry(doc, 1), "station_id", cJSON_CreateString("OTC-X-1"));
+    replace(entry(doc, 0), "station_id", cJSON_CreateString("OTC-X-2"));
+    replace(entry(doc, 1), "station_id", cJSON_CreateString("OTC-X-1"));
     return doc;
 }
 
 static cJSON *zero_length(cJSON *doc)
 {
-    cJSON_ReplaceItemInObject(entry(doc, 0), "length", cJSON_CreateNumber(0));
+    replace(entry(doc, 0), "length", cJSON_CreateNumber(0));
     return doc;
 }
 
 static cJSON *same_offsets(cJSON *doc)
 {
-    cJSON_ReplaceItemInObject(entry(doc, 1), "offset", cJSON_CreateNumber(0));
-    cJSON_ReplaceItemInObject(entry(doc, 1), "length", cJSON_CreateNumber(cJSON_GetObjectItem(entry(doc, 0), "length")->valuedouble));
+    replace(entry(doc, 1), "offset", cJSON_CreateNumber(0));
+    replace(entry(doc, 1), "length", cJSON_CreateNumber(number(entry(doc, 0), "length")));
     return doc;
 }
 
@@ -55,14 +93,14 @@ static void check_station(const char *id, const char *want_name, int want_index)
 {
     otc_release *rel = NULL;
     otc_station_t *st = NULL;
-    char name[64];
+    char name[64] = "";
     size_t need;
     CHECK_STATUS(otc_open_file(g_jsonl, NULL, &rel), OTC_OK);
     if (!rel) return;
     CHECK(rel->index_used == want_index);
     CHECK_STATUS(otc_station(rel, id, &st), OTC_OK);
     if (st) {
-        otc_station_name(st, name, sizeof name, &need);
+        CHECK_STATUS(otc_station_name(st, name, sizeof name, &need), OTC_OK);
         CHECK(!strcmp(name, want_name));
     }
     otc_station_free(st);
@@ -79,8 +117,8 @@ int main(void)
     test_write(g_dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "First") "\n" TEST_STATION("OTC-X-2", "Second") "\n");
     g_jsonl = test_join(g_dir, "OTC_20990101.jsonl");
     mp = test_join(g_dir, "OTC_20990101.meta.json");
-    otc__sha256_file(g_jsonl, hex_l);
-    otc__sha256_file(mp, hex_m);
+    sha256_or_die(g_jsonl, hex_l);
+    sha256_or_die(mp, hex_m);
     snprintf(sums, sizeof sums, "%s  OTC_20990101.jsonl\n%s  OTC_20990101.meta.json\n", hex_l, hex_m);
     test_write(g_dir, "OTC_20990101.sha256", sums);
     ixp = test_join(g_dir, "index-v1.json");
@@ -93,13 +131,13 @@ int main(void)
     write_index(swap_ids);
     CHECK_STATUS(otc_open_file(g_jsonl, NULL, &rel), OTC_OK);
     if (rel) {
-        char msg[512];
+        char msg[512] = "";
         size_t need;
         CHECK(rel->index_used == 1);
         CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_E_INVALID_RELEASE);
         otc_station_free(st);
         st = NULL;
-        otc_last_error(rel, msg, sizeof msg, &need);
+        CHECK_STATUS(otc_last_error(rel, msg, sizeof msg, &need), OTC_OK);
         CHECK(strstr(msg, "index-v1.json") != NULL);
         otc_close(rel);
     }
@@ -109,7 +147,9 @@ int main(void)
     /* out of bounds: rebuilt, right answers */
     write_index(zero_length);
     check_station("OTC-X-1", "First", 0);
+    check_station("OTC-X-1", "First", 0);   /* and the next open does not trust it either */
     write_index(same_offsets);
+    check_station("OTC-X-2", "Second", 0);
     check_station("OTC-X-2", "Second", 0);
 
     free(ixp);

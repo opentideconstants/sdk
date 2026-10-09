@@ -354,13 +354,14 @@ static int fs_rm_rf(const char *path)
 }
 
 /* mkdir -p; 0 when path is a directory afterwards */
+/* 0, or -1 when a directory cannot be created, or -2 when memory runs out. */
 static int fs_mkdir_p(const char *path)
 {
     char *p = otc__strdup(path);
     size_t i, n;
     int ok;
     size_t start = 1;
-    if (!p) return -1;
+    if (!p) return -2;
     n = strlen(p);
     while (n > 1 && (p[n - 1] == '/' || p[n - 1] == '\\')) p[--n] = '\0';
 #ifdef _WIN32
@@ -1043,11 +1044,13 @@ static otc_status copy_to_tmp(fctx *c, const char *src, const char *dir, char **
     buf = (unsigned char *)malloc(65536);
     out = tmp ? fs_fopen(tmp, "wb") : NULL;
     if (!tmp || !buf || !out) {
+        int nomem = !tmp || !buf;   /* a path or buffer that could not be allocated is not an I/O error */
         fclose(in);
         if (out) fclose(out);
         free(buf);
         free(tmp);
-        return fail(c, buf ? OTC_E_IO : OTC_E_NOMEM, dir, "cannot write into %s", dir);
+        if (nomem) return fail(c, OTC_E_NOMEM, dir, "out of memory");
+        return fail(c, OTC_E_IO, dir, "cannot write into %s", dir);
     }
     sha_256_init(&sha, hash);
     while ((n = fread(buf, 1, 65536, in)) > 0) {
@@ -1186,7 +1189,7 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
             free(lock);
             return st;
         }
-        if (done && done(c, ds)) break;
+        if (done && done(c, ds) > 0) break;   /* -1 (out of memory) is not done */
         if (waited >= LOCK_STALE_MS) {
             /* spec 5.4 (CR D3): a stale lock that cannot be removed 3 times is a cache error */
             logf_(c, 2, "removing the stale lock %s", lock);
@@ -1583,7 +1586,9 @@ static otc_status read_verified_st(fctx *c, const char *ds, cJSON **out)
 {
     char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = NULL;
     otc_status st = p ? slurp_st(p, &t) : OTC_E_NOMEM;
-    cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+    cJSON *doc = NULL;
+    /* a parse that ran out of memory is out of memory, never "not verified" */
+    if (t && otc__json_parse_st(t, strlen(t), &doc) == OTC_E_NOMEM) st = OTC_E_NOMEM;
     free(d);
     free(p);
     free(t);
@@ -1598,6 +1603,8 @@ static cJSON *read_verified(fctx *c, const char *ds)
     (void)read_verified_st(c, ds, &doc);
     return doc;
 }
+
+static void jput(cJSON *o, const char *key, cJSON *item, int *ok);
 
 /*
  * The pointer or index entry for a cached release names its version DOI
@@ -1630,11 +1637,12 @@ static void note_entry(fctx *c, const otc_release_info *ri)
     }
     v = read_verified(c, ri->datestamp);   /* again, now under the lock */
     if (v) {
+        int ok = 1;
         cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
-        cJSON_AddItemToObject(v, "zenodo_version_doi",
-                              ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+        jput(v, "zenodo_version_doi", ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull(),
+             &ok);
         p = path2(d, ".verified");
-        txt = p ? cJSON_Print(v) : NULL;
+        txt = p && ok ? cJSON_Print(v) : NULL;
         if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
             logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
             if (c->err) otc_error_init(c->err);
@@ -1647,21 +1655,28 @@ static void note_entry(fctx *c, const otc_release_info *ri)
     cJSON_Delete(v);
 }
 
+/* 1 when the file is there, 0 when not, -1 when memory runs out. */
 static int file_there(fctx *c, const char *ds, const char *suffix)
 {
     char *p = rel_file(c, ds, suffix);
-    int r = p && fs_kind(p) == 2;
+    int r;
+    if (!p) return -1;
+    r = fs_kind(p) == 2;
     free(p);
     return r;
 }
 
-/* A verified release whose .jsonl and .meta.json are there (and .json when strict and asked for). */
+/* A verified release whose .jsonl and .meta.json are there (and .json when strict and asked for):
+ * 1 yes, 0 no, -1 out of memory (never read as "not verified"). */
 static int usable_impl(fctx *c, const char *ds, int strict)
 {
-    cJSON *v = read_verified(c, ds);
-    int ok = v && file_there(c, ds, ".jsonl") && file_there(c, ds, ".meta.json");
-    if (ok && strict && (c->formats & OTC_FORMAT_JSON)) ok = file_there(c, ds, ".json");
+    static const char *const want[] = {".jsonl", ".meta.json", ".json"};
+    cJSON *v = NULL;
+    int ok, i, n = (strict && (c->formats & OTC_FORMAT_JSON)) ? 3 : 2;
+    if (read_verified_st(c, ds, &v) == OTC_E_NOMEM) return -1;
+    ok = v != NULL;
     cJSON_Delete(v);
+    for (i = 0; ok > 0 && i < n; i++) ok = file_there(c, ds, want[i]);
     return ok;
 }
 static int usable_strict(fctx *c, const char *ds) { return usable_impl(c, ds, 1); }
@@ -1757,7 +1772,9 @@ static otc_status newest_cached(fctx *c, char **out)
     free(ip);
     free(it);
     for (i = 0; st == OTC_OK && i < n && !*out; i++) {
-        if (!usable_loose(c, list[i]) || !cached_readable(c, list[i], index)) continue;
+        int u = usable_loose(c, list[i]);
+        if (u < 0) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); break; }
+        if (!u || !cached_readable(c, list[i], index)) continue;
         if (!(*out = otc__strdup(list[i]))) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
     }
     free_list(list, n);
@@ -1768,12 +1785,14 @@ static otc_status newest_cached(fctx *c, char **out)
 /* release.files from .verified (spec 4.3.1), sorted by name. */
 static otc_status files_from_verified(fctx *c, const char *ds, otc_file_info **out, size_t *n_out)
 {
-    cJSON *v = read_verified(c, ds);
+    cJSON *v = NULL;
+    otc_status vs = read_verified_st(c, ds, &v);
     const cJSON *files = otc__jget(v, "files"), *f;
     otc_file_info *arr;
     size_t n = 0;
     *out = NULL;
     *n_out = 0;
+    if (vs == OTC_E_NOMEM) { cJSON_Delete(v); return fail(c, vs, NULL, "out of memory"); }
     if (!v) return fail(c, OTC_E_CACHE, NULL, "release %s has no .verified record", ds);
     arr = (otc_file_info *)calloc((size_t)cJSON_GetArraySize(files) + 1, sizeof *arr);
     if (!arr) { cJSON_Delete(v); return fail(c, OTC_E_NOMEM, NULL, "out of memory"); }
@@ -1801,16 +1820,19 @@ static otc_status files_from_verified(fctx *c, const char *ds, otc_file_info **o
 static otc_status check_cached_sizes(fctx *c, const char *ds)
 {
     static const char *const suffixes[] = {".jsonl", ".meta.json", NULL};
-    cJSON *v = read_verified(c, ds);
-    const cJSON *files = otc__jget(v, "files");
+    cJSON *v = NULL;
+    const cJSON *files;
     size_t i;
-    otc_status st = OTC_OK;
+    /* out of memory is never "no sizes to compare" */
+    otc_status st = read_verified_st(c, ds, &v) == OTC_E_NOMEM ? fail(c, OTC_E_NOMEM, NULL, "out of memory") : OTC_OK;
+    files = otc__jget(v, "files");
     for (i = 0; suffixes[i] && st == OTC_OK; i++) {
         char name[NAME_CAP], *p = rel_file(c, ds, suffixes[i]);
         const cJSON *rec;
         snprintf(name, sizeof name, "OTC_%s%s", ds, suffixes[i]);
         rec = otc__jget(files, name);
-        if (p && otc__jint(rec, "size") >= 0 && otc__path_size(p) != otc__jint(rec, "size"))
+        if (!p) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (otc__jint(rec, "size") >= 0 && otc__path_size(p) != otc__jint(rec, "size"))
             st = fail_checksum(c, p, otc__jstr(rec, "sha256"), "", "the size does not match .verified");
         free(p);
     }
@@ -1821,6 +1843,16 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
 /* ------------------------------------------------------------- stream index */
 
 static cJSON *str_or_null(const char *s) { return s ? cJSON_CreateString(s) : cJSON_CreateNull(); }
+
+/* Adds item to o under key; on any failure (item or o NULL, no memory for the key) the item is
+ * deleted and *ok cleared, so a record is either whole or not written. */
+static void jput(cJSON *o, const char *key, cJSON *item, int *ok)
+{
+    if (!item || !o || !cJSON_AddItemToObject(o, key, item)) {
+        cJSON_Delete(item);
+        *ok = 0;
+    }
+}
 
 /*
  * index-v1.json (spec 6.2). otc_open_file reads it when it is fresh; when the
@@ -1966,9 +1998,15 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     memset(&r, 0, sizeof r);
     memset(pend, 0, sizeof pend);
     if (!dir) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-    if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto out; }
+    if ((res = fs_mkdir_p(dir)) != 0) {
+        st = res == -2 ? fail(c, OTC_E_NOMEM, NULL, "out of memory")
+                       : fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir);
+        goto out;
+    }
     if ((st = lock_take(c, dir, ds, usable_strict, &held, token)) != OTC_OK) goto out;
-    if (!held || usable_strict(c, ds)) goto out;   /* another process finished it */
+    if (!held) goto out;
+    if ((res = usable_strict(c, ds)) < 0) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+    if (res) goto out;   /* another process finished it */
 
     /* 1. the .sha256 list */
     snprintf(sha_name, sizeof sha_name, "OTC_%s.sha256", ds);
@@ -2060,55 +2098,57 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         if (st != OTC_OK) goto out;
     }
     write_stream_index(c, ds, rel);
-    ver = cJSON_CreateObject();
-    files = cJSON_CreateObject();
-    if (old && cJSON_IsObject(otc__jget(old, "files"))) {
-        const cJSON *f;
-        cJSON_ArrayForEach(f, otc__jget(old, "files")) cJSON_AddItemToObject(files, f->string, cJSON_Duplicate(f, 1));
-    }
-    /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
-     * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */
-    {
-        for (i = 0; i < n_rows; i++) {
+    {   /* .verified: every allocation is checked, so a partial record (one with no files, which
+         * reads as "not verified" and has the release downloaded again) is never written */
+        int ok = 1;
+        char now[32], fvbuf[64], *vpath, *txt;
+        size_t need;
+        ver = cJSON_CreateObject();
+        files = cJSON_CreateObject();
+        if (!ver || !files) ok = 0;
+        if (old && cJSON_IsObject(otc__jget(old, "files"))) {
+            const cJSON *f;
+            cJSON_ArrayForEach(f, otc__jget(old, "files")) jput(files, f->string, cJSON_Duplicate(f, 1), &ok);
+        }
+        /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
+         * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */
+        for (i = 0; ok && i < n_rows; i++) {
             char *p = path2(dir, names[i]), *u = url_resolve(c->base_url, names[i]);
             int64_t size = p ? otc__path_size(p) : -1;
             const cJSON *prev = otc__jget(otc__jget(files, names[i]), "size");
             cJSON *o = cJSON_CreateObject();
-            cJSON_AddStringToObject(o, "sha256", digests[i]);
-            if (size >= 0) cJSON_AddNumberToObject(o, "size", (double)size);
-            else if (cJSON_IsNumber(prev)) cJSON_AddNumberToObject(o, "size", prev->valuedouble);
-            else cJSON_AddNullToObject(o, "size");
-            cJSON_AddItemToObject(o, "url", info ? cJSON_CreateNull() : str_or_null(u));
+            if (!p || !u) ok = 0;
+            jput(o, "sha256", cJSON_CreateString(digests[i]), &ok);
+            jput(o, "size", size >= 0 ? cJSON_CreateNumber((double)size)
+                            : cJSON_IsNumber(prev) ? cJSON_CreateNumber(prev->valuedouble) : cJSON_CreateNull(), &ok);
+            jput(o, "url", info ? cJSON_CreateNull() : str_or_null(u), &ok);
             cJSON_DeleteItemFromObjectCaseSensitive(files, names[i]);
-            cJSON_AddItemToObject(files, names[i], o);
+            jput(files, names[i], o, &ok);
             free(p);
             free(u);
         }
-        for (i = 0; info && i < info->n_files; i++) {
+        for (i = 0; ok && info && i < info->n_files; i++) {
             const otc_file_info *f = &info->files[i];
             cJSON *o = cJSON_CreateObject();
-            cJSON_AddItemToObject(o, "sha256", str_or_null(f->sha256));
-            cJSON_AddItemToObject(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull());
-            cJSON_AddItemToObject(o, "url", str_or_null(f->url));
+            jput(o, "sha256", str_or_null(f->sha256), &ok);
+            jput(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull(), &ok);
+            jput(o, "url", str_or_null(f->url), &ok);
             cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
-            cJSON_AddItemToObject(files, f->name, o);
+            jput(files, f->name, o, &ok);
         }
-    }
-    cJSON_AddItemToObject(ver, "files", files);
-    {
-        char now[32], fvbuf[64], *vpath = path2(dir, ".verified"), *txt;
-        size_t need;
+        jput(ver, "files", files, &ok);   /* ver owns files now (or it is deleted) */
         utc_now(now);
-        cJSON_AddStringToObject(ver, "verified_at", now);
-        cJSON_AddStringToObject(ver, "by", SDK_ID);
-        cJSON_AddStringToObject(ver, "datestamp", ds);
+        jput(ver, "verified_at", cJSON_CreateString(now), &ok);
+        jput(ver, "by", cJSON_CreateString(SDK_ID), &ok);
+        jput(ver, "datestamp", cJSON_CreateString(ds), &ok);
         if (otc_release_format_version(rel, fvbuf, sizeof fvbuf, &need) == OTC_OK)
-            cJSON_AddStringToObject(ver, "format_version", fvbuf);
+            jput(ver, "format_version", cJSON_CreateString(fvbuf), &ok);
         if (otc__jstr(rel->release_obj, "min_reader_version"))
-            cJSON_AddStringToObject(ver, "min_reader_version", otc__jstr(rel->release_obj, "min_reader_version"));
+            jput(ver, "min_reader_version", cJSON_CreateString(otc__jstr(rel->release_obj, "min_reader_version")), &ok);
         /* the version DOI of the entry used (spec 4.3); a pinned download reads no entry */
-        cJSON_AddItemToObject(ver, "zenodo_version_doi", str_or_null(info ? info->zenodo_version_doi : NULL));
-        txt = cJSON_Print(ver);
+        jput(ver, "zenodo_version_doi", str_or_null(info ? info->zenodo_version_doi : NULL), &ok);
+        vpath = path2(dir, ".verified");
+        txt = ok ? cJSON_Print(ver) : NULL;
         if (!vpath || !txt) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
         else st = write_atomic(c, dir, vpath, txt, strlen(txt));
         cJSON_free(txt);
@@ -2137,8 +2177,9 @@ static otc_status ensure_root(fctx *c)
 {
     char *r = path2(c->base, "releases");
     otc_status st = OTC_OK;
-    if (!r) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-    if (fs_mkdir_p(r) != 0) st = fail(c, OTC_E_CACHE, r, "cannot create the cache directory %s", r);
+    int m = r ? fs_mkdir_p(r) : -2;
+    if (m == -2) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    else if (m != 0) st = fail(c, OTC_E_CACHE, r, "cannot create the cache directory %s", r);
     free(r);
     return st;
 }
@@ -2165,7 +2206,9 @@ static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info 
                                 otc_loaded_from *lf)
 {
     otc_status st;
-    if (usable_strict(c, ds)) {
+    int u = usable_strict(c, ds);
+    if (u < 0) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    if (u) {
         *lf = OTC_LOADED_FROM_CACHE;
         st = open_cached(c, ds, rel);
         if (st != OTC_E_CHECKSUM) return st;
@@ -2210,7 +2253,9 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         *ds_out = otc__strdup(release);
         if (!*ds_out) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
         if (c->offline) {
-            if (!usable_loose(c, release))
+            int u = usable_loose(c, release);
+            if (u < 0) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+            if (!u)
                 return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
             *lf = OTC_LOADED_FROM_CACHE;
             return open_cached(c, release, rel);
@@ -2273,7 +2318,10 @@ static otc_status fetch_path(const otc_fetch_options *opts, const char *release,
     otc_release *rel = NULL;
     otc_loaded_from lf;
     char *ds = NULL, msg[512], *p;
-    otc_status st = ctx_init(&c, opts), last;
+    otc_status st, last;
+    if (path && len) path[0] = '\0';   /* a failed call leaves no path and no size behind */
+    if (needed) *needed = 0;
+    st = ctx_init(&c, opts);
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
     otc_close(rel);
     if (st == OTC_OK) {
@@ -2308,7 +2356,10 @@ otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestam
 {
     if (!datestamp) {
         fctx c;
-        otc_status st = ctx_init(&c, opts);
+        otc_status st;
+        if (path && len) path[0] = '\0';
+        if (needed) *needed = 0;
+        st = ctx_init(&c, opts);
         if (st == OTC_OK) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "datestamp is NULL");
         ctx_free(&c);
         return st;
@@ -2337,15 +2388,15 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
         size_t n = 0;
         st = files_from_verified(&c, ds, &files, &n);
         if (st == OTC_OK) {
-            cJSON *v = read_verified(&c, ds);
+            cJSON *v = NULL;
+            int nomem = read_verified_st(&c, ds, &v) == OTC_E_NOMEM;
             const char *zdoi = otc__jstr(v, "zenodo_version_doi");
-            int nomem;
             free_file_infos(rel->files, rel->n_files);
             rel->files = files;
             rel->n_files = n;
             free(rel->zenodo_version_doi);
             rel->zenodo_version_doi = zdoi ? otc__strdup(zdoi) : NULL;
-            nomem = zdoi && !rel->zenodo_version_doi;
+            nomem = nomem || (zdoi && !rel->zenodo_version_doi);
             cJSON_Delete(v);
             if (nomem) {
                 otc_close(rel);
@@ -2791,7 +2842,13 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         free(p);
         todo_name[n_todo++] = targets[i];
     }
-    if (fs_mkdir_p(dir) != 0) { st = fail(&c, OTC_E_IO, dir, "cannot create %s", dir); goto out; }
+    {
+        int m = fs_mkdir_p(dir);
+        if (m != 0) {
+            st = m == -2 ? fail(&c, OTC_E_NOMEM, NULL, "out of memory") : fail(&c, OTC_E_IO, dir, "cannot create %s", dir);
+            goto out;
+        }
+    }
     /* spec 4.3.2 "check, then rename": every file goes to a temporary file in dir first;
      * only when all of them are there and checked are they renamed into place, so a
      * failure (network, offline, checksum) leaves nothing in dir */

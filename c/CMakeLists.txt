@@ -203,6 +203,9 @@ if(OTC_BUILD_TESTS)
         else()
             add_test(NAME ${name} COMMAND ${name})
         endif()
+        # a test that skips itself exits 77 (TEST_SKIP_RC in c/tests/otc_test.h): ctest shows it as
+        # "Skipped", not "Passed"
+        set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
     endforeach()
 endif()
 

@@ -2,7 +2,8 @@
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
  *      not cut to an integer: it reads as missing (-1).
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
- *      text after a line's object is invalid_release, not ignored.
+ *      text after a line's object is invalid_release, not ignored; white
+ *      space after it (CRLF, spaces, tabs) is not text.
  * C34: the kind filter "other" is not a kind value: it matches no station,
  *      also not one whose kind is unknown (spec 4.4).
  * C35: a validation row without previous_release has NaN and -1 there, as
@@ -26,7 +27,7 @@ static otc_release *open_lines(const char *lines, char **dir_out)
     test_write(dir, "OTC_20990101.jsonl", lines);
     path = test_join(dir, "OTC_20990101.jsonl");
     st = otc_open_file(path, NULL, &rel);
-    if (st != OTC_OK) fprintf(stderr, "open: %s\n", otc_status_code(st));
+    CHECK_STATUS(st, OTC_OK);   /* a fixture that does not open fails here; its checks below do not run */
     free(path);
     *dir_out = dir;
     return rel;
@@ -41,7 +42,8 @@ int main(void)
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
                      "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n", &dir);
     CHECK(rel != NULL);
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         const otc_validation_t *v = NULL;
         CHECK_STATUS(otc_station_validation_at(st, 0, &v), OTC_OK);
         if (v) {
@@ -62,6 +64,12 @@ int main(void)
     CHECK(rel != NULL && otc_release_station_count(rel) == 2);
     otc_close(rel);
     free(dir);
+    /* white space after a line's object is not text after it: CRLF, spaces and tabs, an empty line */
+    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\r\n" TEST_STATION("OTC-X-2", "Two") " \t\n\n"
+                     TEST_STATION("OTC-X-3", "Three") " \r\n", &dir);
+    CHECK(rel != NULL && otc_release_station_count(rel) == 3);
+    otc_close(rel);
+    free(dir);
     {
         char *d2 = test_tmpdir(), *path;
         otc_release *r2 = NULL;
@@ -80,6 +88,7 @@ int main(void)
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
                      "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\",\"quantity\":\"salinity\","
                      "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
+    CHECK(rel != NULL);
     if (rel) {
         otc_filter f;
         const char *ids[4];
@@ -94,6 +103,12 @@ int main(void)
         f.kind = NULL;
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
         CHECK(n == 1);
+        /* the premise: this station's kind is OTHER (a quantity the library does not know), so the
+         * zero above is the filter's doing, not a kind that is unknown */
+        CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+        if (st) CHECK(otc_station_kind(st) == OTC_KIND_OTHER);
+        otc_station_free(st);
+        st = NULL;
     }
     otc_close(rel);
     free(dir);
@@ -102,7 +117,9 @@ int main(void)
                      "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\","
                      "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
     st = NULL;
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    CHECK(rel != NULL);
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         const otc_set *set = NULL;
         char pj[16];
         size_t pn = 0;
@@ -118,7 +135,9 @@ int main(void)
     /* C13 */
     rel = open_lines(TEST_STATION("OTC-X-1", "\xc3\x98st") "\n", &dir);
     st = NULL;
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    CHECK(rel != NULL);
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         char b[4];
         size_t need = 0;
         CHECK_STATUS(otc_station_name(st, b, 2, &need), OTC_E_BUFFER_TOO_SMALL);

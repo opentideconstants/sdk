@@ -354,6 +354,10 @@ otc_status otc_nearest(const otc_release *rel, double lat, double lon, double ma
     otc_nearby *hits = NULL;
     size_t n = 0;
     otc_status st;
+    if (hit) {   /* a failed call leaves no value behind */
+        hit->id = NULL;
+        hit->distance_km = NAN;
+    }
     if (!rel || !hit || !filter_ok(filter)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_nearest: bad argument");
     if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
     if (isnan(max_km)) max_km = INFINITY;

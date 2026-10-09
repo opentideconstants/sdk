@@ -29,14 +29,20 @@ int main(void)
 {
     char *dir = test_tmpdir(), *jsonl;
     otc_release *rel = NULL;
-    long k, base;
+    long k, base, injected;
     int runs = 0;
     test_write(dir, "OTC_20990101.meta.json", TEST_META("20990101"));
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "First") "\n" TEST_STATION("OTC-X-2", "Me\\u0000da") "\n");
     jsonl = test_join(dir, "OTC_20990101.jsonl");
     printf("oom: start\n");
-    if (otc_open_file(jsonl, NULL, &rel) != OTC_OK) return 2;
-    for (k = 1; ; k++) {
+    {
+        otc_status st = otc_open_file(jsonl, NULL, &rel);
+        if (st != OTC_OK) {
+            fprintf(stderr, "test_index_oom: the open gave %s\n", otc_status_code(st));
+            return 2;
+        }
+    }
+    for (k = 1, injected = 0; k <= OOM_MAX_RUNS; k++) {
         cJSON *doc;
         base = oom_live;
         oom_arm(k);
@@ -50,7 +56,9 @@ int main(void)
         if (oom_live != base) { fprintf(stderr, "allocation %ld fails: %ld blocks leak\n", k, oom_live - base); CHECK(0); }
         runs++;
         if (!oom_failed) { CHECK(doc != NULL); break; }
+        injected++;
     }
+    CHECK(oom_loop_end("index_doc", k, injected));
     otc_close(rel);
     printf("oom: %d runs\n", runs);
     free(jsonl);

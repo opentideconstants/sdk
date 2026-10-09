@@ -97,6 +97,10 @@ void otc__mutex_destroy(otc__mutex *m);
  * text[len] must be '\0'. The whole text must be one JSON value (whitespace
  * around it is fine): anything after the value fails the parse. */
 cJSON *otc__json_parse(const char *text, size_t len);
+/* otc__json_parse, and why it failed: OTC_OK (*out set), OTC_E_NOMEM (cJSON
+ * could not allocate: a real malloc sets errno to ENOMEM) or
+ * OTC_E_INVALID_RELEASE (the text is not JSON). *out is NULL on failure. */
+otc_status otc__json_parse_st(const char *text, size_t len, cJSON **out);
 
 /* ----------------------------------------------------------------- helpers */
 

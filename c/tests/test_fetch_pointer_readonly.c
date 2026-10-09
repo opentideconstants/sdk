@@ -29,11 +29,10 @@ int main(void)
     free(pdir);
     pdir = test_join(cache, "v1/pointer");
     mkdir(pdir, 0555);
-    if (access(pdir, W_OK) == 0) {
-        printf("test_fetch_pointer_readonly: skipped (running as root)\n");
+    if (test_write_perms_ignored()) {
         free(pdir);
         free(cache);
-        return 0;
+        return test_skip("test_fetch_pointer_readonly", "file permissions do not stop this process");
     }
     CHECK_STATUS(otc_fetch_latest_info(&fo, &info), OTC_OK);
     CHECK(info != NULL);

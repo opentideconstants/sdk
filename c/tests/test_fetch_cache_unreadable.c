@@ -14,27 +14,33 @@ int main(void)
     fo.error = &err;
     fo.offline = true;
     snprintf(p, sizeof p, "%s/v1", cache);
-    mkdir(p, 0777);
+    if (mkdir(p, 0777) != 0) { perror(p); return 2; }
     snprintf(p, sizeof p, "%s/v1/releases", cache);
-    mkdir(p, 0777);
+    if (mkdir(p, 0777) != 0) { perror(p); return 2; }
     /* an empty cache is fine */
     CHECK_STATUS(otc_fetch_cached_releases(&fo, ds, 4, &n), OTC_OK);
     CHECK(n == 0);
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     /* one that cannot be read is not empty */
-    chmod(p, 0000);
-    if (access(p, R_OK) == 0) {
-        printf("test_fetch_cache_unreadable: skipped (running as root)\n");
-        chmod(p, 0755);
+    test_chmod(p, 0000);
+    if (test_read_perms_ignored()) {
+        test_chmod(p, 0755);
         free(cache);
-        return 0;
+        return test_skip("test_fetch_cache_unreadable", "file permissions do not stop this process");
     }
     n = 7;
+    err.file[0] = '\0';
     CHECK_STATUS(otc_fetch_cached_releases(&fo, ds, 4, &n), OTC_E_CACHE);
     CHECK(n == 0);
+    CHECK(strstr(err.file, "releases") != NULL);   /* the error names the directory that cannot be read */
+    n = 7;
+    err.file[0] = '\0';
     CHECK_STATUS(otc_fetch_prune(&fo, 0, NULL, ds, 4, &n), OTC_E_CACHE);
+    CHECK(n == 0);
+    CHECK(strstr(err.file, "releases") != NULL);
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_CACHE);
-    chmod(p, 0755);
+    if (!strstr(err.file, "releases")) fprintf(stderr, "error: %s (%s)\n", err.message, err.file);
+    test_chmod(p, 0755);
     free(cache);
     return test_done("test_fetch_cache_unreadable");
 }

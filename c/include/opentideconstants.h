@@ -7,7 +7,9 @@
  *
  * Conventions (spec 4.1, 6.4):
  *   - Every call returns an otc_status. OTC_OK is 0.
- *   - "No value" is OTC_E_NOT_FOUND; an output pointer then stays NULL.
+ *   - "No value" is OTC_E_NOT_FOUND; an output pointer then stays NULL. Any
+ *     failed call clears its outputs first, so no value from an earlier call
+ *     stays in them.
  *   - Strings out: the caller passes buf and len. The function writes at most
  *     len bytes, always NUL-terminates when len > 0, and stores the needed size
  *     (with the NUL) in *needed. A buffer that is too small gives
@@ -18,11 +20,20 @@
  *   - Missing numbers are NaN; missing counts are -1; missing enums are
  *     OTC_<ENUM>_UNSET; enum values the library does not know are
  *     OTC_<ENUM>_OTHER.
- *   - Ownership: otc_release and otc_station, otc_tombstone, otc_stats and
- *     otc_iter handles are owned by the caller and freed with their _free /
- *     otc_close / otc_iter_close call. Every other pointer is borrowed: from
- *     the station (sets, constituents, validation rows, flags, strings in
- *     structs) or from the release (conventions, licences, ids in hit lists).
+ *   - Ownership: otc_release, otc_station, otc_tombstone, otc_stats,
+ *     otc_iter and otc_release_info handles are owned by the caller and freed
+ *     with their otc_close / _free / otc_iter_close call. The strings in the
+ *     lists of the otc_fetch module (otc_fetch_cached_releases,
+ *     otc_fetch_prune, otc_fetch_to_dir) are owned by the caller and freed
+ *     with otc_free. Every other pointer is borrowed: from the station (sets,
+ *     constituents, validation rows, flags, strings in structs), from the
+ *     release (conventions, licences, release files, ids in hit lists), from
+ *     the stats (keys) or from the release info (its files), and is valid
+ *     until that owner is freed.
+ *   - Lifetime: station, iterator and stats handles may borrow from their
+ *     release. Free them (otc_station_free, otc_iter_close, otc_stats_free)
+ *     before otc_close on that release; a handle used after its release is
+ *     closed is undefined behaviour.
  *   - Threads: a release handle is read-only after otc_open_file and may be
  *     used by several threads at once. A station handle belongs to the thread
  *     that made it.
@@ -237,7 +248,7 @@ typedef void (*otc_log_fn)(void *user_data, int level, const char *message); /* 
 
 typedef struct otc_open_options {
     size_t      struct_size;      /* set by otc_open_options_init() */
-    bool        require_checksum; /* a missing OTC_{D}.sha256 next to the file is an error */
+    bool        require_checksum; /* a missing OTC_{D}.sha256 next to the file is OTC_E_CHECKSUM (DR34) */
     otc_error  *error;            /* detail of a failed open; NULL = not wanted */
     otc_log_fn  log_fn;           /* optional */
     void       *log_user_data;
@@ -695,9 +706,16 @@ OTC_API void otc_fetch_options_init(otc_fetch_options *opts);
  * supported format major and a readable min_reader_version: when the pointer
  * names a release too new, OTC_index.json (one more GET, only then) gives the
  * newest readable one (OTC_E_READER_TOO_OLD if none). On a network error with
- * on_network_error USE_CACHE it gives the newest readable cached release. */
+ * on_network_error USE_CACHE it gives the newest readable cached release.
+ * Only otc_fetch_open reports that fallback to the caller (loaded_from
+ * cache_after_error, and the network error as the handle's last error).
+ * otc_fetch_latest, otc_fetch_to_dir and otc_fetch_releases return OTC_OK
+ * when they fall back, and send the network error to log_fn at level 2 only
+ * (without a log_fn it is not reported). On failure *needed is 0 and path
+ * is "". */
 OTC_API otc_status otc_fetch_latest(const otc_fetch_options *opts, char *path, size_t len, size_t *needed);
-/* The same for a pinned datestamp; no network access when it is cached. */
+/* The same for a pinned datestamp; no network access when it is cached.
+ * A pinned datestamp has no fallback: a network error is the error. */
 OTC_API otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestamp, char *path, size_t len,
                                      size_t *needed);
 /* otc_fetch_latest / otc_fetch_release (release NULL or "latest": latest),

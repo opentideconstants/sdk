@@ -1,7 +1,9 @@
 /* Small helpers for the C library's own tests (c/tests). Each test is one
- * program that exits 0 when every CHECK holds. A test that needs the
- * conformance fixture server runs under c/tests/run_with_server.sh, which
- * sets OTC_TEST_SERVER (http://127.0.0.1:<port>) and OTC_TEST_PROXY. */
+ * program that exits 0 when every CHECK holds, and TEST_SKIP_RC (77, ctest's
+ * SKIP_RETURN_CODE) when it skips itself. A test that needs the conformance
+ * fixture server runs under c/tests/run_with_server.sh, which sets
+ * OTC_TEST_SERVER (http://127.0.0.1:<port>), OTC_TEST_PROXY and
+ * OTC_TEST_REQUIRE_SERVER=1. */
 #ifndef OTC_TEST_H
 #define OTC_TEST_H
 
@@ -43,11 +45,52 @@ static int g_failures;
         }                                                                                           \
     } while (0)
 
+/* The exit status of a test that skips itself; c/CMakeLists.txt registers it as
+ * SKIP_RETURN_CODE, so ctest reports "Skipped", not "Passed". */
+#define TEST_SKIP_RC 77
+
+/* A check that the library fails today, owned by the package named (for
+ * example "PK-R2-23") that fixes the library. PENDING(pkg, cond) counts a
+ * false cond apart from the failures: when every CHECK holds but a PENDING
+ * does not, test_done prints "PENDING <pkg>" and the test skips (exit 77), so
+ * ctest shows it as Skipped, never as Passed. A CHECK failure still fails the
+ * test. When the library fix lands, the PENDING becomes a CHECK. */
+static int g_pending;
+static const char *g_pending_pkgs[4];
+
+#define PENDING(pkg, cond)                                                                          \
+    do {                                                                                            \
+        if (!(cond)) {                                                                              \
+            fprintf(stderr, "%s:%d: PENDING %s: %s\n", __FILE__, __LINE__, (pkg), #cond);           \
+            test_pending_note(pkg);                                                                 \
+        }                                                                                           \
+    } while (0)
+
+static void test_pending_note(const char *pkg)
+{
+    size_t i;
+    g_pending++;
+    for (i = 0; i < 4 && g_pending_pkgs[i]; i++)
+        if (!strcmp(g_pending_pkgs[i], pkg)) return;
+    if (i < 4) g_pending_pkgs[i] = pkg;
+}
+
 static int test_done(const char *name)
 {
-    if (g_failures) fprintf(stderr, "%s: %d check(s) failed\n", name, g_failures);
-    else printf("%s: ok\n", name);
-    return g_failures ? 1 : 0;
+    size_t i;
+    if (g_failures) {
+        fprintf(stderr, "%s: %d check(s) failed\n", name, g_failures);
+        return 1;
+    }
+    if (g_pending) {
+        printf("%s: skipped: PENDING", name);
+        for (i = 0; i < 4 && g_pending_pkgs[i]; i++) printf(" %s", g_pending_pkgs[i]);
+        printf(" (%d check(s) wait for that library fix; every other check holds)\n", g_pending);
+        fflush(stdout);
+        return TEST_SKIP_RC;
+    }
+    printf("%s: ok\n", name);
+    return 0;
 }
 
 /* A fresh directory under TMPDIR; the caller frees the path. */
@@ -78,22 +121,101 @@ static void test_write(const char *dir, const char *name, const char *text)
     free(p);
 }
 
-/* 1 when file permissions do not stop this process (root): the parts of a test
- * that make a file unreadable or unwritable are then skipped. */
-static int test_is_root(void)
+/* Prints why NAME is skipped and gives TEST_SKIP_RC: return test_skip(...). */
+static int test_skip(const char *name, const char *why)
+{
+    printf("%s: skipped (%s)\n", name, why);
+    fflush(stdout);
+    return TEST_SKIP_RC;
+}
+
+/* Whether file permissions stop this process, found by trying, not from the uid:
+ * root without CAP_DAC_OVERRIDE is stopped, and a user with it is not (and
+ * access() answers for the real uid without capabilities, so it cannot tell).
+ * The parts of a test that need an unwritable or unreadable directory skip
+ * when these give 1. Each probe uses a fresh directory and is done once. */
+#ifndef _WIN32
+#include <dirent.h>
+
+/* chmod that must work: a probe or test that cannot set the mode is broken */
+static void test_chmod(const char *path, mode_t mode)
+{
+    if (chmod(path, mode) != 0) { perror(path); exit(2); }
+}
+
+static void test_probe_done(char *dir, char *file)
+{
+    test_chmod(dir, 0755);
+    if (file) remove(file);
+    if (rmdir(dir) != 0) { perror(dir); exit(2); }
+    free(file);
+    free(dir);
+}
+#endif
+
+/* 1 when this process can make a file in a 0555 directory. */
+static int test_write_perms_ignored(void)
 {
 #ifdef _WIN32
     return 0;
 #else
-    return geteuid() == 0;
+    static int known = -1;
+    char *dir, *file;
+    FILE *f;
+    if (known >= 0) return known;
+    dir = test_tmpdir();
+    file = test_join(dir, "probe");
+    test_chmod(dir, 0555);
+    f = fopen(file, "wb");
+    known = f != NULL;
+    if (f) fclose(f);
+    test_probe_done(dir, file);
+    return known;
 #endif
 }
 
-/* The conformance fixture server's base URL, or NULL (the test is then skipped). */
+/* 1 when this process can list a 0000 directory. */
+static int test_read_perms_ignored(void)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    static int known = -1;
+    char *dir;
+    DIR *d;
+    if (known >= 0) return known;
+    dir = test_tmpdir();
+    test_chmod(dir, 0000);
+    d = opendir(dir);
+    known = d != NULL;
+    if (d) closedir(d);
+    test_probe_done(dir, NULL);
+    return known;
+#endif
+}
+
+/* The old name, kept for its callers (a 0555 directory that must stop a
+ * removal): it is test_write_perms_ignored and no longer looks at the uid. */
+static int test_is_root(void)
+{
+    return test_write_perms_ignored();
+}
+
+/* The conformance fixture server's base URL. Under run_with_server.sh
+ * (OTC_TEST_REQUIRE_SERVER set, not "0") a missing or empty OTC_TEST_SERVER is
+ * a failure: the program exits 2, so a broken wrapper cannot turn every fetch
+ * test into a pass. Run by hand without the wrapper it is NULL. */
 static const char *test_server(void)
 {
     const char *s = getenv("OTC_TEST_SERVER");
-    return s && s[0] ? s : NULL;
+    const char *req = getenv("OTC_TEST_REQUIRE_SERVER");
+    if (s && s[0]) return s;
+    if (req && req[0] && strcmp(req, "0") != 0) {
+        fprintf(stderr, "OTC_TEST_SERVER is empty but OTC_TEST_REQUIRE_SERVER is set: the fixture server address "
+                        "is missing, which is a failure, not a skip\n");
+        exit(2);
+    }
+    return NULL;
 }
 
 /* A minimal release: format 1.0, one convention, one licence. */

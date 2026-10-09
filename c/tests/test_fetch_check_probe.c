@@ -18,9 +18,9 @@ int main(void)
     otc_fetch_options fo;
     otc_release_info *info = NULL;
     otc_error err;
-    bool found = true;
+    bool found = false;   /* the call must set it: true from the start would hide a call that never writes it */
     int major = 0;
-    if (!test_server()) { printf("test_fetch_check_probe: skipped (no OTC_TEST_SERVER)\n"); return 0; }
+    if (!test_server()) return test_skip("test_fetch_check_probe", "no OTC_TEST_SERVER");
     otc_fetch_options_init(&fo);
     otc_error_init(&err);
     snprintf(base, sizeof base, "%s/good/", test_server());
@@ -30,13 +30,19 @@ int main(void)
     fo.log_fn = log_fn;
     /* a value from before: the cached OTC_latest.json names format 2 */
     pdir = test_join(cache, "v1");
-    mkdir(pdir, 0777);
+    if (mkdir(pdir, 0777) != 0) { perror(pdir); return 2; }
     free(pdir);
     pdir = test_join(cache, "v1/pointer");
-    mkdir(pdir, 0777);
+    if (mkdir(pdir, 0777) != 0) { perror(pdir); return 2; }
     test_write(pdir, "OTC_latest.json", "{\"datestamp\":\"21000101\",\"format_version\":\"2.0\"}");
     CHECK_STATUS(otc_fetch_check_for_update(&fo, "20991231", &info, &found), OTC_OK);
     CHECK(found && info);
+    if (info) {   /* and it answers with the newer release */
+        char ds[32] = "";
+        size_t need;
+        CHECK_STATUS(otc_release_info_datestamp(info, ds, sizeof ds, &need), OTC_OK);
+        CHECK(!strcmp(ds, "20991231.2"));
+    }
     CHECK(g_warned == 1);
     CHECK(err.status == OTC_OK);
     CHECK_STATUS(otc_fetch_newer_format_major(&fo, &major), OTC_OK);

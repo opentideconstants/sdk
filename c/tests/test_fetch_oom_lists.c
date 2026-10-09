@@ -1,7 +1,14 @@
 /* PK04 / C28: otc_fetch_cached_releases and otc_fetch_prune under out of
- * memory. Every allocation is made to fail in turn. A failed call hands the
- * caller nothing it must free (cached_releases), or exactly the entries it
- * reports (prune: *count names the releases removed), and nothing leaks. */
+ * memory. Every allocation is made to fail in turn. Each call gives OTC_OK or
+ * OTC_E_NOMEM. A failed call hands the caller nothing it must free
+ * (cached_releases), or exactly the entries it reports (prune: *count names
+ * the releases removed, each one by name, and every release it removed is
+ * named), and nothing leaks. The run with no failure gives the whole answer.
+ * A .verified whose parse ran out of memory (a cJSON allocation) must give
+ * OTC_E_NOMEM, never "not verified" (OK with fewer releases; PK-R2-23, fixed).
+ * Known library defects are PENDING, each only in the form it has today:
+ *  PK-R2-03  prune removes a release and then cannot allocate its name: it is
+ *            counted, but its slot is NULL (R2-025) */
 #include "otc_test.h"
 #include "otc_oom.h"
 
@@ -24,11 +31,13 @@ static void mkrel(const char *cache, const char *ds)
     fclose(f);
 }
 
+static long g_unverified, g_holes;
+
 int main(void)
 {
     char cache[4096];
     const char *tmp = getenv("TMPDIR");
-    long k, base;
+    long k, base, injected;
     int runs = 0;
     otc_fetch_options fo;
     otc_error err;
@@ -53,7 +62,8 @@ int main(void)
         for (wi = 0; wi < 4; wi++) otc_free(w[wi]);
     }
 
-    for (k = 1; ; k++) {
+    oom_hook_cjson();
+    for (k = 1, injected = 0; k <= OOM_MAX_RUNS; k++) {
         char *out[8];
         size_t n = 77, i;
         otc_status st;
@@ -62,12 +72,24 @@ int main(void)
         oom_arm(k);
         st = otc_fetch_cached_releases(&fo, out, 8, &n);
         oom_disarm();
+        if (oom_failed) injected++;
         if (st == OTC_OK) {
-            /* a .verified whose parse ran out of memory reads as "not verified" (cJSON does
-             * not tell the two apart), so a run with a failure may list fewer */
-            CHECK(oom_failed ? n <= 3 : n == 3);
+            CHECK(n <= 3);
+            for (i = 0; i < 8; i++) CHECK(i < n ? out[i] != NULL : out[i] == NULL);
+            for (i = 0; i < n && i < 8; i++)
+                if (out[i]) CHECK(!strcmp(out[i], i == 0 ? "20990103" : i == 1 ? "20990102" : "20990101") || n < 3);
+            if (!oom_failed) {
+                CHECK(n == 3);
+            } else if (n < 3) {
+                if (oom_cjson_failed) g_unverified++;
+                else {
+                    fprintf(stderr, "cached_releases, allocation %ld fails: ok with %lu of 3 releases\n", k, (unsigned long)n);
+                    CHECK(0);
+                }
+            }
         } else {
             if (st != OTC_E_NOMEM) fprintf(stderr, "cached_releases, allocation %ld fails: %s (%s)\n", k, otc_status_code(st), err.message);
+            CHECK(oom_failed);
             CHECK(st == OTC_E_NOMEM);
             CHECK(n == 0);
             for (i = 0; i < 8; i++) {
@@ -82,28 +104,67 @@ int main(void)
         runs++;
         if (!oom_failed) break;
     }
+    CHECK(oom_loop_end("cached_releases", k, injected));
 
-    for (k = 1; ; k++) {
+    /* keep 1: 20990103 stays, 20990102 and 20990101 go */
+    for (k = 1, injected = 0; k <= OOM_MAX_RUNS; k++) {
+        static const char *const cand[2] = {"20990101", "20990102"};
         char *out[8], p[4200];
-        size_t n = 77, i, set = 0;
+        size_t n = 77, i, j, holes = 0, removed = 0, unreported = 0;
         otc_status st;
         mkrel(cache, "20990101");
         mkrel(cache, "20990102");
         mkrel(cache, "20990103");
         memset(out, 0, sizeof out);
+        err.message[0] = '\0';
         base = oom_live;
         oom_arm(k);
         st = otc_fetch_prune(&fo, 1, NULL, out, 8, &n);
         oom_disarm();
+        if (oom_failed) injected++;
         if (st != OTC_OK && st != OTC_E_NOMEM) fprintf(stderr, "prune, allocation %ld fails: %s (%s)\n", k, otc_status_code(st), err.message);
         CHECK(st == OTC_OK || st == OTC_E_NOMEM);
-        for (i = 0; i < 8; i++) if (out[i]) set++;
-        CHECK(set <= n);
-        /* every release reported as removed is gone */
+        CHECK(st == OTC_OK || oom_failed);
+        CHECK(n <= 2);   /* two candidates; also: *count was written (it was 77) */
+        for (i = n < 8 ? n : 8; i < 8; i++) CHECK(out[i] == NULL);
+        /* every release reported as removed is a candidate, is named once, and is gone */
         for (i = 0; i < n && i < 8; i++) {
-            if (!out[i]) continue;
+            if (!out[i]) { holes++; continue; }
+            CHECK(!strcmp(out[i], cand[0]) || !strcmp(out[i], cand[1]));
+            for (j = 0; j < i; j++) CHECK(!out[j] || strcmp(out[i], out[j]) != 0);
             snprintf(p, sizeof p, "%s/v1/releases/%s", cache, out[i]);
             CHECK(access(p, F_OK) != 0);
+        }
+        /* and every candidate that is gone was reported */
+        for (j = 0; j < 2; j++) {
+            int reported = 0;
+            snprintf(p, sizeof p, "%s/v1/releases/%s", cache, cand[j]);
+            for (i = 0; i < n && i < 8; i++) if (out[i] && !strcmp(out[i], cand[j])) reported = 1;
+            if (access(p, F_OK) != 0) {
+                removed++;
+                if (!reported) unreported++;
+            }
+        }
+        snprintf(p, sizeof p, "%s/v1/releases/20990103", cache);
+        CHECK(access(p, F_OK) == 0);   /* the newest is kept */
+        if (unreported || holes) {
+            /* today's form only: each removed release that is not named is a NULL slot in the count */
+            if (unreported == holes) g_holes++;
+            else {
+                fprintf(stderr, "prune, allocation %ld fails: %lu removed and not named, %lu NULL slots, count %lu\n", k,
+                        (unsigned long)unreported, (unsigned long)holes, (unsigned long)n);
+                CHECK(0);
+            }
+        }
+        if (!oom_failed) {
+            CHECK_STATUS(st, OTC_OK);
+            CHECK(n == 2 && removed == 2);
+        } else if (st == OTC_OK && removed < 2) {
+            if (oom_cjson_failed) g_unverified++;
+            else {
+                fprintf(stderr, "prune, allocation %ld fails: ok with %lu of 2 releases removed\n", k, (unsigned long)removed);
+                CHECK(0);
+            }
         }
         for (i = 0; i < 8; i++) otc_free(out[i]);
         if (oom_live != base) fprintf(stderr, "prune, allocation %ld fails: %ld blocks leak\n", k, oom_live - base);
@@ -111,6 +172,13 @@ int main(void)
         runs++;
         if (!oom_failed) break;
     }
+    CHECK(oom_loop_end("prune", k, injected));
+    if (g_unverified)
+        fprintf(stderr, "%ld runs: a .verified whose parse ran out of memory read as not verified (ok, fewer releases)\n",
+                g_unverified);
+    if (g_holes) fprintf(stderr, "%ld runs: prune removed a release and did not name it\n", g_holes);
+    CHECK(g_unverified == 0);
+    PENDING("PK-R2-03", g_holes == 0);
     printf("oom: %d runs\n", runs);
     return test_done("test_fetch_oom_lists");
 }
