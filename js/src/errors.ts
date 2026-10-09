@@ -99,25 +99,20 @@ export class InvalidReleaseError extends OpenTideConstantsError {
     }
 }
 
-/** `requireStation` with an unknown id. */
+/** `requireStation` with an unknown id. The message names the id. */
 export class StationNotFoundError extends OpenTideConstantsError {
-    readonly stationId: string;
-
     constructor(stationId: string) {
         super("station_not_found", `no station ${stationId} in this release`);
-        this.stationId = stationId;
     }
 }
 
-/** `requireStation` with a removed id. The tombstone is attached. */
+/** `requireStation` with a removed id. The tombstone is attached; the message names the id. */
 export class StationRemovedError extends OpenTideConstantsError {
-    readonly stationId: string;
     /** The removed station's tombstone. */
     readonly tombstone: Tombstone;
 
     constructor(stationId: string, tombstone: Tombstone, reason: string | null) {
         super("station_removed", `station ${stationId} was removed${reason ? `: ${reason}` : ""}`);
-        this.stationId = stationId;
         this.tombstone = tombstone;
     }
 }
@@ -131,13 +126,15 @@ export class PinnedReleaseError extends OpenTideConstantsError {
 
 /** The cache cannot be written (permissions, disk full, a failed rename). */
 export class CacheError extends OpenTideConstantsError {
-    readonly path: string | null;
     /** The datestamps that `prune` removed before the failure, newest first; empty for every other operation (spec 4.3, CR2 DR18). */
     readonly removed: readonly string[];
 
+    /**
+     * `detail.path` is the file or directory, which the message already names; api.json gives CacheError no path
+     * field, so it is not kept.
+     */
     constructor(message: string, detail: { path?: string | null; removed?: readonly string[] } & CauseOption = {}) {
         super("cache", message, detail);
-        this.path = detail.path ?? null;
         this.removed = Object.freeze([...(detail.removed ?? [])]);
     }
 }
