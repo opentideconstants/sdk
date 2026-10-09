@@ -745,9 +745,15 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "tripwire", "harness_error": True,
                              "problems": [f"harness error: the tripwire could not accept connections: {srv.trip_errors[0]}"]})
-        if not srv.running:
-            srv.resume()
-        srv.set_rules([])
+        try:
+            if not srv.running:
+                srv.resume()
+            srv.set_rules([])
+        except OSError as e:  # the server cannot serve again: no later case can run; stop the run (exit 2)
+            stats["harness_errors"] += 1
+            stats["abort"] = f"the fixture server cannot restart: {type(e).__name__}: {e}"
+            failures.append({"step": None, "driver": "server_start", "harness_error": True,
+                             "problems": [f"harness error: {stats['abort']}"]})
         tails = []
         for role in runners:
             sp = stderr_path(role)
@@ -1026,6 +1032,9 @@ def main():
                 if len(failures) > 1:
                     line += f"  (+{len(failures) - 1} more failed step(s))"
             print(line[:400], flush=True)
+            if stats.get("abort"):
+                print(f"run stopped: {stats['abort']}", flush=True)
+                break
     finally:
         srv.shutdown()
         proxy.shutdown()

@@ -83,3 +83,25 @@ def test_bad_env_or_timeout_is_a_case_error(tmp_path, extra):
     assert "FAIL  a" in r.stdout and "PASS  b" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-500:])
     r = run_driver("--check-cases", "--cases", str(cases))
     assert r.returncode == 2 and "PROBLEM" in r.stdout and "Traceback" not in r.stderr, r.stdout[-500:]
+
+
+# --- K4: a server that cannot restart after a case is a harness error, not an exception out of run_case
+
+def test_resume_failure_does_not_escape_run_case(tmp_path, monkeypatch):
+    srv, proxy = FixtureServer().start(), RecordingProxy().start()
+
+    def boom():
+        raise OSError(98, "Address already in use (test)")
+
+    case = {"id": "t", "steps": [{"driver": "server_stop"}, {"op": "station_count", "expect": {"count": 1}}]}
+    stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
+    cmd = write_fake_runner(tmp_path).split()
+    monkeypatch.setenv("FAKE_REPLY", OK_REPLY)
+    try:
+        monkeypatch.setattr(srv, "resume", boom)
+        failures, _ = driver.run_case(case, {"main": (cmd, set(driver.FEATURES))}, srv, proxy, False, False, stats)
+    finally:
+        monkeypatch.undo()
+        srv.shutdown()
+        proxy.shutdown()
+    assert failures and stats["harness_errors"] == 1 and stats.get("abort"), (failures, stats)
