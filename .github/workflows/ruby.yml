@@ -49,12 +49,32 @@ jobs:
         run: cmp conformance/name_fold.json ruby/lib/opentideconstants/name_fold.json
       - name: Unit tests
         run: ruby -Iruby/lib ruby/test/test_unit.rb
+      # Install into an empty gem directory, and use only that directory from
+      # here on, so no other copy of the gem can be loaded.
       - name: Build and install the gem
         shell: bash
         working-directory: ruby
         run: |
           gem build opentideconstants.gemspec
-          gem install --local opentideconstants-*.gem
+          gems="$RUNNER_TEMP/gems"
+          gem install --local --no-document --install-dir "$gems" opentideconstants-*.gem
+          echo "GEM_HOME=$gems" >> "$GITHUB_ENV"
+          echo "GEM_PATH=$gems" >> "$GITHUB_ENV"
+      - name: The runner loads the gem that was just built
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: |
+          version=$(ruby -Iruby/lib -e 'require "opentideconstants/version"; print OpenTideConstants::VERSION')
+          # shellcheck disable=SC2016  # the single quotes hold Ruby code
+          ruby -e '
+            require "opentideconstants"
+            spec = Gem.loaded_specs["opentideconstants"] or abort "opentideconstants was not loaded from a gem"
+            home = File.realpath(ENV.fetch("GEM_HOME"))
+            file = $LOADED_FEATURES.find { |f| f.end_with?("/opentideconstants.rb") }
+            abort "loaded #{file}, not from #{home}" unless file && File.realpath(file).start_with?(home + "/")
+            abort "loaded version #{spec.version}, built #{ARGV[0]}" unless spec.version.to_s == ARGV[0]
+            puts "loaded #{file} (#{spec.version})"
+          ' "$version"
       - name: API manifest check (installed gem)
         shell: bash
         env:
