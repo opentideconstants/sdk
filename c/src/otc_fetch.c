@@ -1194,10 +1194,13 @@ static otc_status fetch_index(fctx *c, otc_release_info ***out, size_t *n)
 }
 
 /* A release this library reads: a supported format major and a
- * min_reader_version no newer than OTC_FORMAT_VERSION (spec 7.4). */
+ * min_reader_version no newer than OTC_FORMAT_VERSION (spec 7.4). An entry
+ * without format_version is judged as the cache path judges it: the
+ * release's own .meta.json is checked when it is opened. */
 static int info_readable(const otc_release_info *ri)
 {
-    return format_major(ri->format_version) == OTC_FORMAT_MAJOR && otc__readable(NULL, ri->min_reader_version);
+    return (!ri->format_version || format_major(ri->format_version) == OTC_FORMAT_MAJOR)
+           && otc__readable(NULL, ri->min_reader_version);
 }
 
 static void note_entry(fctx *c, const otc_release_info *ri);
@@ -1249,7 +1252,10 @@ static otc_status latest_info(fctx *c, otc_release_info **out, int *read_main)
         logf_(c, 1, "release %s needs a reader for format %s; looking for an older release", ri->datestamp,
               ri->min_reader_version ? ri->min_reader_version : "?");
     } else {
-        logf_(c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", format_major(ri->format_version));
+        int m = format_major(ri->format_version);
+        if (m > OTC_FORMAT_MAJOR) logf_(c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", m);
+        else logf_(c, 1, "the pointer names release %s of format %s, which this library does not read", ri->datestamp,
+                   ri->format_version);
     }
     otc_release_info_free(ri);
     /* step 2a: one GET of the index, only in this case */
