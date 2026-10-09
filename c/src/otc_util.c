@@ -714,6 +714,11 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
         own = sha_path_for(path);
         if (!own) { otc__err_set(err, OTC_E_NOMEM, path, "out of memory"); return OTC_E_NOMEM; }
         sha256_path = own;
+        if (otc__path_size(own) < 0) {   /* file_unverified: nothing to compare with (spec 4.3, CR D20) */
+            otc__err_set(err, OTC_E_CHECKSUM, path, "no %s next to %s, so it cannot be verified", base_name(own), path);
+            free(own);
+            return OTC_E_CHECKSUM;
+        }
     }
     st = otc__sha256_rows(sha256_path, &names, &digests, &n);
     if (st != OTC_OK) {

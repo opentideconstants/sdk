@@ -1201,8 +1201,6 @@
   {
    "case": "rules/pk11/verify-unverified-file",
    "runners": [
-    "c",
-    "c-fetch",
     "ruby"
    ],
    "package": "PK11",

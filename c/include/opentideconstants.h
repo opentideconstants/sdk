@@ -241,7 +241,9 @@ OTC_API otc_status otc_last_error_status(const otc_release *rel);
 
 /* Hashes path again in full and compares it with its row in sha256_path
  * (NULL: the OTC_{D}.sha256 next to path). OTC_E_CHECKSUM on a mismatch, with
- * file, expected_sha256 and actual_sha256 in err. */
+ * file, expected_sha256 and actual_sha256 in err; also when sha256_path is
+ * NULL and there is no OTC_{D}.sha256 next to path (a file_unverified
+ * release, spec 4.3). */
 OTC_API otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error *err);
 
 /* --------------------------------------------------------- release metadata */
