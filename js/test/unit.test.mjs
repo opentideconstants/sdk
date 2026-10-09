@@ -488,3 +488,53 @@ test("R2-119: the automatic update interval runs on a monotonic clock, so a wall
         child.kill();
     }
 });
+
+test("R2-117: an https proxy is verified against the default roots plus caFile, for https and http targets", async () => {
+    // test/tls: two throwaway CAs (100 years). proxy-ca stands for a CA the system trusts (NODE_EXTRA_CA_CERTS in the
+    // child); target-ca is the caFile, a private CA. NODE_EXTRA_CA_CERTS is read at start-up, so the GET runs in a child.
+    const https = await import("node:https");
+    const net = await import("node:net");
+    const { spawn } = await import("node:child_process");
+    const TLS = new URL("./tls/", import.meta.url).pathname;
+    const pem = (n) => fs.readFileSync(path.join(TLS, n));
+    const target = https.createServer({ key: pem("target.key"), cert: pem("target.pem") }, (req, res) => res.end("target"));
+    const proxyWith = (name) => https.createServer({ key: pem(`${name}.key`), cert: pem(`${name}.pem`) }, (req, res) => res.end("via-proxy"))
+        .on("connect", (req, sock, head) => {
+            const [h, p] = req.url.split(":");
+            const up = net.connect(Number(p), h, () => {
+                sock.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+                up.write(head);
+                up.pipe(sock);
+                sock.pipe(up);
+            });
+            up.on("error", () => sock.destroy());
+            sock.on("error", () => up.destroy());
+        });
+    const publicProxy = proxyWith("proxy");    // a proxy with a certificate from a system-trusted CA
+    const privateProxy = proxyWith("target");  // a proxy with a certificate from the caFile's private CA
+    const servers = [target, publicProxy, privateProxy];
+    await Promise.all(servers.map((s) => new Promise((r) => s.listen(0, "127.0.0.1", r))));
+    const port = (s) => s.address().port;
+    const get = (url, proxy) => new Promise((resolve) => {
+        const script = `
+            const { nodePlatform } = await import(${JSON.stringify(new URL("../dist/node.js", import.meta.url).href)});
+            try {
+                const r = await nodePlatform().get(${JSON.stringify(url)}, { headers: {}, timeout: 5, proxy: ${JSON.stringify(proxy)}, caFile: ${JSON.stringify(path.join(TLS, "target-ca.pem"))} });
+                console.log(r.status + " " + new TextDecoder().decode(r.body));
+            } catch (e) { console.log("error " + e.code + ": " + (e.cause?.code ?? e.message)); }`;
+        const child = spawn(process.execPath, ["--input-type=module", "-e", script],
+            { env: { ...process.env, NODE_EXTRA_CA_CERTS: path.join(TLS, "proxy-ca.pem") }, stdio: ["ignore", "pipe", "ignore"] });
+        let out = "";
+        child.stdout.on("data", (d) => { out += d; });
+        child.on("close", () => resolve(out.trim()));
+    });
+    try {
+        // an https target through a public https proxy: caFile is for the target, not for the proxy
+        // (localhost, not 127.0.0.1: the tunnelled TLS sends the host as SNI, which Node refuses for an IP)
+        assert.equal(await get(`https://localhost:${port(target)}/x`, `https://127.0.0.1:${port(publicProxy)}`), "200 target");
+        // an http target through an https proxy whose CA is the caFile
+        assert.equal(await get(`http://example.invalid/x`, `https://127.0.0.1:${port(privateProxy)}`), "200 via-proxy");
+    } finally {
+        servers.forEach((s) => { s.closeAllConnections(); s.close(); });
+    }
+});
