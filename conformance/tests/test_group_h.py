@@ -390,3 +390,12 @@ def test_missing_parent_gives_null_not_empty_list(tmp_path, lang):
     assert len(out) == len(lines) and out[0]["ok"], (p.stdout[-500:], p.stderr[-500:])
     for (op, a, key), reply in zip(LIST_OPS, out[1:]):
         assert reply == {"ok": True, "result": {key: None}}, (op, reply)
+
+
+# --- T57: a station_removed error whose tombstone the runner cannot encode is an uncaught: reply, not station_removed
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_unencodable_tombstone_changes_the_code(lang):
+    rc, hello, out, err = talk(lang, [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}])
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply

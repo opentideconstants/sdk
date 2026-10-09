@@ -418,12 +418,13 @@ def encode_sdk_error(e):
             v = getattr(e, f, None)
             if v is not None:
                 fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+        code = e.code
         if getattr(e, "tombstone", None) is not None:
             try:
                 fields["tombstone"] = enc_tombstone(e.tombstone)
             except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
-                fields["tombstone"] = f"uncaught:{type(te).__name__}"
-        return {"ok": False, "error": {"code": e.code, "message": str(e), "fields": finite(fields)}}
+                fields["tombstone"] = code = f"uncaught:{type(te).__name__}"  # also the code: a code-only check fails
+        return {"ok": False, "error": {"code": code, "message": str(e), "fields": finite(fields)}}
     except Exception as x:  # noqa: BLE001
         print(f"cannot encode the SDK error {type(e).__name__}: {type(x).__name__}: {x}", file=sys.stderr)
         return {"ok": False, "error": {"code": f"uncaught:{type(x).__name__}", "message": f"cannot encode the SDK error: {x}"}}

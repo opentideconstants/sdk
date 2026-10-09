@@ -361,13 +361,14 @@ export function makeRunner(sdk) {
     function encodeSdkError(e) {
         const fields = {};
         for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
+        let code = e.code;
         if (e.tombstone != null) {
-            // a tombstone the runner cannot encode fails the step instead of crashing the runner
+            // a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails)
             try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
-                fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
+                code = fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
             }
         }
-        return { ok: false, error: { code: e.code, message: String(e.message), fields: finite(fields) } };
+        return { ok: false, error: { code, message: String(e.message), fields: finite(fields) } };
     }
 
     // Closes the client at shutdown. Returns false (and the runner exits non-zero) when close() fails.

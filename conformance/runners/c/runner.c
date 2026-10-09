@@ -1050,6 +1050,8 @@ static void op_query(request *q, reply *r)
                 r->fields = cJSON_CreateObject();
                 cJSON_AddItemToObject(r->fields, "tombstone", enc_tombstone(t, &bad));
                 otc_tombstone_free(t);
+                /* a tombstone the runner could not encode: the code changes too, so a code-only check fails */
+                if (bad) set_error(r, "uncaught:BufferProtocol", "the tombstone of station_removed could not be encoded");
             }
             return;
         }
