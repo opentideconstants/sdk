@@ -730,7 +730,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         put(sets, NULL, s, &ok);
         if (rec && !otc__strcmp_null(otc__jstr(cs, "set_id"), rec)) {
             const char *q = otc__jstr(cs, "quantity");
-            kind = q && !strcmp(q, "water_level") ? "tide" : q && !strcmp(q, "current") ? "current" : "other";
+            kind = !q ? NULL : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
         }
     }
     if (otc__jstr(d, "status") && !strcmp(otc__jstr(d, "status"), "active") && otc__jstr(d, "station_id")) {
@@ -799,9 +799,10 @@ cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const ch
 static otc_kind resolve_kind(const otc_release *r, const otc__entry *e, size_t depth)
 {
     if (e->has_rec) {
+        /* OTHER only for a quantity the library does not know; no quantity is no kind (spec 6.2) */
         if (e->rec_quantity == OTC_QUANTITY_WATER_LEVEL) return OTC_KIND_TIDE;
         if (e->rec_quantity == OTC_QUANTITY_CURRENT) return OTC_KIND_CURRENT;
-        return OTC_KIND_OTHER;
+        return e->rec_quantity == OTC_QUANTITY_UNSET ? OTC_KIND_UNSET : OTC_KIND_OTHER;
     }
     if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets && depth < 16) {
         const otc__entry *ref = otc__find_entry(r, e->ref_id);

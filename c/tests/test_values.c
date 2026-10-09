@@ -4,7 +4,9 @@
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
  *      text after a line's object is invalid_release, not ignored.
  * C34: the kind filter "other" is not a kind value: it matches no station,
- *      also not one whose kind is unknown (spec 4.4). */
+ *      also not one whose kind is unknown (spec 4.4).
+ * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
+ *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
 #include "otc_test.h"
 
 static otc_release *open_lines(const char *lines, char **dir_out)
@@ -81,6 +83,18 @@ int main(void)
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
         CHECK(n == 1);
     }
+    otc_close(rel);
+    free(dir);
+    /* C4 */
+    rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
+                     "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\","
+                     "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
+    st = NULL;
+    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+        CHECK(otc_station_kind(st) == OTC_KIND_UNSET);
+        if (otc_station_kind(st) != OTC_KIND_UNSET) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
+    }
+    otc_station_free(st);
     otc_close(rel);
     free(dir);
     return test_done("test_values");
