@@ -26,30 +26,6 @@
    "reason": "step 3 assert_index: index-v1.json: stations[1] (OTC-T-0151): name is 'Me', expected 'Me\\x00da'"
   },
   {
-   "case": "cross/index-nul-name[ruby>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
-   "case": "cross/index-nul-name[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
-   "case": "cross/index-nul-name[ruby>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
    "case": "cross/index-offset-past-eof[c>python]",
    "runners": [
     "cross"
@@ -999,43 +975,10 @@
    "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
   },
   {
-   "case": "rules/pk08/fold-nul@json",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@json.gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@jsonl",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
    "case": "rules/pk08/fold-nul@jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@server",
-   "runners": [
-    "ruby"
+    "c-fetch"
    ],
    "package": "PK08",
    "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
@@ -1052,8 +995,7 @@
   {
    "case": "rules/pk08/previous-release-non-number@json",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK08",
    "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
@@ -1061,8 +1003,7 @@
   {
    "case": "rules/pk08/previous-release-non-number@json.gz",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK08",
    "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
@@ -1070,8 +1011,7 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK08",
    "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
@@ -1079,8 +1019,7 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl-stream",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK08",
    "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
@@ -1088,8 +1027,7 @@
   {
    "case": "rules/pk08/previous-release-non-number@server",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK08",
    "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""

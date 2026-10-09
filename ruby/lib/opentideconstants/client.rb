@@ -47,7 +47,8 @@ class OpenTideConstants
         @requested = check_release_arg(release)
         @mode = check_enum(mode, MODES, "mode").to_sym
         @on_network_error = check_enum(on_network_error, ON_NETWORK_ERROR, "on_network_error").to_sym
-        @offline = check_bool(offline, "offline") || ENV["OPENTIDECONSTANTS_OFFLINE"] == "1"
+        # The variable turns offline on with 1, true, yes or on, and then wins over offline: false (CR D15).
+        @offline = check_bool(offline, "offline") || %w[1 true yes on].include?(ENV["OPENTIDECONSTANTS_OFFLINE"].to_s.strip.downcase)
         @auto_update = check_bool(auto_update, "auto_update")
         @verify_on_open = check_bool(verify_on_open, "verify_on_open")
         unless update_interval.is_a?(Numeric) && update_interval.positive?

@@ -265,7 +265,8 @@ class OpenTideConstants
                 prev = raw["previous_release"]
                 @previous_release = prev.is_a?(Hash) ? Validation.new(prev, previous: true) : nil
             end
-            NUMBERS.each { |k| instance_variable_set("@#{k}", raw[k]) }
+            # In previous_release a value that is not a number is nil, as in every SDK (spec §4.6).
+            NUMBERS.each { |k| instance_variable_set("@#{k}", previous && !Release.real?(raw[k]) ? nil : raw[k]) }
             freeze
         end
     end

@@ -578,7 +578,6 @@ class OpenTideConstants
             list.call(raw["validation"], "validation")
             Array(raw["validation"]).each do |v|
                 %w[set_id reference_source reference_station window].each { |k| bad.call("validation #{k} is not a string") unless str.call(v[k]) }
-                bad.call("validation previous_release is not an object") unless v["previous_release"].nil? || v["previous_release"].is_a?(Hash)
             end
             Array(raw["constant_sets"]).each { |cs| check_set!(cs, bad, str, list) }
         end
