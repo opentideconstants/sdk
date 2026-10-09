@@ -785,10 +785,18 @@ static void op_verify(request *q, reply *r)
 {
     size_t i, n = otc_release_file_count(q->rel);
     char dir[4096];
-    const char *slash1 = strrchr(q->path, '/'), *slash2 = strrchr(q->path, '\\');
-    const char *slash = slash1 > slash2 ? slash1 : slash2;
-    size_t dlen = slash ? (size_t)(slash - q->path + 1) : 0;
-    if (dlen >= sizeof dir) { set_error(r, "io", "path too long"); return; }
+    const char *slash1, *slash2, *slash;
+    size_t dlen;
+    int opened_hashed = 0;   /* the file the release was opened from must be one of the files hashed */
+    otc_error oerr;
+    otc_status orc;
+    /* no path: the runner does not know where the release is; it must not answer verified with nothing hashed */
+    if (!q->path || !q->path[0]) { set_error(r, "uncaught:NoPath", "verify: the runner has no path for this release"); return; }
+    slash1 = strrchr(q->path, '/');
+    slash2 = strrchr(q->path, '\\');
+    slash = slash1 > slash2 ? slash1 : slash2;
+    dlen = slash ? (size_t)(slash - q->path + 1) : 0;
+    if (dlen >= sizeof dir) { set_error(r, "uncaught:PathTooLong", "path too long"); return; }
     memcpy(dir, q->path, dlen);
     dir[dlen] = '\0';
     for (i = 0; i < n; i++) {
@@ -814,6 +822,15 @@ static void op_verify(request *q, reply *r)
         otc_error_init(&err);
         rc = otc_verify_file(full, NULL, &err);
         if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
+        if (!strcmp(full, q->path)) opened_hashed = 1;
+    }
+    if (!opened_hashed) {
+        /* the opened file was not hashed: it is gone (the library reports that), or no checksum lists it */
+        otc_error_init(&oerr);
+        orc = otc_verify_file(q->path, NULL, &oerr);
+        if (orc != OTC_OK) { set_error_struct(r, orc, &oerr); return; }
+        set_error(r, "uncaught:NothingVerified", "verify: no checksum covers the file the release was opened from");
+        return;
     }
     r->result = cJSON_CreateObject();
     cJSON_AddTrueToObject(r->result, "verified");

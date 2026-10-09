@@ -126,3 +126,36 @@ def test_ops_with_no_client_are_error_replies(lang):
     for req, line in zip(NO_CLIENT_OPS, out):
         reply = strict(line)
         assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), (req, reply)
+
+
+# --- C61: the C runner's verify never answers verified: true when it hashed nothing
+
+def _copy_release(tmp_path):
+    d = "20991231.2"
+    for ext in (".jsonl", ".meta.json", ".sha256"):
+        shutil.copy(CONF / "fixtures" / "good" / f"OTC_{d}{ext}", tmp_path / f"OTC_{d}{ext}")
+    return tmp_path / f"OTC_{d}.jsonl"
+
+
+@pytest.mark.parametrize("lang", ["c", "c-fetch"])
+def test_c_verify_with_no_file_left_is_not_verified(tmp_path, lang):
+    path = _copy_release(tmp_path)
+    cmd, env = runner_cmd(lang)
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=dict(os.environ, **env))
+    try:
+        p.stdout.readline()
+        p.stdin.write(json.dumps({"op": "open", "args": {"file": str(path), "mode": "stream"}}) + "\n")
+        p.stdin.flush()
+        assert strict(p.stdout.readline())["ok"] is True
+        p.stdin.write(json.dumps({"op": "verify"}) + "\n")
+        p.stdin.flush()
+        assert strict(p.stdout.readline()) == {"ok": True, "result": {"verified": True}}  # the files are there
+        for f in tmp_path.iterdir():
+            f.unlink()
+        p.stdin.write(json.dumps({"op": "verify"}) + "\n")
+        p.stdin.flush()
+        reply = strict(p.stdout.readline())
+    finally:
+        p.stdin.close()
+        p.wait(timeout=10)
+    assert reply.get("ok") is False, reply
