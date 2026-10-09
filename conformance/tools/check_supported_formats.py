@@ -16,6 +16,8 @@ check fails when, for any language:
   - version is not the package version (python/src/opentideconstants/_client.py __version__, ruby
     version.rb VERSION, the top-level "version" of js/package.json read as JSON, C OTC_VERSION);
   - supported_format_version is not the SDK's declared SUPPORTED_FORMAT_VERSION (C: OTC_FORMAT_VERSION);
+  - supported_format_version is not conformance/api.json constants.SUPPORTED_FORMAT_VERSION.value (CR2 DR35),
+    or api.json cannot be read or has no such MAJOR.MINOR string (then every language fails);
   - the SDK declares no SUPPORTED_FORMAT_VERSION, or declares it more than once with different values.
   - a file that the check reads cannot be read (missing, a directory, not UTF-8; a .py file that is not valid
     Python). This is a FAIL line for that language, and the other languages are still checked.
@@ -389,6 +391,23 @@ def c_declarations():
     return scan_files(["c/include/**/*.h", "c/src/**/*.h", "c/src/**/*.c"], c_scan)
 
 
+def api_format_version():
+    """api.json constants.SUPPORTED_FORMAT_VERSION.value: (the version, None) or (None, why it cannot be read)."""
+    path = ROOT / "conformance" / "api.json"
+    try:
+        doc = json.loads(read(path))
+    except Unreadable as e:
+        return None, str(e)
+    except ValueError as e:
+        return None, f"{rel(path)} is not JSON: {e}"
+    v = doc
+    for key in ("constants", NAME, "value"):
+        v = v.get(key) if isinstance(v, dict) else None
+    if not isinstance(v, str) or not re.fullmatch(VERSION_RE, v):
+        return None, f"{rel(path)} has no MAJOR.MINOR string at constants.{NAME}.value (found {v!r})"
+    return v, None
+
+
 # language: (package version reader, declaration reader)
 LANGUAGES = {
     "python": (version_by_regex("python/src/opentideconstants/_client.py", r'^__version__\s*=\s*"([^"]+)"'),
@@ -401,7 +420,7 @@ LANGUAGES = {
 }
 
 
-def check_language(lang):
+def check_language(lang, api_version):
     get_version, get_declarations = LANGUAGES[lang]
     path = ROOT / lang / "supported-formats.json"
     if not path.exists():
@@ -427,6 +446,9 @@ def check_language(lang):
     sfv = doc["supported_format_version"]
     if not isinstance(sfv, str) or not re.fullmatch(VERSION_RE, sfv):
         errs.append(f"{lang}: supported_format_version {sfv!r} is not MAJOR.MINOR")
+    elif api_version is not None and sfv != api_version:
+        errs.append(f"{lang}: supported_format_version is {sfv!r}, but conformance/api.json "
+                    f"constants.{NAME}.value is {api_version!r}")
     declared = get_declarations()
     unparsed = [(f, why) for f, v, why in declared if v is None]
     if unparsed:
@@ -446,9 +468,14 @@ def check_language(lang):
 
 def main():
     problems = []
+    api_version, api_error = api_format_version()
+    if api_error:
+        problems.append(f"api.json: {api_error}")
     for lang in LANGUAGES:
         try:
-            errs, note = check_language(lang)
+            errs, note = check_language(lang, api_version)
+            if api_error:
+                errs = [f"{lang}: cannot compare with conformance/api.json (see above)"] + errs
         except Exception as e:  # noqa: BLE001 - report it as this language's failure and check the others
             errs, note = [f"{lang}: the check itself failed: {type(e).__name__}: {e}"], None
         print(f"{'FAIL' if errs else 'PASS'}  {lang:7} {note or ''}")

@@ -368,3 +368,60 @@ def test_c_forms_that_are_not_a_conflicting_declaration_pass(tree):
     ]))
     rc, out = run(tree)
     assert rc == 0, out
+
+
+# --- R2-185 (DR35): supported_format_version must equal api.json constants.SUPPORTED_FORMAT_VERSION.value
+
+def set_sfv(root, lang, value):
+    p = root / lang / "supported-formats.json"
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    doc["supported_format_version"] = value
+    p.write_text(json.dumps(doc), encoding="utf-8")
+
+
+DECLS = {
+    "python": ("python/src/opentideconstants/_release.py", 'SUPPORTED_FORMAT_VERSION = "1.0"'),
+    "ruby": ("ruby/lib/opentideconstants/version.rb", 'SUPPORTED_FORMAT_VERSION = "1.0".freeze'),
+    "js": ("js/src/constants.ts", 'export const SUPPORTED_FORMAT_VERSION = "1.0";'),
+    "c": ("c/include/opentideconstants.h", '#define OTC_FORMAT_VERSION "1.0"'),
+}
+
+
+def move_sdk_to(root, lang, value):
+    rel, decl = DECLS[lang]
+    p = root / rel
+    text = p.read_text(encoding="utf-8")
+    assert decl in text
+    p.write_text(text.replace(decl, decl.replace('"1.0"', f'"{value}"')), encoding="utf-8")
+    set_sfv(root, lang, value)
+
+
+def test_every_sdk_agreeing_on_a_version_api_json_does_not_name_fails(tree):
+    for lang in LANGS:
+        move_sdk_to(tree, lang, "2.0")
+    rc, out = run(tree)
+    assert rc == 1, out
+    for lang in LANGS:
+        assert status(out, lang) == "FAIL", out
+    assert "api.json" in out and "'1.0'" in out, out
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_one_sdk_consistent_with_itself_but_not_api_json_fails(tree, lang):
+    move_sdk_to(tree, lang, "1.1")
+    assert_fails(tree, lang, "api.json", "'1.1'")
+
+
+def test_missing_api_json_fails_and_still_checks_every_language(tree):
+    (tree / "conformance/api.json").unlink()
+    rc, out = run(tree)
+    assert rc == 1, out
+    assert "api.json" in out, out
+
+
+@pytest.mark.parametrize("doc", ["{", "[]", '{"constants": []}', '{"constants": {}}', '{"constants": {"SUPPORTED_FORMAT_VERSION": {"value": 1}}}'])
+def test_api_json_without_a_readable_supported_format_version_fails(tree, doc):
+    (tree / "conformance/api.json").write_text(doc, encoding="utf-8")
+    rc, out = run(tree)
+    assert rc == 1, out
+    assert "api.json" in out, out
