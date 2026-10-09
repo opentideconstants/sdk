@@ -2067,7 +2067,19 @@ static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info 
     otc_status st;
     if (usable_strict(c, ds)) {
         *lf = OTC_LOADED_FROM_CACHE;
-        return open_cached(c, ds, rel);
+        st = open_cached(c, ds, rel);
+        if (st != OTC_E_CHECKSUM) return st;
+        /* spec 4.8, 5.3: a cached file that fails its check is not used again. Online, the
+         * release is downloaded again: its .verified goes first, so every file is fetched */
+        {
+            char *d = rel_dir(c, ds), *v = d ? path2(d, ".verified") : NULL;
+            int gone = v && (fs_unlink(v) == 0 || fs_kind(v) == 0);
+            logf_(c, 2, "the cached release %s failed its check (%s); downloading it again", ds, c->err->message);
+            free(v);
+            free(d);
+            if (!gone) return st;
+            otc_error_init(c->err);
+        }
     }
     st = download_to_cache(c, ds, info, rel);
     if (st == OTC_OK && !*rel) {   /* another process finished it while we waited */
@@ -2097,12 +2109,12 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         if ((st = ensure_root(c)) != OTC_OK) return st;
         *ds_out = otc__strdup(release);
         if (!*ds_out) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-        if (usable_strict(c, release) || (c->offline && usable_loose(c, release))) {
+        if (c->offline) {
+            if (!usable_loose(c, release))
+                return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
             *lf = OTC_LOADED_FROM_CACHE;
             return open_cached(c, release, rel);
         }
-        if (c->offline)
-            return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
         return ensure_cached(c, release, NULL, rel, lf);
     }
     if ((st = ensure_root(c)) != OTC_OK) return st;
@@ -2123,14 +2135,25 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         otc_error net = *c->err;
         if (newest_cached(c, &ds) != OTC_OK) *c->err = net;   /* the network error stays the one reported */
         if (ds) {
-            snprintf(last_msg, last_len, "%s", c->err->message);
+            otc_status cst;
+            snprintf(last_msg, last_len, "%s", net.message);
             logf_(c, 2, "network error (%s); using the cached release %s", last_msg, ds);
             free(*ds_out);
             *ds_out = ds;
             *last_status = OTC_E_NETWORK;
             *lf = OTC_LOADED_FROM_CACHE_AFTER_ERROR;
             otc_error_init(c->err);
-            return open_cached(c, ds, rel);
+            cst = open_cached(c, ds, rel);
+            if (cst != OTC_OK) {
+                /* the cache cannot stand in: the error is the network's, with what the cache said */
+                char cmsg[512];
+                snprintf(cmsg, sizeof cmsg, "%s", c->err->message);
+                *c->err = net;
+                logf_(c, 2, "the cached release %s cannot be used either: %s", ds, cmsg);
+                *last_status = OTC_OK;
+                return OTC_E_NETWORK;
+            }
+            return OTC_OK;
         }
     }
     return st;
