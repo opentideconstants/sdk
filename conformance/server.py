@@ -268,7 +268,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         headers = {"ETag": tag, "Content-Type": ctype}
         body = data
         accept = self.headers.get("Accept-Encoding", "")
-        if "gzip" in accept.lower() and not path.endswith(".gz") and action not in ("short_body", "truncate"):
+        if "gzip" in accept.lower() and not served.endswith(".gz") and action not in ("short_body", "truncate"):
             body = gzip.compress(data, mtime=0)
             headers["Content-Encoding"] = "gzip"
         if action == "short_body":

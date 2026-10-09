@@ -77,3 +77,30 @@ def test_proxy_closes_the_upstream_connection(pair):
             break
         time.sleep(0.05)
     assert n == 0, f"{n} upstream connection(s) left open by the proxy"
+
+
+# --- K3: the gzip decision follows the file served, not the request path
+
+def _get(srv, path, headers=None):
+    conn = http.client.HTTPConnection(srv.host, srv.port, timeout=10)
+    conn.request("GET", path, headers=headers or {})
+    r = conn.getresponse()
+    body = r.read()
+    conn.close()
+    return r, body
+
+
+def test_gz_file_served_under_another_name_is_not_gzipped_again(pair):
+    srv, _ = pair
+    gz = (CONF / "fixtures" / "good" / "OTC_20991231.2.json.gz").read_bytes()
+    srv.set_rules([{"match": r"x\.json$", "action": "file", "file": "good/OTC_20991231.2.json.gz"}])
+    r, body = _get(srv, "/good/x.json", {"Accept-Encoding": "gzip"})
+    assert r.getheader("Content-Encoding") is None and body == gz, r.getheaders()
+
+
+def test_plain_file_served_under_a_gz_name_is_gzipped(pair):
+    srv, _ = pair
+    data = (CONF / "fixtures" / "good" / "OTC_20991231.2.json").read_bytes()
+    srv.set_rules([{"match": r"x\.json\.gz$", "action": "file", "file": "good/OTC_20991231.2.json"}])
+    r, body = _get(srv, "/good/x.json.gz", {"Accept-Encoding": "gzip"})
+    assert r.getheader("Content-Encoding") == "gzip" and gzip.decompress(body) == data, r.getheaders()
