@@ -129,6 +129,33 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
     return OTC_OK;
 }
 
+static const char *path_base(const char *path);
+
+otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length, cJSON **out)
+{
+    otc_status st = otc__read_line(rel, offset, length, out);
+    char got[96];
+    if (st != OTC_OK) return st;
+    if (otc__jstr(*out, "station_id") && !strcmp(otc__jstr(*out, "station_id"), id)) return OTC_OK;
+    snprintf(got, sizeof got, "%s", otc__jstr(*out, "station_id") ? otc__jstr(*out, "station_id") : "not a station");
+    cJSON_Delete(*out);
+    *out = NULL;
+    if (rel->index_used) {
+        /* spec 6.2 (CR D4): the index named the wrong line; delete it so the next open rebuilds it */
+        const char *base = path_base(rel->path);
+        char *dir = otc__strndup(rel->path, (size_t)(base - rel->path)), *ix = dir ? otc__join(dir, "index-v1.json") : NULL;
+        int removed = ix && otc__remove_file(ix) == 0;
+        free(ix);
+        free(dir);
+        return otc__fail(rel, OTC_E_INVALID_RELEASE,
+                         "index-v1.json names the line at offset %llu of %s for station %s, but the line is %s; the "
+                         "index is stale%s", (unsigned long long)offset, rel->path, id, got,
+                         removed ? " and was deleted (the next open rebuilds it)" : " and could not be deleted");
+    }
+    return otc__fail(rel, OTC_E_INVALID_RELEASE, "the line at offset %llu of %s is not station %s (it changed after open?)",
+                     (unsigned long long)offset, rel->path, id);
+}
+
 /* ----------------------------------------------------------------- close */
 
 static void free_entry(otc__entry *e)
@@ -464,6 +491,9 @@ static int entry_ok(const cJSON *e, int64_t size)
     const cJSON *a, *x, *sets, *cs;
     size_t i;
     if (!cJSON_IsObject(e) || !whole_ok(otc__jget(e, "offset")) || !whole_ok(otc__jget(e, "length"))) return 0;
+    /* the bounds check of spec 6.2 (CR D4): length > 0 and offset + length <= jsonl_size (the
+     * caller checks that the offsets increase) */
+    if (otc__jget(e, "length")->valuedouble <= 0) return 0;
     if (otc__jget(e, "offset")->valuedouble + otc__jget(e, "length")->valuedouble > (double)size) return 0;
     if (!otc__jstr(e, "station_id") || !otc__jstr(e, "status")) return 0;
     for (i = 0; ENTRY_STR[i]; i++)
@@ -551,7 +581,13 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
         goto done;
     v = otc__jget(doc, "jsonl_size");
     if (!cJSON_IsNumber(v) || v->valuedouble != (double)size || !cJSON_IsArray(otc__jget(doc, "stations"))) goto done;
-    cJSON_ArrayForEach(e, otc__jget(doc, "stations")) if (!entry_ok(e, size)) goto done;
+    {
+        double prev = -1;
+        cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
+            if (!entry_ok(e, size) || otc__jget(e, "offset")->valuedouble <= prev) goto done;
+            prev = otc__jget(e, "offset")->valuedouble;
+        }
+    }
     st = OTC_OK;
     cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
         cJSON *line = line_from_entry(e);

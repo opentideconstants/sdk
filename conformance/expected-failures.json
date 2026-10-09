@@ -146,14 +146,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[python>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[python>ruby]",
    "runners": [
     "cross"
@@ -170,14 +162,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[ruby>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[ruby>python]",
    "runners": [
     "cross"
@@ -192,14 +176,6 @@
    ],
    "package": "PK05",
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
-   "case": "cross/index-station-id-swapped[typescript>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
    "case": "cross/index-station-id-swapped[typescript>python]",

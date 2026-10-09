@@ -522,6 +522,18 @@ void otc__mutex_unlock(otc__mutex *m) { pthread_mutex_unlock(&m->m); }
 void otc__mutex_destroy(otc__mutex *m) { pthread_mutex_destroy(&m->m); }
 #endif
 
+int otc__remove_file(const char *path)
+{
+#ifdef _WIN32
+    wchar_t *w = widen(path);
+    int r = w ? _wremove(w) : -1;
+    free(w);
+    return r;
+#else
+    return remove(path);
+#endif
+}
+
 otc_status otc__read_all(const char *path, char **out, size_t *len)
 {
     otc__file *f = NULL;

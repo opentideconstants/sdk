@@ -35,7 +35,7 @@ static int filter_ok(const otc_filter *f)
 static otc_status load_entry(const otc_release *rel, const otc__entry *e, otc_station_t **out)
 {
     cJSON *root = NULL;
-    otc_status st = otc__read_line(rel, e->offset, e->length, &root);
+    otc_status st = otc__read_station_line(rel, e->id, e->offset, e->length, &root);
     if (st != OTC_OK) return st;
     st = otc__station_build(rel, root, e->kind, out);
     return st == OTC_OK ? st : otc__fail(rel, st, "cannot build station %s", e->id);
@@ -87,7 +87,7 @@ otc_status otc_tombstone(const otc_release *rel, const char *id, otc_tombstone_t
     if (!rel || !out || !id) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_tombstone: NULL argument");
     t = otc__find_tomb(rel, id);
     if (!t) return OTC_E_NOT_FOUND;
-    st = otc__read_line(rel, t->offset, t->length, &root);
+    st = otc__read_station_line(rel, t->id, t->offset, t->length, &root);
     if (st != OTC_OK) return st;
     *out = (otc_tombstone_t *)malloc(sizeof **out);
     if (!*out) { cJSON_Delete(root); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }

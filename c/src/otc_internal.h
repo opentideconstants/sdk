@@ -51,6 +51,8 @@ int64_t otc__file_size(otc__file *f);
 void otc__file_close(otc__file *f);
 /* The size of a file, or -1 if it does not exist or is not a regular file. */
 int64_t otc__path_size(const char *path);
+/* Removes a file; 0 on success. */
+int otc__remove_file(const char *path);
 /* Reads a whole (small) file into a NUL-terminated malloc'd buffer. */
 otc_status otc__read_all(const char *path, char **out, size_t *len);
 
@@ -242,6 +244,9 @@ const otc_licence *otc__find_licence(const otc_release *rel, const char *id);
 cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by);
 /* Reads and parses one line of the .jsonl file. */
 otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length, cJSON **out);
+/* Reads the line of station id: invalid_release when the line is another
+ * station's (a stale index, spec 6.2 / CR D4; the index file is then deleted). */
+otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length, cJSON **out);
 int otc__filter_match(const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */
