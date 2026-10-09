@@ -43,10 +43,10 @@ from jsonschema import Draft202012Validator
 
 # Format 1.0 and its index schema, from the site repository at the merge that published format 1.0,
 # pinned by commit and SHA-256.
-SCHEMA_COMMIT = "c5b0cb6387c2f78fe4a5acf9975f4dcc5a8e8a4e"
+SCHEMA_COMMIT = "0833df89c988049abe38d0ddd8b482e4f3d425c0"
 _RAW = f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_COMMIT}/src/schema"
 SCHEMAS = {
-    "1.0": (f"{_RAW}/otc-1.0.schema.json", "8771007c86895a29a263885500907a2e489d3145fc15e7d5e4ec60ff3b8d5fc0"),
+    "1.0": (f"{_RAW}/otc-1.0.schema.json", "e27d5f6b5886b4366dbb8b7bb83ebb375cce99bdfe93ae32189cf27cf8463845"),
     "index-1.0": (f"{_RAW}/otc-index-1.0.schema.json", "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb"),
 }
 SCHEMA_FILES = {"1.0": "otc-1.0.schema.json", "index-1.0": "otc-index-1.0.schema.json"}
@@ -68,6 +68,8 @@ SECOND = "20991231.2"
 COUNTER = "20991231.10"
 EARLIER = "20991230"   # a release before the fixtures' releases, for carried_from_release
 TABLE = "otc-test-1"
+ASTRO = "otc-test-astro-1"   # the astro_tables entry every convention uses (all are f_u_at_prediction)
+ASTRO_YEARS = (2098, 2101)
 COMMIT = "0123456"
 BUILD = {"build_commit": COMMIT}
 
@@ -207,6 +209,20 @@ def tombstone(station_id, name, removed_in, reason, into, detail=None):
     return t
 
 
+def astro_tables(table):
+    """One synthetic astro table (format 1.0 astro_tables): a row per constituent of the table, the same speeds,
+    made-up V0+u and f per year. Its tables_sha256 is the conventions' (the release build checks they agree)."""
+    first, last = ASTRO_YEARS
+    rows = {}
+    for i, c in enumerate(table):
+        rows[c["name"]] = {"speed_deg_per_hour": c["speed_deg_per_hour"],
+                           "v0u_deg": [round((37.5 * i + 11.25 * y) % 360, 2) for y in range(last - first + 1)],
+                           "f": [round(1.0 + 0.01 * ((i + y) % 3 - 1), 4) for y in range(last - first + 1)]}
+    return [{"astro_table_id": ASTRO, "v0_model": "schureman_tcd", "tables_sha256": hashlib.sha256(TABLE.encode()).hexdigest(),
+             "generator": "synthetic test values (not congen output)", "first_year": first, "last_year": last,
+             "constituents": rows}]
+
+
 def release_doc(datestamp):
     conventions = [
         {
@@ -217,6 +233,7 @@ def release_doc(datestamp):
             "nodal_formula_ids": {"M2": "M2", "S2": 0, "N2": "M2", "K1": "K1", "O1": "O1", "M4": "M2^2"},
             "constituent_table_version": TABLE,
             "tables_sha256": hashlib.sha256(TABLE.encode()).hexdigest(),
+            "astro_table_id": ASTRO,
             "canary": {"status": "not_applicable"},
         },
         {
@@ -226,6 +243,7 @@ def release_doc(datestamp):
             "v0_model": "schureman_tcd",
             "nodal_handling": "f_u_at_prediction",
             "constituent_table_version": TABLE,
+            "astro_table_id": ASTRO,
             "canary": {"status": "pass", "gauges": 3, "median_amp_diff_m": 0.004, "median_phase_diff_deg": 0.8},
         },
         {
@@ -234,20 +252,21 @@ def release_doc(datestamp):
             "v0_model": "schureman_tcd",
             "nodal_handling": "f_u_at_prediction",
             "constituent_table_version": TABLE,
+            "astro_table_id": ASTRO,
         },
     ]
     # Not in licence_id order: release.licences keeps file order, the attribution orders by licence_id (spec 4.6).
     licences = [
         {"licence_id": "noaa", "spdx": "LicenseRef-PublicDomain-USGov", "provider": "Example Ocean Service",
-         "attribution": "Synthetic test data in the style of a public-domain US agency."},
+         "attribution": "Synthetic test data in the style of a public-domain US agency.", "commercial_use": True},
         {"licence_id": "kartverket", "spdx": "CC-BY-4.0", "provider": "Example Mapping Authority",
-         "attribution": "Synthetic test data, Example Mapping Authority."},
+         "attribution": "Synthetic test data, Example Mapping Authority.", "commercial_use": True},
         {"licence_id": "eot20", "spdx": "CC-BY-4.0", "provider": "Example Tide Model Group",
-         "attribution": "Example tide model, interpolated by OpenTideConstants tests."},
+         "attribution": "Example tide model, interpolated by OpenTideConstants tests.", "commercial_use": True},
         {"licence_id": "gesla-derived", "spdx": "CC-BY-4.0", "provider": "Example Gauge Agency via GESLA",
          "citation": "Example Gauge Agency (2099). Example sea level records. Test citation.",
          "attribution": "Contains synthetic test data in the style of GESLA-4.",
-         "url": "https://example.org/gesla-test"},
+         "url": "https://example.org/gesla-test", "commercial_use": True},
     ]
     table = [
         {"constituent_table_version": TABLE, "name": "K1", "doodson": "165 555", "speed_deg_per_hour": 15.0410686, "nodal_formula_id": "K1"},
@@ -366,6 +385,7 @@ def release_doc(datestamp):
         "conventions": conventions,
         "licences": licences,
         "constituents": table,
+        "astro_tables": astro_tables(table),
         "stations": stations,
     }
     if datestamp == BASE:
@@ -680,9 +700,12 @@ def small_doc(datestamp, full=False, concept_doi="10.5072/zenodo.1"):
            "build_commit": "89abcdef0123456789abcdef0123456789abcdef",
            "changelog_url": f"https://opentideconstants.org/changelog/#{datestamp}"}
     licences = base["licences"] + ([{"licence_id": "jma", "spdx": "LicenseRef-JMA-Test", "provider": "Example Meteorological Agency",
-                                     "attribution": "Synthetic test data in the style of JMA."}] if full else [])
+                                     "attribution": "Synthetic test data in the style of JMA.", "commercial_use": False,
+                                     "restriction": "Test: non-commercial use only, by the provider's terms.",
+                                     "terms_url": "https://example.org/jma-test-terms"}] if full else [])
     doc = {"format_version": FORMAT, "release": rel, "conventions": base["conventions"], "licences": licences,
-           "constituents": base["constituents"], "stations": v1_stations(datestamp, full)}
+           "constituents": base["constituents"], "astro_tables": base["astro_tables"],
+           "stations": v1_stations(datestamp, full)}
     doc["stations"].sort(key=lambda s: s["station_id"])
     return doc
 
@@ -807,6 +830,23 @@ def cross_ref_errors(doc):
     lic = {l["licence_id"] for l in doc["licences"]}
     table = {(c["constituent_table_version"], c["name"]) for c in doc["constituents"]}
     conv_table = {c["convention_id"]: c["constituent_table_version"] for c in doc["conventions"]}
+    astro = {t["astro_table_id"]: t for t in doc.get("astro_tables", [])}
+    conv_astro = {}
+    for c in doc["conventions"]:
+        if "astro_table_id" not in c:
+            continue
+        t = astro.get(c["astro_table_id"])
+        if t is None:
+            errs.append(f"{c['convention_id']}: astro_table_id {c['astro_table_id']} does not resolve")
+            continue
+        conv_astro[c["convention_id"]] = t
+        if "tables_sha256" in c and c["tables_sha256"] != t["tables_sha256"]:
+            errs.append(f"{c['convention_id']}: tables_sha256 differs from astro table {t['astro_table_id']}")
+    for t in astro.values():
+        n = t["last_year"] - t["first_year"] + 1
+        for name, row in t["constituents"].items():
+            if len(row["v0u_deg"]) != n or len(row["f"]) != n:
+                errs.append(f"astro table {t['astro_table_id']}: {name} does not have {n} yearly entries")
     ids = [s["station_id"] for s in doc["stations"]]
     if len(ids) != len(set(ids)):
         errs.append("duplicate station_id")
@@ -832,6 +872,13 @@ def cross_ref_errors(doc):
             for c in cs["constituents"] + cs.get("dropped_constituents", []):
                 if tv and (tv, c["name"]) not in table:
                     errs.append(f"{cs['set_id']}: constituent {c['name']} not in table {tv}")
+            at = conv_astro.get(cs["convention_id"])
+            for c in cs["constituents"]:
+                row = at and at["constituents"].get(c["name"])
+                if at and row is None:
+                    errs.append(f"{cs['set_id']}: constituent {c['name']} not in astro table {at['astro_table_id']}")
+                elif row and abs(row["speed_deg_per_hour"] - c["speed_deg_per_hour"]) > 1e-7:
+                    errs.append(f"{cs['set_id']}: {c['name']} speed differs from astro table {at['astro_table_id']}")
         rec = s["recommended_set_id"]
         if rec is not None and rec not in own:
             errs.append(f"{sid}: recommended_set_id {rec} does not resolve")
