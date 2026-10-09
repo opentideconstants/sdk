@@ -73,9 +73,16 @@ jobs:
         run: |
           python -m zipfile -l dist/opentideconstants-*-py3-none-any.whl > wheel-files.txt
           grep "opentideconstants/supported-formats.json" wheel-files.txt
+      # As the runner's own user, not root: as root the chmod-based unit tests and
+      # the read-only cache cases cannot see a permission error, so they fail (R2-359).
       - name: Install the wheel in a clean python:3.10-slim container, run the unit tests on it, and run the quickstart against the fixture server
         run: |
-          docker run --rm -i -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim bash -eo pipefail -s <<'SCRIPT'
+          docker run --rm -i --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim bash -eo pipefail -s <<'SCRIPT'
+          test "$(id -u)" -ne 0
+          mkdir -p "$HOME"
+          # a venv, not pip --user: the driver gives each runner its own HOME
+          python -m venv /tmp/venv
+          export PATH=/tmp/venv/bin:$PATH
           pip install --no-index --quiet /dist/opentideconstants-*-py3-none-any.whl
           cd /tmp
           OTC_TEST_INSTALLED=1 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s /repo/python/tests -v
