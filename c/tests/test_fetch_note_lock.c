@@ -1,7 +1,8 @@
 /* PK04 / C113: note_entry (which records a pointer's version DOI in a cached
  * release's .verified) rewrites .verified only while it holds the release's
  * .lock. While another process holds it (a download or an index build that
- * also writes .verified), the note is skipped, not raced. */
+ * also writes .verified), the note is skipped, not raced. A lock at least
+ * 120 s old (a crashed process) is taken over (CR2 DR3). */
 #include "otc_test.h"
 
 static int verified_has(const char *vpath, const char *needle)
@@ -42,13 +43,9 @@ int main(void)
     info = NULL;
     CHECK(!verified_has(vpath, "10.5072/zenodo.2"));
     if (verified_has(vpath, "10.5072/zenodo.2")) fprintf(stderr, ".verified was rewritten while another process held the lock\n");
-    /* the lock is gone: the note is made */
-    {
-        char *owner = test_join(lock, "owner.json");
-        unlink(owner);
-        free(owner);
-    }
-    rmdir(lock);
+    /* a lock left by a crashed process (at least 120 s old) is taken over, and the
+     * note is made (spec 5.4 non-blocking takes, CR2 DR3, R2-011) */
+    test_write(lock, "owner.json", "{\"pid\":1,\"token\":\"crashed\",\"started_at\":\"2000-01-01T00:00:00Z\"}");
     CHECK_STATUS(otc_fetch_latest_info(&fo, &info), OTC_OK);
     otc_release_info_free(info);
     CHECK(verified_has(vpath, "10.5072/zenodo.2"));
