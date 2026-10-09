@@ -2617,7 +2617,13 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         char *p = path2(dir, targets[i]), hex[65];
         if (!p) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         if (fs_kind(p) == 2) {
-            if (file_sha(p, hex) == OTC_OK && !strcmp(hex, target_sha[i])) { free(p); continue; }
+            otc_status hs = file_sha(p, hex);
+            if (hs != OTC_OK) {   /* a file that cannot be read is that error, not "a different SHA-256" */
+                st = fail(&c, hs == OTC_E_NOMEM ? hs : OTC_E_IO, p, "cannot read %s", p);
+                free(p);
+                goto out;
+            }
+            if (!strcmp(hex, target_sha[i])) { free(p); continue; }
             if (!overwrite) {
                 st = fail(&c, OTC_E_FILE_EXISTS, p, "%s exists with a different SHA-256", p);
                 free(p);
