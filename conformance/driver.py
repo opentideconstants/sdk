@@ -987,7 +987,8 @@ def main():
         return selftest()
     if a.cross and a.runner:
         ap.error("--runner and --cross do not go together")
-    cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross else CASES_DIR)
+    # --check-cases with no --cases lints cases/ and cross/ (each once), whatever --cross says
+    cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross and not a.check_cases else CASES_DIR)
     try:
         raw = load_cases(cases_dir)
         cases = raw if a.cross else expand(raw)

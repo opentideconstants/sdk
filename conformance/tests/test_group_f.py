@@ -159,3 +159,13 @@ def test_cross_case_requires_applies_to_every_role():
     assert [v["id"] for v in driver.expand_cross([c], hellos)] == []
     hellos["b"] = (["b"], {"fs", "json"})
     assert sorted(v["id"] for v in driver.expand_cross([c], hellos)) == ["x[a>b]", "x[b>a]"]
+
+
+# --- K1: --check-cases with --cross lints cases/ and cross/ once each, with no false problems
+
+def test_check_cases_with_cross_has_no_false_problems():
+    plain = run_driver("--check-cases")
+    r = run_driver("--check-cases", "--cross", "a=x", "--cross", "b=y")
+    assert plain.returncode == 0, plain.stdout[-400:]
+    assert r.returncode == 0 and "PROBLEM" not in r.stdout, r.stdout[-600:]
+    assert r.stdout.splitlines()[-1] == plain.stdout.splitlines()[-1], (r.stdout[-300:], plain.stdout[-300:])
