@@ -20,6 +20,11 @@ The same package runs in a browser, for read-only use: it fetches releases over 
 npm install opentideconstants
 ```
 
+The package is an ES module only. Its `exports` has `types`, `import` and `default`, and no CommonJS build:
+
+- ES modules and TypeScript: `import { OpenTideConstants } from "opentideconstants"`. In TypeScript use `"module": "nodenext"` (or `"bundler"` resolution).
+- CommonJS on Node 22.12 or later: `const { OpenTideConstants } = require("opentideconstants")` loads the ES module (Node's `require` of ES modules; Node 22.12 prints an `ExperimentalWarning` for it). TypeScript checks such a `require` with `"module": "nodenext"`; with `"node16"` it reports TS1471, so use `await import("opentideconstants")` there.
+
 ## Quickstart
 
 ```js

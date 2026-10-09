@@ -383,3 +383,23 @@ test("D15: OPENTIDECONSTANTS_OFFLINE reads 1, true, yes and on (any case, trimme
         if (saved === undefined) delete process.env.OPENTIDECONSTANTS_OFFLINE; else process.env.OPENTIDECONSTANTS_OFFLINE = saved;
     }
 });
+
+test("T65: ESM only: exports has types, import and default, and no CommonJS condition names the ES module", async () => {
+    const { readFileSync, existsSync } = await import("node:fs");
+    const pkgUrl = new URL("../package.json", import.meta.url);
+    const pkg = JSON.parse(readFileSync(pkgUrl, "utf8"));
+    assert.equal(pkg.type, "module");
+    const root = pkg.exports["."];
+    assert.deepEqual(Object.keys(root), ["types", "import", "default"]);
+    for (const k of ["require", "node-addons", "module-sync"]) assert.equal(root[k], undefined, k);
+    for (const target of Object.values(root)) assert.ok(existsSync(new URL(target, pkgUrl)), target);
+});
+
+test("T65: require() of the package (Node 22.12 or later, require of an ES module) gives the same module as import", async () => {
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const viaRequire = req("opentideconstants");
+    const viaImport = await import("opentideconstants");
+    assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
+    assert.equal(viaRequire.VERSION, otc.VERSION);
+});
