@@ -117,3 +117,4 @@ jobs:
         with:
           name: cross-report-${{ matrix.os }}
           path: cross-report.json
+          if-no-files-found: error

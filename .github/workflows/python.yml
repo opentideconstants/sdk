@@ -44,7 +44,7 @@ jobs:
         with:
           name: conformance-python-${{ matrix.os }}-${{ matrix.python }}
           path: conformance-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   wheel:
     name: wheel and clean install
@@ -100,3 +100,4 @@ jobs:
         with:
           name: python-dist
           path: dist
+          if-no-files-found: error

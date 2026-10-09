@@ -91,4 +91,4 @@ jobs:
         with:
           name: ruby-conformance-${{ matrix.os }}-${{ matrix.ruby }}
           path: ruby-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error

@@ -73,7 +73,7 @@ jobs:
         with:
           name: ts-node-report-${{ matrix.os }}-${{ matrix.node }}
           path: ts-node-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   browser:
     name: headless Chromium (CORS)
@@ -101,7 +101,7 @@ jobs:
         with:
           name: ts-browser-report
           path: ts-browser-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   package:
     name: npm pack in ${{ matrix.image }}
