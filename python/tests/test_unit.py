@@ -241,6 +241,100 @@ class FormatVersionTest(unittest.TestCase):
             srv.close()
 
 
+class LockAndPruneTest(unittest.TestCase):
+    """Lock liveness, .verified writes and prune safety (spec §4.3, §5.4, CR D3; review PK04)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.cache = self.root / "cache"
+
+    def tearDown(self):
+        for p in self.root.rglob("*"):
+            if p.is_dir():
+                p.chmod(0o755)
+        self.root.chmod(0o755)
+        self.tmp.cleanup()
+
+    def test_a_stale_lock_that_cannot_be_removed_is_a_cache_error_not_a_hang(self):
+        import threading
+        from opentideconstants import _cache
+        d = self.root / "rel"
+        (d / ".lock").mkdir(parents=True)
+        (d / ".lock" / "owner.json").write_text("{}")
+        (d / ".lock").chmod(0o555)  # owner.json cannot be deleted, so the stale lock cannot be removed
+        saved = _cache.LOCK_STALE_S, _cache.LOCK_POLL_S
+        _cache.LOCK_STALE_S, _cache.LOCK_POLL_S = 0.05, 0.01
+        out = []
+
+        def take():
+            try:
+                with _cache.lock_dir(d, "test"):
+                    out.append("held")
+            except Exception as e:  # noqa: BLE001
+                out.append(e)
+        t = threading.Thread(target=take, daemon=True)
+        t.start()
+        t.join(5)
+        _cache.LOCK_STALE_S, _cache.LOCK_POLL_S = saved
+        self.assertFalse(t.is_alive(), "lock_dir loops forever on a stale lock it cannot remove")
+        self.assertIsInstance(out[0], otc.CacheError)
+
+    def test_release_leaves_a_lock_that_another_process_took(self):
+        from opentideconstants._cache import lock_dir
+        d = self.root / "rel"
+        d.mkdir()
+        with lock_dir(d, "test") as held:
+            self.assertTrue(held)
+            owner = json.loads((d / ".lock" / "owner.json").read_text())
+            self.assertGreaterEqual(len(owner.get("token", "")), 32)
+            owner["token"] = "another process"
+            (d / ".lock" / "owner.json").write_text(json.dumps(owner))
+        self.assertTrue((d / ".lock").is_dir())
+
+    def test_an_index_entry_without_a_doi_keeps_the_known_doi(self):
+        srv = _Server()
+        try:
+            with otc.OpenTideConstants(release="20991231", base_url=srv.url, cache_dir=str(self.cache)) as c:
+                vp = self.cache / "v1" / "releases" / "20991231" / ".verified"
+                v = json.loads(vp.read_text())
+                v["zenodo_version_doi"] = "10.5072/zenodo.9"
+                vp.write_text(json.dumps(v))
+                c.releases()
+                self.assertEqual(json.loads(vp.read_text())["zenodo_version_doi"], "10.5072/zenodo.9")
+        finally:
+            srv.close()
+
+    def test_prune_skips_a_release_being_downloaded(self):
+        srv = _Server()
+        try:
+            with otc.OpenTideConstants(release="20991231", base_url=srv.url, cache_dir=str(self.cache)):
+                pass
+            with otc.OpenTideConstants(release="20991231.2", base_url=srv.url, cache_dir=str(self.cache)) as c:
+                (self.cache / "v1" / "releases" / "20991231" / ".lock").mkdir()  # another process holds it
+                self.assertEqual(c.prune(keep=1), ())
+                self.assertTrue((self.cache / "v1" / "releases" / "20991231" / ".verified").is_file())
+        finally:
+            srv.close()
+
+    def test_prune_keeps_a_release_the_caller_still_holds(self):
+        idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+        script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
+        srv = _Server(script=script)
+        try:
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream") as c:
+                old = c.release
+                self.assertEqual(old.datestamp, "20991231")
+                del script["/OTC_latest-f1.json"]
+                self.assertTrue(c.update().updated)
+                self.assertEqual(c.prune(keep=0), ())
+                self.assertTrue((self.cache / "v1" / "releases" / "20991231" / ".verified").is_file())
+                self.assertEqual(old.station("OTC-T-0001").station_id, "OTC-T-0001")
+        finally:
+            srv.close()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

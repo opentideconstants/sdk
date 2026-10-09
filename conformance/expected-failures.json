@@ -352,7 +352,6 @@
    "case": "rules/pk04/prune-reports-only-removed",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],

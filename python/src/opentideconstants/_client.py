@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import time
+import weakref
 import zlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,6 +77,7 @@ class OpenTideConstants:
         self._last_error: Optional[OpenTideConstantsError] = None
         self._newer_format_major: Optional[int] = None
         self._closed = False
+        self._handed_out = weakref.WeakSet()  # Releases this client made that may still be held
         if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
             raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
         if mode not in _MODES:
@@ -155,6 +157,7 @@ class OpenTideConstants:
     def _set(self, rel: Release, loaded_from: str) -> None:
         old = self._release
         self._release = rel
+        self._handed_out.add(rel)
         self._loaded_from = LoadedFrom(loaded_from)
         if old is not None and old is not rel:
             pass  # a Release the caller holds stays usable; it is closed with the client only if current
@@ -244,15 +247,22 @@ class OpenTideConstants:
         return rel
 
     def _note_entry(self, info: ReleaseInfo) -> None:
-        """Keep the version DOI of a pointer or index entry in the .verified of that cached release (spec §4.3)."""
+        """Keep the version DOI of a pointer or index entry in the .verified of that cached release (spec §4.3).
+        An entry with no DOI does not erase a known one. The read-modify-write runs under the release lock."""
+        if info.zenodo_version_doi is None:
+            return
         v = self._cache.read_verified(info.datestamp)
         if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
             return
-        v["zenodo_version_doi"] = info.zenodo_version_doi
+        d = self._cache.release_dir(info.datestamp)
         try:
-            atomic_write(self._cache.release_dir(info.datestamp) / ".verified",
-                         json.dumps(v, indent=1, sort_keys=True).encode("utf-8"))
-        except OSError as e:
+            with lock_dir(d, SDK) as held:
+                v = self._cache.read_verified(info.datestamp) if held else None
+                if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
+                    return
+                v["zenodo_version_doi"] = info.zenodo_version_doi
+                atomic_write(d / ".verified", json.dumps(v, indent=1, sort_keys=True).encode("utf-8"))
+        except (OSError, CacheError) as e:
             self._log.warning("cannot update %s/.verified: %s", info.datestamp, e)
 
     def _cached_index_entries(self):
@@ -704,13 +714,18 @@ class OpenTideConstants:
         """Remove cached releases beyond the newest ``keep``. Never removes the loaded release."""
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
             raise InvalidArgumentError("keep must be a non-negative integer")
-        loaded = self._release.datestamp if self._release is not None else None
+        # never the loaded release, nor one that the caller still holds from before an update (spec §4.3)
+        keep_ds = {r.datestamp for r in list(self._handed_out) if not r._closed}
+        if self._release is not None:
+            keep_ds.add(self._release.datestamp)
         removed = []
         for ds in self._cache.cached()[keep:]:
-            if ds == loaded:
+            if ds in keep_ds:
                 continue
-            self._cache.remove_release(ds)
-            removed.append(ds)
+            if self._cache.remove_release(ds):
+                removed.append(ds)
+            else:
+                self._log.info("prune: %s is locked by another process; it is kept", ds)
         return tuple(removed)
 
     def download(self, release: str = "latest", *, to, formats: Sequence[str] = ("jsonl",),

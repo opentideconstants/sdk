@@ -220,7 +220,8 @@ class Release:
 
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
-                 "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi")
+                 "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
+                 "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None):
         self._meta = meta

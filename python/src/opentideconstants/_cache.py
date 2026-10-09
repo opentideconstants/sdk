@@ -113,13 +113,27 @@ class Cache:
             return []
         return sorted(names, key=datestamp_key, reverse=True)
 
-    def remove_release(self, datestamp: str) -> None:
+    def remove_release(self, datestamp: str) -> bool:
+        """Remove a cached release; False when another process holds its lock (it is downloading). CacheError
+        when it cannot be removed. .verified goes first, so a half-removed directory is never trusted."""
         d = self.release_dir(datestamp)
+        if not try_lock(d):
+            return False
         try:
             (d / ".verified").unlink()
-        except OSError:
+        except FileNotFoundError:
             pass
-        shutil.rmtree(d, ignore_errors=True)
+        except OSError as e:
+            try:
+                os.rmdir(d / ".lock")
+            except OSError:
+                pass
+            raise CacheError(f"cannot remove the cached release {d}: {e}") from e
+        try:
+            shutil.rmtree(d)
+        except OSError as e:
+            raise CacheError(f"cannot remove the cached release {d}: {e}") from e
+        return True
 
     def read_pointer(self, name: str):
         d = self.pointer_dir()
@@ -142,7 +156,7 @@ class Cache:
         on the pointer directory keeps two writers of this SDK from interleaving."""
         d = self.pointer_dir(create=True)
         try:
-            with lock_dir(d, "opentideconstants-python", name=f".lock-{name}"):
+            with lock_dir(d, "opentideconstants-python"):
                 try:
                     (d / (name + ".etag")).unlink()
                 except FileNotFoundError:
@@ -163,11 +177,14 @@ class Cache:
 
 @contextmanager
 def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
-    """Take <directory>/.lock (spec §5.4 Locks). Yields True when the lock is held, or False when
-    ``done()`` became true while waiting (another process finished the work)."""
+    """Take <directory>/.lock (spec §5.4 Locks, CR D3). Yields True when the lock is held, or False when
+    ``done()`` became true while waiting (another process finished the work). After 120 s of waiting the lock is
+    stale and is removed; failing to remove it 3 times is CacheError. On release the lock is removed only if its
+    owner.json still carries this lock's token (another process may have taken it as stale)."""
     lock = directory / name
     waited = 0.0
     held = False
+    stale_failures = 0
     while True:
         try:
             os.mkdir(lock)
@@ -180,27 +197,59 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
         if done is not None and done():
             break
         if waited >= LOCK_STALE_S:
-            shutil.rmtree(lock, ignore_errors=True)  # stale: safe because every write is an atomic rename
+            try:
+                shutil.rmtree(lock)  # stale: safe because every write is an atomic rename
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                stale_failures += 1
+                if stale_failures >= 3:
+                    raise CacheError(f"cannot remove the stale lock {lock}: {e}") from e
+                time.sleep(LOCK_POLL_S)
+                continue
             waited = 0.0
             continue
         time.sleep(LOCK_POLL_S)
         waited += LOCK_POLL_S
-    try:
-        if held:
-            try:
-                owner = {"pid": os.getpid(), "host": socket.gethostname(), "sdk": sdk,
-                         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-                (lock / "owner.json").write_text(json.dumps(owner), encoding="utf-8")
-            except OSError:
-                pass
-        yield held
-    finally:
-        if held:
-            try:
-                (lock / "owner.json").unlink()
-            except OSError:
-                pass
+    token = secrets.token_hex(16)
+    if held:
+        try:
+            owner = {"pid": os.getpid(), "host": socket.gethostname(), "sdk": sdk, "token": token,
+                     "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            atomic_write(lock / "owner.json", json.dumps(owner).encode("utf-8"))
+        except OSError as e:
             try:
                 os.rmdir(lock)
             except OSError:
                 pass
+            raise CacheError(f"cannot write {lock / 'owner.json'}: {e}") from e
+    try:
+        yield held
+    finally:
+        if held:
+            _release_lock(lock, token)
+
+
+def _release_lock(lock: Path, token: str) -> None:
+    try:
+        owner = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return  # gone or rewritten: another process took the lock as stale
+    if not isinstance(owner, dict) or owner.get("token") != token:
+        return
+    try:
+        (lock / "owner.json").unlink()
+        os.rmdir(lock)
+    except OSError:
+        pass  # a lock left behind only costs a 120 s wait (spec §5.4)
+
+
+def try_lock(directory: Path) -> bool:
+    """Take <directory>/.lock without waiting; False when another process holds it."""
+    try:
+        os.mkdir(directory / ".lock")
+        return True
+    except FileExistsError:
+        return False
+    except OSError as e:
+        raise CacheError(f"cannot create the lock {directory / '.lock'}: {e}") from e
