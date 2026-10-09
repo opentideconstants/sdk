@@ -532,17 +532,19 @@ def write_root(root, docs, *, reuse_root=None, tamper=None, version_dois=None, m
 # --------------------------------------------------------------------------- bad fixtures
 
 def corrupt_same_size(files, sums, entry, reuse):
-    """Change one byte in every station data file; keep the honest SHA-256 list and pointer."""
+    """Change one byte in every station data file, at the same size; keep the honest SHA-256 list and pointer. So
+    the hash differs and the size does not (a size check alone cannot catch it). The .json.gz gets one byte of its
+    compressed body changed: it is not valid gzip any more, but a reader hashes it before it decompresses it."""
     out = dict(files)
     for name in list(out):
         if name.endswith(".json") and not name.endswith(".meta.json"):
             out[name] = out[name].replace(b"San Francisco", b"San Franciscx", 1)
         elif name.endswith(".jsonl"):
             out[name] = out[name].replace(b"San Francisco", b"San Franciscx", 1)
-    for name in list(out):
-        if name.endswith(".json.gz"):
-            plain = out[name[:-3]]
-            out[name] = gz(plain, reuse / name if reuse else None)
+        elif name.endswith(".json.gz"):
+            data = bytearray(out[name])
+            data[len(data) // 2] ^= 0x01
+            out[name] = bytes(data)
     return out, sums, entry
 
 

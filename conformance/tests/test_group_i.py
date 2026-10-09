@@ -158,3 +158,13 @@ def test_formats_are_checked(schemas, where, value):
     with pytest.raises(bf.Fail) as e:
         bf.validate_release(doc, meta, doc["stations"], schemas)
     assert e.value.code == "invalid_release"
+
+
+# --- K22: bad/wrong-sha256 changes one byte of every station data file at the same size (the hash differs, not the size)
+
+def test_wrong_sha256_files_keep_their_size():
+    good, bad = CONF / "fixtures" / "good", CONF / "fixtures" / "bad" / "wrong-sha256"
+    for ext in (".json", ".json.gz", ".jsonl"):
+        g, b = (good / f"OTC_20991231{ext}").read_bytes(), (bad / f"OTC_20991231{ext}").read_bytes()
+        assert len(g) == len(b) and g != b, (ext, len(g), len(b))
+        assert sum(x != y for x, y in zip(g, b)) == 1, ext
