@@ -50,7 +50,10 @@ class CacheLockTest < Minitest::Test
         cache = quick_cache(log)
         dir = cache.ensure_dir(cache.release_dir("20991231"))
         cache.with_lock(dir) { File.write(File.join(dir, ".lock", "stray"), "x") }
-        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?(".lock") }, log.lines.inspect)
+        # The release-failure warning itself, not another lock warning (stale, or held by another process).
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("cannot release the lock #{File.join(dir, '.lock')}") },
+               log.lines.inspect)
+        assert File.directory?(File.join(dir, ".lock"))
     end
 
     # R73 + D26: a download whose entry has no zenodo_version_doi keeps the
@@ -79,17 +82,38 @@ class CacheLockTest < Minitest::Test
         [cache, c]
     end
 
-    # R23: prune raises cache when a release cannot be removed, and the
-    # release stays cached.
+    # R23: prune raises cache when a release cannot be removed. Two ways:
+    # its lock cannot be taken (nothing is removed, and it stays cached), and
+    # a file in it cannot be removed (its .verified goes first, so it is no
+    # longer trusted). The release kept stays cached in both.
     def test_prune_failure_is_a_cache_error
         posix_only
         srv = serve
         cache, c = two_cached(srv)
         old = File.join(cache, "v1", "releases", "20991231")
-        FileUtils.chmod(0o555, old)
-        assert_raises(OTC::CacheError) { c.prune(keep: 1) }
-        FileUtils.chmod(0o755, old)
+        begin
+            FileUtils.chmod(0o555, old)
+            err = assert_raises(OTC::CacheError) { c.prune(keep: 1) }
+            assert_match(/cannot take the lock/, err.message)
+        ensure
+            FileUtils.chmod(0o755, old)
+        end
         assert_equal %w[20991231.2 20991231], c.cached_releases
+
+        stuck = File.join(old, "stuck")
+        Dir.mkdir(stuck)
+        File.write(File.join(stuck, "file"), "x")
+        begin
+            FileUtils.chmod(0o555, stuck) # the lock can be taken; the file in stuck cannot be removed
+            err = assert_raises(OTC::CacheError) { c.prune(keep: 1) }
+            assert_match(/cannot remove #{Regexp.escape(old)}/, err.message)
+            assert File.file?(File.join(stuck, "file"))
+        ensure
+            FileUtils.chmod(0o755, stuck)
+        end
+        assert_equal %w[20991231.2], c.cached_releases
+        refute File.exist?(File.join(old, ".lock")), "the failed removal left its lock"
+        refute_nil c.station("OTC-T-0001")
     ensure
         c&.close
     end
@@ -115,8 +139,9 @@ class CacheLockTest < Minitest::Test
         partial = File.join(cache, "v1", "releases", "20991230")
         FileUtils.mkdir_p(partial)
         File.write(File.join(partial, ".tmp-1-abc"), "x" * 100)
-        c.prune(keep: 5)
+        assert_equal [], c.prune(keep: 5)
         refute File.exist?(partial)
+        assert_equal %w[20991231.2 20991231], c.cached_releases
     ensure
         c&.close
     end

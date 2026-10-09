@@ -52,6 +52,8 @@ class PointerCacheTest < Minitest::Test
             h["if-none-match"] == etag ? [304, { "ETag" => etag }, ""] : [200, { "ETag" => etag }, File.binread(fixture("good", "OTC_latest-f1.json"))]
         })
         c = OTC.new(base_url: srv304.url("/"), cache_dir: cache)
+        assert_equal "/OTC_latest-f1.json", srv304.requests.first
+        assert_nil srv304.headers.first["if-none-match"], "the corrupt copy's ETag was sent"
         assert_equal "20991231.2", c.latest.datestamp
         assert_equal File.binread(fixture("good", "OTC_latest-f1.json")), File.binread(pointer_path(cache))
     ensure
@@ -103,17 +105,43 @@ class PointerCacheTest < Minitest::Test
 
     # R96: the body and its ETag are written as a pair under pointer/.lock, so
     # concurrent writers never leave one writer's body with another's ETag.
+    # Writer a stops between its body and its ETag; writer b then writes.
+    # Writer a goes on when b has finished (no lock) or waits for the lock.
+    # Without the lock the result is b's body with a's ETag.
     def test_concurrent_pointer_writes_keep_body_and_etag_paired
-        cache = OTC::Cache.new(tmpdir)
+        cache = OTC::Cache.new(tmpdir, lock_poll_s: 0.01)
         path = File.join(cache.pointer_dir, "OTC_index.json")
-        mismatched = 0
-        20.times do
-            %w[a b c].map do |tag|
-                Thread.new { cache.write_pointer("OTC_index.json", "{\"t\":\"#{tag}\"}", "\"#{tag}\"") }
-            end.each(&:join)
-            mismatched += 1 if JSON.parse(File.read(path))["t"] != File.read("#{path}.etag").delete('"')
+        paused = Queue.new
+        b_state = Queue.new # :waiting (on the lock) or :done
+        cache.define_singleton_method(:write_atomic) do |p, bytes|
+            if Thread.current[:writer] == "a" && p.end_with?(".etag")
+                paused << true
+                state = b_state.pop # never empty: b either waits on the lock or finishes
+                Thread.current[:b_state] = state
+            end
+            super(p, bytes)
         end
-        assert_equal 0, mismatched
+        cache.define_singleton_method(:sleep) do |s|
+            b_state << :waiting if Thread.current[:writer] == "b" && !Thread.current[:told]
+            Thread.current[:told] = true
+            Kernel.sleep(s)
+        end
+        write = lambda do |tag|
+            Thread.new do
+                Thread.current[:writer] = tag
+                Thread.current.report_on_exception = false
+                cache.write_pointer("OTC_index.json", "{\"t\":\"#{tag}\"}", "\"#{tag}\"")
+            ensure
+                b_state << :done if tag == "b"
+            end
+        end
+        a = write.call("a")
+        Kernel.sleep(0.001) while paused.empty? && a.alive?
+        assert a.alive? && !paused.empty?, "writer a did not stop between its body and its ETag"
+        b = write.call("b")
+        [a, b].each { |t| t.join(10) or flunk("a writer did not finish") }
+        assert_equal :waiting, a[:b_state], "writer b did not wait for the lock"
+        assert_equal ["b", "b"], [JSON.parse(File.read(path))["t"], File.read("#{path}.etag").delete('"')]
     end
 
     # R37: releases() falling back to the cached index does not set last_error
@@ -121,12 +149,16 @@ class PointerCacheTest < Minitest::Test
     def test_releases_fallback_leaves_last_error_alone
         over = {}
         srv = serve(File.join(FIXTURES, "good"), over)
-        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir)
+        log = Log.new
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, logger: log)
         c.releases
         over["OTC_index.json"] = [500, {}, "boom"]
         assert_equal 2, c.releases.size
         assert_equal :download, c.loaded_from
         assert_nil c.last_error
+        # The warning is the only sign that the index fetch failed.
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("HTTP 500") && m.include?("using the cached OTC_index.json") },
+               log.lines.inspect)
     ensure
         c&.close
     end

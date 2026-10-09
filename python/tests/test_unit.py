@@ -171,10 +171,9 @@ class PointerCacheTest(unittest.TestCase):
         (d / "OTC_latest-f1.json.etag").unlink()
         (d / "OTC_latest-f1.json.etag").mkdir()  # cannot be unlinked as a file
         (d / "OTC_latest-f1.json.etag" / "x").write_text("y")
-        try:
+        # The old ETag cannot be removed: that is a cache error, and the body is not replaced.
+        with self.assertRaises(otc.CacheError):
             c.write_pointer("OTC_latest-f1.json", b'{"a": 2}', None)
-        except otc.CacheError:
-            pass
         self.assertEqual((d / "OTC_latest-f1.json").read_bytes(), b'{"a": 1}')
 
 

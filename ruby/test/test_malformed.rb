@@ -110,14 +110,33 @@ class BadArgumentTest < Minitest::Test
     def test_query_encodings
         assert_raises(OTC::InvalidArgumentError) { client.search(name: "M\xFFK".dup.force_encoding("UTF-8")) }
         latin = "Troms\xF8".dup.force_encoding("ISO-8859-1")
-        assert_kind_of Array, client.search(name: latin)
-        assert_equal client.search(name: "Tromsø").map(&:station_id), client.search(name: latin).map(&:station_id)
+        assert_equal ["OTC-T-0006"], client.search(name: "Tromsø").map(&:station_id)
+        assert_equal ["OTC-T-0006"], client.search(name: latin).map(&:station_id)
     end
 
     # R91: an empty filter value matches nothing, not the stations whose field is null.
+    # The release has an active station with each field null (type cannot be null).
     def test_empty_filter_value
-        %i[country type kind source source_type].each do |k|
-            assert_equal [], client.stations(k => "").map(&:station_id), k.to_s
+        null = {
+            country: ->(s) { s.country.nil? },
+            kind: ->(s) { s.kind.nil? },
+            source: ->(s) { s.constant_sets.any? { |cs| cs.source.nil? } },
+            source_type: ->(s) { s.recommended_set && s.recommended_set.source_type.nil? }
+        }
+        MalformedDataTest::PATHS.each do |ext, mode|
+            path = release_file(ext) do |d|
+                st = station_in(d, "OTC-T-0001")
+                st["country"] = nil
+                st["constant_sets"].each { |cs| cs["source"] = cs["source_type"] = nil }
+                station_in(d, "OTC-T-0002")["recommended_set_id"] = nil # no recommended set: kind is null
+            end
+            c = OTC.new(file: path, mode: mode)
+            null.each { |k, test| assert(c.stations.any?(&test), "#{ext} #{mode}: no station with a null #{k}") }
+            %i[country type kind source source_type].each do |k|
+                assert_equal [], c.stations(k => "").map(&:station_id), "#{k} (#{ext}, #{mode})"
+            end
+        ensure
+            c&.close
         end
     end
 

@@ -1,36 +1,56 @@
 # Helpers for the unit tests: a small real HTTP server on 127.0.0.1 and
 # temporary directories. The tests drive the real client over real sockets.
+# Each test file runs on its own (ruby -Iruby/lib ruby/test/test_x.rb) or
+# through test_unit.rb.
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+require "minitest/autorun"
+require "opentideconstants"
 require "socket"
 require "tmpdir"
 require "fileutils"
 require "json"
 require "digest"
 require "openssl"
+require "time"
 
 module TestSupport
     ROOT = File.expand_path("../..", __dir__)
     FIXTURES = File.join(ROOT, "conformance", "fixtures")
 
-    # A one-thread HTTP/1.1 server. The handler gets the request path and
-    # headers and returns [status, headers, body]. Every request is recorded.
+    # A one-thread HTTP/1.1 server (HTTPS when ssl_context is given). The
+    # handler gets the request path and headers and returns [status,
+    # headers, body]. Every request is recorded. An exception in the handler
+    # (or in the server code) is recorded in errors, and teardown fails the
+    # test with it: a handler that crashes must not look like a network
+    # failure. A client that goes away (a socket or TLS error) is not an error.
     class Server
-        attr_reader :requests, :headers
+        attr_reader :requests, :headers, :errors
 
-        def initialize(&handler)
+        CLIENT_GONE = [IOError, SystemCallError, OpenSSL::SSL::SSLError].freeze
+
+        def initialize(ssl_context: nil, &handler)
             @handler = handler
             @requests = []
             @headers = []
-            @server = TCPServer.new("127.0.0.1", 0)
+            @errors = Queue.new
+            @tcp = TCPServer.new("127.0.0.1", 0)
+            @server = ssl_context ? OpenSSL::SSL::SSLServer.new(@tcp, ssl_context) : @tcp
             @thread = Thread.new { serve }
         end
 
+        def port
+            @tcp.addr[1]
+        end
+
         def url(path = "/")
-            "http://127.0.0.1:#{@server.addr[1]}#{path}"
+            "http://127.0.0.1:#{port}#{path}"
         end
 
         def stop
             @thread.kill
+            @thread.join
             @server.close
+            @tcp.close unless @tcp.closed?
         rescue IOError
             nil
         end
@@ -39,11 +59,18 @@ module TestSupport
 
         def serve
             loop do
-                sock = @server.accept
+                sock = begin
+                    @server.accept
+                rescue *CLIENT_GONE
+                    raise if @tcp.closed?
+                    next # a failed TLS handshake
+                end
                 begin
                     handle(sock)
-                rescue StandardError
+                rescue *CLIENT_GONE
                     nil
+                rescue Exception => e # rubocop:disable Lint/RescueException
+                    @errors << e
                 ensure
                     sock.close unless sock.closed?
                 end
@@ -95,7 +122,8 @@ module TestSupport
     end
 
     # A TLS server on 127.0.0.1 with a self-signed certificate; returns
-    # [port, ca_file path, stop lambda]. The handler is as for Server.
+    # [port, ca_file path, stop lambda]. The handler is as for Server, and the
+    # server is stopped (and its handler errors checked) in teardown.
     def tls_server(&handler)
         key = OpenSSL::PKey::RSA.new(2048)
         cert = OpenSSL::X509::Certificate.new
@@ -114,36 +142,9 @@ module TestSupport
         ctx = OpenSSL::SSL::SSLContext.new
         ctx.cert = cert
         ctx.key = key
-        tcp = TCPServer.new("127.0.0.1", 0)
-        ssl = OpenSSL::SSL::SSLServer.new(tcp, ctx)
-        t = Thread.new do
-            loop do
-                s = begin
-                    ssl.accept
-                rescue OpenSSL::SSL::SSLError, SystemCallError
-                    next
-                end
-                begin
-                    line = s.gets
-                    path = line.to_s.split(" ")[1]
-                    h = {}
-                    while (x = s.gets) && x != "\r\n"
-                        k, v = x.split(":", 2)
-                        h[k.strip.downcase] = v.to_s.strip
-                    end
-                    status, hdrs, body = handler.call(path, h)
-                    body = body.to_s.b
-                    out = +"HTTP/1.1 #{status} X\r\nConnection: close\r\nContent-Length: #{body.bytesize}\r\n"
-                    (hdrs || {}).each { |k, v| out << "#{k}: #{v}\r\n" }
-                    s.write(out + "\r\n" + body)
-                rescue StandardError
-                    nil
-                ensure
-                    s.close rescue nil
-                end
-            end
-        end
-        [tcp.addr[1], ca, -> { t.kill; tcp.close rescue nil }]
+        s = Server.new(ssl_context: ctx, &handler)
+        (@servers ||= []) << s
+        [s.port, ca, -> { s.stop }]
     end
 
     def tmpdir
@@ -153,9 +154,26 @@ module TestSupport
         d
     end
 
+    # Stops the servers, then fails the test if a handler raised. A temporary
+    # directory that cannot be removed is reported, not left in silence.
     def teardown
-        (@tmpdirs || []).each { |d| FileUtils.chmod_R("u+rwx", d) rescue nil; FileUtils.rm_rf(d) }
-        (@servers || []).each(&:stop)
+        servers = @servers || []
+        servers.each(&:stop)
+        (@tmpdirs || []).each do |d|
+            begin
+                FileUtils.chmod_R("u+rwx", d) if File.exist?(d)
+            rescue SystemCallError => e
+                warn "teardown: cannot make #{d} writable: #{e.message}"
+            end
+            FileUtils.rm_rf(d)
+            warn "teardown: cannot remove the temporary directory #{d}" if File.exist?(d)
+        end
+        errors = servers.flat_map { |s| Array.new(s.errors.size) { s.errors.pop } }
+        unless errors.empty?
+            e = errors.first
+            msg = e.message.lines.first.to_s.strip[0, 200]
+            flunk "the test server's handler raised #{e.class}: #{msg}\n#{Array(e.backtrace).first(5).join("\n")}"
+        end
         super
     end
 

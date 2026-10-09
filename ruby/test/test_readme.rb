@@ -44,7 +44,9 @@ class ReadmeTest < Minitest::Test
     def test_latest_skips_an_unreadable_release
         srv = serve(File.join(FIXTURES, "reader"))
         c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir)
-        assert_equal c.release.datestamp, c.latest.datestamp
+        # 20991231.4 needs a reader for format 1.99; .3 is the newest this gem reads.
+        assert_equal "20991231.3", c.release.datestamp
+        assert_equal "20991231.3", c.latest.datestamp
     ensure
         c&.close
     end

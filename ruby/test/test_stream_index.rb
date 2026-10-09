@@ -65,19 +65,26 @@ class StreamIndexTest < Minitest::Test
         c&.close
     end
 
-    # R42/D4: an entry out of bounds makes the index stale (rebuilt at open),
-    # never a raw TypeError at query time.
+    # R42/D4: an entry out of bounds makes the index stale, so the open
+    # rebuilds it (never a raw TypeError at query time).
     def test_out_of_bounds_entries_make_the_index_stale
         [->(st) { st[-1]["offset"] = 10**6 }, ->(st) { st[3]["length"] = 0 },
          ->(st) { st[2]["offset"] = st[1]["offset"] }].each do |tamper|
             srv = serve
             cache = tmpdir
             OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+            built = JSON.parse(File.read(index_path(cache)))
             tamper_index(cache, &tamper)
-            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
-            assert_equal 20, c.stations.size
-            assert(c.stations.all? { |s| s.is_a?(OTC::Station) })
-            c.close
+            refute_equal built, JSON.parse(File.read(index_path(cache)))
+            begin
+                c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+                # Rebuilt at open: the index on disk is the one a fresh build writes.
+                assert_equal built, JSON.parse(File.read(index_path(cache))), "the stale index was not rebuilt at open"
+                assert_equal 20, c.stations.size
+                assert(c.stations.all? { |s| s.is_a?(OTC::Station) })
+            ensure
+                c&.close
+            end
         end
     end
 end

@@ -20,10 +20,14 @@ class LifecycleTest < Minitest::Test
         sleep 0.05
         refute_nil c.station("OTC-T-0001")
         assert_equal "release_not_found", c.last_error&.code
+        prev = c.last_error
         c.define_singleton_method(:update!) { raise NoMethodError, "boom" }
         sleep 0.05
         refute_nil c.station("OTC-T-0001")
+        # A new error, for the non-SDK failure (not the release_not_found one kept from before).
+        refute_same prev, c.last_error
         assert_kind_of OTC::Error, c.last_error
+        assert_includes c.last_error.message, "NoMethodError: boom"
     ensure
         c&.close
     end

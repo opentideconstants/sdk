@@ -20,13 +20,19 @@ class FormatGateTest < Minitest::Test
     def test_newer_major_survives_a_network_error
         over = {}
         srv = serve(File.join(FIXTURES, "good"), over)
-        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, on_network_error: :raise)
+        log = Log.new
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, on_network_error: :raise, logger: log)
         major2 = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json"))).merge("format_version" => "2.0")
         over["OTC_latest.json"] = [200, {}, JSON.generate(major2)]
         assert_nil c.check_for_update
         assert_equal 2, c.newer_format_major
         over["OTC_latest.json"] = [503, { "Retry-After" => "0" }, "busy"]
-        c.check_for_update
+        before = srv.requests.size
+        assert_nil c.check_for_update
+        # The network error happened: OTC_latest.json was asked for again, and the failure was logged.
+        assert_includes srv.requests[before..], "/OTC_latest.json"
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("cannot check OTC_latest.json") && m.include?("503") },
+               "no warning for the failed OTC_latest.json check: #{log.lines.inspect}")
         assert_equal 2, c.newer_format_major
     ensure
         c&.close
@@ -42,7 +48,8 @@ class FormatGateTest < Minitest::Test
         assert_equal ["1.0", "1.0"], ver.values_at("format_version", "min_reader_version")
         assert_raises(OTC::ReaderTooOldError) { OTC.new(release: "20991231.4", base_url: srv.url("/"), cache_dir: cache) }
         ver4 = File.join(cache, "v1", "releases", "20991231.4", ".verified")
-        assert_equal "1.99", JSON.parse(File.read(ver4))["min_reader_version"] if File.file?(ver4)
+        assert File.file?(ver4), "the unreadable release was not recorded in .verified"
+        assert_equal "1.99", JSON.parse(File.read(ver4))["min_reader_version"]
         c = OTC.new(offline: true, cache_dir: cache)
         assert_equal "20991231.2", c.release.datestamp
     ensure
