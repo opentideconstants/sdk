@@ -2,9 +2,9 @@ name: C library
 
 on:
   push:
-    paths: ["c/**", "conformance/**", ".github/workflows/c.yml"]
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
   pull_request:
-    paths: ["c/**", "conformance/**", ".github/workflows/c.yml"]
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
   workflow_dispatch:
 
 permissions:

@@ -6,11 +6,13 @@ on:
       - "js/**"
       - "conformance/**"
       - ".github/workflows/typescript.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "js/**"
       - "conformance/**"
       - ".github/workflows/typescript.yml"
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:

@@ -14,6 +14,7 @@ on:
       - "c/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "python/**"
@@ -22,6 +23,7 @@ on:
       - "c/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:

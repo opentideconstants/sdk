@@ -6,11 +6,13 @@ on:
       - "ruby/**"
       - "conformance/**"
       - ".github/workflows/ruby.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "ruby/**"
       - "conformance/**"
       - ".github/workflows/ruby.yml"
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:

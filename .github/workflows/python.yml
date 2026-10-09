@@ -2,9 +2,9 @@ name: Python SDK
 
 on:
   push:
-    paths: ["python/**", "conformance/**", ".github/workflows/python.yml"]
+    paths: ["python/**", "conformance/**", ".github/workflows/python.yml", ".gitattributes"]
   pull_request:
-    paths: ["python/**", "conformance/**", ".github/workflows/python.yml"]
+    paths: ["python/**", "conformance/**", ".github/workflows/python.yml", ".gitattributes"]
   workflow_dispatch:
 
 permissions:
