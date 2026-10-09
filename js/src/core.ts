@@ -4,7 +4,7 @@ import {
     ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, ReleaseNotFoundError,
     UnsupportedFormatError,
 } from "./errors.js";
-import { isObject } from "./json.js";
+import { daysInMonth, isObject } from "./json.js";
 import {
     checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl,
     type LineReader, type StreamIndex,
@@ -68,13 +68,33 @@ export function log(ctx: Ctx, level: "debug" | "info" | "warn", message: string)
     }
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const IMF_FIXDATE = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), ([0-9]{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]{4}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/;
+
+/**
+ * @internal An HTTP date (IMF-fixdate, RFC 9110 5.6.7) in milliseconds since the epoch, or null. Impossible calendar
+ * fields, hour 24, a leap second and the wrong weekday are malformed: Date.parse would roll them over (CR2 DR6).
+ */
+export function httpDate(v: string): number | null {
+    const m = IMF_FIXDATE.exec(v);
+    if (!m) return null;
+    const [d, y, h, mi, s] = [m[2], m[4], m[5], m[6], m[7]].map(Number) as [number, number, number, number, number];
+    const mo = MONTHS.indexOf(m[3] as string);
+    if (d < 1 || d > daysInMonth(y, mo + 1) || h > 23 || mi > 59 || s > 59) return null;
+    const t = new Date(0);
+    t.setUTCFullYear(y, mo, d);
+    t.setUTCHours(h, mi, s, 0);
+    return WEEKDAYS[t.getUTCDay()] === m[1] ? t.getTime() : null;
+}
+
 function retryAfter(res: HttpResponse): number | null {
     const v = res.header("retry-after");
     if (!v) return null;
     const n = Number(v);
     if (Number.isFinite(n)) return Math.min(Math.max(n, 0), 60);
-    const t = Date.parse(v);
-    return Number.isNaN(t) ? null : Math.min(Math.max((t - Date.now()) / 1000, 0), 60);
+    const t = httpDate(v.trim());
+    return t === null ? null : Math.min(Math.max((t - Date.now()) / 1000, 0), 60);
 }
 
 /**

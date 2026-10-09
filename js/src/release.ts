@@ -105,6 +105,7 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     if (!Array.isArray(conventions) || !Array.isArray(licences)) throw new InvalidReleaseError("conventions or licences is missing");
     const created = release["created"];
     if (created !== undefined && created !== null && typeof created !== "string") throw new InvalidReleaseError("release.created is not a string");
+    checkedTime(created, "release.created");
     if (!shapeOk(release["source_versions"], "object")) throw new InvalidReleaseError("release.source_versions is not an object");
     if (!conventions.every(isObject) || !licences.every(isObject)) throw new InvalidReleaseError("a convention or licence is not a JSON object");
     const cs = conventions.filter(isObject);
@@ -138,6 +139,17 @@ function shapeOk(v: Json | undefined, want: Shape): boolean {
 }
 
 /**
+ * A created or record_span time (spec 7.3, CR2 DR6): null when absent, else an RFC 3339 time with real calendar fields
+ * in years 1 to 9999 in UTC; anything else is invalid_release, never a rolled-over date or null.
+ */
+function checkedTime(v: Json | undefined, what: string): Date | null {
+    if (v === undefined || v === null) return null;
+    const t = time(v);
+    if (t === null) throw new InvalidReleaseError(`${what} is not an RFC 3339 time: ${JSON.stringify(v)}`);
+    return t;
+}
+
+/**
  * Tolerant is not lax (spec 7.3): a known field with the wrong JSON type is invalid_release at load, in every path,
  * instead of a field that is silently dropped or a raw TypeError at query time.
  */
@@ -157,6 +169,8 @@ function checkShape(doc: JsonObject, id: string): void {
     for (const cs of arr(doc, "constant_sets").filter(isObject)) {
         const sid = typeof cs["set_id"] === "string" ? cs["set_id"] : "?";
         for (const [k, want] of Object.entries(SET_SHAPE)) if (!shapeOk(cs[k], want)) throw bad(`${k} of set ${sid}`);
+        const span = obj(cs, "record_span");
+        for (const k of ["start", "end"]) checkedTime(span?.[k], `record_span.${k} of set ${sid}`);
         for (const k of ["constituents", "dropped_constituents", "qc_flags"]) {
             const list = cs[k];
             if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k} of set ${sid}`);
@@ -454,7 +468,10 @@ export class ConstantSet {
         this.source_record_id = str(raw, "source_record_id");
         this.source_version = str(raw, "source_version");
         const span = obj(raw, "record_span");
-        this.record_span = span === null ? null : Object.freeze({ start: time(span["start"]), end: time(span["end"]), good_samples: num(span, "good_samples") });
+        this.record_span = span === null ? null : Object.freeze({
+            start: checkedTime(span["start"], `record_span.start of set ${this.set_id}`),
+            end: checkedTime(span["end"], `record_span.end of set ${this.set_id}`), good_samples: num(span, "good_samples"),
+        });
         const datum = obj(raw, "datum");
         this.datum = datum === null ? null : Object.freeze({
             msl_offset_m: num(datum, "msl_offset_m"),
@@ -763,7 +780,7 @@ export class Release {
         this.#lru = eager ? Infinity : LRU_SIZE;
         const r = header.release;
         this.datestamp = str(r, "datestamp") ?? "";
-        this.created = time(r["created"]);
+        this.created = checkedTime(r["created"], "release.created");
         this.format_version = header.format_version;
         this.concept_doi = str(r, "concept_doi");
         this.zenodo_version_doi = zenodoVersionDoi;
