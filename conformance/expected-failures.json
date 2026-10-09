@@ -569,18 +569,7 @@
   {
    "case": "rules/pk06/bad-unresolved-offsets-licence-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "typescript"
-   ],
-   "package": "PK06",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk06/bad-unresolved-recommended-jsonl-stream",
-   "runners": [
-    "c",
-    "c-fetch"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -618,8 +607,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

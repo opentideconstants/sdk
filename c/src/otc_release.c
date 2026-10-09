@@ -381,9 +381,14 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         if (!e->id || !e->name || !e->folded || !e->type_s || (otc__jstr(root, "country") && !e->country))
             return OTC_E_NOMEM;
         if (cJSON_IsObject(off)) {
+            const char *ref = otc__jstr(off, "reference_station_id"), *ol = otc__jstr(off, "licence_id");
             e->has_offsets = 1;
-            e->ref_id = otc__strdup(otc__jstr(off, "reference_station_id"));
-            e->off_licence = otc__strdup(otc__jstr(off, "licence_id"));
+            e->ref_id = otc__strdup(ref);
+            e->off_licence = otc__strdup(ol);
+            if ((ref && !e->ref_id) || (ol && !e->off_licence)) return OTC_E_NOMEM;
+            /* spec 4.5: a link that does not resolve fails the open (the reference station
+             * is checked when every line is in) */
+            if (ol && !otc__find_licence(r, ol)) return bad_line(b, "subordinate_offsets.licence_id does not resolve");
         }
         cJSON_ArrayForEach(s, sets) {
             const cJSON *t;
@@ -396,6 +401,7 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             }
             if (st != OTC_OK || (st = index_set(b, s, e, rec_id)) != OTC_OK) break;
         }
+        if (st == OTC_OK && rec_id && !e->has_rec) st = bad_line(b, "recommended_set_id does not resolve");
         if (st == OTC_OK) {
             cJSON_ArrayForEach(a, aliases) {
                 if (cJSON_IsString(a)) {
@@ -1040,6 +1046,15 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
                                                                                  : NULL;
         if (dup) {
             otc__err_set(err, OTC_E_INVALID_RELEASE, path, "station %s %s", r->tomb[i].id, dup);
+            st = OTC_E_INVALID_RELEASE;
+            goto done;
+        }
+    }
+    for (i = 0; i < r->n_st; i++) {
+        const otc__entry *e = &r->st[i];
+        if (e->ref_id && !otc__find_entry(r, e->ref_id)) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, path,
+                         "station %s: subordinate_offsets.reference_station_id %s is not an active station", e->id, e->ref_id);
             st = OTC_E_INVALID_RELEASE;
             goto done;
         }
