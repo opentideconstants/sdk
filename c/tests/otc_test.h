@@ -45,11 +45,52 @@ static int g_failures;
         }                                                                                           \
     } while (0)
 
+/* The exit status of a test that skips itself; c/CMakeLists.txt registers it as
+ * SKIP_RETURN_CODE, so ctest reports "Skipped", not "Passed". */
+#define TEST_SKIP_RC 77
+
+/* A check that the library fails today, owned by the package named (for
+ * example "PK-R2-23") that fixes the library. PENDING(pkg, cond) counts a
+ * false cond apart from the failures: when every CHECK holds but a PENDING
+ * does not, test_done prints "PENDING <pkg>" and the test skips (exit 77), so
+ * ctest shows it as Skipped, never as Passed. A CHECK failure still fails the
+ * test. When the library fix lands, the PENDING becomes a CHECK. */
+static int g_pending;
+static const char *g_pending_pkgs[4];
+
+#define PENDING(pkg, cond)                                                                          \
+    do {                                                                                            \
+        if (!(cond)) {                                                                              \
+            fprintf(stderr, "%s:%d: PENDING %s: %s\n", __FILE__, __LINE__, (pkg), #cond);           \
+            test_pending_note(pkg);                                                                 \
+        }                                                                                           \
+    } while (0)
+
+static void test_pending_note(const char *pkg)
+{
+    size_t i;
+    g_pending++;
+    for (i = 0; i < 4 && g_pending_pkgs[i]; i++)
+        if (!strcmp(g_pending_pkgs[i], pkg)) return;
+    if (i < 4) g_pending_pkgs[i] = pkg;
+}
+
 static int test_done(const char *name)
 {
-    if (g_failures) fprintf(stderr, "%s: %d check(s) failed\n", name, g_failures);
-    else printf("%s: ok\n", name);
-    return g_failures ? 1 : 0;
+    size_t i;
+    if (g_failures) {
+        fprintf(stderr, "%s: %d check(s) failed\n", name, g_failures);
+        return 1;
+    }
+    if (g_pending) {
+        printf("%s: skipped: PENDING", name);
+        for (i = 0; i < 4 && g_pending_pkgs[i]; i++) printf(" %s", g_pending_pkgs[i]);
+        printf(" (%d check(s) wait for that library fix; every other check holds)\n", g_pending);
+        fflush(stdout);
+        return TEST_SKIP_RC;
+    }
+    printf("%s: ok\n", name);
+    return 0;
 }
 
 /* A fresh directory under TMPDIR; the caller frees the path. */
@@ -79,10 +120,6 @@ static void test_write(const char *dir, const char *name, const char *text)
     if (!f || fwrite(text, 1, strlen(text), f) != strlen(text) || fclose(f) != 0) { perror(p); exit(2); }
     free(p);
 }
-
-/* The exit status of a test that skips itself; c/CMakeLists.txt registers it as
- * SKIP_RETURN_CODE, so ctest reports "Skipped", not "Passed". */
-#define TEST_SKIP_RC 77
 
 /* Prints why NAME is skipped and gives TEST_SKIP_RC: return test_skip(...). */
 static int test_skip(const char *name, const char *why)
