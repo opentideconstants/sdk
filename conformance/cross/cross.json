@@ -515,6 +515,13 @@
      "value": "ZZ"
     },
     {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/10/country": "ZZ"
+     }
+    },
+    {
      "driver": "copy",
      "files": [
       "${cache}/v1/releases/20991231.2/index-v1.json"
@@ -643,6 +650,14 @@
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/jsonl_sha256",
      "value": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/10/country": "ZZ",
+      "/jsonl_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+     }
     },
     {
      "driver": "server_stop"
@@ -778,6 +793,14 @@
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/index_version",
      "value": 2
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/10/country": "ZZ",
+      "/index_version": 2
+     }
     },
     {
      "driver": "server_stop"
@@ -989,6 +1012,14 @@
      "value": "OTC-T-0001"
     },
     {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/0/station_id": "OTC-T-0002",
+      "/stations/1/station_id": "OTC-T-0001"
+     }
+    },
+    {
      "driver": "server_stop"
     },
     {
@@ -1093,6 +1124,13 @@
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/stations/21/offset",
      "value": 25837
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/21/offset": 25837
+     }
     },
     {
      "driver": "server_stop"
@@ -1233,6 +1271,14 @@
      "value": "20991230"
     },
     {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/10/country": "ZZ",
+      "/datestamp": "20991230"
+     }
+    },
+    {
      "driver": "server_stop"
     },
     {
@@ -1357,6 +1403,18 @@
      "op": "search",
      "args": {
       "name": "Me\u0000da"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0151"
+      ]
+     }
+    },
+    {
+     "as": "reader",
+     "op": "search",
+     "args": {
+      "name": "da"
      },
      "expect": {
       "station_ids": [
@@ -1530,6 +1588,222 @@
      "expect": {
       "zenodo_version_doi": "10.5072/zenodo.2"
      }
+    }
+   ]
+  },
+  {
+   "id": "cross/verified-doi-pinned-writer",
+   "title": "the writer caches a pinned release (no pointer, so no version DOI); the reader opens latest online, gets the cached release (a 304 path or a pointer for the same datestamp) and records the pointer's version DOI in .verified; the writer then has it offline (B1-5, D26, R2-151)",
+   "spec": "4.3, 5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "zenodo_version_doi": "10.5072/zenodo.2",
+      "files": {
+       "$len_min": 4
+      }
+     }
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    },
+    {
+     "as": "writer",
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.2 [Data set]. https://doi.org/10.5072/zenodo.1 (version DOI: https://doi.org/10.5072/zenodo.2)"
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/verified-keys",
+   "title": "the writer's .verified has the seven keys of D26 (files, verified_at, by, datestamp, format_version, min_reader_version, zenodo_version_doi); a reader opens offline a release whose .verified holds only files (D26, G13)",
+   "spec": "5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "$len_min": 4
+      },
+      "verified_at": {
+       "$regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+      },
+      "by": {
+       "$regex": "^opentideconstants-[a-z]+/\\S+$"
+      },
+      "datestamp": "20991231.2",
+      "format_version": "1.0",
+      "min_reader_version": "1.0",
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "text": "{\n \"files\": {\n  \"OTC_20991231.2.json\": {\n   \"sha256\": \"3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e\",\n   \"size\": 29814\n  },\n  \"OTC_20991231.2.json.gz\": {\n   \"sha256\": \"0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd\",\n   \"size\": 4474\n  },\n  \"OTC_20991231.2.jsonl\": {\n   \"sha256\": \"759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1\",\n   \"size\": 25827\n  },\n  \"OTC_20991231.2.meta.json\": {\n   \"sha256\": \"f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350\",\n   \"size\": 3974\n  }\n }\n}\n"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
     }
    ]
   }

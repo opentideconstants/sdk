@@ -1363,6 +1363,7 @@ def group_cross(R2):
     country = R2.by_id["OTC-T-0011"]["country"]
     out.append(case("cross/index-shared", "the reader uses the stream index the writer built (a fresh index is read, not rebuilt)", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ"}),
                             drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
@@ -1372,7 +1373,8 @@ def group_cross(R2):
                     roles=roles))
     out.append(case("cross/index-stale", "a stale stream index (its jsonl_sha256 does not match) is ignored, rebuilt and rewritten", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/jsonl_sha256", value="0" * 64)] + offline + [
+                            drv("json_set", path=idx, pointer="/jsonl_sha256", value="0" * 64),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/jsonl_sha256": "0" * 64})] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("stations", {"station_ids": [x["station_id"] for x in apply_filters(R2, R2.active, {"country": country})]}, country=country)),
@@ -1382,7 +1384,8 @@ def group_cross(R2):
                     roles=roles))
     out.append(case("cross/index-other-version", "an index with another index_version is stale: rebuilt and rewritten", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/index_version", value=2)] + offline + [
+                            drv("json_set", path=idx, pointer="/index_version", value=2),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/index_version": 2})] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("close")),
@@ -1415,7 +1418,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     ids = [s["station_id"] for s in R2.doc["stations"]]
     out.append(case("cross/index-station-id-swapped", "two index entries trade station ids (the index is still fresh and in bounds): a query for one reads the other's line, which must be invalid_release, never the wrong station (D4)", "6.2",
                     fill + [drv("json_set", path=idx, pointer="/stations/0/station_id", value=ids[1]),
-                            drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0])] + offline + [
+                            drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0]),
+                            drv("assert_json", path=idx, match={"/stations/0/station_id": ids[1], "/stations/1/station_id": ids[0]})] + offline + [
                         reader_open,
                         as_("reader", step("station", err("invalid_release"), station_id=ids[0])),
                         no_requests],
@@ -1423,7 +1427,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
     last = ids[-1]
     out.append(case("cross/index-offset-past-eof", "an index entry whose offset is past the end of the .jsonl: the index is stale, so it is rebuilt, and the query is right (D4)", "6.2",
-                    fill + [drv("json_set", path=idx, pointer=f"/stations/{len(ids) - 1}/offset", value=jsize + 10)] + offline + [
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{len(ids) - 1}/offset", value=jsize + 10),
+                            drv("assert_json", path=idx, match={f"/stations/{len(ids) - 1}/offset": jsize + 10})] + offline + [
                         reader_open,
                         as_("reader", step("tombstone" if last not in R2.by_id else "station",
                                            {"tombstone": enc_tombstone(R2.tomb_by_id[last])} if last not in R2.by_id else {"station": enc_station(R2, R2.by_id[last])},
@@ -1434,7 +1439,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     pos = ids.index("OTC-T-0011")
     out.append(case("cross/index-datestamp-mismatch", "an index whose datestamp is not the release's is stale: it is ignored and rebuilt", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/datestamp", value="20991230")] + offline + [
+                            drv("json_set", path=idx, pointer="/datestamp", value="20991230"),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/datestamp": "20991230"})] + offline + [
                         reader_open,
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("close")),
@@ -1449,7 +1455,9 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                      as_("writer", step("close")),
                      drv("assert_index", path=f"{vdir}/index-v1.json", jsonl=f"{vdir}/OTC_{vd}.jsonl", datestamp=vd)] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": vd}, release=vd, cache_dir="${cache}", offline=True, mode="stream")),
-                        as_("reader", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")), no_requests],
+                        as_("reader", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")),
+                        # past the NUL: a reader that cuts the name at the NUL ("Me") finds nothing (R2-149)
+                        as_("reader", step("search", {"station_ids": search(Rel("values", vd), "da")}, name="da")), no_requests],
                     roles=roles))
     latest_writer = [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
@@ -1467,6 +1475,31 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi}))],
                     roles={"writer": ["fs", "fetch", "stream"], "reader": ["fs", "fetch", "eager"]}))
+    citation_v = citation(R2, vdoi)
+    out.append(case("cross/verified-doi-pinned-writer", "the writer caches a pinned release (no pointer, so no version DOI); the reader opens latest online, gets the cached release (a 304 path or a pointer for the same datestamp) and records the pointer's version DOI in .verified; the writer then has it offline (B1-5, D26, R2-151)", "4.3, 5.4",
+                    [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode="stream")),
+                     as_("writer", step("close")),
+                     as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                     as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                     as_("reader", step("close")),
+                     drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi, "files": {"$len_min": 4}})] + offline + [
+                        as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("writer", step("verify", {"verified": True})),
+                        as_("writer", step("citation", {"citation": citation_v})), no_requests],
+                    roles=roles))
+    rows = sha256_rows("good", d)
+    files_only = {"files": {n: {"sha256": h, "size": (FIXTURES / "good" / n).stat().st_size} for n, h in sorted(rows.items())}}
+    out.append(case("cross/verified-keys", "the writer's .verified has the seven keys of D26 (files, verified_at, by, datestamp, format_version, min_reader_version, zenodo_version_doi); a reader opens offline a release whose .verified holds only files (D26, G13)", "5.4",
+                    latest_writer + [
+                        drv("assert_json", path=f"{rdir}/.verified", match={
+                            "files": {"$len_min": len(rows)}, "verified_at": {"$regex": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"},
+                            "by": {"$regex": r"^opentideconstants-[a-z]+/\S+$"}, "datestamp": d, "format_version": R2.doc["format_version"],
+                            "min_reader_version": R2.doc["release"]["min_reader_version"], "zenodo_version_doi": vdoi}),
+                        drv("write", path=f"{rdir}/.verified", text=json.dumps(files_only, indent=1, sort_keys=True) + "\n")] + offline + [
+                        reader_open,
+                        as_("reader", step("verify", {"verified": True})),
+                        as_("reader", step("station_count", {"station_count": len(R2.active)})), no_requests],
+                    roles=roles))
     return out
 
 

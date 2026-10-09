@@ -1,4 +1,32 @@
 {
  "description": "Cases that are expected to fail for a runner today: the RED baseline of the cross-SDK behaviour rules that the SDK lanes (review round 1, packages PK01-PK15) have yet to fix. The driver reports a listed case that fails as XFAIL (the run still passes) and a listed case that passes as XPASS (the run fails, so the entry must be removed). A lane that fixes a case removes its entry. See conformance/README.md \"Expected failures\".",
- "entries": []
+ "entries": [
+  {
+   "case": "cross/verified-doi-pinned-writer[python>ruby]",
+   "runners": [
+    "cross"
+   ],
+   "package": "PK-R2-09",
+   "step": 3,
+   "reason": "Ruby opens latest online over a release a pinned writer cached and reports zenodo_version_doi null in the session, although it writes the pointer's DOI to .verified (DOI parity, DR11)"
+  },
+  {
+   "case": "cross/verified-doi-pinned-writer[typescript>ruby]",
+   "runners": [
+    "cross"
+   ],
+   "package": "PK-R2-09",
+   "step": 3,
+   "reason": "Ruby opens latest online over a release a pinned writer cached and reports zenodo_version_doi null in the session, although it writes the pointer's DOI to .verified (DOI parity, DR11)"
+  },
+  {
+   "case": "cross/verified-doi-pinned-writer[c>ruby]",
+   "runners": [
+    "cross"
+   ],
+   "package": "PK-R2-09",
+   "step": 3,
+   "reason": "Ruby opens latest online over a release a pinned writer cached and reports zenodo_version_doi null in the session, although it writes the pointer's DOI to .verified (DOI parity, DR11)"
+  }
+ ]
 }
