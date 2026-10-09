@@ -29,14 +29,25 @@ every source file of the SDK:
     (from x import Y as SUPPORTED_FORMAT_VERSION), an import of it from outside the package, and a string-keyed
     write (globals()[...] =, setattr, update(SUPPORTED_FORMAT_VERSION=...), a dict key). A docstring or a
     comment is not a declaration.
-  - Ruby: ruby/lib/**/*.rb; a line that starts with the constant (optionally Module::-qualified) and
-    assigns it with =, ||= or &&=, and any const_set of the name. Comment lines and =begin/=end blocks
-    are not declarations.
-  - TypeScript: js/src/**/*.{ts,mts,cts,tsx,js,mjs,cjs}; a line that starts with a const/let/var
-    declaration of the name (optionally export/declare), a line that starts with an assignment to it, and
-    an export that renames another binding to it ("as SUPPORTED_FORMAT_VERSION"). A JSDoc or block
-    comment line starts with "*" or "/*", so it is not a declaration.
-  - C: c/include/**/*.h and c/src/**/*.{h,c}; a #define OTC_FORMAT_VERSION line.
+  - Ruby, TypeScript/JavaScript and C have no parser here, so the check reads the text around each
+    occurrence of the name and fails closed: an occurrence that has the shape of a binding but is not a
+    recognised literal declaration cannot be read, so it fails. Comments are not parsed out, so a
+    commented-out declaration still counts (a different or unreadable one fails; reword or delete it).
+  - Ruby: ruby/lib/**/*.rb, each statement (a line split at ";"). NAME =, ||= or &&= (optionally
+    Module::-qualified) at the start of a statement is a declaration. A multiple assignment (A, NAME = ...),
+    an operator assignment, class/module NAME, for NAME, rescue => NAME, a trailing-comma line (a multiple
+    assignment across lines) and const_set cannot be read. "#{NAME}" and other reads pass.
+  - TypeScript/JavaScript: js/src/**/*.{ts,mts,cts,tsx,js,mjs,cjs}. A const/let/var declaration of the name
+    (optionally export/declare) and an assignment to NAME or to x.NAME (exports.NAME, module.exports.NAME) at
+    the start of a statement are declarations; a statement starts at a line start or after ";", "{", "}" or
+    "*/". Any other binding cannot be read: a second declarator (const A = 1, NAME = ...), declare const
+    without a value, an object property or quoted key, a string-keyed write (exports["NAME"] =,
+    Object.defineProperty), destructuring, a default, namespace or aliased import, an export that renames
+    another binding to the name, an import or re-export of it from a package, a function, class member,
+    parameter or for target. An import of the name from a relative module, export { NAME } and "${NAME}" pass.
+  - C: c/include/**/*.h and c/src/**/*.{h,c}. #define OTC_FORMAT_VERSION at the start of a line ("#  define"
+    and a leading /* comment */ allowed) is a declaration. #undef, a #define that does not start its line
+    (a commented-out one) and a variable of that name cannot be read.
 A declaration whose value is not a quoted MAJOR.MINOR literal (a computed value, an aliased export, a
 const_set) cannot be checked, so it fails.
 """
@@ -52,14 +63,6 @@ ROOT = Path(__file__).resolve().parents[2]
 NAME = "SUPPORTED_FORMAT_VERSION"
 VERSION_RE = r"[0-9]+\.[0-9]+"
 KEYS = {"language", "version", "supported_format_version"}
-
-RUBY_ASSIGN = re.compile(rf"^\s*(?:(?:::)?[A-Z]\w*::)*(?:::)?{NAME}\s*(?:\|\||&&)?=(?![=~>])\s*([^\n]*)$", re.M)
-RUBY_CONST_SET = re.compile(rf"^(?!\s*#).*\bconst_set\b[\s(]*[:'\"]?{NAME}\b[^\n]*$", re.M)
-TS_DECL = re.compile(rf"^\s*(?:export\s+)?(?:declare\s+)?(?:const|let|var)\s+{NAME}\b\s*(?::[^=\n]+)?=(?![=>])\s*([^\n]*)$",
-                     re.M)
-TS_ASSIGN = re.compile(rf"^\s*{NAME}\s*(?:\|\||&&|\?\?)?=(?![=>])\s*([^\n]*)$", re.M)
-TS_ALIAS = re.compile(rf"^(?!\s*(?:\*|//|/\*)).*\bas\s+{NAME}\b[^\n]*$", re.M)
-C_DEFINE = re.compile(r"^\s*#\s*define\s+OTC_FORMAT_VERSION\b\s*([^\n]*)$", re.M)
 
 
 def literal(rhs):
@@ -210,49 +213,180 @@ def python_declarations():
     return out
 
 
-def ruby_declarations():
+RUBY_CONST_SET = re.compile(rf"\bconst_set\b[\s(]*[:'\"]?{NAME}\b")
+RUBY_DECL_BEFORE = re.compile(r"^\s*(?:(?:::)?[A-Z]\w*::)*(?:::)?$")
+RUBY_DECL_AFTER = re.compile(r"^\s*(?:\|\||&&)?=(?![=~>])\s*(.*)$")
+RUBY_ASSIGN_OP = re.compile(r"(?<![=!<>])(?:\|\||&&|\*\*|<<|>>|[-+*/%|&^])?=(?![=~>])")
+RUBY_BINDER_BEFORE = re.compile(r"(?:\b(?:class|module)\s+(?:(?:::)?[A-Z]\w*::)*(?:::)?|\bfor\s+[^;]*|\brescue\b[^;]*=>\s*)$")
+
+JS_ID = r"[\w$]"
+JS_STMT = r"(?:^|[;{}]|\*/)\s*"
+JS_DECL_BEFORE = re.compile(JS_STMT + r"(?:export\s+)?(?:declare\s+)?(?:const|let|var)\s+$")
+JS_DECL_AFTER = re.compile(r"^\s*(?::[^=\n]+)?=(?![=>])\s*(.*)$")
+JS_ASSIGN_AFTER = re.compile(r"^\s*(?:\|\||&&|\?\?)?=(?![=>])\s*(.*)$")
+JS_ASSIGN_BEFORE = re.compile(JS_STMT + r"(?:[\w$]+\s*\.\s*)*$")  # NAME = or exports.NAME = at a statement start
+JS_OTHER_ASSIGN_AFTER = re.compile(r"^\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?)=|=>|\??:(?!:))")  # op=, x =>, property or annotation
+JS_BINDER_BEFORE = re.compile(
+    r"(?:\b(?:const|let|var|function|class|interface|type|enum|namespace|module|declare|import|as|abstract|static"
+    r"|readonly|get|set|accessor)\s*\*?\s*|\bcatch\s*\(\s*|\bfor\s*(?:await\s*)?\(\s*|\b(?:const|let|var)\s*[\[{][^=;]*"
+    r"|\bfunction\b[^(]*\([^)]*)$")
+JS_METHOD_BEFORE = re.compile(
+    r"^\s*(?:(?:static|async|get|set|public|private|protected|readonly|override)\s+)*\*?\s*"
+    r"(?!(?:if|while|for|switch|with|return|typeof|await|new|delete|void|yield|throw|case|in|of|do|else|super|this)\b)"
+    r"[\w$]+\s*(?:<[^>]*>)?\s*\([^)]*$")
+JS_METHOD_AFTER = re.compile(r"^[^)]*\)\s*(?::[^{;=]*)?\{")
+JS_PATTERN_AFTER = re.compile(r"^[^;=]*?[\]})]\s*(?:=(?![=>])|=>)")  # [a, NAME] = / {NAME} = / (a, NAME) =>
+JS_STRING_KEY = re.compile(
+    r"(?:\[\s*['\"`]$|\b(?:defineProperty|defineProperties|set|assign|__defineGetter__|__defineSetter__)\s*\([^)]*['\"`]$)")
+JS_SPECIFIERS = re.compile(r"\b(import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^{}]*)\}"
+                           r"(?:\s*from\s*(['\"])([^'\"\n]*)\3)?", re.S)
+JS_SPECIFIER = re.compile(r"(?:type\s+)?([\w$]+)(?:\s+as\s+([\w$]+))?")
+
+C_DEFINE_BEFORE = re.compile(r"^\s*(?:/\*.*?\*/\s*)*#\s*define\s+$")
+C_OTHER_BEFORE = re.compile(r"#\s*(?:define|undef)\s+$")
+C_ASSIGN_AFTER = re.compile(r"^\s*(?:\[[^\]]*\]\s*)?=(?!=)")
+
+
+def occurrences(text, name, ident):
+    """Each whole-word occurrence of name: (line number, text before it on its line, text after it on its line,
+    start offset)."""
+    for m in re.finditer(rf"(?<!{ident}){name}(?!{ident})", text):
+        ls = text.rfind("\n", 0, m.start()) + 1
+        le = text.find("\n", m.end())
+        le = len(text) if le < 0 else le
+        yield text.count("\n", 0, m.start()) + 1, text[ls:m.start()], text[m.end():le], m.start()
+
+
+def declared(at, line, rhs):
+    """A literal declaration's value, or (None, why) when its value is not a quoted MAJOR.MINOR literal."""
+    v = literal(rhs)
+    return (at, v, None) if v else (at, None, f"line {line}: not a quoted MAJOR.MINOR literal: {rhs.strip()!r}")
+
+
+def unreadable(at, line, what, before, after):
+    return at, None, f"line {line}: {what}, so its value cannot be read: {(before + NAME + after).strip()!r}"
+
+
+def ruby_scan(at, text):
+    """Ruby: every statement (a line split at ;) that names the constant. NAME = / ||= / &&= with a literal at the
+    start of a statement (optionally Module::-qualified) is a declaration. A multiple assignment, an op-assignment,
+    class/module NAME, for NAME, rescue => NAME, a trailing-comma line and const_set cannot be read. Comments are
+    not parsed out: a commented-out declaration still counts."""
     out = []
-    for p in files(["ruby/lib/**/*.rb"]):
+    for line, before, after, _ in occurrences(text, NAME, r"[\w]"):
+        before = before[before.rfind(";") + 1:]
+        after = after.split(";", 1)[0]
+        if before.endswith("#{") and after.startswith("}"):
+            continue
+        if RUBY_DECL_BEFORE.match(before) and (m := RUBY_DECL_AFTER.match(after)):
+            out.append(declared(at, line, m.group(1)))
+        elif RUBY_ASSIGN_OP.search(after):
+            out.append(unreadable(at, line, "a multiple or operator assignment", before, after))
+        elif RUBY_BINDER_BEFORE.search(before):
+            out.append(unreadable(at, line, "a class, module, for or rescue binding", before, after))
+        elif re.fullmatch(r"\s*,\s*", after):
+            out.append(unreadable(at, line, "a multiple assignment across lines", before, after))
+    for m in RUBY_CONST_SET.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
+        out.append((at, None, f"line {line}: const_set, so its value cannot be read"))
+    return out
+
+
+def js_specifier_spans(at, text):
+    """The import/export { ... } lists that name the constant: (spans to skip, findings). A plain import from a
+    relative module, an import or export of the name under another name, and export { NAME } are reads; an alias
+    to the name, an import or re-export of it from a package, and a list entry that does not parse cannot be read."""
+    spans, out = [], []
+    for m in JS_SPECIFIERS.finditer(text):
+        body = m.group(2)
+        if not re.search(rf"(?<!{JS_ID}){NAME}(?!{JS_ID})", body):
+            continue
+        spans.append(m.span(2))
+        line = text.count("\n", 0, m.start()) + 1
+        source = m.group(4)
+        relative = source is not None and source.startswith(("./", "../"))
+        for item in body.split(","):
+            if not re.search(rf"(?<!{JS_ID}){NAME}(?!{JS_ID})", item):
+                continue
+            item = re.sub(r"//[^\n]*|/\*.*?\*/", " ", item, flags=re.S).strip()
+            s = JS_SPECIFIER.fullmatch(item)
+            bound = s and (s.group(2) or s.group(1))
+            if not s or (bound == NAME and s.group(1) != NAME):
+                out.append((at, None, f"line {line}: {m.group(1)} {{ {item} }} renames another binding to {NAME}, "
+                                      "so its value cannot be read"))
+            elif bound == NAME and (source is not None or m.group(1) == "import") and not relative:
+                out.append((at, None, f"line {line}: {m.group(1)} {{ {item} }} from {source!r}, a module outside the "
+                                      "SDK, so its value cannot be read"))
+    return spans, out
+
+
+def js_scan(at, text):
+    """TypeScript/JavaScript: every occurrence of the name, read by the text around it on its line. A const/let/var
+    declaration of the name, or an assignment to it (or to x.NAME, such as exports.NAME) at the start of a
+    statement, with a literal, is a declaration. Any other binding cannot be read (see the module docstring).
+    Comments are not parsed out: a commented-out declaration still counts."""
+    spans, out = js_specifier_spans(at, text)
+    for line, before, after, pos in occurrences(text, NAME, JS_ID):
+        if any(a <= pos < b for a, b in spans):
+            continue
+        if before.endswith(("'", '"', "`")):
+            if JS_STRING_KEY.search(before) or re.match(r"""^['"`]\s*(?::|\]\s*(?:[-+*/%&|^?]{0,3})=(?![=>]))""", after):
+                out.append(unreadable(at, line, "a string-keyed write", before, after))
+            continue
+        if re.search(r"\$\{\s*$", before) and re.match(r"^\s*\}", after):
+            continue
+        if JS_DECL_BEFORE.search(before):
+            m = JS_DECL_AFTER.match(after)
+            out.append(declared(at, line, m.group(1)) if m else
+                       unreadable(at, line, "a declaration with no literal value", before, after))
+        elif m := JS_ASSIGN_AFTER.match(after):
+            out.append(declared(at, line, m.group(1)) if JS_ASSIGN_BEFORE.search(before) else
+                       unreadable(at, line, "an assignment that is not at the start of a statement", before, after))
+        elif JS_OTHER_ASSIGN_AFTER.match(after):
+            out.append(unreadable(at, line, "an operator assignment, parameter, property or annotation", before, after))
+        elif JS_BINDER_BEFORE.search(before) or (JS_METHOD_BEFORE.search(before) and JS_METHOD_AFTER.match(after)):
+            out.append(unreadable(at, line, "a declaration, import, parameter or member", before, after))
+        elif JS_PATTERN_AFTER.match(after):
+            out.append(unreadable(at, line, "a destructuring pattern or parameter list", before, after))
+        elif not before.strip() and re.match(r"^\s*(?:,|$)", after):
+            out.append(unreadable(at, line, "a list entry across lines", before, after))
+    return out
+
+
+def c_scan(at, text):
+    """C: #define OTC_FORMAT_VERSION with a literal (#  define and a leading /* comment */ allowed) is a declaration.
+    #undef, a #define that does not start its line (a commented-out one) and a variable of that name cannot be
+    read."""
+    out = []
+    for line, before, after, _ in occurrences(text, "OTC_FORMAT_VERSION", r"\w"):
+        if C_DEFINE_BEFORE.match(before):
+            out.append(declared(at, line, after))
+        elif C_OTHER_BEFORE.search(before) or C_ASSIGN_AFTER.match(after):
+            out.append((at, None, f"line {line}: an #undef, a commented-out #define or a variable, so its value cannot "
+                                  f"be read: {(before + 'OTC_FORMAT_VERSION' + after).strip()!r}"))
+    return out
+
+
+def scan_files(globs, scan):
+    out = []
+    for p in files(globs):
         try:
-            text = re.sub(r"^=begin\b.*?^=end\b[^\n]*", "", read(p), flags=re.M | re.S)
+            out += scan(rel(p), read(p))
         except Unreadable as e:
             out.append((rel(p), None, str(e)))
-            continue
-        for m in RUBY_ASSIGN.finditer(text):
-            out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
-        for m in RUBY_CONST_SET.finditer(text):
-            out.append((rel(p), None, repr(m.group(0).strip())))
     return out
+
+
+def ruby_declarations():
+    return scan_files(["ruby/lib/**/*.rb"], ruby_scan)
 
 
 def ts_declarations():
-    out = []
-    exts = ("ts", "mts", "cts", "tsx", "js", "mjs", "cjs")
-    for p in files([f"js/src/**/*.{e}" for e in exts]):
-        try:
-            text = read(p)
-        except Unreadable as e:
-            out.append((rel(p), None, str(e)))
-            continue
-        for rx in (TS_DECL, TS_ASSIGN):
-            for m in rx.finditer(text):
-                out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
-        for m in TS_ALIAS.finditer(text):
-            out.append((rel(p), None, repr(m.group(0).strip())))
-    return out
+    return scan_files([f"js/src/**/*.{e}" for e in ("ts", "mts", "cts", "tsx", "js", "mjs", "cjs")], js_scan)
 
 
 def c_declarations():
-    out = []
-    for p in files(["c/include/**/*.h", "c/src/**/*.h", "c/src/**/*.c"]):
-        try:
-            text = read(p)
-        except Unreadable as e:
-            out.append((rel(p), None, str(e)))
-            continue
-        for m in C_DEFINE.finditer(text):
-            out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
-    return out
+    return scan_files(["c/include/**/*.h", "c/src/**/*.h", "c/src/**/*.c"], c_scan)
 
 
 # language: (package version reader, declaration reader)

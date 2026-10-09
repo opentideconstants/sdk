@@ -214,3 +214,157 @@ def test_python_forms_that_are_not_a_conflicting_declaration_pass(tree, src):
     plant(tree, "python/src/opentideconstants/_zz.py", src)
     rc, out = run(tree)
     assert rc == 0, out
+
+
+# --- R2-183: TypeScript/JavaScript, Ruby and C declarations in any position count. A comment is not parsed out:
+# a commented-out declaration still counts, and one whose value cannot be read fails (fail closed).
+
+TS_UNREADABLE = {
+    "multi-declarator": 'export const A = 1, SUPPORTED_FORMAT_VERSION = "2.0";',
+    "declare-const": 'export declare const SUPPORTED_FORMAT_VERSION: "2.0";',
+    "object-property": 'export const cfg = { SUPPORTED_FORMAT_VERSION: "2.0" };',
+    "quoted-object-key": 'module.exports = { "SUPPORTED_FORMAT_VERSION": "2.0" };',
+    "string-keyed-write": 'exports["SUPPORTED_FORMAT_VERSION"] = "2.0";',
+    "define-property": 'Object.defineProperty(exports, "SUPPORTED_FORMAT_VERSION", { value: "2.0" });',
+    "object-destructuring": 'const { SUPPORTED_FORMAT_VERSION } = globalThis as any;',
+    "multi-line-destructuring": "const {\n  SUPPORTED_FORMAT_VERSION,\n} = globalThis as any;",
+    "array-destructuring": 'const [SUPPORTED_FORMAT_VERSION] = ["2.0"];',
+    "default-import": 'import SUPPORTED_FORMAT_VERSION from "./zz_other.js";',
+    "namespace-import": 'import * as SUPPORTED_FORMAT_VERSION from "./zz_other.js";',
+    "import-alias": 'import { OTHER as SUPPORTED_FORMAT_VERSION } from "./zz_other.js";',
+    "export-alias": 'export { OTHER as SUPPORTED_FORMAT_VERSION } from "./zz_other.js";',
+    "re-export-from-a-package": 'export { SUPPORTED_FORMAT_VERSION } from "some-package";',
+    "function": "export function SUPPORTED_FORMAT_VERSION() { return \"2.0\"; }",
+    "class-static-field": 'export class C { static SUPPORTED_FORMAT_VERSION = "2.0"; }',
+    "for-of": 'for (const SUPPORTED_FORMAT_VERSION of ["2.0"]) { void 0; }',
+    "arrow-parameter": 'export const f = ["2.0"].map(SUPPORTED_FORMAT_VERSION => SUPPORTED_FORMAT_VERSION);',
+    "arrow-parameters": "export const g = (a: string, SUPPORTED_FORMAT_VERSION: string) => a;",
+    "compound-assignment": 'SUPPORTED_FORMAT_VERSION += ".1";',
+    "commented-out-declaration": '// export const SUPPORTED_FORMAT_VERSION = "2.0";',
+}
+
+TS_CONFLICT = {
+    "cjs-exports": 'exports.SUPPORTED_FORMAT_VERSION = "2.0";',
+    "cjs-module-exports": 'module.exports.SUPPORTED_FORMAT_VERSION = "2.0";',
+    "after-an-inline-block-comment": '/* note */ export const SUPPORTED_FORMAT_VERSION = "2.0";',
+    "after-a-block-comment-ends": '/*\n note\n */ export const SUPPORTED_FORMAT_VERSION = "2.0";',
+    "inside-a-block-comment-not-starting-with-star": '/*\nexport const SUPPORTED_FORMAT_VERSION = "2.0";\n*/',
+    "second-declarator-on-its-own-line": 'export const A = 1,\n  SUPPORTED_FORMAT_VERSION = "2.0";',
+    "after-a-semicolon": 'void 0; export const SUPPORTED_FORMAT_VERSION = "2.0";',
+}
+
+
+@pytest.mark.parametrize("form", sorted(TS_UNREADABLE))
+def test_typescript_binding_that_cannot_be_read_fails(tree, form):
+    plant(tree, "js/src/zz.ts", TS_UNREADABLE[form])
+    assert_fails(tree, "js", "zz.ts", "cannot read")
+
+
+@pytest.mark.parametrize("ext", ["cjs", "mjs", "js"])
+def test_javascript_files_are_scanned(tree, ext):
+    plant(tree, f"js/src/zz.{ext}", TS_CONFLICT["cjs-exports"])
+    assert_fails(tree, "js", "different values", "'2.0'")
+
+
+@pytest.mark.parametrize("form", sorted(TS_CONFLICT))
+def test_typescript_declaration_with_another_value_fails(tree, form):
+    plant(tree, "js/src/zz.ts", TS_CONFLICT[form])
+    assert_fails(tree, "js", "different values", "'2.0'")
+
+
+@pytest.mark.parametrize("src", [
+    'import { SUPPORTED_FORMAT_VERSION as V } from "./constants.js";\nexport const w = V;',
+    'import {\n  SUPPORTED_FORMAT_VERSION, // the newest format\n  VERSION,\n} from "./constants.js";\nvoid VERSION;',
+    'import { SUPPORTED_FORMAT_VERSION } from "./constants.js";\nexport { SUPPORTED_FORMAT_VERSION as SFV };',
+    'import { SUPPORTED_FORMAT_VERSION } from "./constants.js";\n'
+    'export const s = `format ${SUPPORTED_FORMAT_VERSION}`;\n'
+    'export const t = (v: string) => v === SUPPORTED_FORMAT_VERSION;\n'
+    'export const u = String(SUPPORTED_FORMAT_VERSION).length;\n'
+    'export const o = { v: SUPPORTED_FORMAT_VERSION };\n'
+    '/*\n newer than SUPPORTED_FORMAT_VERSION (spec 7.4).\n*/',
+])
+def test_typescript_forms_that_are_not_a_conflicting_declaration_pass(tree, src):
+    plant(tree, "js/src/zz.ts", src)
+    rc, out = run(tree)
+    assert rc == 0, out
+
+
+RB_UNREADABLE = {
+    "multiple-assignment": 'module Opentideconstants\n  A, SUPPORTED_FORMAT_VERSION = "9", "2.0"\nend',
+    "multiple-assignment-first": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION, B = "2.0", 1\nend',
+    "nested-multiple-assignment": 'module Opentideconstants\n  (A, SUPPORTED_FORMAT_VERSION), B = ["1", "2.0"], 3\nend',
+    "multi-line-multiple-assignment": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION,\n    B = "2.0", 1\nend',
+    "const-set": 'Opentideconstants.const_set(:SUPPORTED_FORMAT_VERSION, "2.0")',
+    "compound-assignment": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION += ".1"\nend',
+    "class": "module Opentideconstants\n  class SUPPORTED_FORMAT_VERSION; end\nend",
+    "for-target": 'for SUPPORTED_FORMAT_VERSION in ["2.0"]; end',
+    "rescue-target": "begin; rescue => SUPPORTED_FORMAT_VERSION; end",
+    "commented-out-declaration": '# SUPPORTED_FORMAT_VERSION = "2.0"',
+}
+
+RB_CONFLICT = {
+    "after-a-semicolon": 'module Opentideconstants; SUPPORTED_FORMAT_VERSION = "2.0"; end',
+    "qualified": 'Opentideconstants::SUPPORTED_FORMAT_VERSION = "2.0"',
+    "or-assign-after-a-semicolon": 'x = 1; SUPPORTED_FORMAT_VERSION ||= "2.0"',
+}
+
+
+@pytest.mark.parametrize("form", sorted(RB_UNREADABLE))
+def test_ruby_binding_that_cannot_be_read_fails(tree, form):
+    plant(tree, "ruby/lib/opentideconstants/zz.rb", RB_UNREADABLE[form])
+    assert_fails(tree, "ruby", "zz.rb", "cannot read")
+
+
+@pytest.mark.parametrize("form", sorted(RB_CONFLICT))
+def test_ruby_declaration_with_another_value_fails(tree, form):
+    plant(tree, "ruby/lib/opentideconstants/zz.rb", RB_CONFLICT[form])
+    assert_fails(tree, "ruby", "different values", "'2.0'")
+
+
+def test_ruby_forms_that_are_not_a_conflicting_declaration_pass(tree):
+    plant(tree, "ruby/lib/opentideconstants/zz.rb", "\n".join([
+        "module Opentideconstants",
+        '  A = "reads format #{SUPPORTED_FORMAT_VERSION}"; B = version_key(SUPPORTED_FORMAT_VERSION) rescue nil',
+        "  C = SUPPORTED_FORMAT_VERSION",
+        "  D = { SUPPORTED_FORMAT_VERSION => 1 }",
+        "  E = (A == SUPPORTED_FORMAT_VERSION) && (A <= SUPPORTED_FORMAT_VERSION)",
+        "  # newer than SUPPORTED_FORMAT_VERSION (§7.4).",
+        "end",
+    ]))
+    rc, out = run(tree)
+    assert rc == 0, out
+
+
+C_UNREADABLE = {
+    "variable": 'static const char OTC_FORMAT_VERSION[] = "2.0";',
+    "commented-out-define": '// #define OTC_FORMAT_VERSION "2.0"',
+    "undef": "#undef OTC_FORMAT_VERSION",
+}
+
+
+@pytest.mark.parametrize("form", sorted(C_UNREADABLE))
+def test_c_binding_that_cannot_be_read_fails(tree, form):
+    plant(tree, "c/src/zz.c", C_UNREADABLE[form])
+    assert_fails(tree, "c", "zz.c", "cannot read")
+
+
+@pytest.mark.parametrize("decl", [
+    '#  define OTC_FORMAT_VERSION "2.0"',
+    '/* note */ #define OTC_FORMAT_VERSION "2.0"',
+])
+def test_c_define_with_another_value_fails(tree, decl):
+    plant(tree, "c/src/zz.c", decl)
+    assert_fails(tree, "c", "different values", "'2.0'")
+
+
+def test_c_forms_that_are_not_a_conflicting_declaration_pass(tree):
+    plant(tree, "c/src/zz.c", "\n".join([
+        "#ifndef OTC_FORMAT_VERSION",
+        "#error no OTC_FORMAT_VERSION",
+        "#endif",
+        "#if defined(OTC_FORMAT_VERSION)",
+        "static int zz(const char *v) { return strcmp(v, OTC_FORMAT_VERSION) == 0; }",
+        "#endif",
+    ]))
+    rc, out = run(tree)
+    assert rc == 0, out
