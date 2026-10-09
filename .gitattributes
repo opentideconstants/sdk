@@ -17,3 +17,9 @@ conformance/schemas/** -text
 name_fold.json        -text
 js/src/fold-table.ts  -text
 c/src/otc_fold_table.c -text
+# Byte-checked on every platform too: the vendored sources (their SHA-256 is
+# checked), the C supported-formats.json (cmp against the bundle), and the
+# Ruby README, whose code blocks test_readme.rb reads in binary mode.
+c/vendor/**           -text
+c/supported-formats.json -text
+ruby/README.md        -text
