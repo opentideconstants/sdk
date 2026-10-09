@@ -682,6 +682,48 @@ class ChecksumTest(unittest.TestCase):
         self.assertFalse(p.exists())
 
 
+class HttpTest(unittest.TestCase):
+    """HTTP transport (spec §5.7; review PK12)."""
+
+    def test_proxy_credentials_are_sent(self):
+        import base64
+        from opentideconstants._http import Http
+        srv = _Server()
+        try:
+            proxy = srv.url.replace("http://", "http://us%65r:p%40ss@")
+            Http(user_agent="t", proxy=proxy).get("http://data.example.invalid/OTC_x.json")
+            self.assertEqual(srv.requests[0][0], "http://data.example.invalid/OTC_x.json")
+            self.assertEqual(srv.requests[0][1].get("Proxy-Authorization"),
+                             "Basic " + base64.b64encode(b"user:p@ss").decode())
+        finally:
+            srv.close()
+
+    def test_multi_member_gzip_is_decoded_in_full(self):
+        import gzip
+        from opentideconstants._http import Http
+        body = gzip.compress(b"first ") + gzip.compress(b"second")
+        srv = _Server(script={"/x": (200, {"Content-Encoding": "gzip"}, body)})
+        try:
+            self.assertEqual(Http(user_agent="t").get(srv.url + "x", accept_gzip=True).body, b"first second")
+        finally:
+            srv.close()
+
+    def test_truncated_gzip_is_retried(self):
+        import gzip
+        from opentideconstants import _http
+        body = gzip.compress(b"x" * 1000)[:-12]
+        srv = _Server(script={"/x": (200, {"Content-Encoding": "gzip"}, body)})
+        saved = _http.BACKOFF_S
+        _http.BACKOFF_S = (0.0, 0.0)
+        try:
+            with self.assertRaises(otc.NetworkError):
+                _http.Http(user_agent="t").get(srv.url + "x", accept_gzip=True)
+            self.assertEqual(len(srv.requests), 3)
+        finally:
+            _http.BACKOFF_S = saved
+            srv.close()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

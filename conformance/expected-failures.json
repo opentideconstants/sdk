@@ -1112,7 +1112,6 @@
   {
    "case": "rules/pk12/gz-with-content-encoding",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1123,7 +1122,6 @@
    "case": "rules/pk12/http-proxy-uppercase-cgi",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK12",
@@ -1132,7 +1130,6 @@
   {
    "case": "rules/pk12/redirect-five-hops",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
