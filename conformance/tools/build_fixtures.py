@@ -397,16 +397,25 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+_GZ_SEEN = {}  # sha256 of content -> committed gzip bytes already reused in this run
+
+
 def gz(data, reuse):
     """gzip with no name and mtime 0. Reuse committed bytes when they hold the same content,
-    so a different zlib build does not change the committed fixtures."""
+    so a different zlib build does not change the committed fixtures. A bad root's committed
+    .json.gz may not hold the honest content (truncated, or one byte changed), so content
+    already reused from another root (good/ is written first) is reused here too."""
     if reuse is not None and reuse.exists():
         old = reuse.read_bytes()
         try:
             if gzip.decompress(old) == data:
+                _GZ_SEEN.setdefault(sha(data), old)
                 return old
         except (OSError, EOFError):
             pass
+    seen = _GZ_SEEN.get(sha(data))
+    if seen is not None:
+        return seen
     return gzip.compress(data, compresslevel=9, mtime=0)
 
 
