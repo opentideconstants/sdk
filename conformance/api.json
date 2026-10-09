@@ -1,8 +1,8 @@
 {
  "description": "OpenTideConstants SDK API manifest (SDK spec section 4). Every public operation, attribute, argument, default, enum value and error code, by its snake_case name. Each SDK's CI turns the names into its own form by the naming rules below and compares them with its public surface; a missing or an extra name fails CI.",
- "suite_version": "0.1",
+ "suite_version": "1.0",
  "supported_format_majors": [
-  0
+  1
  ],
  "naming": {
   "canonical": "snake_case",
@@ -331,6 +331,20 @@
      "typescript_async": true
     },
     {
+     "name": "newer_format_major",
+     "kind": "attribute",
+     "returns": "integer|null",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_fetch_newer_format_major",
+     "note": "set by check_for_update: the format major of OTC_latest.json when it is newer than every supported major, else null (spec 7.4)"
+    },
+    {
      "name": "update",
      "kind": "method",
      "args": [],
@@ -512,16 +526,18 @@
      "nullable": false
     },
     {
-     "name": "doi",
+     "name": "zenodo_version_doi",
      "kind": "field",
      "type": "string",
-     "nullable": true
+     "nullable": true,
+     "note": "spec 4.3: the version DOI from the pointer or index entry for this datestamp that the SDK read last (kept in .verified); not in the release document; always null for loaded_from file and file_unverified"
     },
     {
      "name": "concept_doi",
      "kind": "field",
      "type": "string",
-     "nullable": true
+     "nullable": true,
+     "note": "from the release document; the one DOI for every Zenodo version"
     },
     {
      "name": "source_versions",
@@ -681,7 +697,8 @@
       "typescript",
       "c"
      ],
-     "c": "otc_release_citation"
+     "c": "otc_release_citation",
+     "note": "exact text (spec 4.6): OpenTideConstants contributors ({year}). OpenTideConstants, release {datestamp} [Data set]. {link}{version}; link https://doi.org/{concept_doi} (or the release URL when null); version ' (version DOI: https://doi.org/{zenodo_version_doi})' only when the release has one"
     },
     {
      "name": "station",
@@ -1024,7 +1041,7 @@
      ],
      "c": "otc_attribution",
      "forwarded_to_client": true,
-     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{doi}, CC BY 4.0. Sources: {provider}: {attribution}; ..."
+     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI)"
     }
    ]
   },
@@ -1045,10 +1062,24 @@
      "nullable": false
     },
     {
-     "name": "doi",
+     "name": "concept_doi",
      "kind": "field",
      "type": "string",
      "nullable": true
+    },
+    {
+     "name": "zenodo_version_doi",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "note": "the DOI of this release's own Zenodo version, or null"
+    },
+    {
+     "name": "content_sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "note": "passed through from the entry (otc-index-1.0 requires it); the SDKs do not use it"
     },
     {
      "name": "files",
@@ -1187,14 +1218,15 @@
       "typescript",
       "c"
      ],
-     "c": "otc_station_recommended_set"
+     "c": "otc_station_recommended_set",
+     "note": "never a no_constants set; null for a subordinate station with offsets only, or a station whose every set is no_constants"
     },
     {
      "name": "constant_sets",
      "kind": "method",
      "args": [
       {
-       "name": "include_excluded",
+       "name": "include_no_constants",
        "type": "boolean",
        "required": false,
        "positional": false,
@@ -1210,7 +1242,7 @@
       "c"
      ],
      "c": "otc_station_set_count/otc_station_set_at",
-     "note": "recommended first, then by set_id"
+     "note": "recommended first, then by set_id; leaves out no_constants sets unless include_no_constants is true"
     },
     {
      "name": "constant_set",
@@ -1300,8 +1332,24 @@
     {
      "name": "removed_reason",
      "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "removed_reason",
+     "c": "otc_tombstone_removed_reason"
+    },
+    {
+     "name": "merged_into",
+     "kind": "field",
      "type": "string",
-     "nullable": false
+     "nullable": false,
+     "note": "the OTC station id that holds the removed station's records",
+     "c": "otc_tombstone_merged_into"
+    },
+    {
+     "name": "detail",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
     },
     {
      "name": "raw",
@@ -1341,7 +1389,7 @@
      "type": "enum",
      "nullable": false,
      "enum": "quantity",
-     "note": "schema 0.2 field; the station kind derives from it"
+     "note": "the station kind derives from it"
     },
     {
      "name": "source_record_id",
@@ -1372,7 +1420,8 @@
      "kind": "field",
      "type": "enum",
      "nullable": false,
-     "enum": "qc_status"
+     "enum": "qc_status",
+     "note": "ok, flagged or no_constants"
     },
     {
      "name": "qc_flags",
@@ -1387,6 +1436,13 @@
      "type": "DroppedConstituent[]",
      "nullable": false,
      "c": "otc_set_dropped_count/otc_set_dropped_at"
+    },
+    {
+     "name": "time_base",
+     "kind": "field",
+     "type": "TimeBase",
+     "nullable": true,
+     "note": "null when the set has none (every gauge set has one)"
     },
     {
      "name": "is_recommended",
@@ -1689,12 +1745,6 @@
    "c": "otc_set_provenance",
    "members": [
     {
-     "name": "build_commit",
-     "kind": "field",
-     "type": "string",
-     "nullable": true
-    },
-    {
      "name": "adapter_version",
      "kind": "field",
      "type": "string",
@@ -1705,13 +1755,6 @@
      "kind": "field",
      "type": "string[]",
      "nullable": true
-    },
-    {
-     "name": "time_base",
-     "kind": "field",
-     "type": "object",
-     "nullable": true,
-     "note": "{verdict, correction, comparators}"
     },
     {
      "name": "selection_reason",
@@ -1727,12 +1770,127 @@
      "note": "{tier, outcome, rule, reason}"
     },
     {
+     "name": "build",
+     "kind": "field",
+     "type": "ProvenanceBuild",
+     "nullable": true,
+     "note": "provenance.build; format 1.0 requires it (with build_commit), so it is null only for malformed input (the load does not fail, spec 7.3)"
+    },
+    {
+     "name": "carried_from_release",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": true,
+     "note": "spec 4.6: the release whose constants a carried-over set keeps (qc_flags carried_over)"
+    },
+    {
      "name": "raw",
      "kind": "field",
      "type": "object",
      "nullable": false,
      "c": "otc_{object}_raw_json",
      "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    }
+   ]
+  },
+  "ProvenanceBuild": {
+   "c": "otc_provenance_build",
+   "description": "The build-only fields of a set's provenance (provenance.build).",
+   "members": [
+    {
+     "name": "build_commit",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "built_at",
+     "kind": "field",
+     "type": "time",
+     "nullable": true
+    },
+    {
+     "name": "fetched_at",
+     "kind": "field",
+     "type": "time",
+     "nullable": true
+    },
+    {
+     "name": "run_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "tool_versions",
+     "kind": "field",
+     "type": "map<string,string>",
+     "nullable": true
+    }
+   ]
+  },
+  "TimeBase": {
+   "c": "otc_time_base",
+   "description": "The time-base annotation of the record behind a set (constant_set.time_base, spec 4.5).",
+   "members": [
+    {
+     "name": "code",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "time_base_code"
+    },
+    {
+     "name": "reason",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "declared",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "note": "a time-base label, e.g. utc_instant"
+    },
+    {
+     "name": "published",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "correction",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "note": "{from, to}, both time-base labels; null unless code is corrected"
+    },
+    {
+     "name": "months_dropped",
+     "kind": "field",
+     "type": "string[]",
+     "nullable": false,
+     "note": "YYYY-MM; [] if none"
+    },
+    {
+     "name": "decided_in",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false
+    },
+    {
+     "name": "decided_build_commit",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "evidence",
+     "kind": "field",
+     "type": "object[]",
+     "nullable": false,
+     "note": "each {comparator_kind, comparator_id, distance_km, lag_min, detail}; distance_km, lag_min and detail null when absent; [] if none"
     }
    ]
   },
@@ -1747,16 +1905,18 @@
      "enum": "qc_flag"
     },
     {
-     "name": "verdict",
+     "name": "reason",
      "kind": "field",
      "type": "string",
-     "nullable": true
+     "nullable": false,
+     "note": "a required one-line string"
     },
     {
      "name": "values",
      "kind": "field",
-     "type": "object",
-     "nullable": true
+     "type": "map<string,number|null>",
+     "nullable": true,
+     "note": "maps a name to a number, or null; it holds only numbers"
     }
    ]
   },
@@ -2029,14 +2189,14 @@
      "kind": "field",
      "type": "map<string,integer>",
      "nullable": false,
-     "note": "sets by source"
+     "note": "counts only sets with constants (qc_status ok or flagged)"
     },
     {
      "name": "qc_status",
      "kind": "field",
      "type": "map<string,integer>",
      "nullable": false,
-     "note": "sets by qc_status"
+     "note": "counts every listed set, no_constants under its own key"
     }
    ]
   }
@@ -2054,6 +2214,10 @@
    "active",
    "removed"
   ],
+  "removed_reason": [
+   "merged",
+   "duplicate"
+  ],
   "source_type": [
    "official",
    "gauge",
@@ -2064,9 +2228,9 @@
    "current"
   ],
   "qc_status": [
-   "accepted",
-   "fallback",
-   "excluded"
+   "ok",
+   "flagged",
+   "no_constants"
   ],
   "loaded_from": [
    "download",
@@ -2106,7 +2270,14 @@
    "microtidal",
    "non_tidal_signal",
    "short_record",
-   "sibling_disagreement"
+   "sibling_disagreement",
+   "carried_over"
+  ],
+  "time_base_code": [
+   "verified",
+   "corrected",
+   "unverified",
+   "disputed"
   ],
   "decision_tier": [
    "rule",
@@ -2221,6 +2392,19 @@
    "class": "UnsupportedFormatError",
    "c": "OTC_E_UNSUPPORTED_FORMAT",
    "when": "format_version major not supported",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "reader_too_old",
+   "class": "ReaderTooOldError",
+   "c": "OTC_E_READER_TOO_OLD",
+   "when": "the release's release.min_reader_version is newer than SUPPORTED_FORMAT_VERSION; the message names both versions",
    "fields": [],
    "languages": [
     "ruby",
@@ -2390,9 +2574,14 @@
  "constants": {
   "SUPPORTED_FORMAT_MAJORS": {
    "value": [
-    0
+    1
    ],
    "c": "OTC_FORMAT_MAJOR"
+  },
+  "SUPPORTED_FORMAT_VERSION": {
+   "value": "1.0",
+   "c": "OTC_FORMAT_VERSION",
+   "note": "the newest format version this SDK reads (spec 7.4); equals supported_format_version in the package's supported-formats.json"
   },
   "DEFAULT_BASE_URL": {
    "value": "https://data.opentideconstants.org/"

@@ -23,9 +23,17 @@ function basename(p) {
     return parts[parts.length - 1];
 }
 
+// A field the op needs: undefined means the SDK does not have it, which fails the step.
+function need(obj, field) {
+    if (obj[field] === undefined) throw new Error(`the SDK has no ${field}`);
+    return obj[field];
+}
+
+// Every field must be there: a field the SDK leaves undefined fails the step (need). Only a missing parent object
+// gives nulls.
 const pick = (obj, fields) => {
     const out = {};
-    for (const f of fields) out[f] = obj == null || obj[f] === undefined ? null : obj[f];
+    for (const f of fields) out[f] = obj == null ? null : need(obj, f);
     return out;
 };
 
@@ -34,13 +42,13 @@ const CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "am
 const CONVENTION = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
     "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"];
 const LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url"];
-const PROVENANCE = ["build_commit", "adapter_version", "input_sha256", "time_base", "selection_reason", "decision"];
+const PROVENANCE = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"];
 const VALIDATION = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
     "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
 const PREVIOUS = ["time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
 const OFFSETS = ["reference_station_id", "time_offset_high_min", "time_offset_low_min", "height_offset_high",
     "height_offset_low", "height_adjusted_type", "licence_id"];
-const TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason"];
+const TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason", "merged_into", "detail"];
 
 function iso(t) {
     if (t == null) return null;
@@ -68,8 +76,9 @@ function encSet(cs) {
         record_span: span == null ? null : { start: iso(span.start), end: iso(span.end), good_samples: span.good_samples },
         datum: datum == null ? null : { msl_offset_m: datum.msl_offset_m, named: datum.named },
         qc_status: cs.qc_status,
-        qc_flags: cs.qc_flags.map((f) => ({ flag: f.flag, verdict: f.verdict, values: f.values })),
+        qc_flags: cs.qc_flags.map((f) => pick(f, ["flag", "reason", "values"])),
         dropped_constituents: cs.dropped_constituents.map((d) => ({ name: d.name, dropped_reason: d.dropped_reason, detail: d.detail })),
+        time_base: encTimeBase(need(cs, "time_base")),
         is_recommended: cs.isRecommended,
         convention_id: cs.convention.convention_id, licence_id: cs.licence.licence_id,
         constituent_count: cs.constituents.length,
@@ -89,7 +98,47 @@ function encFiles(files) {
 
 function encInfo(i) {
     if (i == null) return null;
-    return { datestamp: i.datestamp, format_version: i.format_version, doi: i.doi, files: encFiles(i.files) };
+    return {
+        datestamp: i.datestamp, format_version: i.format_version, concept_doi: need(i, "concept_doi"),
+        zenodo_version_doi: need(i, "zenodo_version_doi"), content_sha256: need(i, "content_sha256"),
+        files: encFiles(i.files),
+    };
+}
+
+
+function encBuild(b) {
+    if (b == null) return null;
+    return {
+        build_commit: need(b, "build_commit"), built_at: iso(need(b, "built_at")), fetched_at: iso(need(b, "fetched_at")),
+        run_id: need(b, "run_id"), tool_versions: need(b, "tool_versions"),
+    };
+}
+
+
+const EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"];
+
+// Encode what the SDK returns: a plain object with its own keys (a missing key is not filled in), or a typed
+// object field by field, each through need().
+function asReturned(v, fields) {
+    if (v == null) return null;
+    const proto = Object.getPrototypeOf(v);
+    if (proto === Object.prototype || proto === null) return { ...v };
+    const out = {};
+    for (const f of fields) out[f] = need(v, f);
+    return out;
+}
+
+// TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects.
+function encTimeBase(t) {
+    if (t == null) return null;
+    const corr = need(t, "correction");
+    return {
+        code: need(t, "code"), reason: need(t, "reason"), declared: need(t, "declared"), published: need(t, "published"),
+        correction: asReturned(corr, ["from", "to"]),
+        months_dropped: [...need(t, "months_dropped")], decided_in: need(t, "decided_in"),
+        decided_build_commit: need(t, "decided_build_commit"),
+        evidence: [...need(t, "evidence")].map((e) => asReturned(e, EVIDENCE)),
+    };
 }
 
 function encStats(s) {
@@ -140,15 +189,16 @@ export function makeRunner(sdk) {
         release_metadata(a, msg) {
             const r = release(msg);
             return {
-                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version, doi: r.doi,
+                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version,
                 concept_doi: r.concept_doi, source_versions: r.source_versions, build_commit: r.build_commit,
-                changelog_url: r.changelog_url,
+                changelog_url: r.changelog_url, zenodo_version_doi: need(r, "zenodo_version_doi"),
             };
         },
         release_files: (a, msg) => ({ files: encFiles(release(msg).files) }),
         releases: async () => ({ releases: (await client().releases()).map(encInfo) }),
         latest: async () => ({ release: encInfo(await client().latest()) }),
         check_for_update: async () => ({ release: encInfo(await client().checkForUpdate()) }),
+        newer_format_major: () => ({ newer_format_major: need(client(), "newerFormatMajor") }),
         async update() {
             const u = await client().update();
             return { updated: u.updated, from: u.from, to: u.to };
@@ -227,7 +277,7 @@ export function makeRunner(sdk) {
         },
         constant_sets(a, msg) {
             const st = lookStation(msg, a);
-            return { set_ids: st ? st.constantSets(opts(a, ["include_excluded"])).map((c) => c.set_id) : [] };
+            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : [] };
         },
         constant_set: (a, msg) => ({ set: encSet(lookSet(msg, a)) }),
         constituents(a, msg) {
@@ -242,7 +292,8 @@ export function makeRunner(sdk) {
         provenance(a, msg) {
             const cs = lookSet(msg, a);
             const p = cs ? cs.provenance : null;
-            return p ? { provenance: pick(p, PROVENANCE), raw: p.raw } : { provenance: null, raw: null };
+            return p ? { provenance: { ...pick(p, PROVENANCE), build: encBuild(need(p, "build")) }, raw: p.raw }
+                : { provenance: null, raw: null };
         },
         set_validation(a, msg) {
             const cs = lookSet(msg, a);
@@ -273,6 +324,12 @@ export function makeRunner(sdk) {
             if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
                 const fields = {};
                 for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
+                if (e.tombstone != null) {
+                    // a tombstone the runner cannot encode fails the step instead of crashing the runner
+                    try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
+                        fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
+                    }
+                }
                 return { ok: false, error: { code: e.code, message: String(e.message), fields } };
             }
             const name = e && e.constructor ? e.constructor.name : typeof e;

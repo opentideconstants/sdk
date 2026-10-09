@@ -26,8 +26,8 @@ def open_result(args):
     if args.get("file"):
         m = DATESTAMP.search(args["file"])
         return {"loaded_from": "file", "datestamp": m.group(1) if m else None,
-                "format_version": "0.3" if "format-minor" in args["file"] else "0.2"}
-    return {"loaded_from": "download", "datestamp": args.get("release"), "format_version": "0.2"}
+                "format_version": "1.1" if "format-minor" in args["file"] else "1.0"}
+    return {"loaded_from": "download", "datestamp": args.get("release"), "format_version": "1.0"}
 
 
 def main():

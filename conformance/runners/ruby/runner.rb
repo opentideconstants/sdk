@@ -103,7 +103,8 @@ class Runner
         when "release_metadata"
             r = rel(target)
             { "datestamp" => r.datestamp, "created" => time(r.created), "format_version" => r.format_version,
-              "doi" => r.doi, "concept_doi" => r.concept_doi, "source_versions" => r.source_versions,
+              "concept_doi" => r.concept_doi, "zenodo_version_doi" => r.zenodo_version_doi,
+              "source_versions" => r.source_versions,
               "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }
         when "release_files"
             { "files" => rel(target).files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
@@ -112,6 +113,7 @@ class Runner
         when "check_for_update"
             i = @client.check_for_update
             { "release" => i && release_info(i) }
+        when "newer_format_major" then { "newer_format_major" => @client.newer_format_major }
         when "update"
             u = @client.update!
             { "updated" => u.updated, "from" => u.from, "to" => u.to }
@@ -186,7 +188,7 @@ class Runner
             { "set_id" => set && set.set_id }
         when "constant_sets"
             st = find_station(args, target)
-            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_excluded])).map(&:set_id) : [] }
+            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : [] }
         when "constant_set"
             set = find_set(args, target)
             { "set" => set && constant_set(set) }
@@ -239,7 +241,14 @@ class Runner
         %i[url status file expected actual path].each do |f|
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
-        fields["tombstone"] = tombstone(e.tombstone) if e.respond_to?(:tombstone) && e.tombstone
+        if e.respond_to?(:tombstone) && e.tombstone
+            # a tombstone the runner cannot encode fails the step instead of crashing the runner
+            fields["tombstone"] = begin
+                tombstone(e.tombstone)
+            rescue StandardError, ScriptError => te
+                "uncaught:#{te.class}"
+            end
+        end
         { "code" => e.code.to_s, "message" => e.message.to_s, "fields" => fields }
     end
 
@@ -248,8 +257,31 @@ class Runner
     end
 
     def release_info(i)
-        { "datestamp" => i.datestamp, "format_version" => i.format_version, "doi" => i.doi,
+        { "datestamp" => i.datestamp, "format_version" => i.format_version, "concept_doi" => i.concept_doi,
+          "zenodo_version_doi" => i.zenodo_version_doi, "content_sha256" => i.content_sha256,
           "files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
+    end
+
+    def build(b)
+        { "build_commit" => b.build_commit, "built_at" => time(b.built_at), "fetched_at" => time(b.fetched_at),
+          "run_id" => b.run_id, "tool_versions" => b.tool_versions && b.tool_versions.to_h { |k, v| [k.to_s, v] } }
+    end
+
+    # Encode what the SDK returns: a Hash with its own keys, or a typed object by its fields. A missing key is not filled in.
+    def as_returned(v, fields)
+        return nil if v.nil?
+        return v.to_h { |k, x| [k.to_s, x.is_a?(Symbol) ? x.to_s : x] } if v.is_a?(Hash)
+        fields.to_h { |f| x = v.public_send(f); [f, x.is_a?(Symbol) ? x.to_s : x] }
+    end
+
+    # TimeBase: typed fields; correction is an object {from, to} or nil; evidence is a list of objects.
+    def time_base(t)
+        return nil if t.nil?
+        { "code" => s(t.code), "reason" => t.reason, "declared" => t.declared, "published" => t.published,
+          "correction" => as_returned(t.correction, %w[from to]),
+          "months_dropped" => t.months_dropped.to_a, "decided_in" => t.decided_in,
+          "decided_build_commit" => t.decided_build_commit,
+          "evidence" => t.evidence.map { |e| as_returned(e, %w[comparator_kind comparator_id distance_km lag_min detail]) } }
     end
 
     def stats(st)
@@ -269,7 +301,8 @@ class Runner
 
     def tombstone(t)
         { "station_id" => t.station_id, "name" => t.name, "status" => s(t.status),
-          "removed_in" => t.removed_in, "removed_reason" => t.removed_reason }
+          "removed_in" => t.removed_in, "removed_reason" => s(t.removed_reason), "merged_into" => t.merged_into,
+          "detail" => t.detail }
     end
 
     def constant_set(set)
@@ -281,8 +314,9 @@ class Runner
           "record_span" => span && { "start" => time(span.start), "end" => time(span.end), "good_samples" => span.good_samples },
           "datum" => datum && { "msl_offset_m" => datum.msl_offset_m, "named" => datum.named },
           "qc_status" => s(set.qc_status),
-          "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "verdict" => f.verdict, "values" => f.values } },
+          "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "reason" => f.reason, "values" => f.values } },
           "dropped_constituents" => set.dropped_constituents.map { |d| { "name" => d.name, "dropped_reason" => s(d.dropped_reason), "detail" => d.detail } },
+          "time_base" => time_base(set.time_base),
           "is_recommended" => set.recommended?, "convention_id" => set.convention.convention_id,
           "licence_id" => set.licence.licence_id, "constituent_count" => set.constituents.size }
     end
@@ -307,8 +341,9 @@ class Runner
     end
 
     def provenance(p)
-        { "build_commit" => p.build_commit, "adapter_version" => p.adapter_version, "input_sha256" => p.input_sha256,
-          "time_base" => p.time_base, "selection_reason" => p.selection_reason, "decision" => p.decision }
+        { "build" => p.build && build(p.build), "adapter_version" => p.adapter_version, "input_sha256" => p.input_sha256,
+          "selection_reason" => p.selection_reason, "decision" => p.decision,
+          "carried_from_release" => p.carried_from_release }
     end
 
     VALIDATION_NUMS = %w[time_mae_min time_p95_min time_bias_min height_mae_m range_error_m missed_events extra_events].freeze

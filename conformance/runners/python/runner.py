@@ -69,8 +69,11 @@ def enc_station(s):
     }
 
 
+TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason", "merged_into", "detail"]
+
+
 def enc_tombstone(t):
-    return None if t is None else pick(t, ["station_id", "name", "status", "removed_in", "removed_reason"])
+    return None if t is None else pick(t, TOMBSTONE)
 
 
 def enc_set(cs):
@@ -81,8 +84,9 @@ def enc_set(cs):
         **pick(cs, ["set_id", "source", "source_type", "quantity", "source_record_id", "source_version", "qc_status"]),
         "record_span": None if span is None else pick(span, ["start", "end", "good_samples"]),
         "datum": None if datum is None else pick(datum, ["msl_offset_m", "named"]),
-        "qc_flags": [pick(f, ["flag", "verdict", "values"]) for f in cs.qc_flags],
+        "qc_flags": [pick(f, ["flag", "reason", "values"]) for f in cs.qc_flags],
         "dropped_constituents": [pick(d, ["name", "dropped_reason", "detail"]) for d in cs.dropped_constituents],
+        "time_base": enc_time_base(cs.time_base),
         "is_recommended": cs.is_recommended,
         "convention_id": cs.convention.convention_id,
         "licence_id": cs.licence.licence_id,
@@ -95,7 +99,7 @@ CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "amplitud
 CONVENTION = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
               "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"]
 LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url"]
-PROVENANCE = ["build_commit", "adapter_version", "input_sha256", "time_base", "selection_reason", "decision"]
+PROVENANCE = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"]
 VALIDATION = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
               "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m",
               "missed_events", "extra_events", "previous_release"]
@@ -111,8 +115,37 @@ def enc_files(files):
 def enc_release_info(info):
     if info is None:
         return None
-    return {"datestamp": info.datestamp, "format_version": info.format_version, "doi": info.doi,
+    return {**pick(info, ["datestamp", "format_version", "concept_doi", "zenodo_version_doi", "content_sha256"]),
             "files": enc_files(info.files)}
+
+
+def enc_provenance(p):
+    b = p.build
+    return {**pick(p, PROVENANCE), "build": None if b is None else pick(b, BUILD)}
+
+
+BUILD = ["build_commit", "built_at", "fetched_at", "run_id", "tool_versions"]
+TIME_BASE = ["code", "reason", "declared", "published", "decided_in", "decided_build_commit"]
+EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"]
+
+
+def enc_time_base(t):
+    """TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects."""
+    if t is None:
+        return None
+    out = pick(t, TIME_BASE)
+    out["correction"] = as_returned(t.correction, ["from_", "to"])
+    out["months_dropped"] = plain(list(t.months_dropped))
+    out["evidence"] = [as_returned(e, EVIDENCE) for e in t.evidence]
+    return out
+
+
+def as_returned(v, fields):
+    """Encode what the SDK returns: a mapping with its own keys, or a typed object by its fields (Python names a
+    reserved word with a trailing underscore, spec 4.1). A missing key is not filled in."""
+    if v is None or hasattr(v, "items"):
+        return plain(v)
+    return {f.rstrip("_"): plain(getattr(v, f)) for f in fields}
 
 
 def enc_validation(rows):
@@ -179,8 +212,8 @@ class Runner:
             return {"code": None if e is None else e.code}
         if op == "release_metadata":
             r = self.release(req)
-            return pick(r, ["datestamp", "created", "format_version", "doi", "concept_doi", "source_versions",
-                            "build_commit", "changelog_url"])
+            return pick(r, ["datestamp", "created", "format_version", "concept_doi", "zenodo_version_doi",
+                            "source_versions", "build_commit", "changelog_url"])
         if op == "release_files":
             return {"files": enc_files(self.release(req).files)}
         if op == "releases":
@@ -189,6 +222,8 @@ class Runner:
             return {"release": enc_release_info(c.latest())}
         if op == "check_for_update":
             return {"release": enc_release_info(c.check_for_update())}
+        if op == "newer_format_major":
+            return {"newer_format_major": c.newer_format_major}
         if op == "update":
             u = c.update()
             return {"updated": u.updated, "from": u.from_, "to": u.to}
@@ -269,7 +304,7 @@ class Runner:
             return {"set_id": None if rs is None else rs.set_id}
         if op == "constant_sets":
             st = self.station(req, a)
-            kw = {"include_excluded": a["include_excluded"]} if "include_excluded" in a else {}
+            kw = {"include_no_constants": a["include_no_constants"]} if "include_no_constants" in a else {}
             return {"set_ids": [] if st is None else [cs.set_id for cs in st.constant_sets(**kw)]}
         if op == "constant_set":
             return {"set": enc_set(self.set(req, a))}
@@ -284,7 +319,7 @@ class Runner:
             cs = self.set(req, a)
             if cs is None:
                 return {"provenance": None, "raw": None}
-            return {"provenance": pick(cs.provenance, PROVENANCE), "raw": plain(cs.provenance.raw)}
+            return {"provenance": enc_provenance(cs.provenance), "raw": plain(cs.provenance.raw)}
         if op == "set_validation":
             cs = self.set(req, a)
             return {"validation": [] if cs is None else enc_validation(cs.validation)}
@@ -341,6 +376,11 @@ def main():
                     v = getattr(e, f, None)
                     if v is not None:
                         fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+                if getattr(e, "tombstone", None) is not None:
+                    try:
+                        fields["tombstone"] = enc_tombstone(e.tombstone)
+                    except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
+                        fields["tombstone"] = f"uncaught:{type(te).__name__}"
                 reply = {"ok": False, "error": {"code": e.code, "message": str(e), "fields": fields}}
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)

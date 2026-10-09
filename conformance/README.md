@@ -1,6 +1,6 @@
 # SDK conformance suite
 
-The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pass (SDK spec §7.1). Suite version **0.1** (it tests format major 0).
+The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pass (SDK spec §7.1). Suite version **1.0** (it tests format 1.0, the first published format).
 
 | Path | What it is |
 |---|---|
@@ -13,6 +13,7 @@ The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pa
 | `server.py` | The fixture HTTP server, the recording proxy and the tripwire. |
 | `driver.py` | Runs the cases against one runner and reports PASS / FAIL / SKIP. |
 | `runners/<lang>/` | One runner per SDK. `runners/null/` is the null runner. |
+| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`; 0.5 for an SDK that does not declare one yet, which reads only the format 0.x drafts). |
 
 All Python here uses the standard library only (Python 3.10 or later).
 
@@ -90,7 +91,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 - An argument that is absent from `args` is not passed (the SDK's default applies). An argument given as JSON `null` is passed as nil / None / null.
 - Values are passed through with their JSON type, so a case can pass a wrong type (for example `country: 5`) to test `invalid_argument`. C, where the type cannot be wrong, reports `invalid_argument` for such a step without calling the SDK.
 - Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with the result for "nothing" (`null` or `[]`) as the op's encoding gives it.
-- Times in arguments do not occur in suite 0.1.
+- Times in arguments do not occur in suite 1.0.
 
 ## Operations
 
@@ -103,7 +104,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `hold_release` | `name` | keep `client.release` under `name` | `{}` |
 | `loaded_from` | | `client.loaded_from` | `{loaded_from}` |
 | `last_error` | | `client.last_error` | `{code}` (the error's code, or null) |
-| `release_metadata` | | R: `datestamp`, `created`, `format_version`, `doi`, `concept_doi`, `source_versions`, `build_commit`, `changelog_url` | those 8 keys |
+| `release_metadata` | | R: `datestamp`, `created`, `format_version`, `concept_doi`, `zenodo_version_doi`, `source_versions`, `build_commit`, `changelog_url` | those 8 keys |
 | `release_files` | | R `.files` | `{files: [FileInfo]}`, sorted by `name` |
 | `releases` | | `client.releases` | `{releases: [ReleaseInfo]}`, newest first |
 | `latest` | | `client.latest` | `{release: ReleaseInfo}` |
@@ -132,11 +133,12 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `station_validation` | `station_id` | `station.validation` | `{validation: [Validation]}` in file order |
 | `subordinate_offsets` | `station_id` | `station.subordinate_offsets` | `{offsets: SubordinateOffsets or null}` |
 | `recommended_set` | `station_id` | `station.recommended_set` | `{set_id}` (null if none) |
-| `constant_sets` | `station_id`, `include_excluded` | `station.constant_sets` | `{set_ids: [...]}` |
+| `constant_sets` | `station_id`, `include_no_constants` | `station.constant_sets` | `{set_ids: [...]}` |
 | `constant_set` | `station_id`, `set_id` | `station.constant_set` | `{set: ConstantSet or null}` |
 | `constituents` | `station_id`, `set_id` | `set.constituents` | `{constituents: [Constituent]}` in file order |
 | `constituent` | `station_id`, `set_id`, `name` | `set.constituent` | `{constituent: Constituent or null}` |
 | `provenance` | `station_id`, `set_id` | `set.provenance` | `{provenance: Provenance, raw: <provenance raw>}` |
+| `newer_format_major` | | `client.newer_format_major` (set by `check_for_update`) | `{newer_format_major}` (an integer or null) |
 | `set_validation` | `station_id`, `set_id` | `set.validation` | `{validation: [Validation]}` by `window` |
 | `raw` | `object` (`station`, `tombstone`, `set`, `constituent`, `convention`, `licence`) and its ids | the object's `raw` | `{raw}` |
 
@@ -144,21 +146,23 @@ Filters are `country`, `type`, `kind`, `source`, `source_type` (§4.4).
 
 ## Result encodings
 
-Every object is a JSON object with exactly these keys (the driver fails extra or missing keys inside a result value). A field that the file leaves out is `null`, unless the row says otherwise. Enum values are the schema strings; an enum value the SDK does not know is `"other"` (§7.3). Numbers are JSON numbers (print doubles with enough digits to round-trip). A C `NaN` or a missing count (`-1`) is `null`. **Times** (`created`, `record_span.start`, `record_span.end`) are ISO 8601 UTC strings, `YYYY-MM-DDTHH:MM:SSZ`.
+Every object is a JSON object with exactly these keys (the driver fails extra or missing keys inside a result value). A field that the file leaves out is `null`, unless the row says otherwise. Enum values are the schema strings; an enum value the SDK does not know is `"other"` (§7.3). Numbers are JSON numbers (print doubles with enough digits to round-trip). A C `NaN` or a missing count (`-1`) is `null`. **Times** (`created`, `record_span.start`, `record_span.end`, `built_at`, `fetched_at`) are ISO 8601 UTC strings, `YYYY-MM-DDTHH:MM:SSZ`.
 
 | Object | Keys |
 |---|---|
 | Station | `station_id`, `name`, `country`, `lat`, `lon`, `type`, `kind`, `timezone`, `aliases` (`{system: [ids]}`, `{}` if none), `status`, `is_reference`, `is_subordinate`, `is_tide`, `is_current`, `recommended_set_id` (the `set_id` of `recommended_set`, or null) |
-| Tombstone | `station_id`, `name`, `status`, `removed_in`, `removed_reason` |
-| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, verdict, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
+| Tombstone | `station_id`, `name`, `status`, `removed_in`, `removed_reason` (`merged` or `duplicate`), `merged_into`, `detail` |
+| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, reason, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `time_base` (TimeBase or null), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
 | Constituent | `name`, `source_name`, `doodson`, `speed_deg_per_hour`, `amplitude_m`, `phase_deg`, `amp_uncertainty_m`, `phase_uncertainty_deg`, `kept_reason` |
 | Convention | `convention_id`, `phase_reference`, `utc_offset_hours`, `v0_model`, `nodal_handling`, `nodal_formula_ids` (object), `constituent_table_version`, `tables_sha256`, `canary` (object) |
 | Licence | `licence_id`, `spdx`, `provider`, `citation`, `attribution`, `url` |
-| Provenance | `build_commit`, `adapter_version`, `input_sha256`, `time_base` (object), `selection_reason`, `decision` (object) |
+| Provenance | `build` (ProvenanceBuild or null), `adapter_version`, `input_sha256`, `selection_reason`, `decision` (object), `carried_from_release` |
+| ProvenanceBuild | `build_commit`, `built_at`, `fetched_at` (times), `run_id`, `tool_versions` (object or null) |
+| TimeBase | `code`, `reason`, `declared`, `published`, `correction` (`{from, to}` or null), `months_dropped` (`[]` if none), `decided_in`, `decided_build_commit`, `evidence` (`[{comparator_kind, comparator_id, distance_km, lag_min, detail}]`, `[]` if none) |
 | Validation | `set_id`, `reference_source`, `reference_station`, `reference_distance_km`, `window`, `time_mae_min`, `time_p95_min`, `time_bias_min`, `height_mae_m`, `range_error_m`, `missed_events`, `extra_events`, `previous_release` (null, or `{time_mae_min, time_p95_min, time_bias_min, height_mae_m, range_error_m, missed_events, extra_events}`) |
 | SubordinateOffsets | `reference_station_id`, `time_offset_high_min`, `time_offset_low_min`, `height_offset_high`, `height_offset_low`, `height_adjusted_type`, `licence_id` |
 | FileInfo | `name`, `url`, `size`, `sha256` |
-| ReleaseInfo | `datestamp`, `format_version`, `doi`, `files` ([FileInfo] sorted by `name`) |
+| ReleaseInfo | `datestamp`, `format_version`, `concept_doi`, `zenodo_version_doi`, `content_sha256`, `files` ([FileInfo] sorted by `name`) |
 | Stats | `{type: {value: n}, kind: {…}, country: {…}, source: {…}, qc_status: {…}}`; `type`, `kind` and `country` count active stations, `source` and `qc_status` count constant sets; zero counts are left out |
 
 `FileInfo.url` is absolute: the SDK resolves the pointer's `url` against the URL of the pointer it read (RFC 3986), so with `base_url` `http://127.0.0.1:P/good/` the url of `OTC_20991231.2.json` is `http://127.0.0.1:P/good/OTC_20991231.2.json`.
@@ -178,7 +182,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 ```
 
 - **`matrix`**: the driver runs the case once per open variant and puts an `open` step first. The variants are `@json`, `@json.gz` (eager), `@jsonl` (eager), `@jsonl-stream`, each opening `fixtures/<root>/OTC_<release><ext>` with `file:`, and `@server` (eager, `release` pinned, from the fixture server into a new cache; it needs `fs` and `fetch`, because it passes `cache_dir`). The open step expects `loaded_from` `file` (or `download`) and the datestamp, plus the case's `open_expect`.
-- **`expect`**: the keys other than `error`, `error_fields` and `tolerance` must be keys of the result, with equal values. `tolerance` (default 1e-9) is the largest absolute difference allowed for every number in the step. Strings and ids must be exactly equal. `{"error": code}` expects an error with that code; `error_fields` checks the error's `fields`.
+- **`expect`**: the keys other than `error`, `error_fields`, `error_message` and `tolerance` must be keys of the result, with equal values. `tolerance` (default 1e-9) is the largest absolute difference allowed for every number in the step. Strings and ids must be exactly equal. `{"error": code}` expects an error with that code; `error_fields` checks the error's `fields`, and `error_message` (a value or a matcher) its `message`.
 - **Matchers** may stand in for a value: `{"$contains": s}`, `{"$regex": re}`, `{"$type": "object" | "array" | "string" | "number" | "boolean" | "null"}`, `{"$len_min": n}`, `{"$all": [matchers]}`, `{"$any_of": [values or matchers]}` (at least one matches).
 - **Placeholders** in args, expectations and driver steps: `${fixtures}` (the absolute path of `conformance/fixtures`), `${server}` (`http://127.0.0.1:<port>`), `${server_alias}` (`http://otc-fixture.invalid:<port>`: the fixture server under a name that does not resolve; only the recording proxy relays it), `${proxy}` (the recording proxy URL), `${tmp}` (the case's temporary directory), `${cache}` (`${tmp}/cache`).
 
@@ -204,7 +208,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | Group | Covers |
 |---|---|
 | `load` | `file:` opens, `loaded_from` `file` / `file_unverified`, `release.files` rows (§4.3.1), bad fixtures from a file, `verify`, datestamp validation |
-| `release` | metadata, counts, `stats`, constituent names, conventions, licences, citation, attribution (exact text, §4.6) |
+| `release` | metadata, counts, `stats`, constituent names, conventions, licences, citation, attribution (exact text, §4.6); the concept DOI and the version DOI (`release/citation-exact-*`, `release/doi-fields-latest`) |
 | `stations` | every station's encoding, sets order, offsets, validation, links; tombstones; `require_station`; every alias system; filters |
 | `sets` | every set's encoding, constituents, provenance (with extra fields), validation by window, constituent lookup |
 | `search` | the fold table and the four ranks (§4.4.1), `limit`, `match: exact`, filters |
@@ -214,6 +218,8 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | `update` | `update` (pinned, file, swap with a held release, no update), `auto_update` |
 | `cache` | `cached_releases`, `prune`, `verify`, the `cache` error, `release.files` from `.verified` |
 | `download` | the §7.1 download cases: then-open, identical, mismatch, from-cache, bad checksum, browser (`expect_if_missing.fs`), plus formats and errors |
+| `v1` | the format 1.0 annotations (`fixtures/v1`): `qc_status` `ok`, `flagged` and `no_constants`; `no_constants` sets left out of `constant_sets()` unless `include_no_constants`, left out of the `source` filter and of `stats.source`, and never recommended; a carried-over set (`carried_from_release`); the `time_base` codes; `provenance.build`; a `merged` tombstone; `stats`, attribution |
+| `format` | format versions (§4.8, §5.2 step 2a, §7.4): `format/reader-too-old` (§7.1); `latest`, `check_for_update`, `update` and `download` skip a release whose `min_reader_version` is too new with one GET of `OTC_index.json`, only in that case; offline with a cached index; a newer major on the server (`format/latest-newer-major`, `format/check-for-update-newer-major`: `newer_format_major`); errors |
 
 ### Cross-SDK cases
 
@@ -234,11 +240,19 @@ These are written into the cases. Change them here and in `tools/build_cases.py`
 - Word-start rank (§4.4.1): the match starts right after a space in the normalised name. A query that is empty after trimming (`"   "`) is `invalid_argument`.
 - `release.conventions` and `release.licences` are in file order. `station.validation` is in file order. `cached_releases` and `prune` return datestamps newest first.
 - `update` with nothing newer returns `{updated: false, from: D, to: D}`.
-- `attribution` with a null DOI: `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
+- `attribution` with a null concept DOI (`good/` release `20991231`): `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{concept_doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
+- `zenodo_version_doi` is null for a file and for a pinned download (which reads no pointer), and after a download of `latest` it is the value of the entry the SDK used: the pointer's, or the index entry that step 2a chose. A cached release keeps it (`.verified`).
+- `no_constants` sets: `constant_sets()` leaves them out by default and `include_no_constants: true` lists them; the `source` filter and `stats.source` do not count them; `stats.qc_status` counts every set.
+- `provenance.build` is required in format 1.0, so every fixture set has it; the suite has no case for a missing one.
+- `ConstantSet.time_base` is the set's annotation, or null (the model and official sets of the fixtures have none). `correction` is `{from, to}`; each `evidence` entry has its five keys, null when absent. The runners encode `correction` and `evidence` as the SDK returns them, so a missing key fails the exact-key check.
+- A `qc_status` that format 1.0 does not have (`excluded` in `bad/format-minor`) is `other` (§7.3): `constant_sets()` lists it, `stats.qc_status` counts it under `other`, and `stats.source` does not count it (only `ok` and `flagged`).
+- `bad/no-build` has a set with no `provenance.build` (malformed 1.0): it loads, and `build` is null.
+- `reader_too_old`: the message must contain `1.99` (the fixtures' `min_reader_version`) and one other `1.x` version (the SDK's own `SUPPORTED_FORMAT_VERSION`).
+- `stations/removed-error-tombstone` checks that `station_removed` carries the tombstone in `fields.tombstone`. Only Ruby, Python and TypeScript attach it (C has no error object), so the case requires `eager`, which C does not have.
 - `user_agent` is added after one space: `opentideconstants-{lang}/{version} (+https://opentideconstants.org) {suffix}`.
 - A body shorter than its `Content-Length` is a `network` error. A consistent but short response is `checksum_mismatch`.
 - A reference that does not resolve is `invalid_release` at open time in stream mode too.
-- The latest pointer is `OTC_latest-f0.json`; the SDK falls back to `OTC_latest.json` only on a 404.
+- The latest pointer is `OTC_latest-f1.json`; the SDK falls back to `OTC_latest.json` only on a 404.
 - `timeout` is one number of seconds for both the connect and the read timeout.
 - `subordinates_of` returns the subordinate stations ordered by `station_id` (§4.4 gives no order for it).
 - A network failure is the `network` error, also with `on_network_error: raise` and an empty cache. `offline_unavailable` is only for offline use (`offline: true` or `OPENTIDECONSTANTS_OFFLINE`) with no usable cached release, and for `releases()` offline with no cached index. This follows §5.2 step 1 and step 5 and §4.3; the `offline_unavailable` row of §4.8 (and its `when` text in `api.json`) also names "a network failure with `:raise`", which the suite does not follow.

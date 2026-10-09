@@ -2,81 +2,85 @@
  "releases": [
   {
    "concept_doi": "10.5072/zenodo.1",
+   "content_sha256": "6666ac8786d6d9f085e5f0cc86b5237c400e815138c73dae61ab8875926e81d7",
    "created": "2099-12-31T12:00:00Z",
    "datestamp": "20991231.10",
-   "doi": "10.5072/zenodo.2",
    "files": [
     {
      "name": "OTC_20991231.10.json",
-     "sha256": "453600fc3850242b3d6af4f80c3f014a632c0d1eefc6b8b5d259dfbe111b2a5c",
-     "size": 21766,
+     "sha256": "af4118c0d4bd2b9f2bc2fa2e8f6127f53a233fcdd83ffe81baf39972e6002c68",
+     "size": 28653,
      "url": "OTC_20991231.10.json"
     },
     {
      "name": "OTC_20991231.10.json.gz",
-     "sha256": "b18773de7173f727c00a575e4fda918d53d0dd0f75fab192bb0ff5baa647cfb0",
-     "size": 3447,
+     "sha256": "73646c711b7959b81f1475c7cc0415523684d684f6c00961bbfdb717b98feed9",
+     "size": 4203,
      "url": "OTC_20991231.10.json.gz"
     },
     {
      "name": "OTC_20991231.10.jsonl",
-     "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4",
-     "size": 18967,
+     "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1",
+     "size": 25827,
      "url": "OTC_20991231.10.jsonl"
     },
     {
      "name": "OTC_20991231.10.meta.json",
-     "sha256": "ab24eb1f1ea5e4a0827e9eff1f8254509c23dfd5a898cbbda2e1b551b96b4d4d",
-     "size": 2786,
+     "sha256": "682e9e76646afa5d50d1695afc2a77a2572a1d40e5b85d70780d7abd9609399d",
+     "size": 2813,
      "url": "OTC_20991231.10.meta.json"
     },
     {
      "name": "OTC_20991231.10.sha256",
-     "sha256": "14160af914d585d64246c07c0b226fc64ab5d991bdd59c5558529d2d6134ccd1",
+     "sha256": "04a34fe595a0a2097f888a09ecd658725347ac5d81b705b353ae1eadeae0d8e6",
      "size": 357,
      "url": "OTC_20991231.10.sha256"
     }
    ],
-   "format_version": "0.2"
+   "format_version": "1.0",
+   "min_reader_version": "1.0",
+   "zenodo_version_doi": null
   },
   {
    "concept_doi": "10.5072/zenodo.1",
+   "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
    "created": "2099-12-31T12:00:00Z",
    "datestamp": "20991231.2",
-   "doi": "10.5072/zenodo.2",
    "files": [
     {
      "name": "OTC_20991231.2.json",
-     "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2",
-     "size": 21765,
+     "sha256": "8e1b22a5499fdbe7ec5306f5ef8df167fca024fb44b98ae38e44175e8d8969b8",
+     "size": 28652,
      "url": "OTC_20991231.2.json"
     },
     {
      "name": "OTC_20991231.2.json.gz",
-     "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d",
-     "size": 3444,
+     "sha256": "612e2a5ee9029e16446a2369927318a480a81b45a6e654983cb8b09d5cb33a10",
+     "size": 4202,
      "url": "OTC_20991231.2.json.gz"
     },
     {
      "name": "OTC_20991231.2.jsonl",
-     "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4",
-     "size": 18967,
+     "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1",
+     "size": 25827,
      "url": "OTC_20991231.2.jsonl"
     },
     {
      "name": "OTC_20991231.2.meta.json",
-     "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26",
-     "size": 2785,
+     "sha256": "934556e41cbc33ab547677890f0aa92bd8f8ac66765b463b1ca3067eef315a1b",
+     "size": 2812,
      "url": "OTC_20991231.2.meta.json"
     },
     {
      "name": "OTC_20991231.2.sha256",
-     "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028",
+     "sha256": "aeb3f82b0fe3f313053a4648e262cad3f55cfcb2d40f0cab8d451987aa2f4f4f",
      "size": 353,
      "url": "OTC_20991231.2.sha256"
     }
    ],
-   "format_version": "0.2"
+   "format_version": "1.0",
+   "min_reader_version": "1.0",
+   "zenodo_version_doi": null
   }
  ]
 }

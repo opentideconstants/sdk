@@ -50,7 +50,7 @@ CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
 FEATURES = ["fs", "fetch", "json", "eager", "stream"]
-RESERVED_EXPECT = {"error", "error_fields", "tolerance"}
+RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
 VARIANTS = [
@@ -76,9 +76,10 @@ OPS = {
     "search": ["name", "limit", "match"] + FILTERS, "near": ["lat", "lon", "radius_km", "limit"] + FILTERS,
     "nearest": ["lat", "lon", "max_km"] + FILTERS, "reference_station": ["station_id"], "subordinates_of": ["station_id"],
     "station_validation": ["station_id"], "subordinate_offsets": ["station_id"], "recommended_set": ["station_id"],
-    "constant_sets": ["station_id", "include_excluded"], "constant_set": ["station_id", "set_id"],
+    "constant_sets": ["station_id", "include_no_constants"], "constant_set": ["station_id", "set_id"],
     "constituents": ["station_id", "set_id"], "constituent": ["station_id", "set_id", "name"],
     "provenance": ["station_id", "set_id"], "set_validation": ["station_id", "set_id"],
+    "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
@@ -216,6 +217,8 @@ def evaluate(expect, reply):
         fields = e.get("fields") or {}
         for k, v in (expect.get("error_fields") or {}).items():
             out += match(v, fields.get(k, _MISSING), tol, f"error.fields.{k}")
+        if "error_message" in expect:
+            out += match(expect["error_message"], e.get("message", _MISSING), tol, "error.message")
         return out
     if not reply["ok"]:
         e = reply["error"]
@@ -765,17 +768,17 @@ def selftest():
         return r, body
 
     try:
-        fx = (FIXTURES / "good" / "OTC_latest-f0.json").read_bytes()
-        r, body = get("/good/OTC_latest-f0.json")
+        fx = (FIXTURES / "good" / "OTC_latest-f1.json").read_bytes()
+        r, body = get("/good/OTC_latest-f1.json")
         tag = r.getheader("ETag")
         check("200 with the file and a SHA-256 ETag", r.status == 200 and body == fx and tag == '"' + hashlib.sha256(fx).hexdigest() + '"')
         check("CORS headers on a GET", r.getheader("Access-Control-Allow-Origin") == "*" and r.getheader("Access-Control-Expose-Headers") == "ETag,Content-Length,Content-Encoding" and r.getheader("Vary") == "Origin")
-        r, _ = get("/good/OTC_latest-f0.json", {"If-None-Match": tag})
+        r, _ = get("/good/OTC_latest-f1.json", {"If-None-Match": tag})
         check("304 for a matching If-None-Match", r.status == 304 and r.getheader("Access-Control-Allow-Origin") == "*")
-        r, _ = get("/good/OTC_latest-f0.json", {"If-None-Match": '"0000"'})
+        r, _ = get("/good/OTC_latest-f1.json", {"If-None-Match": '"0000"'})
         check("200 for a stale If-None-Match", r.status == 200)
         conn = http.client.HTTPConnection(srv.host, srv.port, timeout=10)
-        conn.request("OPTIONS", "/good/OTC_latest-f0.json", headers={"Origin": "https://example.org", "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "if-none-match"})
+        conn.request("OPTIONS", "/good/OTC_latest-f1.json", headers={"Origin": "https://example.org", "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "if-none-match"})
         r = conn.getresponse(); r.read(); conn.close()
         check("preflight 204 with methods GET, HEAD and if-none-match", r.status == 204 and r.getheader("Access-Control-Allow-Methods") == "GET, HEAD" and r.getheader("Access-Control-Allow-Headers") == "if-none-match")
         jl = (FIXTURES / "good" / "OTC_20991231.2.jsonl").read_bytes()
@@ -810,7 +813,7 @@ def selftest():
         except OSError as e:
             check("rule: slow body hits a 1 s timeout", "timed out" in str(e), str(e))
         srv.set_rules([{"match": r"OTC_latest", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}])
-        r, body = get("/good/OTC_latest-f0.json")
+        r, body = get("/good/OTC_latest-f1.json")
         check("rule: json pointer serves the 20991231 index entry", json.loads(body)["datestamp"] == "20991231")
         srv.set_rules([])
         srv.log.clear(); proxy.log.clear()
