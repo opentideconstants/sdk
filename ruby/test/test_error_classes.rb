@@ -11,8 +11,10 @@ class ErrorClassTest < Minitest::Test
     end
 
     # R2 + R6/R92: download() problems in the caller's folder are io
-    # (FileError): a file that cannot be written while its body streams in is
-    # not a network error (it was retried and could fall back to the cache).
+    # (FileError), and not retried: a file in the way (found when the
+    # existing files are checked), a folder where the temporary file cannot
+    # be made, and a write that fails while the body streams in (that one
+    # was a network error, retried and could fall back to the cache).
     def test_download_folder_errors_are_io
         posix_only
         srv = serve
@@ -23,7 +25,34 @@ class ErrorClassTest < Minitest::Test
         assert_equal "io", err.code
         to2 = tmpdir
         FileUtils.chmod(0o555, to2)
-        assert_raises(OTC::FileError) { c.download(D, to: to2, formats: [:json]) }
+        err = assert_raises(OTC::FileError) { c.download(D, to: to2, formats: [:json]) }
+        assert_equal "io", err.code
+        assert_includes err.message, "Permission denied"
+
+        # The disk fills up after the first chunk of OTC_D.json is written.
+        to3 = tmpdir
+        writes = Hash.new(0)
+        full = Module.new do
+            define_method(:write) do |*args|
+                if path.to_s.start_with?(to3) && File.basename(path.to_s).start_with?(".tmp-")
+                    writes[path] += 1
+                    raise Errno::ENOSPC, path if writes[path] > 1
+                end
+                super(*args)
+            end
+        end
+        File.prepend(full)
+        before = srv.requests.size
+        begin
+            err = assert_raises(OTC::FileError) { c.download(D, to: to3, formats: [:json]) }
+        ensure
+            full.send(:remove_method, :write)
+        end
+        assert_operator writes.values.max.to_i, :>, 1, "the write did not fail after the first chunk"
+        assert_equal "io", err.code
+        assert_includes err.message, "No space left on device"
+        assert_equal ["/OTC_#{D}.json"], srv.requests[before..], "the failed write was retried"
+        assert_empty Dir.children(to3)
     ensure
         c&.close
     end
@@ -152,8 +181,17 @@ class ErrorClassTest < Minitest::Test
         end
         c.instance_variable_set(:@cache, racy)
         assert_nil c.send(:load_cached_unless_corrupt, D)
-        assert_kind_of OTC::Release, c.send(:fetch_release, D, nil, nil)
+        # The race happened: the check read .verified (and it was then
+        # deleted), and the load read it again and found it gone.
+        assert_operator seen, :>=, 2
+        refute File.exist?(ver)
+        before = srv.requests.size
+        rel = c.send(:fetch_release, D, nil, nil)
+        assert_kind_of OTC::Release, rel
+        assert_includes srv.requests[before..], "/OTC_#{D}.sha256", "the release was not downloaded again"
+        assert File.file?(ver)
     ensure
+        rel&.send(:close)
         c&.close
     end
 end
