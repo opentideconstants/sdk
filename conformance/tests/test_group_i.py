@@ -198,7 +198,7 @@ def test_fixture_write_is_all_or_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(_shutil, "copytree", failing(real_copytree))
     monkeypatch.setattr(_os, "replace", failing(real_replace))
     monkeypatch.setattr(sys, "argv", ["build_fixtures.py"])
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match=r"No space left on device \(test\)"):   # the planted failure, not another one
         bf.main()
     after = {p.relative_to(fx).as_posix(): p.read_bytes() for p in fx.rglob("*") if p.is_file()}
     assert after == before, sorted(set(before) ^ set(after))[:10]
@@ -219,7 +219,7 @@ def test_duplicate_cross_case_id_stops_the_build(tmp_path, monkeypatch):
     import build_cases as bc
     real = bc.group_cross
     monkeypatch.setattr(bc, "group_cross", lambda r2: real(r2) + real(r2)[:1])
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit, match="duplicate case id "):
         bc.build(tmp_path / "cases", tmp_path / "cross")
 
 

@@ -110,13 +110,16 @@ def test_resume_failure_does_not_escape_run_case(tmp_path, monkeypatch):
 
 # --- K68: --check-cases rejects an unknown matcher, a bad matcher argument and a mixed $-object
 
-@pytest.mark.parametrize("value", [{"$contain": "x"}, {"$regex": "("}, {"$type": "int"}, {"$len_min": "2"},
-                                   {"$all": {"$contains": "x"}}, {"$any_of": "x"}, {"$contains": "x", "other": 1},
-                                   [{"$conatins": "x"}]])
-def test_check_cases_rejects_bad_matchers(tmp_path, value):
+@pytest.mark.parametrize("value,why", [({"$contain": "x"}, "unknown matcher"), ({"$regex": "("}, "not a regular expression"),
+                                       ({"$type": "int"}, r"\$type must be one of"), ({"$len_min": "2"}, "non-negative integer"),
+                                       ({"$all": {"$contains": "x"}}, "non-empty list"), ({"$any_of": "x"}, "non-empty list"),
+                                       ({"$contains": "x", "other": 1}, "must be one matcher"),
+                                       ([{"$conatins": "x"}], "unknown matcher")])
+def test_check_cases_rejects_bad_matchers(tmp_path, value, why):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "citation", "expect": {"citation": value}}]}])
     r = run_driver("--check-cases", "--cases", str(cases))
-    assert r.returncode == 2 and "PROBLEM" in r.stdout and "Traceback" not in r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-400:])
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-400:])
+    assert re.search(rf"^PROBLEM a step 0: expect\.citation.*{why}", r.stdout, re.M), r.stdout[-400:]   # this matcher, not any problem
 
 
 # --- K18: an error expectation with a key that is not error, error_fields, error_message or tolerance
@@ -137,9 +140,11 @@ def test_assert_requests_bad_header_regex_on_empty_log(tmp_path):
     st = {"driver": "assert_requests", "header": {"user-agent": "("}, "count": 0}
     cases = write_cases(tmp_path, [{"id": "a", "steps": [st, OK_STEP]}])
     r = run_driver("--check-cases", "--cases", str(cases))
-    assert r.returncode == 2 and "PROBLEM" in r.stdout, r.stdout[-400:]
+    assert r.returncode == 2 and re.search(r"^PROBLEM a step 0: assert_requests user-agent '\(' is not a regular expression",
+                                           r.stdout, re.M), r.stdout[-400:]
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
-    assert "FAIL  a" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-400:])
+    assert re.search(r"^FAIL  a  \[step 0 assert_requests\] harness error", r.stdout, re.M) and r.returncode == 2, \
+        (r.returncode, r.stdout[-400:])
 
 
 def test_assert_requests_all_with_no_request_fails():
@@ -188,8 +193,10 @@ def test_malformed_case_content_exits_2(tmp_path, cases):
     d = write_cases(tmp_path, cases)
     r = run_driver("--check-cases", "--cases", str(d))
     assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-500:])
+    assert "1 malformed case(s) (exit 2)" in r.stderr, r.stderr[-300:]   # the structure check, not another lint problem
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(d), env={"FAKE_REPLY": OK_REPLY})
     assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-500:])
+    assert "case file error: " in r.stderr and "1 malformed case(s) (exit 2)" in r.stderr, r.stderr[-300:]
 
 
 @pytest.mark.parametrize("hello", ['{"hello": {"runner": ["x"], "features": []}}', '{"hello": {"runner": {"a": 1}, "features": []}}'])
@@ -281,7 +288,7 @@ def test_expected_failure_is_xfail_and_the_run_passes(tmp_path):
     assert "XFAIL  a" in r.stdout and "XFAIL  b" in r.stdout and r.returncode == 0, r.stdout[-500:]
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf),
                    "--no-expected-failures", env=env)
-    assert "FAIL  a" in r.stdout and r.returncode == 1, r.stdout[-500:]
+    assert re.search(r"^FAIL  a  ", r.stdout, re.M) and "XFAIL" not in r.stdout and r.returncode == 1, r.stdout[-500:]
 
 
 def test_expected_failure_for_another_runner_does_not_apply(tmp_path):
