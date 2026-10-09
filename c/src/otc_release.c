@@ -180,6 +180,7 @@ void otc_close(otc_release *rel)
     for (i = 0; i < rel->n_cnames; i++) free(rel->cnames[i]);
     free(rel->cnames);
     free_files(rel->files, rel->n_files);
+    free(rel->zenodo_version_doi);
     otc__kv_free(&rel->source_counts);
     otc__kv_free(&rel->qc_counts);
     otc__mutex_destroy(&rel->lock);
@@ -253,6 +254,7 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     const char *qc = otc__jstr(set, "qc_status");
     const char *conv = otc__jstr(set, "convention_id"), *lic = otc__jstr(set, "licence_id");
     const cJSON *cons = otc__jget(set, "constituents"), *c;
+    otc_qc_status qcs;
     otc_status st;
     if (!cJSON_IsObject(set) || !set_id || !source || !qc) return bad_line(b, "a constant set lacks set_id, source or qc_status");
     if (!otc__find_convention(r, conv)) return bad_line(b, "a constant set's convention_id does not resolve");
@@ -266,11 +268,15 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
             return bad_line(b, "a constituent string is longer than its schema maxLength");
         if ((st = add_cname(b, name)) != OTC_OK) return st;
     }
-    if ((st = otc__kv_add(&r->source_counts, source, 1)) != OTC_OK) return st;
-    if ((st = otc__kv_add(&r->qc_counts, qc, 1)) != OTC_OK) return st;
-    if (strcmp(qc, "excluded") != 0) {
+    /* spec 4.3: qc_status counts every set (a value format 1.0 does not have is
+     * "other", 7.3); source counts, and the source filter sees, only sets with
+     * constants (ok or flagged) */
+    qcs = otc__parse_qc_status(qc);
+    if ((st = otc__kv_add(&r->qc_counts, otc_qc_status_name(qcs), 1)) != OTC_OK) return st;
+    if (qcs == OTC_QC_STATUS_OK || qcs == OTC_QC_STATUS_FLAGGED) {
         size_t i;
         int seen = 0;
+        if ((st = otc__kv_add(&r->source_counts, source, 1)) != OTC_OK) return st;
         for (i = 0; i < e->n_sources; i++)
             if (!strcmp(e->sources[i], source)) seen = 1;
         if (!seen) {
@@ -745,6 +751,15 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s has no release.datestamp", meta_path);
         return OTC_E_INVALID_RELEASE;
     }
+    {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions */
+        const char *mrv = otc__jstr(r->release_obj, "min_reader_version");
+        if (mrv && !otc__readable(NULL, mrv)) {
+            otc__err_set(err, OTC_E_READER_TOO_OLD, meta_path,
+                         "release %s needs a reader for format %s; this SDK reads format %s",
+                         otc__jstr(r->release_obj, "datestamp"), mrv, OTC_FORMAT_VERSION);
+            return OTC_E_READER_TOO_OLD;
+        }
+    }
     convs = otc__jget(r->meta, "conventions");
     lics = otc__jget(r->meta, "licences");
     if ((convs && !cJSON_IsArray(convs)) || (lics && !cJSON_IsArray(lics))) {
@@ -987,8 +1002,8 @@ otc_loaded_from otc_release_loaded_from(const otc_release *rel)
 REL_STR(otc_release_datestamp, otc__jstr(rel->release_obj, "datestamp"))
 REL_STR(otc_release_created, otc__jstr(rel->release_obj, "created"))
 REL_STR(otc_release_format_version, otc__jstr(rel->meta, "format_version"))
-REL_STR(otc_release_doi, otc__jstr(rel->release_obj, "doi"))
 REL_STR(otc_release_concept_doi, otc__jstr(rel->release_obj, "concept_doi"))
+REL_STR(otc_release_zenodo_version_doi, rel->zenodo_version_doi)
 REL_STR(otc_release_build_commit, otc__jstr(rel->release_obj, "build_commit"))
 REL_STR(otc_release_changelog_url, otc__jstr(rel->release_obj, "changelog_url"))
 
@@ -1048,23 +1063,36 @@ otc_status otc_release_constituent_names(const otc_release *rel, const char **ou
     return cap < rel->n_cnames ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
 }
 
-/* Spec 4.6: "OpenTideConstants contributors ({year}). OpenTideConstants, release {D} [Data set]. {link}",
- * where {year} is the first four digits of the datestamp and {link} is https://doi.org/{doi}, or the
- * release URL when the DOI is null. */
+/* Spec 4.6: "OpenTideConstants contributors ({year}). OpenTideConstants, release {D} [Data set]. {link}{version}",
+ * where {year} is the first four digits of the datestamp, {link} is https://doi.org/{concept_doi} (the
+ * release URL when the concept DOI is null) and {version} is " (version DOI: https://doi.org/{zenodo_version_doi})"
+ * when the release has its own Zenodo version, else empty. */
 otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, size_t *needed)
 {
-    const char *d, *doi;
-    char text[1024];
+    const char *d, *doi, *vdoi;
+    char *text;
+    size_t cap;
+    otc_status st;
     if (!rel) return OTC_E_INVALID_ARGUMENT;
     d = otc__jstr(rel->release_obj, "datestamp");
-    doi = otc__jstr(rel->release_obj, "doi");
+    doi = otc__jstr(rel->release_obj, "concept_doi");
+    vdoi = rel->zenodo_version_doi;
+    cap = 256 + 2 * strlen(d) + (doi ? strlen(doi) : 0) + (vdoi ? strlen(vdoi) : 0);
+    text = (char *)malloc(cap);
+    if (!text) return OTC_E_NOMEM;
     if (doi)
-        snprintf(text, sizeof text, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
+        snprintf(text, cap, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
                  "https://doi.org/%s", d, d, doi);
     else
-        snprintf(text, sizeof text, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
+        snprintf(text, cap, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
                  "https://data.opentideconstants.org/OTC_%s.json", d, d, d);
-    return otc__copy_str(text, buf, len, needed);
+    if (vdoi) {
+        size_t n = strlen(text);
+        snprintf(text + n, cap - n, " (version DOI: https://doi.org/%s)", vdoi);
+    }
+    st = otc__copy_str(text, buf, len, needed);
+    free(text);
+    return st;
 }
 
 static int str_ptr_cmp(const void *a, const void *b)
@@ -1079,7 +1107,8 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     const char **seen_prov = NULL, **seen_att = NULL;
     size_t n_lic = 0, cap, i, n_seen = 0, total;
     const char *d, *doi;
-    char head[512], *text;
+    char *head, *text;
+    size_t head_cap;
     otc_status st;
     if (!rel || (n_ids && !ids)) return OTC_E_INVALID_ARGUMENT;
     cap = ids ? n_ids * 3 + 1 : rel->n_lic + 1;
@@ -1106,9 +1135,12 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     }
     if (n_lic > 1) qsort((void *)lic, n_lic, sizeof *lic, str_ptr_cmp);
     d = otc__jstr(rel->release_obj, "datestamp");
-    doi = otc__jstr(rel->release_obj, "doi");
-    if (doi) snprintf(head, sizeof head, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0. Sources: ", d, doi);
-    else snprintf(head, sizeof head, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0. Sources: ", d, d);
+    doi = otc__jstr(rel->release_obj, "concept_doi");   /* never the version DOI (spec 4.6) */
+    head_cap = 160 + 2 * strlen(d) + (doi ? strlen(doi) : 0);
+    head = (char *)malloc(head_cap);
+    if (!head) { free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (doi) snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0. Sources: ", d, doi);
+    else snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0. Sources: ", d, d);
     /* one entry per licence id (sorted), then one per provider */
     total = strlen(head) + 1;
     for (i = 0; i < n_lic; i++) {
@@ -1127,8 +1159,9 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         total += (prov ? strlen(prov) : 0) + 2 + (att ? strlen(att) : 0) + 2;
     }
     text = (char *)malloc(total);
-    if (!text) { free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (!text) { free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
     strcpy(text, head);
+    free(head);
     for (i = 0; i < n_seen; i++) {
         if (i) strcat(text, "; ");
         strcat(text, seen_prov[i] ? seen_prov[i] : "");
@@ -1299,7 +1332,10 @@ void otc_release_info_free(otc_release_info *ri)
     if (!ri) return;
     free(ri->datestamp);
     free(ri->format_version);
-    free(ri->doi);
+    free(ri->min_reader_version);
+    free(ri->concept_doi);
+    free(ri->zenodo_version_doi);
+    free(ri->content_sha256);
     free_files(ri->files, ri->n_files);
     free(ri);
 }
@@ -1312,9 +1348,17 @@ otc_status otc_release_info_format_version(const otc_release_info *ri, char *buf
 {
     return ri ? otc__copy_str(ri->format_version, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
-otc_status otc_release_info_doi(const otc_release_info *ri, char *buf, size_t len, size_t *needed)
+otc_status otc_release_info_concept_doi(const otc_release_info *ri, char *buf, size_t len, size_t *needed)
 {
-    return ri ? otc__copy_str(ri->doi, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return ri ? otc__copy_str(ri->concept_doi, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+otc_status otc_release_info_zenodo_version_doi(const otc_release_info *ri, char *buf, size_t len, size_t *needed)
+{
+    return ri ? otc__copy_str(ri->zenodo_version_doi, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+otc_status otc_release_info_content_sha256(const otc_release_info *ri, char *buf, size_t len, size_t *needed)
+{
+    return ri ? otc__copy_str(ri->content_sha256, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 size_t otc_release_info_file_count(const otc_release_info *ri) { return ri ? ri->n_files : 0; }
 otc_status otc_release_info_file_at(const otc_release_info *ri, size_t i, const otc_file_info **out)

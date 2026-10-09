@@ -240,6 +240,7 @@ DEF_STR(s_rel_datestamp, otc_release_datestamp, otc_release)
 DEF_STR(s_rel_created, otc_release_created, otc_release)
 DEF_STR(s_rel_format_version, otc_release_format_version, otc_release)
 DEF_STR(s_rel_concept_doi, otc_release_concept_doi, otc_release)
+DEF_STR(s_rel_zenodo_version_doi, otc_release_zenodo_version_doi, otc_release)
 DEF_STR(s_rel_build_commit, otc_release_build_commit, otc_release)
 DEF_STR(s_rel_changelog_url, otc_release_changelog_url, otc_release)
 DEF_STR(s_rel_citation, otc_release_citation, otc_release)
@@ -268,7 +269,8 @@ DEF_STR(s_st_raw, otc_station_raw_json, otc_station_t)
 DEF_STR(s_tb_id, otc_tombstone_station_id, otc_tombstone_t)
 DEF_STR(s_tb_name, otc_tombstone_name, otc_tombstone_t)
 DEF_STR(s_tb_removed_in, otc_tombstone_removed_in, otc_tombstone_t)
-DEF_STR(s_tb_removed_reason, otc_tombstone_removed_reason, otc_tombstone_t)
+DEF_STR(s_tb_merged_into, otc_tombstone_merged_into, otc_tombstone_t)
+DEF_STR(s_tb_detail, otc_tombstone_detail, otc_tombstone_t)
 DEF_STR(s_tb_raw, otc_tombstone_raw_json, otc_tombstone_t)
 DEF_STR(s_set_id, otc_set_set_id, otc_set)
 DEF_STR(s_set_source, otc_set_source, otc_set)
@@ -280,8 +282,30 @@ DEF_STR(s_prov_adapter_version, otc_set_provenance_adapter_version, otc_set)
 DEF_STR(s_prov_input_sha256, otc_set_provenance_input_sha256_json, otc_set)
 DEF_STR(s_prov_selection_reason, otc_set_provenance_selection_reason, otc_set)
 DEF_STR(s_prov_decision, otc_set_provenance_decision_json, otc_set)
+DEF_STR(s_prov_carried, otc_set_provenance_carried_from_release, otc_set)
+DEF_STR(s_build_commit, otc_provenance_build_build_commit, otc_provenance_build)
+DEF_STR(s_build_built_at, otc_provenance_build_built_at, otc_provenance_build)
+DEF_STR(s_build_fetched_at, otc_provenance_build_fetched_at, otc_provenance_build)
+DEF_STR(s_build_run_id, otc_provenance_build_run_id, otc_provenance_build)
+DEF_STR(s_build_tool_versions, otc_provenance_build_tool_versions_json, otc_provenance_build)
+DEF_STR(s_tbase_reason, otc_time_base_reason, otc_time_base_t)
+DEF_STR(s_tbase_declared, otc_time_base_declared, otc_time_base_t)
+DEF_STR(s_tbase_published, otc_time_base_published, otc_time_base_t)
+DEF_STR(s_tbase_corr_from, otc_time_base_correction_from, otc_time_base_t)
+DEF_STR(s_tbase_corr_to, otc_time_base_correction_to, otc_time_base_t)
+DEF_STR(s_tbase_decided_in, otc_time_base_decided_in, otc_time_base_t)
+DEF_STR(s_tbase_decided_commit, otc_time_base_decided_build_commit, otc_time_base_t)
+DEF_STR(s_ev_kind, otc_time_base_evidence_comparator_kind, otc_time_base_evidence)
+DEF_STR(s_ev_id, otc_time_base_evidence_comparator_id, otc_time_base_evidence)
+DEF_STR(s_ev_detail, otc_time_base_evidence_detail, otc_time_base_evidence)
+DEF_STR(s_ri_datestamp, otc_release_info_datestamp, otc_release_info)
+DEF_STR(s_ri_format_version, otc_release_info_format_version, otc_release_info)
+DEF_STR(s_ri_concept_doi, otc_release_info_concept_doi, otc_release_info)
+DEF_STR(s_ri_zenodo_version_doi, otc_release_info_zenodo_version_doi, otc_release_info)
+DEF_STR(s_ri_content_sha256, otc_release_info_content_sha256, otc_release_info)
 DEF_STR(s_span_start, otc_record_span_start, otc_record_span)
 DEF_STR(s_span_end, otc_record_span_end, otc_record_span)
+DEF_STR(s_flag_reason, otc_qc_flag_reason, otc_qc_flag)
 DEF_STR(s_flag_values, otc_qc_flag_values_json, otc_qc_flag)
 DEF_STR(s_drop_name, otc_dropped_name, otc_dropped)
 DEF_STR(s_drop_detail, otc_dropped_detail, otc_dropped)
@@ -374,21 +398,77 @@ static cJSON *enc_tombstone(const otc_tombstone_t *t, int *bad)
     cJSON_AddItemToObject(o, "name", j_take(s_tb_name(t, bad)));
     cJSON_AddItemToObject(o, "status", j_enum(otc_station_status_name(otc_tombstone_status(t))));
     cJSON_AddItemToObject(o, "removed_in", j_take(s_tb_removed_in(t, bad)));
-    cJSON_AddItemToObject(o, "removed_reason", j_take(s_tb_removed_reason(t, bad)));
-    /* merged_into and detail (spec 4.4: otc_tombstone_merged_into, otc_tombstone_detail) are not in the C library
-     * yet: left out, so the tombstone steps fail until the C work for format 1.0 maps them. */
+    cJSON_AddItemToObject(o, "removed_reason", j_enum(otc_removed_reason_name(otc_tombstone_removed_reason(t))));
+    cJSON_AddItemToObject(o, "merged_into", j_take(s_tb_merged_into(t, bad)));
+    cJSON_AddItemToObject(o, "detail", j_take(s_tb_detail(t, bad)));
+    return o;
+}
+
+/* months_dropped[i], called the way an app calls it (a size query, then the copy). */
+static char *s_tbase_month(const otc_time_base_t *tb, size_t i, int *bad)
+{
+    size_t need = 0, need2 = 0;
+    char *buf;
+    if (otc_time_base_months_dropped_at(tb, i, NULL, 0, &need) != OTC_OK || !need) { *bad = 1; return NULL; }
+    buf = (char *)malloc(need);
+    if (!buf) { *bad = 1; return NULL; }
+    if (otc_time_base_months_dropped_at(tb, i, buf, need, &need2) != OTC_OK || strlen(buf) + 1 != need) {
+        free(buf);
+        *bad = 1;
+        return NULL;
+    }
+    return buf;
+}
+
+static cJSON *enc_time_base(const otc_time_base_t *tb, int *bad)
+{
+    cJSON *o = cJSON_CreateObject(), *months = cJSON_CreateArray(), *evs = cJSON_CreateArray();
+    char *from, *to;
+    size_t i, n;
+    cJSON_AddItemToObject(o, "code", j_enum(otc_time_base_code_name(otc_time_base_code(tb))));
+    cJSON_AddItemToObject(o, "reason", j_take(s_tbase_reason(tb, bad)));
+    cJSON_AddItemToObject(o, "declared", j_take(s_tbase_declared(tb, bad)));
+    cJSON_AddItemToObject(o, "published", j_take(s_tbase_published(tb, bad)));
+    from = s_tbase_corr_from(tb, bad);
+    to = s_tbase_corr_to(tb, bad);
+    if (from || to) {
+        cJSON *c = cJSON_CreateObject();
+        cJSON_AddItemToObject(c, "from", j_take(from));
+        cJSON_AddItemToObject(c, "to", j_take(to));
+        cJSON_AddItemToObject(o, "correction", c);
+    } else {
+        cJSON_AddNullToObject(o, "correction");
+    }
+    n = otc_time_base_months_dropped_count(tb);
+    for (i = 0; i < n; i++) cJSON_AddItemToArray(months, j_take(s_tbase_month(tb, i, bad)));
+    cJSON_AddItemToObject(o, "months_dropped", months);
+    cJSON_AddItemToObject(o, "decided_in", j_take(s_tbase_decided_in(tb, bad)));
+    cJSON_AddItemToObject(o, "decided_build_commit", j_take(s_tbase_decided_commit(tb, bad)));
+    n = otc_time_base_evidence_count(tb);
+    for (i = 0; i < n; i++) {
+        const otc_time_base_evidence *ev = NULL;
+        cJSON *e;
+        if (otc_time_base_evidence_at(tb, i, &ev) != OTC_OK) { *bad = 1; break; }
+        e = cJSON_CreateObject();
+        cJSON_AddItemToObject(e, "comparator_kind", j_take(s_ev_kind(ev, bad)));
+        cJSON_AddItemToObject(e, "comparator_id", j_take(s_ev_id(ev, bad)));
+        cJSON_AddItemToObject(e, "distance_km", j_num(otc_time_base_evidence_distance_km(ev)));
+        cJSON_AddItemToObject(e, "lag_min", j_num(otc_time_base_evidence_lag_min(ev)));
+        cJSON_AddItemToObject(e, "detail", j_take(s_ev_detail(ev, bad)));
+        cJSON_AddItemToArray(evs, e);
+    }
+    cJSON_AddItemToObject(o, "evidence", evs);
     return o;
 }
 
 static cJSON *enc_set(const otc_set *set, int *bad)
 {
-    /* time_base (TimeBase, spec 4.5) has no C accessor here yet: the key is left out, so the constant_set steps
-     * fail until the C library reads format 1.0 and this runner maps otc_set_time_base. */
     cJSON *o = cJSON_CreateObject(), *flags = cJSON_CreateArray(), *drops = cJSON_CreateArray();
     const otc_record_span *rs = NULL;
     const otc_datum *dt = NULL;
     const otc_convention *conv = NULL;
     const otc_licence *lic = NULL;
+    const otc_time_base_t *tb = NULL;
     size_t i, n;
     cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, bad)));
     cJSON_AddItemToObject(o, "source", j_take(s_set_source(set, bad)));
@@ -428,8 +508,7 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         cJSON *fo = cJSON_CreateObject();
         if (otc_set_qc_flag_at(set, i, &f) != OTC_OK) { *bad = 1; cJSON_Delete(fo); break; }
         cJSON_AddItemToObject(fo, "flag", j_enum(otc_qc_flag_kind_name(otc_qc_flag_flag(f))));
-        /* reason (spec 4.6 QcFlag) has no C accessor yet: left out, so the constant_set steps fail until the C
-         * library reads format 1.0 and this runner maps it. */
+        cJSON_AddItemToObject(fo, "reason", j_take(s_flag_reason(f, bad)));
         cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad)));
         cJSON_AddItemToArray(flags, fo);
     }
@@ -445,6 +524,8 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         cJSON_AddItemToArray(drops, dobj);
     }
     cJSON_AddItemToObject(o, "dropped_constituents", drops);
+    if (otc_set_time_base(set, &tb) == OTC_OK) cJSON_AddItemToObject(o, "time_base", enc_time_base(tb, bad));
+    else cJSON_AddNullToObject(o, "time_base");
     cJSON_AddBoolToObject(o, "is_recommended", otc_set_is_recommended(set));
     if (otc_set_convention(set, &conv) == OTC_OK) cJSON_AddItemToObject(o, "convention_id", j_take(s_conv_id(conv, bad)));
     else cJSON_AddNullToObject(o, "convention_id");
@@ -775,9 +856,8 @@ static void op_query(request *q, reply *r)
         cJSON_AddItemToObject(o, "datestamp", j_take(s_rel_datestamp(R, &bad)));
         cJSON_AddItemToObject(o, "created", j_take(s_rel_created(R, &bad)));
         cJSON_AddItemToObject(o, "format_version", j_take(s_rel_format_version(R, &bad)));
-        /* zenodo_version_doi (spec 4.3) has no C accessor yet: the key is left out, so a case that checks it fails
-         * with "missing" until the C library reads format 1.0 and this runner maps it. */
         cJSON_AddItemToObject(o, "concept_doi", j_take(s_rel_concept_doi(R, &bad)));
+        cJSON_AddItemToObject(o, "zenodo_version_doi", j_take(s_rel_zenodo_version_doi(R, &bad)));
         for (i = 0; i < n; i++) {
             char k[256], v[256];
             size_t nk, nv;
@@ -887,7 +967,17 @@ static void op_query(request *q, reply *r)
         } else if (rc == OTC_E_NOT_FOUND) {
             cJSON_AddNullToObject(o, "station");
         } else {
-            set_status(r, rc, op);
+            char msg[512];
+            size_t need = 0;
+            otc_tombstone_t *t = NULL;
+            if (otc_last_error(R, msg, sizeof msg, &need) != OTC_OK) snprintf(msg, sizeof msg, "%s", op);
+            set_status(r, rc, msg);
+            /* station_removed carries the tombstone (spec 4.4): the handle's error names it, otc_tombstone gives it */
+            if (rc == OTC_E_STATION_REMOVED && id && otc_tombstone(R, id, &t) == OTC_OK) {
+                r->fields = cJSON_CreateObject();
+                cJSON_AddItemToObject(r->fields, "tombstone", enc_tombstone(t, &bad));
+                otc_tombstone_free(t);
+            }
             return;
         }
     } else if (!strcmp(op, "tombstone")) {
@@ -1100,8 +1190,19 @@ static void op_query(request *q, reply *r)
             const otc_set *set = find_set(q, st);
             if (set) {
                 cJSON *p = cJSON_CreateObject();
-                /* build (ProvenanceBuild) and carried_from_release (spec 4.6, 7.4) have no C accessors yet: left
-                 * out, so the provenance steps fail until the C library reads format 1.0 and this runner maps them. */
+                const otc_provenance_build *b = NULL;
+                if (otc_set_provenance_build(set, &b) == OTC_OK) {
+                    cJSON *bo = cJSON_CreateObject();
+                    cJSON_AddItemToObject(bo, "build_commit", j_take(s_build_commit(b, &bad)));
+                    cJSON_AddItemToObject(bo, "built_at", j_take(s_build_built_at(b, &bad)));
+                    cJSON_AddItemToObject(bo, "fetched_at", j_take(s_build_fetched_at(b, &bad)));
+                    cJSON_AddItemToObject(bo, "run_id", j_take(s_build_run_id(b, &bad)));
+                    cJSON_AddItemToObject(bo, "tool_versions", j_parse_or_null(s_build_tool_versions(b, &bad)));
+                    cJSON_AddItemToObject(p, "build", bo);
+                } else {
+                    cJSON_AddNullToObject(p, "build");
+                }
+                cJSON_AddItemToObject(p, "carried_from_release", j_take(s_prov_carried(set, &bad)));
                 cJSON_AddItemToObject(p, "adapter_version", j_take(s_prov_adapter_version(set, &bad)));
                 cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad)));
                 cJSON_AddItemToObject(p, "selection_reason", j_take(s_prov_selection_reason(set, &bad)));
@@ -1180,14 +1281,12 @@ static void op_query(request *q, reply *r)
 static cJSON *enc_release_info(const otc_release_info *ri, int *bad)
 {
     cJSON *o = cJSON_CreateObject(), *files = cJSON_CreateArray();
-    char buf[256];
-    size_t need, i, n = otc_release_info_file_count(ri);
-    cJSON_AddItemToObject(o, "datestamp", otc_release_info_datestamp(ri, buf, sizeof buf, &need) == OTC_OK
-                                              ? cJSON_CreateString(buf) : cJSON_CreateNull());
-    cJSON_AddItemToObject(o, "format_version", otc_release_info_format_version(ri, buf, sizeof buf, &need) == OTC_OK
-                                                   ? cJSON_CreateString(buf) : cJSON_CreateNull());
-    /* concept_doi, zenodo_version_doi and content_sha256 (spec 3) have no C accessors yet: left out, so the
-     * cases that check a ReleaseInfo fail until the C library reads format 1.0 and this runner maps them. */
+    size_t i, n = otc_release_info_file_count(ri);
+    cJSON_AddItemToObject(o, "datestamp", j_take(s_ri_datestamp(ri, bad)));
+    cJSON_AddItemToObject(o, "format_version", j_take(s_ri_format_version(ri, bad)));
+    cJSON_AddItemToObject(o, "concept_doi", j_take(s_ri_concept_doi(ri, bad)));
+    cJSON_AddItemToObject(o, "zenodo_version_doi", j_take(s_ri_zenodo_version_doi(ri, bad)));
+    cJSON_AddItemToObject(o, "content_sha256", j_take(s_ri_content_sha256(ri, bad)));
     for (i = 0; i < n; i++) {
         const otc_file_info *fi = NULL;
         if (otc_release_info_file_at(ri, i, &fi) != OTC_OK) { *bad = 1; break; }
@@ -1273,8 +1372,12 @@ static void op_fetch(request *q, reply *r)
     if (otc_release_datestamp(q->rel, ds, sizeof ds, &need) != OTC_OK) ds[0] = '\0';
     r->result = cJSON_CreateObject();
     if (!strcmp(q->op, "newer_format_major")) {
-        /* spec 7.4: otc_fetch_newer_format_major is not in the C library yet; the C 1.0 work maps it here. */
-        set_error(r, "uncaught:Unimplemented", q->op);
+        /* spec 7.4: the major that the last otc_fetch_check_for_update found, or null */
+        int major = 0;
+        rc = otc_fetch_newer_format_major(&fo, &major);
+        if (rc == OTC_OK) cJSON_AddNumberToObject(r->result, "newer_format_major", major);
+        else if (rc == OTC_E_NOT_FOUND) cJSON_AddNullToObject(r->result, "newer_format_major");
+        else set_error_struct(r, rc, &err);
         return;
     }
     if (!strcmp(q->op, "releases")) {

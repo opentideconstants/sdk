@@ -44,8 +44,12 @@ extern "C" {
 #define OTC_VERSION_PATCH 0
 /* Changes only with a breaking ABI change (and with the soname major). */
 #define OTC_ABI_VERSION 1
-/* The format major this library reads (SUPPORTED_FORMAT_MAJORS = [0]). */
-#define OTC_FORMAT_MAJOR 0
+/* The format major this library reads (SUPPORTED_FORMAT_MAJORS = [1]). */
+#define OTC_FORMAT_MAJOR 1
+/* The newest format version this library reads (SUPPORTED_FORMAT_VERSION, spec
+ * 7.4). A release whose release.min_reader_version is newer is refused with
+ * OTC_E_READER_TOO_OLD. Equals supported_format_version in c/supported-formats.json. */
+#define OTC_FORMAT_VERSION "1.0"
 
 #ifndef OTC_API
 #define OTC_API
@@ -72,7 +76,8 @@ typedef enum otc_status {
     OTC_E_BUFFER_TOO_SMALL = 15,
     OTC_E_NOMEM = 16,
     OTC_E_NOT_BUILT = 17,
-    OTC_E_UNSUPPORTED_CONVENTION = 18 /* phase 2 */
+    OTC_E_UNSUPPORTED_CONVENTION = 18, /* phase 2 */
+    OTC_E_READER_TOO_OLD = 19          /* release.min_reader_version is newer than OTC_FORMAT_VERSION */
 } otc_status;
 
 /* The stable error code of a status ("checksum_mismatch", ...); "ok" for OTC_OK. */
@@ -106,8 +111,17 @@ typedef enum otc_quantity {
     OTC_QUANTITY_UNSET = 0, OTC_QUANTITY_WATER_LEVEL, OTC_QUANTITY_CURRENT, OTC_QUANTITY_OTHER
 } otc_quantity;
 typedef enum otc_qc_status {
-    OTC_QC_STATUS_UNSET = 0, OTC_QC_STATUS_ACCEPTED, OTC_QC_STATUS_FALLBACK, OTC_QC_STATUS_EXCLUDED, OTC_QC_STATUS_OTHER
+    OTC_QC_STATUS_UNSET = 0, OTC_QC_STATUS_OK, OTC_QC_STATUS_FLAGGED, OTC_QC_STATUS_NO_CONSTANTS, OTC_QC_STATUS_OTHER
 } otc_qc_status;
+typedef enum otc_removed_reason {
+    OTC_REMOVED_REASON_UNSET = 0, OTC_REMOVED_REASON_MERGED, OTC_REMOVED_REASON_DUPLICATE, OTC_REMOVED_REASON_OTHER
+} otc_removed_reason;
+/* The enum that otc_time_base_code() returns (the type gets _t: C cannot have a
+ * type and a function with the same name). */
+typedef enum otc_time_base_code_t {
+    OTC_TIME_BASE_CODE_UNSET = 0, OTC_TIME_BASE_CODE_VERIFIED, OTC_TIME_BASE_CODE_CORRECTED,
+    OTC_TIME_BASE_CODE_UNVERIFIED, OTC_TIME_BASE_CODE_DISPUTED, OTC_TIME_BASE_CODE_OTHER
+} otc_time_base_code_t;
 typedef enum otc_loaded_from {
     OTC_LOADED_FROM_UNSET = 0, OTC_LOADED_FROM_DOWNLOAD, OTC_LOADED_FROM_CACHE, OTC_LOADED_FROM_CACHE_AFTER_ERROR,
     OTC_LOADED_FROM_FILE, OTC_LOADED_FROM_FILE_UNVERIFIED, OTC_LOADED_FROM_OTHER
@@ -133,7 +147,8 @@ typedef enum otc_dropped_reason {
 } otc_dropped_reason;
 typedef enum otc_qc_flag_kind {
     OTC_QC_FLAG_UNSET = 0, OTC_QC_FLAG_TIME_BASE, OTC_QC_FLAG_BROKEN_RECORD, OTC_QC_FLAG_MICROTIDAL,
-    OTC_QC_FLAG_NON_TIDAL_SIGNAL, OTC_QC_FLAG_SHORT_RECORD, OTC_QC_FLAG_SIBLING_DISAGREEMENT, OTC_QC_FLAG_OTHER
+    OTC_QC_FLAG_NON_TIDAL_SIGNAL, OTC_QC_FLAG_SHORT_RECORD, OTC_QC_FLAG_SIBLING_DISAGREEMENT, OTC_QC_FLAG_CARRIED_OVER,
+    OTC_QC_FLAG_OTHER
 } otc_qc_flag_kind;
 typedef enum otc_decision_tier {
     OTC_DECISION_TIER_UNSET = 0, OTC_DECISION_TIER_RULE, OTC_DECISION_TIER_REVIEW, OTC_DECISION_TIER_FALLBACK,
@@ -167,6 +182,8 @@ OTC_API const char *otc_station_status_name(otc_station_status_t v);
 OTC_API const char *otc_source_type_name(otc_source_type v);
 OTC_API const char *otc_quantity_name(otc_quantity v);
 OTC_API const char *otc_qc_status_name(otc_qc_status v);
+OTC_API const char *otc_removed_reason_name(otc_removed_reason v);
+OTC_API const char *otc_time_base_code_name(otc_time_base_code_t v);
 OTC_API const char *otc_loaded_from_name(otc_loaded_from v);
 OTC_API const char *otc_phase_reference_name(otc_phase_reference v);
 OTC_API const char *otc_nodal_handling_name(otc_nodal_handling v);
@@ -190,6 +207,9 @@ typedef struct otc_dropped otc_dropped;           /* borrowed from the station *
 typedef struct otc_record_span otc_record_span;   /* borrowed from the station */
 typedef struct otc_datum otc_datum;               /* borrowed from the station */
 typedef struct otc_release_info otc_release_info; /* made by otc_fetch only */
+typedef struct otc_time_base otc_time_base_t;     /* borrowed from the station */
+typedef struct otc_time_base_evidence otc_time_base_evidence; /* borrowed from the station */
+typedef struct otc_provenance_build otc_provenance_build; /* borrowed from the station */
 typedef otc_set otc_set_provenance;               /* the provenance accessors take the set */
 
 /* ------------------------------------------------------------ open / close */
@@ -207,7 +227,10 @@ OTC_API void otc_open_options_init(otc_open_options *opts);
 
 /* Opens OTC_{D}.jsonl (path) with OTC_{D}.meta.json next to it. If
  * OTC_{D}.sha256 is next to it, both files are checked against it
- * (loaded_from file); otherwise loaded_from is file_unverified. opts may be NULL. */
+ * (loaded_from file); otherwise loaded_from is file_unverified. A format major
+ * other than OTC_FORMAT_MAJOR is OTC_E_UNSUPPORTED_FORMAT; a higher minor loads
+ * (spec 7.3). A release.min_reader_version newer than OTC_FORMAT_VERSION is
+ * OTC_E_READER_TOO_OLD, with a message that names both versions. opts may be NULL. */
 OTC_API otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_release **out);
 OTC_API void otc_close(otc_release *rel);
 
@@ -227,8 +250,13 @@ OTC_API otc_loaded_from otc_release_loaded_from(const otc_release *rel);
 OTC_API otc_status otc_release_datestamp(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_created(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_format_version(const otc_release *rel, char *buf, size_t len, size_t *needed);
-OTC_API otc_status otc_release_doi(const otc_release *rel, char *buf, size_t len, size_t *needed);
+/* The all-versions (concept) DOI, from the release document; OTC_E_NOT_FOUND when null. */
 OTC_API otc_status otc_release_concept_doi(const otc_release *rel, char *buf, size_t len, size_t *needed);
+/* The DOI of this release's own Zenodo version (spec 4.3). It is not in the
+ * release document: otc_fetch_open takes it from the pointer or index entry
+ * for this datestamp, kept in the cache's .verified record. OTC_E_NOT_FOUND
+ * when there is none, and always for a release opened with otc_open_file. */
+OTC_API otc_status otc_release_zenodo_version_doi(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_build_commit(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_changelog_url(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API size_t otc_release_source_version_count(const otc_release *rel);
@@ -246,13 +274,25 @@ OTC_API otc_status otc_file_info_sha256(const otc_file_info *fi, char *buf, size
 OTC_API size_t otc_release_station_count(const otc_release *rel);   /* active stations */
 OTC_API size_t otc_release_tombstone_count(const otc_release *rel);
 OTC_API otc_status otc_release_constituent_names(const otc_release *rel, const char **out, size_t cap, size_t *count);
+/* The dataset citation (spec 4.6): "OpenTideConstants contributors ({year}).
+ * OpenTideConstants, release {D} [Data set]. {link}{version}", where {link} is
+ * https://doi.org/{concept_doi} (or https://data.opentideconstants.org/OTC_{D}.json
+ * when the concept DOI is null) and {version} is
+ * " (version DOI: https://doi.org/{zenodo_version_doi})" when the release has one. */
 OTC_API otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, size_t *needed);
-/* ids = NULL: every licence in the release; else the licences of these stations (spec 4.6). */
+/* The CC BY 4.0 attribution text (spec 4.6): "Tidal constants: OpenTideConstants
+ * {D}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ...".
+ * ids = NULL: every licence in the release; else the licences of these
+ * stations (the recommended set's, plus for a subordinate station its
+ * offsets' licence and its reference station's). Each provider once, by
+ * licence_id. It never carries the version DOI. */
 OTC_API otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_t n_ids, char *buf, size_t len,
                                    size_t *needed);
 
-/* Stats: counts by type, kind and country (active stations) and by source and
- * qc_status (constant sets); zero counts are left out; keys sorted. */
+/* Stats (spec 4.3): counts by type, kind and country (active stations), by
+ * qc_status (every constant set; a value format 1.0 does not have counts as
+ * "other") and by source (only sets with constants: qc_status ok or flagged).
+ * Zero counts are left out; keys sorted. */
 OTC_API otc_status otc_release_stats(const otc_release *rel, otc_stats **out);
 OTC_API void otc_stats_free(otc_stats *stats);
 OTC_API size_t otc_stats_type_count(const otc_stats *s);
@@ -320,7 +360,10 @@ typedef struct otc_nearby {   /* otc_near / otc_nearest; id is borrowed from the
 
 /* An active station by OTC id; the caller frees it with otc_station_free. */
 OTC_API otc_status otc_station(const otc_release *rel, const char *id, otc_station_t **out);
-/* As otc_station, but OTC_E_STATION_NOT_FOUND or OTC_E_STATION_REMOVED. */
+/* As otc_station, but OTC_E_STATION_NOT_FOUND or OTC_E_STATION_REMOVED. For a
+ * removed id the handle's error (otc_last_error) names the tombstone's
+ * removed_in, removed_reason and merged_into; otc_tombstone(rel, id, &t)
+ * gives the tombstone itself. */
 OTC_API otc_status otc_require_station(const otc_release *rel, const char *id, otc_station_t **out);
 OTC_API void otc_station_free(otc_station_t *st);
 OTC_API otc_status otc_tombstone(const otc_release *rel, const char *id, otc_tombstone_t **out);
@@ -371,11 +414,13 @@ OTC_API otc_status otc_station_alias_at(const otc_station_t *st, const char *sys
                                         size_t *needed);
 OTC_API otc_status otc_station_raw_json(const otc_station_t *st, char *buf, size_t len, size_t *needed);
 
-/* Sets: the recommended set first, then the others by set_id; without
- * include_excluded, sets with qc_status excluded are left out. */
+/* Sets (spec 4.5): the recommended set first, then the others by set_id.
+ * Without include_no_constants, sets with qc_status no_constants (listed, but
+ * with no fitted constants) are left out; every other set is always listed. */
 OTC_API otc_status otc_station_recommended_set(const otc_station_t *st, const otc_set **out);
-OTC_API size_t otc_station_set_count(const otc_station_t *st, bool include_excluded);
-OTC_API otc_status otc_station_set_at(const otc_station_t *st, bool include_excluded, size_t i, const otc_set **out);
+OTC_API size_t otc_station_set_count(const otc_station_t *st, bool include_no_constants);
+OTC_API otc_status otc_station_set_at(const otc_station_t *st, bool include_no_constants, size_t i,
+                                      const otc_set **out);
 OTC_API otc_status otc_station_set(const otc_station_t *st, const char *set_id, const otc_set **out);
 
 /* Subordinate offsets (spec 4.7). Missing numbers are NaN; strings are borrowed from the station. */
@@ -428,7 +473,11 @@ OTC_API otc_status otc_tombstone_station_id(const otc_tombstone_t *t, char *buf,
 OTC_API otc_status otc_tombstone_name(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
 OTC_API otc_station_status_t otc_tombstone_status(const otc_tombstone_t *t);
 OTC_API otc_status otc_tombstone_removed_in(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
-OTC_API otc_status otc_tombstone_removed_reason(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
+OTC_API otc_removed_reason otc_tombstone_removed_reason(const otc_tombstone_t *t);
+/* The OTC station id that holds the removed station's records; OTC_E_NOT_FOUND when null. */
+OTC_API otc_status otc_tombstone_merged_into(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
+/* A one-line note; OTC_E_NOT_FOUND when null. */
+OTC_API otc_status otc_tombstone_detail(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_tombstone_raw_json(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed);
 
 /* ---------------------------------------------------------------- sets */
@@ -457,7 +506,9 @@ OTC_API otc_status otc_datum_named_at(const otc_datum *d, size_t i, char *name, 
 OTC_API size_t otc_set_qc_flag_count(const otc_set *set);
 OTC_API otc_status otc_set_qc_flag_at(const otc_set *set, size_t i, const otc_qc_flag **out);
 OTC_API otc_qc_flag_kind otc_qc_flag_flag(const otc_qc_flag *f);
-OTC_API otc_status otc_qc_flag_verdict(const otc_qc_flag *f, char *buf, size_t len, size_t *needed);
+/* The one-line reason the flag was raised. */
+OTC_API otc_status otc_qc_flag_reason(const otc_qc_flag *f, char *buf, size_t len, size_t *needed);
+/* {name: number or null} as JSON; OTC_E_NOT_FOUND when the flag has no values. */
 OTC_API otc_status otc_qc_flag_values_json(const otc_qc_flag *f, char *buf, size_t len, size_t *needed);
 
 OTC_API size_t otc_set_dropped_count(const otc_set *set);
@@ -466,21 +517,71 @@ OTC_API otc_status otc_dropped_name(const otc_dropped *d, char *buf, size_t len,
 OTC_API otc_dropped_reason otc_dropped_dropped_reason(const otc_dropped *d);
 OTC_API otc_status otc_dropped_detail(const otc_dropped *d, char *buf, size_t len, size_t *needed);
 
+/* The set's time-base annotation (TimeBase, spec 4.5); OTC_E_NOT_FOUND when
+ * the set has none (every gauge set has one). Borrowed from the station. */
+OTC_API otc_status otc_set_time_base(const otc_set *set, const otc_time_base_t **out);
+OTC_API otc_time_base_code_t otc_time_base_code(const otc_time_base_t *tb);
+OTC_API otc_status otc_time_base_reason(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+/* The declared and the published time base (time-base labels). */
+OTC_API otc_status otc_time_base_declared(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_time_base_published(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+/* The correction {from, to} (labels), null unless the code is corrected:
+ * OTC_E_NOT_FOUND then. _json gives the object as JSON text. */
+OTC_API otc_status otc_time_base_correction_from(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_time_base_correction_to(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_time_base_correction_json(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+/* The months dropped from the record ("YYYY-MM"), in file order; 0 when none. */
+OTC_API size_t otc_time_base_months_dropped_count(const otc_time_base_t *tb);
+OTC_API otc_status otc_time_base_months_dropped_at(const otc_time_base_t *tb, size_t i, char *buf, size_t len,
+                                                   size_t *needed);
+/* The datestamp of the build that decided it, and that build's commit (OTC_E_NOT_FOUND when null). */
+OTC_API otc_status otc_time_base_decided_in(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_time_base_decided_build_commit(const otc_time_base_t *tb, char *buf, size_t len,
+                                                      size_t *needed);
+/* The evidence rows, in file order; 0 when none. distance_km and lag_min are
+ * NaN when absent; detail is OTC_E_NOT_FOUND when absent. */
+OTC_API size_t otc_time_base_evidence_count(const otc_time_base_t *tb);
+OTC_API otc_status otc_time_base_evidence_at(const otc_time_base_t *tb, size_t i, const otc_time_base_evidence **out);
+OTC_API otc_status otc_time_base_evidence_comparator_kind(const otc_time_base_evidence *ev, char *buf, size_t len,
+                                                          size_t *needed);
+OTC_API otc_status otc_time_base_evidence_comparator_id(const otc_time_base_evidence *ev, char *buf, size_t len,
+                                                        size_t *needed);
+OTC_API double otc_time_base_evidence_distance_km(const otc_time_base_evidence *ev);
+OTC_API double otc_time_base_evidence_lag_min(const otc_time_base_evidence *ev);
+OTC_API otc_status otc_time_base_evidence_detail(const otc_time_base_evidence *ev, char *buf, size_t len,
+                                                 size_t *needed);
+
 /* Linked objects, resolved at open (a reference that does not resolve fails the open). */
 OTC_API otc_status otc_set_convention(const otc_set *set, const otc_convention **out);
 OTC_API otc_status otc_set_licence(const otc_set *set, const otc_licence **out);
 
-/* Provenance: one field (a string field as its text, any other value as JSON), or the whole object as JSON. */
+/* Provenance (spec 4.6): one field (a string field as its text, any other
+ * value as JSON), or the whole object as JSON (raw, with any further fields). */
 OTC_API otc_status otc_set_provenance_field(const otc_set *set, const char *field, char *buf, size_t len,
                                             size_t *needed);
 OTC_API otc_status otc_set_provenance_json(const otc_set *set, char *buf, size_t len, size_t *needed);
 #define otc_set_provenance_raw_json otc_set_provenance_json
-OTC_API otc_status otc_set_provenance_build_commit(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_adapter_version(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_input_sha256_json(const otc_set *set, char *buf, size_t len, size_t *needed);
-OTC_API otc_status otc_set_provenance_time_base_json(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_selection_reason(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_decision_json(const otc_set *set, char *buf, size_t len, size_t *needed);
+/* The datestamp of the release the set was carried over from; OTC_E_NOT_FOUND
+ * when the set is not carried over. */
+OTC_API otc_status otc_set_provenance_carried_from_release(const otc_set *set, char *buf, size_t len,
+                                                           size_t *needed);
+/* provenance.build (ProvenanceBuild). Format 1.0 writes it for every set, so
+ * OTC_E_NOT_FOUND only for malformed input (the open does not fail, spec 7.3).
+ * Borrowed from the station. Each field is OTC_E_NOT_FOUND when absent;
+ * built_at and fetched_at are ISO 8601 UTC strings. */
+OTC_API otc_status otc_set_provenance_build(const otc_set *set, const otc_provenance_build **out);
+OTC_API otc_status otc_provenance_build_build_commit(const otc_provenance_build *b, char *buf, size_t len,
+                                                     size_t *needed);
+OTC_API otc_status otc_provenance_build_built_at(const otc_provenance_build *b, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_provenance_build_fetched_at(const otc_provenance_build *b, char *buf, size_t len,
+                                                   size_t *needed);
+OTC_API otc_status otc_provenance_build_run_id(const otc_provenance_build *b, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_provenance_build_tool_versions_json(const otc_provenance_build *b, char *buf, size_t len,
+                                                           size_t *needed);
 
 /* The station's validation rows for this set, ordered by window. */
 OTC_API size_t otc_set_validation_count(const otc_set *set);
@@ -543,8 +644,11 @@ typedef struct otc_fetch_options {
 OTC_API void otc_fetch_options_init(otc_fetch_options *opts);
 
 /* The path of OTC_{D}.jsonl of the latest release in the cache, downloaded and
- * verified first if needed (spec 5.2). On a network error with
- * on_network_error USE_CACHE it gives the newest cached release. */
+ * verified first if needed (spec 5.2). latest is the newest release with a
+ * supported format major and a readable min_reader_version: when the pointer
+ * names a release too new, OTC_index.json (one more GET, only then) gives the
+ * newest readable one (OTC_E_READER_TOO_OLD if none). On a network error with
+ * on_network_error USE_CACHE it gives the newest readable cached release. */
 OTC_API otc_status otc_fetch_latest(const otc_fetch_options *opts, char *path, size_t len, size_t *needed);
 /* The same for a pinned datestamp; no network access when it is cached. */
 OTC_API otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestamp, char *path, size_t len,
@@ -560,9 +664,17 @@ OTC_API otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *re
 OTC_API otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap,
                                       size_t *count);
 OTC_API otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_release_info **info);
-/* *found is true and *info is set when the latest release is newer than current. */
+/* *found is true and *info is set when the latest readable release (a
+ * supported major and a readable min_reader_version, spec 7.4) is newer than
+ * current. It also makes a conditional GET of OTC_latest.json, which
+ * otc_fetch_newer_format_major reads. */
 OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char *current,
                                               otc_release_info **info, bool *found);
+/* The format major of the newest release on the server when it is newer than
+ * every major this library reads (spec 7.4): the value the last
+ * otc_fetch_check_for_update on this cache found (it reads the cached
+ * OTC_latest.json; no network access). OTC_E_NOT_FOUND when there is none. */
+OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major);
 /* If a release newer than current exists, downloads it into the cache, sets
  * *updated and writes the path of its .jsonl; the app then opens it and
  * closes the old handle (C has no automatic update, spec 5.6). */
@@ -588,7 +700,13 @@ OTC_API void otc_release_info_free(otc_release_info *info);
 OTC_API otc_status otc_release_info_datestamp(const otc_release_info *ri, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_info_format_version(const otc_release_info *ri, char *buf, size_t len,
                                                    size_t *needed);
-OTC_API otc_status otc_release_info_doi(const otc_release_info *ri, char *buf, size_t len, size_t *needed);
+/* The concept DOI, the release's own Zenodo version DOI and the digest of its
+ * data-bearing content; each OTC_E_NOT_FOUND when null. */
+OTC_API otc_status otc_release_info_concept_doi(const otc_release_info *ri, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_release_info_zenodo_version_doi(const otc_release_info *ri, char *buf, size_t len,
+                                                       size_t *needed);
+OTC_API otc_status otc_release_info_content_sha256(const otc_release_info *ri, char *buf, size_t len,
+                                                   size_t *needed);
 OTC_API size_t otc_release_info_file_count(const otc_release_info *ri);
 OTC_API otc_status otc_release_info_file_at(const otc_release_info *ri, size_t i, const otc_file_info **out);
 

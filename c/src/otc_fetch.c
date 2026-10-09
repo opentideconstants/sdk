@@ -4,7 +4,7 @@
  * (spec 5.4), and writes releases into a folder the app chooses (4.3.2).
  * Built only with -DOTC_WITH_FETCH=ON; otherwise otc_fetch_stub.c is built.
  *
- * Cache: <root>/v1/pointer/{OTC_latest-f0.json,OTC_index.json}(+.etag) and
+ * Cache: <root>/v1/pointer/{OTC_latest-f1.json,OTC_latest.json,OTC_index.json}(+.etag) and
  * <root>/v1/releases/<D>/{OTC_<D>.sha256,.jsonl,.meta.json,[.json],
  * index-v1.json,.verified}. Every file is written to .tmp-<pid>-<random> in
  * the same directory, fsynced and renamed into place; .verified is last. A
@@ -958,7 +958,9 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
 {
     otc_release_info *ri;
     const cJSON *files = otc__jget(e, "files"), *f;
-    const char *ds = otc__jstr(e, "datestamp"), *fv = otc__jstr(e, "format_version"), *doi = otc__jstr(e, "doi");
+    const char *ds = otc__jstr(e, "datestamp"), *fv = otc__jstr(e, "format_version");
+    const char *mrv = otc__jstr(e, "min_reader_version"), *cdoi = otc__jstr(e, "concept_doi");
+    const char *zdoi = otc__jstr(e, "zenodo_version_doi"), *csha = otc__jstr(e, "content_sha256");
     size_t n = 0;
     *out = NULL;
     if (!cJSON_IsObject(e) || !ds || !valid_datestamp(ds) || (files && !cJSON_IsArray(files)))
@@ -967,9 +969,13 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     if (!ri) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     ri->datestamp = otc__strdup(ds);
     ri->format_version = fv ? otc__strdup(fv) : NULL;
-    ri->doi = doi ? otc__strdup(doi) : NULL;
+    ri->min_reader_version = mrv ? otc__strdup(mrv) : NULL;
+    ri->concept_doi = cdoi ? otc__strdup(cdoi) : NULL;
+    ri->zenodo_version_doi = zdoi ? otc__strdup(zdoi) : NULL;
+    ri->content_sha256 = csha ? otc__strdup(csha) : NULL;
     ri->files = (otc_file_info *)calloc((size_t)cJSON_GetArraySize(files) + 1, sizeof *ri->files);
-    if (!ri->datestamp || (fv && !ri->format_version) || (doi && !ri->doi) || !ri->files) {
+    if (!ri->datestamp || (fv && !ri->format_version) || (mrv && !ri->min_reader_version) || (cdoi && !ri->concept_doi)
+        || (zdoi && !ri->zenodo_version_doi) || (csha && !ri->content_sha256) || !ri->files) {
         otc_release_info_free(ri);
         return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     }
@@ -1130,42 +1136,92 @@ static otc_status fetch_index(fctx *c, otc_release_info ***out, size_t *n)
     return st;
 }
 
-/* The newest release with a supported format major (spec 5.2 step 2, 7.4). */
-static otc_status latest_info(fctx *c, otc_release_info **out)
+/* A release this library reads: a supported format major and a
+ * min_reader_version no newer than OTC_FORMAT_VERSION (spec 7.4). */
+static int info_readable(const otc_release_info *ri)
 {
-    char name[64];
+    return format_major(ri->format_version) == OTC_FORMAT_MAJOR && otc__readable(NULL, ri->min_reader_version);
+}
+
+static void note_entry(fctx *c, const otc_release_info *ri);
+
+/* reader_too_old for a release of a supported major that needs a newer reader (spec 4.8). */
+static otc_status fail_too_old(fctx *c, const char *ds, const char *mrv)
+{
+    return fail(c, OTC_E_READER_TOO_OLD, NULL, "release %s needs a reader for format %s; this SDK reads format %s", ds,
+                mrv ? mrv : "?", OTC_FORMAT_VERSION);
+}
+
+/*
+ * The newest readable release (spec 5.2 steps 2 and 2a, 7.4): the per-major
+ * pointer, or OTC_latest.json only when that is a 404. When the pointer names
+ * a release this library cannot read, one GET of OTC_index.json gives the
+ * newest readable entry (OTC_E_READER_TOO_OLD when a release of a supported
+ * major exists but none is readable, else OTC_E_UNSUPPORTED_FORMAT).
+ * *read_main (may be NULL) is set when OTC_latest.json was read.
+ */
+static otc_status latest_info(fctx *c, otc_release_info **out, int *read_main)
+{
+    char name[64], *url = NULL, *too_old_ds = NULL, *too_old_mrv = NULL;
     cJSON *doc = NULL;
-    char *url = NULL;
     otc_release_info *ri = NULL, **all = NULL;
     size_t n = 0, i;
     otc_status st;
     *out = NULL;
+    if (read_main) *read_main = 0;
     snprintf(name, sizeof name, "OTC_latest-f%d.json", OTC_FORMAT_MAJOR);
     st = get_changing(c, name, &doc, &url);
-    if (st == OTC_OK && !doc) st = get_changing(c, "OTC_latest.json", &doc, &url);
+    if (st == OTC_OK && !doc) {
+        if (read_main) *read_main = 1;
+        st = get_changing(c, "OTC_latest.json", &doc, &url);
+    }
     if (st != OTC_OK) return st;
     if (!doc) return fail(c, OTC_E_RELEASE_NOT_FOUND, NULL, "no latest pointer under %s", c->base_url);
     st = info_from_entry(c, doc, url, &ri);
     cJSON_Delete(doc);
     free(url);
     if (st != OTC_OK) return st;
-    if (format_major(ri->format_version) == OTC_FORMAT_MAJOR) { *out = ri; return OTC_OK; }
-    logf_(c, 2, "a newer format (%s) exists; upgrade the library to read it", ri->format_version ? ri->format_version : "?");
+    if (info_readable(ri)) {
+        note_entry(c, ri);
+        *out = ri;
+        return OTC_OK;
+    }
+    if (format_major(ri->format_version) == OTC_FORMAT_MAJOR) {
+        too_old_ds = otc__strdup(ri->datestamp);
+        too_old_mrv = ri->min_reader_version ? otc__strdup(ri->min_reader_version) : NULL;
+        logf_(c, 1, "release %s needs a reader for format %s; looking for an older release", ri->datestamp,
+              ri->min_reader_version ? ri->min_reader_version : "?");
+    } else {
+        logf_(c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", format_major(ri->format_version));
+    }
     otc_release_info_free(ri);
+    /* step 2a: one GET of the index, only in this case */
     st = fetch_index(c, &all, &n);
     if (st == OTC_E_RELEASE_NOT_FOUND) { st = OTC_OK; n = 0; }
-    if (st != OTC_OK) return st;
+    if (st != OTC_OK) { free(too_old_ds); free(too_old_mrv); return st; }
     for (i = 0; i < n; i++) {
-        if (format_major(all[i]->format_version) == OTC_FORMAT_MAJOR) {
+        if (info_readable(all[i])) {
             *out = all[i];
             all[i] = NULL;
             break;
         }
+        if (!too_old_ds && format_major(all[i]->format_version) == OTC_FORMAT_MAJOR) {
+            too_old_ds = otc__strdup(all[i]->datestamp);
+            too_old_mrv = all[i]->min_reader_version ? otc__strdup(all[i]->min_reader_version) : NULL;
+        }
     }
     free_infos(all, n);
-    if (!*out) return fail(c, OTC_E_UNSUPPORTED_FORMAT, NULL, "no release with the supported format major %d", OTC_FORMAT_MAJOR);
-    if (c->err) otc_error_init(c->err);
-    return OTC_OK;
+    if (*out) {
+        if (c->err) otc_error_init(c->err);
+        note_entry(c, *out);
+    } else if (too_old_ds) {
+        st = fail_too_old(c, too_old_ds, too_old_mrv);
+    } else {
+        st = fail(c, OTC_E_UNSUPPORTED_FORMAT, NULL, "no release with the supported format major %d", OTC_FORMAT_MAJOR);
+    }
+    free(too_old_ds);
+    free(too_old_mrv);
+    return st;
 }
 
 /* --------------------------------------------------------------------- cache */
@@ -1198,6 +1254,39 @@ static cJSON *read_verified(fctx *c, const char *ds)
     free(t);
     if (doc && !cJSON_IsObject(otc__jget(doc, "files"))) { cJSON_Delete(doc); doc = NULL; }
     return doc;
+}
+
+/*
+ * The pointer or index entry for a cached release names its version DOI
+ * (spec 4.3): .verified keeps the newest one the SDK has read, so a later
+ * open from the cache reports it. A failure to write is logged, not raised.
+ */
+static void note_entry(fctx *c, const otc_release_info *ri)
+{
+    cJSON *v = read_verified(c, ri->datestamp);
+    const cJSON *old;
+    char *d = NULL, *p = NULL, *txt = NULL;
+    if (!v) return;
+    old = cJSON_GetObjectItemCaseSensitive(v, "zenodo_version_doi");
+    if (old && (ri->zenodo_version_doi ? (cJSON_IsString(old) && !strcmp(old->valuestring, ri->zenodo_version_doi))
+                                       : cJSON_IsNull(old))) {
+        cJSON_Delete(v);
+        return;
+    }
+    cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
+    cJSON_AddItemToObject(v, "zenodo_version_doi",
+                          ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+    d = rel_dir(c, ri->datestamp);
+    p = d ? path2(d, ".verified") : NULL;
+    txt = p ? cJSON_Print(v) : NULL;
+    if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
+        logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
+        if (c->err) otc_error_init(c->err);
+    }
+    cJSON_free(txt);
+    free(p);
+    free(d);
+    cJSON_Delete(v);
 }
 
 static int file_there(fctx *c, const char *ds, const char *suffix)
@@ -1242,22 +1331,51 @@ static otc_status cached_list(fctx *c, char ***out, size_t *n_out)
     return OTC_OK;
 }
 
-/* The newest cached release that C can open, with a supported format major. */
+static int ver_ok(const char *fv, const char *mrv)
+{
+    return (!fv || format_major(fv) == OTC_FORMAT_MAJOR) && otc__readable(NULL, mrv);
+}
+
+/* A cached release this library reads (spec 5.2 step 1): its format_version
+ * and min_reader_version, from .verified, the cached index and its .meta.json. */
+static int cached_readable(fctx *c, const char *ds, const cJSON *index)
+{
+    cJSON *v = read_verified(c, ds), *meta = NULL;
+    const cJSON *e;
+    char *mp, *t;
+    int ok = ver_ok(otc__jstr(v, "format_version"), otc__jstr(v, "min_reader_version"));
+    cJSON_Delete(v);
+    cJSON_ArrayForEach(e, otc__jget(index, "releases"))
+        if (ok && !otc__strcmp_null(otc__jstr(e, "datestamp"), ds))
+            ok = ver_ok(otc__jstr(e, "format_version"), otc__jstr(e, "min_reader_version"));
+    if (!ok) return 0;
+    mp = rel_file(c, ds, ".meta.json");
+    t = mp ? slurp(mp) : NULL;
+    meta = t ? otc__json_parse(t, strlen(t)) : NULL;
+    if (meta) ok = ver_ok(otc__jstr(meta, "format_version"), otc__jstr(otc__jget(meta, "release"), "min_reader_version"));
+    cJSON_Delete(meta);
+    free(t);
+    free(mp);
+    return ok;
+}
+
+/* The newest cached release that C can open and read (spec 5.2 step 1, 7.4). */
 static char *newest_cached(fctx *c)
 {
-    char **list = NULL, *best = NULL;
+    char **list = NULL, *best = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
+    char *it = ip ? slurp(ip) : NULL;
+    cJSON *index = it ? otc__json_parse(it, strlen(it)) : NULL;
     size_t n = 0, i;
-    if (cached_list(c, &list, &n) != OTC_OK) return NULL;
+    free(dir);
+    free(ip);
+    free(it);
+    if (cached_list(c, &list, &n) != OTC_OK) { cJSON_Delete(index); return NULL; }
     for (i = 0; i < n && !best; i++) {
-        cJSON *v;
-        const char *fv;
-        if (!usable_loose(c, list[i])) continue;
-        v = read_verified(c, list[i]);
-        fv = otc__jstr(v, "format_version");
-        if (!fv || format_major(fv) == OTC_FORMAT_MAJOR) best = otc__strdup(list[i]);
-        cJSON_Delete(v);
+        if (!usable_loose(c, list[i]) || !cached_readable(c, list[i], index)) continue;
+        best = otc__strdup(list[i]);
     }
     free_list(list, n);
+    cJSON_Delete(index);
     return best;
 }
 
@@ -1573,6 +1691,10 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         cJSON_AddStringToObject(ver, "datestamp", ds);
         if (otc_release_format_version(rel, fvbuf, sizeof fvbuf, &need) == OTC_OK)
             cJSON_AddStringToObject(ver, "format_version", fvbuf);
+        if (otc__jstr(rel->release_obj, "min_reader_version"))
+            cJSON_AddStringToObject(ver, "min_reader_version", otc__jstr(rel->release_obj, "min_reader_version"));
+        /* the version DOI of the entry used (spec 4.3); a pinned download reads no entry */
+        cJSON_AddItemToObject(ver, "zenodo_version_doi", str_or_null(info ? info->zenodo_version_doi : NULL));
         txt = cJSON_Print(ver);
         if (!vpath || !txt) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
         else st = write_atomic(c, dir, vpath, txt, strlen(txt));
@@ -1678,7 +1800,7 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         *lf = OTC_LOADED_FROM_CACHE;
         return open_cached(c, *ds_out, rel);
     }
-    st = latest_info(c, &info);
+    st = latest_info(c, &info, NULL);
     if (st == OTC_OK) {
         *ds_out = otc__strdup(info->datestamp);
         st = *ds_out ? ensure_cached(c, info->datestamp, info, rel, lf) : fail(c, OTC_E_NOMEM, NULL, "out of memory");
@@ -1775,9 +1897,23 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
         size_t n = 0;
         st = files_from_verified(&c, ds, &files, &n);
         if (st == OTC_OK) {
+            cJSON *v = read_verified(&c, ds);
+            const char *zdoi = otc__jstr(v, "zenodo_version_doi");
+            int nomem;
             free_file_infos(rel->files, rel->n_files);
             rel->files = files;
             rel->n_files = n;
+            free(rel->zenodo_version_doi);
+            rel->zenodo_version_doi = zdoi ? otc__strdup(zdoi) : NULL;
+            nomem = zdoi && !rel->zenodo_version_doi;
+            cJSON_Delete(v);
+            if (nomem) {
+                otc_close(rel);
+                rel = NULL;
+                st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+            }
+        }
+        if (st == OTC_OK) {
             rel->loaded_from = lf;
             if (last != OTC_OK) {
                 rel->last_status = last;
@@ -1825,6 +1961,7 @@ otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **
             st = fetch_index(&c, &v, &n);
         }
     }
+    for (i = 0; st == OTC_OK && i < n; i++) note_entry(&c, v[i]);
     if (st == OTC_OK) {
         *count = n;
         for (i = 0; i < n && i < cap; i++) {
@@ -1845,7 +1982,7 @@ otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_release_info
     if (info) *info = NULL;
     if (st == OTC_OK && !info) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "info is NULL");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
-    if (st == OTC_OK) st = latest_info(&c, info);
+    if (st == OTC_OK) st = latest_info(&c, info, NULL);
     ctx_free(&c);
     return st;
 }
@@ -1855,19 +1992,66 @@ otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char 
 {
     fctx c;
     otc_release_info *ri = NULL;
+    int read_main = 0;
     otc_status st = ctx_init(&c, opts);
     if (info) *info = NULL;
     if (found) *found = false;
     if (st == OTC_OK && (!info || !found || !valid_datestamp(current)))
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; info and found must not be NULL");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
-    if (st == OTC_OK) st = latest_info(&c, &ri);
+    if (st == OTC_OK) st = latest_info(&c, &ri, &read_main);
+    if (st == OTC_OK && !read_main) {
+        /* spec 7.4: a conditional GET of OTC_latest.json tells whether a newer
+         * format major exists (otc_fetch_newer_format_major reads it back) */
+        cJSON *doc = NULL;
+        char *url = NULL;
+        if (get_changing(&c, "OTC_latest.json", &doc, &url) != OTC_OK) {
+            logf_(&c, 2, "cannot read OTC_latest.json: %s", c.err->message);
+            otc_error_init(c.err);
+        }
+        cJSON_Delete(doc);
+        free(url);
+    }
+    if (st == OTC_OK) {
+        int major = -1;
+        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
+        cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+        major = format_major(otc__jstr(doc, "format_version"));
+        if (major > OTC_FORMAT_MAJOR)
+            logf_(&c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", major);
+        cJSON_Delete(doc);
+        free(t);
+        free(p);
+        free(dir);
+    }
     if (st == OTC_OK && ds_cmp(ri->datestamp, current) > 0) {
         *info = ri;
         *found = true;
         ri = NULL;
     }
     otc_release_info_free(ri);
+    ctx_free(&c);
+    return st;
+}
+
+otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major)
+{
+    fctx c;
+    otc_status st = ctx_init(&c, opts);
+    if (major) *major = 0;
+    if (st == OTC_OK && !major) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "major is NULL");
+    if (st == OTC_OK) {
+        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
+        cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+        int m = format_major(otc__jstr(doc, "format_version"));
+        if (!dir || !p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (m > OTC_FORMAT_MAJOR) *major = m;
+        else st = OTC_E_NOT_FOUND;
+        cJSON_Delete(doc);
+        free(t);
+        free(p);
+        free(dir);
+    }
     ctx_free(&c);
     return st;
 }
@@ -1886,7 +2070,7 @@ otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, 
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; updated must not be NULL");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = ensure_root(&c);
-    if (st == OTC_OK) st = latest_info(&c, &ri);
+    if (st == OTC_OK) st = latest_info(&c, &ri, NULL);
     if (st == OTC_OK && ds_cmp(ri->datestamp, current) > 0) {
         st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
         otc_close(rel);
@@ -2001,7 +2185,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
             ds = newest_cached(&c);
             if (!ds) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache"); goto out; }
         } else {
-            if ((st = latest_info(&c, &info)) != OTC_OK) goto out;
+            if ((st = latest_info(&c, &info, NULL)) != OTC_OK) goto out;
             ds = otc__strdup(info->datestamp);
         }
     } else {

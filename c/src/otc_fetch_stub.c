@@ -69,6 +69,12 @@ otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char 
     return not_built(opts, "otc_fetch_check_for_update");
 }
 
+otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major)
+{
+    if (major) *major = 0;
+    return not_built(opts, "otc_fetch_newer_format_major");
+}
+
 otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                             bool *updated)
 {
