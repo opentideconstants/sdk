@@ -337,6 +337,15 @@ DEF_STR(s_flag_values, otc_qc_flag_values_json, otc_qc_flag)
 DEF_STR(s_drop_name, otc_dropped_name, otc_dropped)
 DEF_STR(s_drop_detail, otc_dropped_detail, otc_dropped)
 
+/* A lookup's status: OTC_OK gives the value, OTC_E_NOT_FOUND is "no value" (null), and any other status is a
+ * library failure that sets *bad, never a null value. */
+static int found(otc_status rc, int *bad)
+{
+    if (rc == OTC_OK) return 1;
+    if (rc != OTC_E_NOT_FOUND) *bad = 1;
+    return 0;
+}
+
 /* A string as a JSON value (null for "no value"). */
 static cJSON *j_take(char *s)
 {
@@ -411,7 +420,7 @@ static cJSON *enc_station(const otc_station_t *st, int *bad)
     cJSON_AddBoolToObject(o, "is_subordinate", otc_station_is_subordinate(st));
     cJSON_AddBoolToObject(o, "is_tide", otc_station_is_tide(st));
     cJSON_AddBoolToObject(o, "is_current", otc_station_is_current(st));
-    if (otc_station_recommended_set(st, &rec) == OTC_OK)
+    if (found(otc_station_recommended_set(st, &rec), bad))
         cJSON_AddItemToObject(o, "recommended_set_id", j_take(s_set_id(rec, bad)));
     else
         cJSON_AddNullToObject(o, "recommended_set_id");
@@ -503,7 +512,7 @@ static cJSON *enc_set(const otc_set *set, int *bad)
     cJSON_AddItemToObject(o, "quantity", j_enum(otc_quantity_name(otc_set_quantity(set))));
     cJSON_AddItemToObject(o, "source_record_id", j_take(s_set_record_id(set, bad)));
     cJSON_AddItemToObject(o, "source_version", j_take(s_set_version(set, bad)));
-    if (otc_set_record_span(set, &rs) == OTC_OK) {
+    if (found(otc_set_record_span(set, &rs), bad)) {
         cJSON *s = cJSON_CreateObject();
         cJSON_AddItemToObject(s, "start", j_take(s_span_start(rs, bad)));
         cJSON_AddItemToObject(s, "end", j_take(s_span_end(rs, bad)));
@@ -512,7 +521,7 @@ static cJSON *enc_set(const otc_set *set, int *bad)
     } else {
         cJSON_AddNullToObject(o, "record_span");
     }
-    if (otc_set_datum(set, &dt) == OTC_OK) {
+    if (found(otc_set_datum(set, &dt), bad)) {
         cJSON *d = cJSON_CreateObject(), *named = cJSON_CreateObject();
         cJSON_AddItemToObject(d, "msl_offset_m", j_num(otc_datum_msl_offset_m(dt)));
         n = otc_datum_named_count(dt);
@@ -551,12 +560,12 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         cJSON_AddItemToArray(drops, dobj);
     }
     cJSON_AddItemToObject(o, "dropped_constituents", drops);
-    if (otc_set_time_base(set, &tb) == OTC_OK) cJSON_AddItemToObject(o, "time_base", enc_time_base(tb, bad));
+    if (found(otc_set_time_base(set, &tb), bad)) cJSON_AddItemToObject(o, "time_base", enc_time_base(tb, bad));
     else cJSON_AddNullToObject(o, "time_base");
     cJSON_AddBoolToObject(o, "is_recommended", otc_set_is_recommended(set));
-    if (otc_set_convention(set, &conv) == OTC_OK) cJSON_AddItemToObject(o, "convention_id", j_take(s_conv_id(conv, bad)));
+    if (found(otc_set_convention(set, &conv), bad)) cJSON_AddItemToObject(o, "convention_id", j_take(s_conv_id(conv, bad)));
     else cJSON_AddNullToObject(o, "convention_id");
-    if (otc_set_licence(set, &lic) == OTC_OK) cJSON_AddItemToObject(o, "licence_id", j_take(s_lic_id(lic, bad)));
+    if (found(otc_set_licence(set, &lic), bad)) cJSON_AddItemToObject(o, "licence_id", j_take(s_lic_id(lic, bad)));
     else cJSON_AddNullToObject(o, "licence_id");
     cJSON_AddNumberToObject(o, "constituent_count", (double)otc_set_constituent_count(set));
     return o;
@@ -1296,7 +1305,7 @@ static void op_query(request *q, reply *r)
             const otc_set *set = find_set(q, st, &bad);
             const char *name = arg_str(&q->a, "name");
             const otc_constituent_t *c = NULL;
-            if (set && name && otc_set_constituent(set, name, &c) == OTC_OK)
+            if (set && name && found(otc_set_constituent(set, name, &c), &bad))
                 cJSON_AddItemToObject(o, "constituent", enc_constituent(c));
             else
                 cJSON_AddNullToObject(o, "constituent");
@@ -1305,7 +1314,7 @@ static void op_query(request *q, reply *r)
             if (set) {
                 cJSON *p = cJSON_CreateObject();
                 const otc_provenance_build *b = NULL;
-                if (otc_set_provenance_build(set, &b) == OTC_OK) {
+                if (found(otc_set_provenance_build(set, &b), &bad)) {
                     cJSON *bo = cJSON_CreateObject();
                     cJSON_AddItemToObject(bo, "build_commit", j_take(s_build_commit(b, &bad)));
                     cJSON_AddItemToObject(bo, "built_at", j_take(s_build_built_at(b, &bad)));
@@ -1349,7 +1358,7 @@ static void op_query(request *q, reply *r)
             } else if (!strcmp(obj, "tombstone")) {
                 otc_tombstone_t *t = NULL;
                 const char *id = arg_str(&q->a, "station_id");
-                if (id && otc_tombstone(R, id, &t) == OTC_OK) {
+                if (id && found(otc_tombstone(R, id, &t), &bad)) {
                     raw = j_parse_or_null(s_tb_raw(t, &bad), &bad);
                     otc_tombstone_free(t);
                 }
@@ -1362,7 +1371,8 @@ static void op_query(request *q, reply *r)
                 size_t i, n = set ? otc_set_constituent_count(set) : 0;
                 for (i = 0; i < n && name; i++) {
                     const otc_constituent_t *c = NULL;
-                    if (otc_set_constituent_at(set, i, &c) == OTC_OK && !strcmp(c->name, name)) {
+                    if (otc_set_constituent_at(set, i, &c) != OTC_OK) { bad = 1; break; }
+                    if (!strcmp(c->name, name)) {
                         size_t need = 0;
                         char *buf;
                         if (otc_constituent_raw_json(set, i, NULL, 0, &need) != OTC_OK) { bad = 1; break; }
@@ -1375,11 +1385,11 @@ static void op_query(request *q, reply *r)
             } else if (!strcmp(obj, "convention")) {
                 const otc_convention *c = NULL;
                 const char *id = arg_str(&q->a, "convention_id");
-                if (id && otc_release_convention(R, id, &c) == OTC_OK) raw = j_parse_or_null(s_conv_raw(c, &bad), &bad);
+                if (id && found(otc_release_convention(R, id, &c), &bad)) raw = j_parse_or_null(s_conv_raw(c, &bad), &bad);
             } else if (!strcmp(obj, "licence")) {
                 const otc_licence *l = NULL;
                 const char *id = arg_str(&q->a, "licence_id");
-                if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad), &bad);
+                if (id && found(otc_release_licence(R, id, &l), &bad)) raw = j_parse_or_null(s_lic_raw(l, &bad), &bad);
             } else {   /* README "raw": station, tombstone, set, constituent, convention or licence */
                 otc_station_free(st);
                 set_error(r, "uncaught:UnknownRawObject", obj);
