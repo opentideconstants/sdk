@@ -128,3 +128,24 @@ def test_error_expectation_with_result_keys_is_rejected(tmp_path):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases),
                    env={"FAKE_REPLY": '{"ok": false, "error": {"code": "not_found"}}'})
     assert "FAIL  a" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-400:])
+
+
+# --- K7: header regexes are compiled even when no request is logged; all: true needs at least one request
+
+def test_assert_requests_bad_header_regex_on_empty_log(tmp_path):
+    st = {"driver": "assert_requests", "header": {"user-agent": "("}, "count": 0}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [st, OK_STEP]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and "PROBLEM" in r.stdout, r.stdout[-400:]
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert "FAIL  a" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-400:])
+
+
+def test_assert_requests_all_with_no_request_fails():
+    srv, proxy = FixtureServer().start(), RecordingProxy().start()
+    try:
+        out = driver.act_assert_requests({"header": {"user-agent": "^x"}, "all": True}, srv, proxy)
+    finally:
+        srv.shutdown()
+        proxy.shutdown()
+    assert out, "all: true passed with no request to check"

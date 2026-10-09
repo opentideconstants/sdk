@@ -393,6 +393,13 @@ def check_cases(cases):
             if "driver" in st:
                 if st["driver"] not in DRIVER_ACTIONS:
                     problems.append(f"{where}: unknown driver action {st['driver']!r}")
+                if st["driver"] == "assert_requests":
+                    for name, rx in [("match", st.get("match"))] + list((st.get("header") or {}).items()):
+                        try:
+                            if rx is not None:
+                                re.compile(rx)
+                        except (re.error, TypeError) as e:
+                            problems.append(f"{where}: assert_requests {name} {rx!r} is not a regular expression: {e}")
                 if st["driver"] == "server_rules":
                     for j, rule in enumerate(st.get("rules", [])):
                         try:
@@ -546,11 +553,15 @@ def act_assert_requests(a, srv, proxy):
         entries = [e for e in entries if e["query"] or (e["path"] and "?" in e["path"])]
     problems = []
     hdr = a.get("header") or {}
+    # compile first: a bad pattern is a case error even when the log is empty
+    hdr_rx = {name: re.compile(rx) for name, rx in hdr.items()}
     if hdr:
         def ok(e):
-            return all(re.search(rx, e["headers"].get(name.lower(), "")) for name, rx in hdr.items())
+            return all(rx.search(e["headers"].get(name.lower(), "")) for name, rx in hdr_rx.items())
         if a.get("all"):
             bad = [e for e in entries if not ok(e)]
+            if not entries:
+                problems.append(f"no request to check the header {hdr} on (all: true needs at least one)")
             if bad:
                 problems.append(f"{len(bad)} request(s) fail the header check {hdr}: e.g. {bad[0]['path']} {bad[0]['headers']}")
         else:
