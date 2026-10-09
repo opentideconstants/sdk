@@ -1095,23 +1095,33 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     if (res == GET_NOT_FOUND) goto done;
     if (res == GET_NOT_MODIFIED && body) {
         logf_(c, 0, "pointer %s: 304", name);
+        *doc = otc__json_parse(body, strlen(body));
+        if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, path, "%s: not JSON", path); goto done; }
     } else {
+        /* spec 5.2 step 2 (CR D8): the body is parsed before it is stored, so a
+         * captive portal's page never replaces a good cached copy. A 200 that is
+         * not JSON stands in for the network: a network error, which the
+         * use_cache fallback handles. */
         logf_(c, 0, "pointer %s: 200", name);
-        free(body);
-        body = r.body ? (char *)r.body : otc__strdup("");
-        r.body = NULL;
-        if (!body) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto done; }
+        *doc = otc__json_parse(r.body ? (const char *)r.body : "", r.len);
+        if (!*doc) {
+            st = fail(c, OTC_E_NETWORK, url, "%s: the 200 response is not JSON (a captive portal or proxy page?)", url);
+            if (c->err) c->err->http_status = 200;
+            goto done;
+        }
         if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto done; }
-        if ((st = write_atomic(c, dir, path, body, strlen(body))) != OTC_OK) goto done;
+        if ((st = write_atomic(c, dir, path, r.body ? (const char *)r.body : "", r.len)) != OTC_OK) goto done;
         if (r.etag[0]) st = write_atomic(c, dir, etag_path, r.etag, strlen(r.etag));
         else fs_unlink(etag_path);
         if (st != OTC_OK) goto done;
     }
-    *doc = otc__json_parse(body, strlen(body));
-    if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, url, "%s: not JSON", url); goto done; }
     *doc_url = url;
     url = NULL;
 done:
+    if (st != OTC_OK) {
+        cJSON_Delete(*doc);
+        *doc = NULL;
+    }
     resp_free(&r);
     free(dir);
     free(path);

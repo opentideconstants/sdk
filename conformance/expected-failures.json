@@ -286,7 +286,6 @@
   {
    "case": "rules/pk02/pointer-200-not-json",
    "runners": [
-    "c-fetch",
     "python",
     "ruby",
     "typescript"
