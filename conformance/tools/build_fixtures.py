@@ -32,6 +32,7 @@ the pinned SHA-256.
 """
 import argparse
 import copy
+import datetime
 import gzip
 import hashlib
 import json
@@ -863,6 +864,21 @@ BAD = [
      lambda: [release_doc(BASE)], sha256_no_json_row),
     ("pointer-file-no-sha256", "invalid_release", "the pointer and index entry for OTC_20991231.sha256 have no sha256 (schema-invalid, DR12)",
      lambda: [release_doc(BASE)], pointer_file_no_sha256, {"index_invalid": True}),
+    # Cross-SDK rules of review round 2 (PK-R2-04, DR6): a time with impossible calendar fields, hour 24, a leap
+    # second, or out of range once its offset is applied is malformed, never rolled over; in created or record_span it
+    # is invalid_release.
+    ("created-impossible", "invalid_release", "release.created is 2099-02-30T00:00:00Z (February has no 30th; DR6)",
+     changed_doc(lambda d: d["release"].update(created="2099-02-30T00:00:00Z")), index_honest),
+    ("created-leap-second", "invalid_release", "release.created is 2099-12-31T23:59:60Z (a leap second; DR6)",
+     changed_doc(lambda d: d["release"].update(created="2099-12-31T23:59:60Z")), index_honest),
+    ("created-out-of-range", "invalid_release", "release.created is 0001-01-01T00:00:00+01:00, which is before year 1 in UTC (DR6)",
+     changed_doc(lambda d: d["release"].update(created="0001-01-01T00:00:00+01:00")), index_honest),
+    ("record-span-feb-31", "invalid_release", "OTC-T-0010's record_span.start is 2090-02-31T00:00:00Z (DR6)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(start="2090-02-31T00:00:00Z")), None),
+    ("record-span-feb-29", "invalid_release", "OTC-T-0010's record_span.end is 2097-02-29T12:00:00Z (2097 is not a leap year; DR6)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(end="2097-02-29T12:00:00Z")), None),
+    ("record-span-hour-24", "invalid_release", "OTC-T-0010's record_span.end is 2098-12-31T24:00:00Z (hour 24; DR6)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(end="2098-12-31T24:00:00Z")), None),
 ]
 
 
@@ -1244,6 +1260,24 @@ def strip_unknown(schema, value, node):
     return walk(value, schema, "$"), dropped
 
 
+def time_range_errors(doc):
+    """CR2 DR6: created and record_span times (already RFC 3339 by the schema) must stay in years 1 to 9999 once the
+    offset is applied; the format checker does not check that."""
+    times = [("release.created", doc["release"].get("created"))]
+    for st in doc["stations"]:
+        for cs in st.get("constant_sets", []):
+            span = cs.get("record_span") or {}
+            times += [(f"{cs['set_id']} record_span.{k}", span.get(k)) for k in ("start", "end")]
+    errs = []
+    for what, v in times:
+        if isinstance(v, str):
+            try:
+                datetime.datetime.fromisoformat(v.replace("z", "Z")).astimezone(datetime.timezone.utc)
+            except (ValueError, OverflowError):
+                errs.append(f"{what} {v!r} is out of range in UTC")
+    return errs
+
+
 def cross_ref_errors(doc):
     errs = []
     for what, key in (("conventions", "convention_id"), ("licences", "licence_id")):
@@ -1475,7 +1509,7 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                     cs["qc_status"] = "flagged"
     errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
     if not errs:   # the cross-references assume the types the schema gives
-        errs = cross_ref_errors(checked)
+        errs = cross_ref_errors(checked) + time_range_errors(checked)
     if errs:
         raise Fail("invalid_release", "; ".join(errs[:5]))
     if exact is not None:

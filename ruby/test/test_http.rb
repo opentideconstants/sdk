@@ -99,6 +99,25 @@ class HttpTest < Minitest::Test
         assert_operator waits[0], :<=, 30
     end
 
+    # CR2 DR6: an HTTP date with impossible calendar fields, hour 24, a leap
+    # second or the wrong weekday is malformed, so Retry-After is ignored and
+    # the default wait (1 s) is used; it is never rolled over into a date.
+    def test_retry_after_impossible_http_date
+        ["Sat, 30 Feb 2099 00:00:00 GMT", "Sun, 31 Feb 2099 00:00:00 GMT", "Sun, 29 Feb 2099 00:00:00 GMT",
+         "Thu, 31 Dec 2099 24:00:00 GMT", "Thu, 31 Dec 2099 23:59:60 GMT", "Wed, 31 Dec 2099 23:59:59 GMT"].each do |date|
+            hits = 0
+            srv = serve(File.join(FIXTURES, "good"), "OTC_#{D}.sha256" => lambda { |_p|
+                hits += 1
+                hits == 1 ? [503, { "Retry-After" => date }, ""] : [200, {}, "x"]
+            })
+            waits = []
+            http = OTC::HTTP.new(sleeper: ->(s) { waits << s })
+            assert_equal 200, http.get(srv.url("/OTC_#{D}.sha256")).status
+            assert_equal [1], waits, date
+        end
+        assert_equal 60, OTC::HTTP.new.send(:retry_after, "Thu, 31 Dec 2099 23:59:59 GMT")
+    end
+
     # R35b: proxy credentials in the URL are percent-decoded before they are sent.
     def test_proxy_credentials_are_decoded
         proxy = serve(File.join(FIXTURES, "good"))

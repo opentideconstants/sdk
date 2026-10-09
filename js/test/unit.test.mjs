@@ -754,3 +754,46 @@ test("R2-087 (CR2 DR16): one .verified with a malformed version fails neither th
         srv.close();
     }
 });
+
+// CR2 DR6: impossible calendar fields, hour 24, a leap second and a time out of range in UTC are malformed (null),
+// never rolled over into another date.
+const BAD_TIMES = ["2099-02-30T00:00:00Z", "2099-02-31T00:00:00Z", "2097-02-29T00:00:00Z", "2099-12-31T24:00:00Z",
+    "2099-12-31T23:59:60Z", "0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"];
+
+test("an impossible or out-of-range RFC 3339 time is null, not rolled over (CR2 DR6)", async () => {
+    const { time } = await import("../dist/json.js");
+    for (const v of BAD_TIMES) assert.equal(time(v), null, `${v} -> ${time(v)?.toISOString()}`);
+    assert.equal(time("2096-02-29T00:00:00Z")?.toISOString(), "2096-02-29T00:00:00.000Z");
+    assert.equal(time("0001-01-01T01:00:00+01:00")?.toISOString(), "0001-01-01T00:00:00.000Z");
+});
+
+test("Retry-After with an impossible HTTP date or the wrong weekday is ignored (CR2 DR6)", async () => {
+    const { httpGet } = await import("../dist/core.js");
+    const run = async (date) => {
+        const waits = [];
+        let hits = 0;
+        const platform = {
+            get: async () => (++hits === 1
+                ? { status: 503, header: (n) => (n.toLowerCase() === "retry-after" ? date : null), body: new Uint8Array() }
+                : { status: 200, header: () => null, body: new Uint8Array() }),
+            sleep: async (s) => { waits.push(s); },
+        };
+        const ctx = { platform, store: null, baseUrl: "http://x/", offline: false, timeout: null, proxy: null, caFile: null,
+            userAgent: "t", onNetworkError: "raise", logger: null, mode: "eager" };
+        await httpGet(ctx, "http://127.0.0.1:9/OTC_20991231.sha256");
+        return waits;
+    };
+    for (const date of ["Sat, 30 Feb 2099 00:00:00 GMT", "Sun, 31 Feb 2099 00:00:00 GMT", "Sun, 29 Feb 2099 00:00:00 GMT",
+        "Thu, 31 Dec 2099 24:00:00 GMT", "Thu, 31 Dec 2099 23:59:60 GMT", "Wed, 31 Dec 2099 23:59:59 GMT"]) {
+        assert.deepEqual(await run(date), [1], date);
+    }
+    assert.deepEqual(await run("Thu, 31 Dec 2099 23:59:59 GMT"), [60]);
+});
+
+test("a release whose created or record_span time is impossible is invalid_release (CR2 DR6)", async () => {
+    const fx = new URL("../../conformance/fixtures/bad/", import.meta.url);
+    for (const root of ["created-impossible", "record-span-hour-24"]) {
+        const file = new URL(`${root}/OTC_20991231.json`, fx).pathname;
+        await assert.rejects(otc.OpenTideConstants.open({ file }), (e) => e.code === "invalid_release", root);
+    }
+});

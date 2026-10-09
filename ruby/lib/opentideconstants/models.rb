@@ -1,3 +1,4 @@
+require "date"
 require "time"
 
 class OpenTideConstants
@@ -22,10 +23,21 @@ class OpenTideConstants
             known.include?(value) ? value.to_sym : :other
         end
 
+        TIME_FIELDS = /\A(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})/
+
+        # An RFC 3339 time in UTC. Impossible calendar fields, hour 24, a leap
+        # second :60 and a time out of years 1 to 9999 in UTC are malformed
+        # (CR2 DR6): Time.iso8601 would roll them over into another date.
         def time(value)
             return nil if value.nil?
             raise InvalidReleaseError, "bad time: #{value.inspect}" unless value.is_a?(String)
-            Time.iso8601(value).utc.freeze
+            y, mo, d, h, mi, s = TIME_FIELDS.match(value)&.captures&.map(&:to_i)
+            unless y && Date.valid_date?(y, mo, d, Date::GREGORIAN) && h <= 23 && mi <= 59 && s <= 59
+                raise InvalidReleaseError, "bad time: #{value.inspect}"
+            end
+            t = Time.iso8601(value).utc
+            raise InvalidReleaseError, "bad time: #{value.inspect}" unless (1..9999).cover?(t.year)
+            t.freeze
         rescue ArgumentError
             raise InvalidReleaseError, "bad time: #{value.inspect}"
         end

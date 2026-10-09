@@ -2344,6 +2344,522 @@
    ]
   },
   {
+   "id": "rules/r2-pk04/bad-created-impossible-json",
+   "title": "bad/created-impossible opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-impossible/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-impossible-json-gz",
+   "title": "bad/created-impossible opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-impossible/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-impossible-jsonl",
+   "title": "bad/created-impossible opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-impossible/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-impossible-jsonl-stream",
+   "title": "bad/created-impossible opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-impossible/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-leap-second-json",
+   "title": "bad/created-leap-second opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-leap-second/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-leap-second-json-gz",
+   "title": "bad/created-leap-second opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-leap-second/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-leap-second-jsonl",
+   "title": "bad/created-leap-second opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-leap-second/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-leap-second-jsonl-stream",
+   "title": "bad/created-leap-second opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-leap-second/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-out-of-range-json",
+   "title": "bad/created-out-of-range opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-out-of-range/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-out-of-range-json-gz",
+   "title": "bad/created-out-of-range opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-out-of-range/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-out-of-range-jsonl",
+   "title": "bad/created-out-of-range opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-out-of-range/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-created-out-of-range-jsonl-stream",
+   "title": "bad/created-out-of-range opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/created-out-of-range/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-31-json",
+   "title": "bad/record-span-feb-31 opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-31/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-31-json-gz",
+   "title": "bad/record-span-feb-31 opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-31/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-31-jsonl",
+   "title": "bad/record-span-feb-31 opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-31/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-31-jsonl-stream",
+   "title": "bad/record-span-feb-31 opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-31/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-29-json",
+   "title": "bad/record-span-feb-29 opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-29/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-29-json-gz",
+   "title": "bad/record-span-feb-29 opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-29/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-29-jsonl",
+   "title": "bad/record-span-feb-29 opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-29/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-feb-29-jsonl-stream",
+   "title": "bad/record-span-feb-29 opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-feb-29/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-hour-24-json",
+   "title": "bad/record-span-hour-24 opened as .json (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-hour-24/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-hour-24-json-gz",
+   "title": "bad/record-span-hour-24 opened as .json.gz (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-hour-24/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-hour-24-jsonl",
+   "title": "bad/record-span-hour-24 opened as .jsonl (eager): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-hour-24/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk04/bad-record-span-hour-24-jsonl-stream",
+   "title": "bad/record-span-hour-24 opened as .jsonl (stream): invalid_release at open (DR6)",
+   "spec": "4.6, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/record-span-hour-24/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk03/check-for-update-only-newer-major",
    "title": "check_for_update when every release on the server has a newer major (bad/format-major): unsupported_format, and newer_format_major is 2 all the same (D10)",
    "spec": "7.4",

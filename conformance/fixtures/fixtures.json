@@ -626,6 +626,72 @@
     "20991231"
    ],
    "root": "bad/pointer-file-no-sha256"
+  },
+  {
+   "defect": "release.created is 2099-02-30T00:00:00Z (February has no 30th; DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/created-impossible"
+  },
+  {
+   "defect": "release.created is 2099-12-31T23:59:60Z (a leap second; DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/created-leap-second"
+  },
+  {
+   "defect": "release.created is 0001-01-01T00:00:00+01:00, which is before year 1 in UTC (DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/created-out-of-range"
+  },
+  {
+   "defect": "OTC-T-0010's record_span.start is 2090-02-31T00:00:00Z (DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/record-span-feb-31"
+  },
+  {
+   "defect": "OTC-T-0010's record_span.end is 2097-02-29T12:00:00Z (2097 is not a leap year; DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/record-span-feb-29"
+  },
+  {
+   "defect": "OTC-T-0010's record_span.end is 2098-12-31T24:00:00Z (hour 24; DR6)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/record-span-hour-24"
   }
  ],
  "reader_format_version": "1.0",

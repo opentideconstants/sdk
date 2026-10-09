@@ -47,10 +47,11 @@ def parse_time(v, what="time"):
             if hh > 23 or mm > 59:
                 raise ValueError("bad offset")
             tz = _dt.timezone(sign * _dt.timedelta(hours=hh, minutes=mm))
-        t = _dt.datetime(int(y), int(mo), int(d), int(h), int(mi), int(sec), us, tzinfo=tz)
-    except ValueError as e:
+        # datetime refuses impossible calendar fields, hour 24 and a leap second :60 (CR2 DR6: malformed, never
+        # rolled over); astimezone raises OverflowError when the offset moves the time out of years 1 to 9999
+        return _dt.datetime(int(y), int(mo), int(d), int(h), int(mi), int(sec), us, tzinfo=tz).astimezone(_dt.timezone.utc)
+    except (ValueError, OverflowError) as e:
         raise InvalidReleaseError(f"{what}: not an ISO 8601 time: {v!r}") from e
-    return t.astimezone(_dt.timezone.utc)
 
 
 def _time_or_none(v, what):

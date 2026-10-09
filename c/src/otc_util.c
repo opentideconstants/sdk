@@ -892,6 +892,21 @@ static void civil_from_days(long long z, long long *y, int *m, int *d)
     *y += *m <= 2;
 }
 
+/* The days in a month of the proleptic Gregorian calendar (M 1 to 12). */
+static int days_in_month(long long y, int M)
+{
+    static const int DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (M == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) return 29;
+    return DAYS[M - 1];
+}
+
+/* CR2 DR6: impossible calendar fields, hour 24 and a leap second :60 are
+ * malformed, never rolled over into another date. */
+static int fields_valid(long long Y, int M, int D, int h, int mi, int sec)
+{
+    return M >= 1 && M <= 12 && D >= 1 && D <= days_in_month(Y, M) && h <= 23 && mi <= 59 && sec <= 59;
+}
+
 int otc__utc_time(const char *s, char out[21])
 {
     int Y, M, D, h, mi, sec, oh = 0, om = 0, sign = 0;
@@ -902,7 +917,7 @@ int otc__utc_time(const char *s, char out[21])
         || !digits_at(s + 8, 2, &D) || (s[10] != 'T' && s[10] != 't' && s[10] != ' ') || !digits_at(s + 11, 2, &h)
         || s[13] != ':' || !digits_at(s + 14, 2, &mi) || s[16] != ':' || !digits_at(s + 17, 2, &sec))
         return 0;
-    if (M < 1 || M > 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return 0;
+    if (!fields_valid(Y, M, D, h, mi, sec)) return 0;
     p = s + 19;
     if (*p == '.') {   /* a fraction: whole seconds are kept (RFC 3339 §5.6) */
         if (p[1] < '0' || p[1] > '9') return 0;
@@ -920,12 +935,11 @@ int otc__utc_time(const char *s, char out[21])
         return 0;
     }
     if (*p != '\0') return 0;
-    if (sec == 60) sec = 59;   /* a leap second is the last second of its minute */
     t = days_from_civil(Y, M, D) * 86400LL + h * 3600LL + mi * 60LL + sec - (long long)sign * (oh * 3600LL + om * 60LL);
     days = t >= 0 ? t / 86400 : -((-t + 86399) / 86400);
     t -= days * 86400;
     civil_from_days(days, &y, &M, &D);
-    if (y < 0 || y > 9999) return 0;
+    if (y < 1 || y > 9999) return 0;   /* years 1 to 9999 once the offset is applied (CR2 DR6) */
     {   /* the fields are in range here; gcc cannot see that, so format into room to spare */
         char tmp[64];
         snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, M, D, (int)(t / 3600), (int)(t / 60 % 60),
@@ -940,7 +954,9 @@ int64_t otc__http_date(const char *s)
 {
     static const char *const MON[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    static const char *const WDAY[] = {"Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"};   /* 1970-01-01: Thu */
     int D, Y, h, mi, sec, M;
+    long long days;
     /* IMF-fixdate: "Sun, 06 Nov 1994 08:49:37 GMT" (RFC 9110 5.6.7) */
     if (!s || strlen(s) != 29 || s[3] != ',' || s[4] != ' ' || !digits_at(s + 5, 2, &D) || s[7] != ' '
         || s[11] != ' ' || !digits_at(s + 12, 4, &Y) || s[16] != ' ' || !digits_at(s + 17, 2, &h) || s[19] != ':'
@@ -948,8 +964,10 @@ int64_t otc__http_date(const char *s)
         return -1;
     for (M = 0; M < 12; M++)
         if (!strncmp(s + 8, MON[M], 3)) break;
-    if (M == 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return -1;
-    return days_from_civil(Y, M + 1, D) * 86400LL + h * 3600LL + mi * 60LL + sec;
+    if (M == 12 || !fields_valid(Y, M + 1, D, h, mi, sec)) return -1;   /* CR2 DR6 */
+    days = days_from_civil(Y, M + 1, D);
+    if (strncmp(s, WDAY[((days % 7) + 7) % 7], 3) != 0) return -1;   /* the weekday must match the date */
+    return days * 86400LL + h * 3600LL + mi * 60LL + sec;
 }
 
 /* ------------------------------------------- strings with a NUL inside */

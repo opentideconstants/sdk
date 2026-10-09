@@ -50,6 +50,31 @@ class MalformedDataTest < Minitest::Test
         assert_invalid("record_span.start 5") { |d| set_of(d)["record_span"] = { "start" => 5, "end" => nil } }
     end
 
+    # CR2 DR6: impossible calendar fields, hour 24, a leap second and a time
+    # out of range in UTC are malformed: InvalidReleaseError (a build time:
+    # nil), never a date that Time.iso8601 rolls over.
+    BAD_TIMES = %w[2099-02-30T00:00:00Z 2099-02-31T00:00:00Z 2097-02-29T00:00:00Z 2099-12-31T24:00:00Z
+                   2099-12-31T23:59:60Z 0001-01-01T00:00:00+01:00 9999-12-31T23:59:59-01:00].freeze
+
+    def test_impossible_times_are_malformed
+        BAD_TIMES.each do |v|
+            got = begin
+                OTC::Util.time(v)
+            rescue OTC::InvalidReleaseError
+                :invalid_release
+            end
+            assert_equal :invalid_release, got, v
+            assert_nil OTC::Util.time_or_nil(v), v
+        end
+        assert_equal Time.utc(2096, 2, 29), OTC::Util.time("2096-02-29T00:00:00Z")
+        assert_equal Time.utc(1, 1, 1), OTC::Util.time("0001-01-01T01:00:00+01:00")
+    end
+
+    def test_impossible_created_and_record_span_fail_the_load
+        assert_invalid("created 02-30") { |d| d["release"]["created"] = "2099-02-30T00:00:00Z" }
+        assert_invalid("record_span.end T24") { |d| set_of(d)["record_span"]["end"] = "2098-12-31T24:00:00Z" }
+    end
+
     # R44: a malformed provenance.build time does not fail the station (spec
     # §4.6: the build data is information only); it reads as nil.
     def test_bad_build_time_is_nil

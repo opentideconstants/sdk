@@ -314,6 +314,17 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     if (cons && !cJSON_IsArray(cons)) return bad_line(b, "constituents is not an array");
     if (otc__jget(set, "qc_flags") && !cJSON_IsArray(otc__jget(set, "qc_flags")))
         return bad_line(b, "qc_flags is not an array");
+    {   /* spec 7.3 (CR2 DR6): a record_span time that is not an RFC 3339 time with real calendar fields */
+        const cJSON *span = otc__jget(set, "record_span");
+        static const char *const KEYS[] = {"start", "end"};
+        size_t k;
+        char t[21];
+        for (k = 0; k < 2 && cJSON_IsObject(span); k++) {
+            const cJSON *v = otc__jget(span, KEYS[k]);
+            if (v && !cJSON_IsNull(v) && !(cJSON_IsString(v) && otc__utc_time(v->valuestring, t)))
+                return bad_line(b, k ? "record_span.end is not an RFC 3339 time" : "record_span.start is not an RFC 3339 time");
+        }
+    }
     cJSON_ArrayForEach(c, cons) {
         const char *name = otc__jstr(c, "name");
         if (!name) return bad_line(b, "a constituent has no name");
@@ -904,6 +915,12 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
                          created && !cJSON_IsString(created) ? "created" : "source_versions");
             return OTC_E_INVALID_RELEASE;
         }
+        /* spec 7.3 (CR2 DR6): a created that is not an RFC 3339 time with real calendar fields */
+        if (created && !r->created[0]) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s: release.created \"%s\" is not an RFC 3339 time",
+                         meta_path, created->valuestring);
+            return OTC_E_INVALID_RELEASE;
+        }
     }
     {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions; a
          * min_reader_version that is present but not MAJOR.MINOR is invalid_release (CR D9) */
@@ -1216,9 +1233,9 @@ otc_loaded_from otc_release_loaded_from(const otc_release *rel)
     }
 
 REL_STR(otc_release_datestamp, otc__jstr(rel->release_obj, "datestamp"))
-/* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ", as the other SDKs give it (spec 4.3); a value that
- * is not an RFC 3339 time is returned as the file has it */
-REL_STR(otc_release_created, rel->created[0] ? rel->created : otc__jstr(rel->release_obj, "created"))
+/* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ", as the other SDKs give it (spec 4.3). A created that
+ * is not an RFC 3339 time fails the open (CR2 DR6), so the raw text is never returned. */
+REL_STR(otc_release_created, rel->created[0] ? rel->created : NULL)
 REL_STR(otc_release_format_version, otc__jstr(rel->meta, "format_version"))
 REL_STR(otc_release_concept_doi, otc__jstr(rel->release_obj, "concept_doi"))
 REL_STR(otc_release_zenodo_version_doi, rel->zenodo_version_doi)
