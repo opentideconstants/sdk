@@ -26,6 +26,10 @@ module OpenTideConstants
         def station_count
             { "inf" => Float::INFINITY, "nan" => Float::NAN, "object" => Object.new }.fetch(MODE, 20)
         end
+        def tombstone_count
+            raise RuntimeError, "not an SDK error" if MODE == "raise"
+            1
+        end
         def stats = Stats.new({ reference: 1 }, MODE == "stats-nil" ? nil : { tide: 1 }, {}, {}, {})
         def station(_id) = nil
         def require_station(_id)

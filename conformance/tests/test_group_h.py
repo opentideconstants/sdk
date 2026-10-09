@@ -448,6 +448,20 @@ def test_unencodable_tombstone_changes_the_code(lang):
     assert uncaught(replies[1]), replies
 
 
+# --- R2-160: a non-SDK exception that the SDK raises during a query is an uncaught: reply naming it; the runner goes on
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_non_sdk_exception_from_the_sdk_is_an_uncaught_reply(lang):
+    replies = opened(lang, [OPEN, {"op": "tombstone_count"}, {"op": "loaded_from"}], mode="raise")
+    assert uncaught(replies[1]) and "not an SDK error" in replies[1]["error"]["message"], replies
+    assert replies[2] == {"ok": True, "result": {"loaded_from": "file"}}, replies
+
+
+def test_tombstone_count_without_the_raise_mode_is_a_value():
+    for lang in LANGS:
+        assert opened(lang, [OPEN, {"op": "tombstone_count"}])[1] == {"ok": True, "result": {"tombstone_count": 1}}, lang
+
+
 # --- R57: a stats field the SDK returns as nil is a failure, not {}
 
 def test_ruby_nil_stats_field_is_an_error():
