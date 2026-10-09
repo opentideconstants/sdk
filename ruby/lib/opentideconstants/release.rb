@@ -31,8 +31,12 @@ class OpenTideConstants
         # entry of this datestamp (the release document does not hold it).
         # on_bad_index: called (with the message) when a line read through the
         # stream index is not the station its entry names (spec §6.2, CR D4).
-        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil)
+        # logger: where a station with an unknown status is reported, once at
+        # load (CR2 DR8).
+        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
+                       logger: nil)
             @mode = mode
+            @logger = logger
             @io = io
             @on_bad_index = on_bad_index
             @io_lock = Mutex.new
@@ -471,10 +475,20 @@ class OpenTideConstants
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
                 # One id across the active stations and the tombstones together (CR D5).
                 raise InvalidReleaseError, "station_id #{sid} appears twice" unless ids.add?(sid)
-                if raw["status"] == "removed"
+                # A line with no status (or null) is an active station, as in the stream index (CR2 DR28).
+                status = raw["status"].nil? ? "active" : raw["status"]
+                if status == "removed"
                     Release.check_tombstone!(raw)
                     tombs << Tombstone.new(raw)
                     tomb_pos << [tombs.last, pos, len]
+                    next
+                end
+                unless status == "active"
+                    # A status this SDK does not know (a newer minor's value): not a
+                    # station, not a tombstone, in no query and no count; said once,
+                    # at load (CR2 DR8).
+                    @logger&.warn("opentideconstants: station #{sid} has the status #{status.inspect}, which this SDK " \
+                                  "does not know: it is left out of every query")
                     next
                 end
                 Release.check_station!(raw)

@@ -183,8 +183,9 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     conventions: Set<string>, licences: Set<string>): IndexEntry {
     if (!isObject(doc)) throw new InvalidReleaseError("a station is not a JSON object");
     const id = doc["station_id"];
-    const status = doc["status"];
-    if (typeof id !== "string" || typeof status !== "string") throw new InvalidReleaseError("a station has no station_id or status");
+    // a line with no status (or null) is an active station, as in the stream index (CR2 DR28)
+    const status = doc["status"] ?? "active";
+    if (typeof id !== "string" || typeof status !== "string") throw new InvalidReleaseError("a station has no station_id, or a status that is not a string");
     void header;
     checkShape(doc, id);
     const sets = arr(doc, "constant_sets").filter(isObject);
@@ -558,7 +559,7 @@ export class Station {
         this.kind = entry.kind === null ? null : en(entry.kind, ["tide", "current"] as const);
         this.timezone = str(raw, "timezone");
         this.aliases = Object.freeze(Object.fromEntries(Object.entries(entry.aliases).map(([k, v]) => [k, Object.freeze([...v])])));
-        this.status = en(raw["status"], ["active", "removed"] as const) ?? "other";
+        this.status = en(entry.status, ["active", "removed"] as const) ?? "other";   // "active" for a line with no status (CR2 DR28)
         this.#validation = Object.freeze(arr(raw, "validation").filter(isObject).map(validationOf));
         const recId = entry.recommended_set_id;
         this.#sets = Object.freeze(arr(raw, "constant_sets").filter(isObject).map((cs) => {
@@ -764,7 +765,7 @@ export class Release {
 
     /** @internal */
     constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
-        zenodoVersionDoi: string | null) {
+        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined) {
         this.#source = source;
         this.#lru = eager ? Infinity : LRU_SIZE;
         const r = header.release;
@@ -782,6 +783,13 @@ export class Release {
         this.#active = entries.filter((e) => e.status === "active").sort((a, b) => cmp(a.station_id, b.station_id));
         this.#byId = new Map(this.#active.map((e) => [e.station_id, e]));
         this.#tombById = new Map(entries.filter((e) => e.status === "removed").map((e) => [e.station_id, e]));
+        for (const e of entries) {
+            // a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no query and no
+            // count; said once, at load (CR2 DR8)
+            if (e.status !== "active" && e.status !== "removed") {
+                warn(`station ${e.station_id} has the status ${JSON.stringify(e.status)}, which this SDK does not know: it is left out of every query`);
+            }
+        }
         this.#alias = new Map();
         for (const e of this.#active) {
             for (const [system, ids] of Object.entries(e.aliases)) {

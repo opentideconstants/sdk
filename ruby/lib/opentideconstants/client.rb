@@ -79,7 +79,7 @@ class OpenTideConstants
         @file = file
         @loaded = ObjectSpace::WeakMap.new # every Release this client loaded, while a caller holds it
         if file
-            @release, @loaded_from = Reader.open_file(file, mode: @mode)
+            @release, @loaded_from = Reader.open_file(file, mode: @mode, logger: @logger)
         elsif @requested == :latest
             open_latest
         else
@@ -622,7 +622,8 @@ class OpenTideConstants
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
-        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open }
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open,
+                 logger: @logger }
         return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
         if index

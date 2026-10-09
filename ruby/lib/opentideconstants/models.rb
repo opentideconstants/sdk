@@ -346,7 +346,8 @@ class OpenTideConstants
             @type = Util.enum(raw["type"], ENUMS[:station_type])
             @kind = kind
             @timezone = raw["timezone"]
-            @status = Util.enum(raw["status"], ENUMS[:station_status])
+            # a line with no status is an active station (CR2 DR28)
+            @status = Util.enum(raw["status"].nil? ? "active" : raw["status"], ENUMS[:station_status])
             @aliases = (raw["aliases"] || {}).to_h do |system, ids|
                 [system.to_sym, (ids.is_a?(Array) ? ids : [ids]).freeze]
             end.freeze

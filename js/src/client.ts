@@ -196,7 +196,7 @@ export class OpenTideConstants {
         const extra = { lastError: null as OpenTideConstantsError | null, pinned: release !== "latest", file: null as FileSource | null, cacheRoot, autoUpdate, interval };
 
         if (file !== null && node) {
-            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode);
+            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m));
             return new OpenTideConstants(ctx, node, rel, from, { ...extra, pinned: true, file: src });
         }
         const store = ctx.store;
@@ -269,7 +269,7 @@ export class OpenTideConstants {
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
-    static #openFile(node: NodeMod, file: string, mode: Mode): { rel: Release; from: LoadedFrom; src: FileSource } {
+    static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void): { rel: Release; from: LoadedFrom; src: FileSource } {
         const path = node.nodePath;
         const full = path.resolve(file);
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
@@ -306,13 +306,13 @@ export class OpenTideConstants {
             if (mode === "stream") {
                 const lr = node.openLineReader(full);
                 try {
-                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close });
+                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn });
                 } catch (e) {
                     lr.close();
                     throw e;
                 }
             } else {
-                rel = releaseFromJsonl(meta, data, { eager: true, files });
+                rel = releaseFromJsonl(meta, data, { eager: true, files, warn });
             }
         } else {
             let json = data;
@@ -323,7 +323,7 @@ export class OpenTideConstants {
                     throw new InvalidReleaseError(`${name} does not decompress`, { cause: e });
                 }
             }
-            rel = releaseFromJson(json, files);
+            rel = releaseFromJson(json, files, null, warn);
         }
         return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
     }

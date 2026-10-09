@@ -179,12 +179,18 @@ def _n(d, k):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _status(d):
+    """A line's status: a line with no status (or null) is an active station, as in the stream index (CR2 DR28)."""
+    s = d.get("status")
+    return "active" if s is None else s
+
+
 def _entry(d, offset=None, length=None):
     """The stream index entry of one line (spec §6.2): every key, for active stations and tombstones.
     `kind` is the station's own kind here; _resolve_kinds finishes it."""
     if not isinstance(d.get("station_id"), str):
         raise InvalidReleaseError(f"station_id is not a string: {d.get('station_id')!r}")
-    if d.get("status") == "active":
+    if _status(d) == "active":
         for k, bound in (("lat", 90), ("lon", 180)):
             v = d.get(k)
             if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or abs(v) > bound:
@@ -199,7 +205,7 @@ def _entry(d, offset=None, length=None):
         raise InvalidReleaseError(f"station {d.get('station_id')!r}: aliases must map a system to a string id or "
                                   f"a list of string ids")
     for cs in d.get("constant_sets") or ():
-        if d.get("status") == "active" and not isinstance(cs.get("set_id"), str):
+        if _status(d) == "active" and not isinstance(cs.get("set_id"), str):
             raise InvalidReleaseError(f"station {d.get('station_id')!r}: a constant set has no set_id")
         sets.append({**{k: _s(cs, k) for k in _SET_KEYS},
                      "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)]})
@@ -207,7 +213,7 @@ def _entry(d, offset=None, length=None):
             kind = {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
     name = _s(d, "name")
     return {
-        "offset": offset, "length": length, "station_id": d["station_id"], "status": d.get("status"),
+        "offset": offset, "length": length, "station_id": d["station_id"], "status": _status(d),
         "name": name, "name_folded": fold(name) if name is not None else None,
         "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"), "kind": kind,
         "aliases": {k: ([v] if isinstance(v, str) else list(v)) for k, v in aliases.items()},
@@ -338,6 +344,12 @@ class Release:
         self._entries = active
         self._by_id = {e["station_id"]: e for e in active}
         self._tombs = {e["station_id"]: e for e in entries if e.get("status") == "removed"}
+        for e in entries:
+            if e.get("status") not in ("active", "removed"):
+                # a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no
+                # query and no count; said once, at load (CR2 DR8)
+                _log.warning("station %s has the status %r, which this SDK does not know: it is left out of every "
+                             "query", e["station_id"], e.get("status"))
         self._alias = {}
         self._subs = {}
         for e in active:
@@ -755,7 +767,7 @@ def _refs(meta, what):
 
 
 def _validate_refs(d, conventions, licences):
-    if d.get("status") == "active":
+    if _status(d) == "active":
         build_station(d, conventions, licences, None)
 
 
@@ -804,9 +816,9 @@ def _eager(meta, docs, files) -> Release:
     kinds = {e["station_id"]: e.get("kind") for e in entries}
     stations, tombs = {}, {}
     for d in docs:
-        if d.get("status") == "active":
+        if _status(d) == "active":
             stations[d["station_id"]] = build_station(d, conv, lic, kinds.get(d["station_id"]))
-        elif d.get("status") == "removed":
+        elif _status(d) == "removed":
             tombs[d["station_id"]] = Tombstone._parse(d)
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs)
 

@@ -44,7 +44,8 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
 }
 
 /** @internal A release from the full `.json` document (eager). */
-export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null): Release {
+export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
+    warn: (message: string) => void = () => undefined): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -53,7 +54,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -122,6 +123,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     zenodoVersionDoi?: string | null;
     /** Called when a line read through `index` does not match its entry: delete index-v1.json (spec 6.2, CR D4). */
     dropIndex?: () => void;
+    /** Where a station with an unknown status is reported, once at load (CR2 DR8). */
+    warn?: (message: string) => void;
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -161,7 +164,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn);
 }
 
 /** @internal Parse a `sha256sum` file: name -> digest. */

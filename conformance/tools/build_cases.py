@@ -63,6 +63,10 @@ def file_sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def status_of(s):
+    return "active" if s.get("status") is None else s["status"]
+
+
 class Rel:
     """One fixture release, indexed the way an SDK indexes it (spec §6.1)."""
 
@@ -70,7 +74,9 @@ class Rel:
         self.root = root
         self.datestamp = datestamp
         self.doc = load_release(root, datestamp)
-        self.active = sorted([s for s in self.doc["stations"] if s.get("status") == "active"], key=lambda s: s["station_id"])
+        # a line with no status (or null) is an active station (CR2 DR28); any other status is no station and no
+        # tombstone (CR2 DR8)
+        self.active = sorted([s for s in self.doc["stations"] if status_of(s) == "active"], key=lambda s: s["station_id"])
         self.tombs = sorted([s for s in self.doc["stations"] if s.get("status") == "removed"], key=lambda s: s["station_id"])
         self.by_id = {s["station_id"]: s for s in self.active}
         self.tomb_by_id = {s["station_id"]: s for s in self.tombs}
@@ -127,7 +133,7 @@ def enc_station(rel, s):
     return {
         "station_id": s["station_id"], "name": s["name"], "country": s["country"],
         "lat": s["lat"], "lon": s["lon"], "type": typed(s["type"], STATION_TYPES), "kind": k,
-        "timezone": s.get("timezone"), "aliases": aliases_enc(s), "status": s["status"],
+        "timezone": s.get("timezone"), "aliases": aliases_enc(s), "status": status_of(s),
         "is_reference": s["type"] == "reference", "is_subordinate": s["type"] == "subordinate",
         "is_tide": k == "tide", "is_current": k == "current",
         "recommended_set_id": rs["set_id"] if rs else None,
@@ -1824,6 +1830,34 @@ def rules_r2_pk09():
                       step("constant_set", {"set": enc_set(U, u15, U.rec_set(u15))}, station_id="OTC-T-0015", set_id=U.rec_set(u15)["set_id"]),
                       step("constant_set", {"set": enc_set(U, u16, U.rec_set(u16))}, station_id="OTC-T-0016", set_id=U.rec_set(u16)["set_id"])],
                      root="bad/unknown-enums", release="20991231", open_expect={"format_version": "1.1"}))
+    # CR2 DR8: a station whose status the SDK does not know is no station and no tombstone, in no query and no count
+    S = Rel("bad/unknown-status", "20991231")
+    out.append(mcase("rules/r2-pk09/unknown-status", "format 1.1: OTC-T-0016's status is retired, which a 1.0 reader does not know: station, tombstone and every query leave it out, and no count includes it (CR2 DR8)", "4.4, 7.3",
+                     [step("station", {"station": None}, station_id="OTC-T-0016"),
+                      step("tombstone", {"tombstone": None}, station_id="OTC-T-0016"),
+                      step("require_station", err("station_not_found"), station_id="OTC-T-0016"),
+                      step("station_count", {"station_count": len(S.active)}),
+                      step("tombstone_count", {"tombstone_count": len(S.tombs)}),
+                      step("stations", {"station_ids": [s["station_id"] for s in apply_filters(S, S.active, {"country": "GBR"})]}, country="GBR"),
+                      step("search", {"station_ids": search(S, "harbour point")}, name="harbour point"),
+                      step("near", {**near(S, 50.7, -1.3, 5), "tolerance": TOL}, lat=50.7, lon=-1.3, radius_km=5),
+                      step("stats", {"stats": stats(S)})],
+                     root="bad/unknown-status", release="20991231", open_expect={"format_version": "1.1"}))
+    # CR2 DR28: a station line with no status (or null) is an active station
+    N = Rel("bad/no-status", "20991231")
+    ns_steps = [step("station", {"station": enc_station(N, N.by_id[i])}, station_id=i) for i in ("OTC-T-0019", "OTC-T-0020")] + [
+                step("station_count", {"station_count": len(N.active)}),
+                step("stations", {"station_ids": [s["station_id"] for s in apply_filters(N, N.active, {"country": "USA"})]}, country="USA"),
+                step("stats", {"stats": stats(N)})]
+    out.append(mcase("rules/r2-pk09/no-status", "OTC-T-0020's line has no status and OTC-T-0019's has status null: both are active stations, with status active (CR2 DR28)", "4.4, 6.2",
+                     ns_steps, root="bad/no-status", release="20991231"))
+    ndir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/no-status-index", "the stream index gives status active for a line with no status, as the reference index does (CR2 DR28)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/no-status/",
+                              cache_dir="${cache}", mode="stream"))] + ns_steps + [
+                     step("close"),
+                     drv("assert_index", path=f"{ndir}/index-v1.json", jsonl=f"{ndir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
     bdir = "${cache}/v1/releases/20991231"
     out.append(case("rules/r2-pk09/blank-lines-index", "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)", "6.2",
                     [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/blank-lines/",

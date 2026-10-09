@@ -852,7 +852,28 @@ def unknown_enums_doc():
     return [doc]
 
 
+def unknown_status_doc():
+    """Format 1.1 (min_reader_version 1.0) with a station status format 1.0 does not have (CR2 DR8)."""
+    doc = release_doc(BASE)
+    doc["format_version"] = "1.1"
+    doc["future_top_level"] = {"note": "added by format 1.1 (test)"}
+    doc["release"]["future_release_field"] = "1.1 release field"
+    _station(doc, "OTC-T-0016")["status"] = "retired"
+    return [doc]
+
+
+def _no_status(doc):
+    del _station(doc, "OTC-T-0020")["status"]
+    _station(doc, "OTC-T-0019")["status"] = None
+
+
 BAD += [
+    ("unknown-status", "load", "format 1.1: OTC-T-0016's status is retired; a 1.0 reader reads it as other: not a station, not a "
+     "tombstone, in no query and no count (CR2 DR8)",
+     unknown_status_doc, None),
+    ("no-status", "load", "OTC-T-0020's line has no status and OTC-T-0019's has status null (malformed 1.0); both are active "
+     "stations (CR2 DR28)",
+     changed_doc(_no_status), None),
     ("unknown-enums", "load", "format 1.1: OTC-T-0014's type is lighthouse, OTC-T-0015's recommended set has quantity tidal_stream, "
      "OTC-T-0016's has source_type satellite; each reads as other, and the filters and stats use other (CR2 DR7)",
      unknown_enums_doc, None),
@@ -1355,11 +1376,15 @@ def open_release(root, datestamp, schemas):
 def tolerate_values(doc):
     """The values an SDK reads from a malformed 1.0 station, put right in a copy so that each is the only defect
     (review round 2, PK-R2-09). A set with no quantity (null or absent) gives the station the kind "other"
-    (orchestrator S3); it is checked as a water_level set, or a current set when it has current_bins.
+    (orchestrator S3); it is checked as a water_level set, or a current set when it has current_bins. A station
+    line with no status (or null) is an active station (CR2 DR28).
     Returns (the copy, the tolerances)."""
     notes = []
     doc = copy.deepcopy(doc)
     for st in doc.get("stations") or []:
+        if isinstance(st, dict) and st.get("status") is None:
+            notes.append(f"{st.get('station_id')}: no status (read as active, CR2 DR28)")
+            st["status"] = "active"
         if not isinstance(st, dict) or not isinstance(st.get("constant_sets"), list):
             continue
         for cs in st["constant_sets"]:
@@ -1410,6 +1435,12 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                 if cs["qc_status"] not in known_qc:
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
+        # A station whose status the schema does not have is read as "other": it is no station and no tombstone, so
+        # it is not checked (CR2 DR8)
+        known_status = schema["$defs"]["station"]["properties"]["status"]["enum"]
+        for st in [x for x in checked["stations"] if x.get("status") not in known_status]:
+            dropped.append(f"{st['station_id']}: status {st.get('status')!r} (read as other, listed nowhere)")
+            checked["stations"].remove(st)
         # The same for a station type, a quantity and a source_type (CR2 DR7): checked with a known value in place
         known_type = schema["$defs"]["active_station"]["properties"]["type"]["enum"]
         set_enums = schema["$defs"]["constant_set"]["properties"]

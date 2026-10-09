@@ -227,6 +227,8 @@ typedef struct builder {
     size_t       cn_slots_cap;
     char       **set_ids;    /* every set_id of the active stations, checked once across the release */
     size_t       n_set_ids, cap_set_ids;
+    char       **unknown;    /* "<station_id> <status>" of each line whose status the library does not know */
+    size_t       n_unknown, cap_unknown;
 } builder;
 
 #define GROW(ptr, n, cap)                                                        \
@@ -356,6 +358,8 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
     otc_status st = OTC_OK;
     id = otc__jstr(root, "station_id");
     status = otc__jstr(root, "status");
+    /* a line with no status (or null) is an active station, as in the stream index (CR2 DR28) */
+    if (!otc__jget(root, "status")) status = "active";
     if (!cJSON_IsObject(root) || !id || !status) return bad_line(b, "not a station object with station_id and status");
     if (!strcmp(status, "removed")) {
         GROW(r->tomb, r->n_tomb, b->cap_tomb);
@@ -438,8 +442,14 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
                 if (st != OTC_OK) break;
             }
         }
+    } else {
+        /* any other status: a newer minor's value (7.3). Not a station, not a tombstone, in no query and
+         * no count; logged once when the open succeeds (CR2 DR8) */
+        size_t n = strlen(id) + strlen(status) + 2;
+        GROW(b->unknown, b->n_unknown, b->cap_unknown);
+        if (!(b->unknown[b->n_unknown] = (char *)malloc(n))) return OTC_E_NOMEM;
+        snprintf(b->unknown[b->n_unknown++], n, "%s %s", id, status);
     }
-    /* any other status: a newer minor's value; the station is not listed (7.3) */
     return st;
 }
 
@@ -693,7 +703,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     ix_ctx *x = (ix_ctx *)ctx;
     cJSON *d = otc__json_parse(text, len), *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
-    const char *rec, *name, *kind = NULL;
+    const char *rec, *name, *kind = NULL, *status;
     int ok = 1;
     if (!d) return OTC_E_INVALID_RELEASE;
     o = cJSON_CreateObject();
@@ -707,7 +717,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     put(o, "offset", cJSON_CreateNumber((double)offset), &ok);
     put(o, "length", cJSON_CreateNumber((double)len), &ok);
     put(o, "station_id", jstr_or_null(d, "station_id"), &ok);
-    put(o, "status", jstr_or_null(d, "status"), &ok);
+    status = otc__jget(d, "status") ? otc__jstr(d, "status") : "active";   /* no status: active (CR2 DR28) */
+    put(o, "status", status ? cJSON_CreateString(status) : cJSON_CreateNull(), &ok);
     if (name && otc__json_has_nul(text, len)) {
         /* a name with a NUL (schema-valid): written from the text, in full, as raw JSON */
         char *full = NULL, *fold = NULL, *jn = NULL, *jf = NULL;
@@ -752,7 +763,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
             kind = !q ? "other" : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
         }
     }
-    if (otc__jstr(d, "status") && !strcmp(otc__jstr(d, "status"), "active") && otc__jstr(d, "station_id")) {
+    if (status && !strcmp(status, "active") && otc__jstr(d, "station_id")) {
         const otc__entry *e = otc__find_entry(x->rel, otc__jstr(d, "station_id"));
         if (e) kind = e->kind == OTC_KIND_UNSET ? NULL : otc_kind_name(e->kind);
     }
@@ -1120,8 +1131,19 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     otc__kv_sort(&r->source_counts);
     otc__kv_sort(&r->qc_counts);
     st = build_files(r, dir, names, digests, n_rows, jsonl_name, path_base(meta_path));
+    if (st == OTC_OK && opts && opts->log_fn) {
+        for (i = 0; i < b.n_unknown; i++) {
+            char msg[512];
+            const char *sp = strchr(b.unknown[i], ' ');
+            snprintf(msg, sizeof msg, "station %.*s has the status \"%s\", which this library does not know: it is left out of every query",
+                     (int)(sp - b.unknown[i]), b.unknown[i], sp + 1);
+            opts->log_fn(opts->log_user_data, 2, msg);
+        }
+    }
 done:
     free(b.cn_slots);
+    for (i = 0; i < b.n_unknown; i++) free(b.unknown[i]);
+    free(b.unknown);
     for (i = 0; i < b.n_set_ids; i++) free(b.set_ids[i]);
     free(b.set_ids);
     otc__free_rows(names, digests, n_rows);

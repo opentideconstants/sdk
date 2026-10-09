@@ -521,6 +521,24 @@
    "valid_as_1_0": false
   },
   {
+   "defect": "format 1.1: OTC-T-0016's status is retired; a 1.0 reader reads it as other: not a station, not a tombstone, in no query and no count (CR2 DR8)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unknown-status"
+  },
+  {
+   "defect": "OTC-T-0020's line has no status and OTC-T-0019's has status null (malformed 1.0); both are active stations (CR2 DR28)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/no-status"
+  },
+  {
    "defect": "format 1.1: OTC-T-0014's type is lighthouse, OTC-T-0015's recommended set has quantity tidal_stream, OTC-T-0016's has source_type satellite; each reads as other, and the filters and stats use other (CR2 DR7)",
    "expect": "load",
    "latest": "20991231",

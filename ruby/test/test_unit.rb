@@ -93,6 +93,31 @@ class FormatOneTest < Minitest::Test
         c&.close
     end
 
+    # CR2 DR8: a station whose status the SDK does not know is in no query, and one warning names it.
+    def test_unknown_status_is_logged_once_at_load
+        lines = []
+        logger = Object.new
+        logger.define_singleton_method(:warn) { |m| lines << m }
+        %i[debug info error].each { |lv| logger.define_singleton_method(lv) { |_m| nil } }
+        c = OpenTideConstants.new(file: File.join(FIXTURES, "bad/unknown-status/OTC_20991231.jsonl"), mode: :stream, logger: logger)
+        hits = lines.grep(/OTC-T-0016/)
+        assert_equal 1, hits.size, lines.inspect
+        assert_includes hits.first, '"retired"'
+        assert_nil c.station("OTC-T-0016")
+        assert_nil c.tombstone("OTC-T-0016")
+    ensure
+        c&.close
+    end
+
+    # CR2 DR28: a line with no status (or null) is an active station.
+    def test_no_status_is_active
+        c = open("bad/no-status", "20991231")
+        assert_equal :active, c.station("OTC-T-0020").status
+        assert_equal :active, c.station("OTC-T-0019").status
+    ensure
+        c&.close
+    end
+
     def test_typed_annotations
         c = open("good", "20991231.2")
         tb = c.station("OTC-T-0011").constant_sets.map(&:time_base).compact.first

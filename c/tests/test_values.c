@@ -12,11 +12,22 @@
  *      UTF-8 character, never inside one.
  * C43: a set without provenance: otc_set_provenance_json is OTC_E_NOT_FOUND,
  *      as every other accessor of an absent value (CR D34), not "{}".
+ * DR8: a line whose status the library does not know is in no query and no
+ *      count, and the open logs it once at level 2 (CR2 DR8).
+ * DR28: a line with no status (or null) is an active station (CR2 DR28).
  * C4:  a recommended set with no quantity gives kind OTHER, as in every SDK and
  *      the reference stream index (spec 6.2; orchestrator S3, PK-R2-09). */
 #include "otc_test.h"
 
 #include <math.h>
+
+static int n_warn_retired;
+
+static void count_log(void *user, int level, const char *msg)
+{
+    (void)user;
+    if (level == 2 && strstr(msg, "OTC-X-2") && strstr(msg, "\"retired\"")) n_warn_retired++;
+}
 
 static otc_release *open_lines(const char *lines, char **dir_out)
 {
@@ -133,5 +144,39 @@ int main(void)
     otc_station_free(st);
     otc_close(rel);
     free(dir);
+    /* DR8, DR28 */
+    {
+        char *d2 = test_tmpdir(), *path;
+        otc_release *r2 = NULL;
+        otc_open_options o;
+        otc_station_t *s2 = NULL;
+        otc_open_options_init(&o);
+        o.log_fn = count_log;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(d2, "OTC_20990101.jsonl",
+                   "{\"station_id\":\"OTC-X-1\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n"
+                   "{\"station_id\":\"OTC-X-2\",\"status\":\"retired\",\"name\":\"B\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n"
+                   "{\"station_id\":\"OTC-X-3\",\"status\":null,\"name\":\"C\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n");
+        path = test_join(d2, "OTC_20990101.jsonl");
+        CHECK_STATUS(otc_open_file(path, &o, &r2), OTC_OK);
+        CHECK(n_warn_retired == 1);
+        if (r2) {
+            otc_tombstone_t *t = NULL;
+            CHECK(otc_release_station_count(r2) == 2 && otc_release_tombstone_count(r2) == 0);
+            CHECK_STATUS(otc_station(r2, "OTC-X-2", &s2), OTC_E_NOT_FOUND);
+            CHECK_STATUS(otc_tombstone(r2, "OTC-X-2", &t), OTC_E_NOT_FOUND);
+            CHECK_STATUS(otc_station(r2, "OTC-X-1", &s2), OTC_OK);
+            CHECK(otc_station_status(s2) == OTC_STATION_STATUS_ACTIVE);
+            otc_station_free(s2);
+            s2 = NULL;
+            CHECK_STATUS(otc_station(r2, "OTC-X-3", &s2), OTC_OK);
+            CHECK(otc_station_status(s2) == OTC_STATION_STATUS_ACTIVE);
+            otc_station_free(s2);
+            otc_tombstone_free(t);
+        }
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
     return test_done("test_values");
 }
