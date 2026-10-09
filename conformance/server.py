@@ -41,6 +41,11 @@ What it does:
   stopped" and "no socket was opened" can both be checked. resume() serves again.
   An accept() error of the tripwire goes to trip_errors; the driver fails the case with a harness error, because
   a tripwire that cannot accept records nothing.
+- start_tls() adds an https listener that serves the same fixtures, with the same
+  rules and the same log, under a certificate from a throw-away CA (made with the
+  openssl command at start). tls_url is its base URL and tls_ca the CA file a
+  client passes as ca_file. It is for the https cases (a redirect from https to
+  http, D1).
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays. Its aliases map a host name (one that
   does not resolve) to the address it connects to instead. A request it cannot
@@ -59,8 +64,12 @@ import json
 import re
 import select
 import socket
+import shutil
 import socketserver
+import ssl
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -379,8 +388,31 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         self._send(200, body, headers, head)
 
 
+_CA_EXT = "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n"
+_LEAF_EXT = ("basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"
+             "subjectAltName=IP:127.0.0.1,DNS:localhost\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always\n")
+
+
+def make_tls_files(d: Path):
+    """A throw-away CA and a server certificate for 127.0.0.1 signed by it (openssl command). Returns (ca, cert, key).
+    The extensions are the ones a strict verifier (Python 3.13 VERIFY_X509_STRICT) requires."""
+    def run(*args):
+        subprocess.run(["openssl", *args], cwd=d, check=True, capture_output=True, timeout=60)
+    (d / "ca.ext").write_text(_CA_EXT)
+    (d / "leaf.ext").write_text(_LEAF_EXT)
+    run("genrsa", "-out", "ca.key", "2048")
+    run("req", "-new", "-key", "ca.key", "-subj", "/CN=otc conformance test CA", "-out", "ca.csr")
+    run("x509", "-req", "-in", "ca.csr", "-signkey", "ca.key", "-days", "2", "-sha256", "-extfile", "ca.ext", "-out", "ca.pem")
+    run("genrsa", "-out", "leaf.key", "2048")
+    run("req", "-new", "-key", "leaf.key", "-subj", "/CN=127.0.0.1", "-out", "leaf.csr")
+    run("x509", "-req", "-in", "leaf.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-set_serial", "2", "-days", "2", "-sha256",
+        "-extfile", "leaf.ext", "-out", "leaf.pem")
+    return d / "ca.pem", d / "leaf.pem", d / "leaf.key"
+
+
 class FixtureServer:
-    """The fixture HTTP server. Use start(), url, set_rules(), log, stop(), resume(), shutdown()."""
+    """The fixture HTTP server. Use start(), url, set_rules(), log, stop(), resume(), shutdown(); start_tls() adds
+    an https listener (tls_url, tls_ca)."""
 
     def __init__(self, host="127.0.0.1", port=0):
         self.host = host
@@ -396,6 +428,10 @@ class FixtureServer:
         self._conns = set()
         self._conns_lock = threading.Lock()
         self.trip_errors = []
+        self._tls_httpd = None
+        self._tls_dir = None
+        self.tls_url = None
+        self.tls_ca = None
         # Harness errors: a rule that could not be applied to a request (the request got a 500). The driver fails
         # the case when this list is not empty, so a broken rule never looks like correct SDK error handling.
         self.errors = []
@@ -520,10 +556,37 @@ class FixtureServer:
         self._stop_tripwire()
         self.start()
 
+    def start_tls(self):
+        """Serve the fixtures over https too. OSError or subprocess.CalledProcessError when it cannot (no openssl)."""
+        self._tls_dir = Path(tempfile.mkdtemp(prefix="otc-tls-"))
+        try:
+            ca, cert, key = make_tls_files(self._tls_dir)
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert, key)
+            httpd = _ThreadingServer((self.host, 0), _FixtureHandler)
+            # no handshake in accept(): it happens on the first read, in the request's own thread
+            httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True, do_handshake_on_connect=False)
+        except BaseException:
+            shutil.rmtree(self._tls_dir, ignore_errors=True)
+            raise
+        httpd.fixture = self  # type: ignore[attr-defined]
+        self._tls_httpd = httpd
+        self.tls_url = f"https://{self.host}:{httpd.server_address[1]}"
+        self.tls_ca = str(ca)
+        threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        return self
+
     def shutdown(self):
         if self.running:
             self._close_listener()
         self._stop_tripwire()
+        if self._tls_httpd is not None:
+            self._tls_httpd.shutdown()
+            self._tls_httpd.server_close()
+            self._tls_httpd = None
+        if self._tls_dir is not None:
+            shutil.rmtree(self._tls_dir, ignore_errors=True)
+            self._tls_dir = None
 
 
 class _ProxyHandler(http.server.BaseHTTPRequestHandler):

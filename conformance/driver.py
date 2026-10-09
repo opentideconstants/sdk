@@ -84,7 +84,7 @@ OPS = {
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
-PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
+PLACEHOLDERS = {"fixtures", "server", "server_alias", "server_tls", "tls_ca", "proxy", "tmp", "cache"}
 # The fields of each driver action (README "Driver steps"): {action: (required {field: type}, optional {field: type})}.
 # Any other field is a typo, and a typo of an assertion field (count, absent) would make the step assert nothing.
 _STR, _LIST, _DICT, _BOOL, _NUM = str, list, dict, bool, (int, float)
@@ -1013,7 +1013,14 @@ def run_action(st, ctx, srv, proxy):
             return [f"{p}: not JSON ({e})"], None
         out = []
         for k, v in a["match"].items():
-            out += match(v, doc.get(k, _MISSING) if isinstance(doc, dict) else _MISSING, DEFAULT_TOL, f"{p.name}.{k}")
+            if k.startswith("/"):   # an RFC 6901 pointer into the document (for example the value a json_set wrote)
+                try:
+                    got = json_pointer(doc, k)
+                except (KeyError, IndexError, ValueError):
+                    got = _MISSING
+                out += match(v, got, DEFAULT_TOL, f"{p.name}{k}")
+            else:
+                out += match(v, doc.get(k, _MISSING) if isinstance(doc, dict) else _MISSING, DEFAULT_TOL, f"{p.name}.{k}")
         return out, None
     elif kind == "sleep":
         time.sleep(float(a["s"]))
@@ -1069,6 +1076,8 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     """Run one case. runners: {role: (command, features)}; a case without roles has the one role "main"."""
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
+    if srv.tls_url:   # the https listener (start_tls); a case that names it on a server without one is a case error
+        ctx.update({"server_tls": srv.tls_url, "tls_ca": srv.tls_ca})
     env_extra = isolated_env(tmp)
     srv.set_rules([])
     srv.log.clear()
@@ -1228,7 +1237,7 @@ def expand_cross(cases, hellos):
 # --------------------------------------------------------------------------- self-test of the server
 
 def selftest():
-    srv = FixtureServer().start()
+    srv = FixtureServer().start().start_tls()
     proxy = RecordingProxy().start()
     results = []
 
@@ -1268,6 +1277,12 @@ def selftest():
         check("a .gz file is sent as is", r.getheader("Content-Encoding") is None and body == (FIXTURES / "good" / "OTC_20991231.2.json.gz").read_bytes())
         r, _ = get("/good/OTC_20991230.sha256")
         check("404 for a missing file", r.status == 404)
+        import ssl
+        tls = http.client.HTTPSConnection(srv.host, int(srv.tls_url.rsplit(":", 1)[1]), timeout=10,
+                                          context=ssl.create_default_context(cafile=srv.tls_ca))
+        tls.request("GET", "/good/OTC_latest-f1.json")
+        r = tls.getresponse(); body = r.read(); tls.close()
+        check("https: the same file under the throw-away CA", r.status == 200 and body == fx)
         srv.set_rules([{"match": r"sha256$", "action": "status", "status": 500, "times": 1}])
         r1, _ = get("/good/OTC_20991231.2.sha256")
         r2, _ = get("/good/OTC_20991231.2.sha256")
@@ -1479,6 +1494,13 @@ def main():
     xf_runner = "cross" if a.cross else hello.get("runner")
     srv = FixtureServer().start()
     try:
+        srv.start_tls()
+    except (OSError, subprocess.SubprocessError) as e:   # no openssl: the https cases could not run; a broken harness
+        srv.shutdown()
+        print(f"fixture server: cannot start the https listener (the openssl command makes its certificate): "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+    try:
         proxy = RecordingProxy().start()
     except BaseException:
         srv.shutdown()
@@ -1489,7 +1511,7 @@ def main():
             print(f"runner {n}: {h[2].get('runner')} {h[2].get('version', '')}  features: {sorted(h[1])}  profile: {h[3]}")
     else:
         print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}  profile: {profile}")
-    print(f"fixture server {srv.url}  proxy {proxy.url}")
+    print(f"fixture server {srv.url}  https {srv.tls_url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
     counts = {"PASS": 0, "FAIL": 0, "SKIP": 0, "XFAIL": 0, "XPASS": 0}
