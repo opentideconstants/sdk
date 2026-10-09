@@ -133,3 +133,15 @@ def test_current_offsets_references_must_resolve():
     doc["stations"][-1]["current_offsets"][0]["licence_id"] = "no-such-licence"
     errs = bf.cross_ref_errors(doc)
     assert any("OTC-T-9999" in e for e in errs) and any("no-such-licence" in e for e in errs), errs
+
+
+# --- K74: merged_into and the current_bins constituent names must resolve
+
+def test_merged_into_and_current_bin_names_resolve():
+    doc = bf.release_doc(bf.SECOND)
+    tomb = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0021")
+    tomb["merged_into"] = "OTC-T-9999"
+    cur = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0019")
+    cur["constant_sets"][0]["current_bins"][0]["constituents"][0]["name"] = "ZZ9"
+    errs = bf.cross_ref_errors(doc)
+    assert any("OTC-T-9999" in e for e in errs) and any("ZZ9" in e for e in errs), errs

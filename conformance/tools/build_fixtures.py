@@ -891,7 +891,8 @@ def cross_ref_errors(doc):
             if cs["licence_id"] not in lic:
                 errs.append(f"{cs['set_id']}: licence_id {cs['licence_id']} does not resolve")
             tv = conv_table.get(cs["convention_id"])
-            for c in cs["constituents"] + cs.get("dropped_constituents", []):
+            current = [c for b in cs.get("current_bins", []) for c in b.get("constituents", [])]
+            for c in cs["constituents"] + cs.get("dropped_constituents", []) + current:
                 if tv and (tv, c["name"]) not in table:
                     errs.append(f"{cs['set_id']}: constituent {c['name']} not in table {tv}")
             at = conv_astro.get(cs["convention_id"])
@@ -933,6 +934,9 @@ def cross_ref_errors(doc):
                 owner = seen_alias.setdefault((system, a), sid)
                 if owner != sid:
                     errs.append(f"alias {system}:{a} used by {owner} and {sid}")
+    for t in doc["stations"]:
+        if t["status"] == "removed" and t.get("merged_into") is not None and t["merged_into"] not in active_ids:
+            errs.append(f"{t['station_id']}: merged_into {t['merged_into']} does not resolve")
     return errs
 
 
