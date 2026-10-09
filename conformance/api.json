@@ -17,7 +17,7 @@
    "field": "a data field with the schema's snake_case name in every language"
   }
  },
- "after_close": "After close, every call on the client or its Release (every query and every release-management operation; close itself excepted) raises io (FileError, message \"the release is closed\"), the same in eager and stream mode, and no automatic update runs (spec 4.2, 5.6, CR D21). This rule applies to every operation in this manifest, so it is stated once here and not added to each errors list.",
+ "after_close": "After close, every call on the client or its Release (every query and every release-management operation; close itself excepted) raises io (FileError, message \"the release is closed\"), the same in eager and stream mode, and no automatic update runs (spec 4.2, 5.6, CR D21). Scope (CR2 DR32): the in-memory metadata getters (datestamp, created, format_version, citation, files, and the client's release property) stay readable after close; every station query, every iterator step, stats, attribution, reference_station and subordinates_of fail with io, and an iterator checks on each step. This rule applies to every operation in this manifest, so it is stated once here and not added to each errors list.",
  "client_options": {
   "note": "Options of the client constructor (Ruby keyword arguments, Python keyword-only, TypeScript one options object, C otc_open_options / otc_fetch_options).",
   "c_only": [
@@ -27,7 +27,7 @@
     "required": false,
     "positional": false,
     "default": false,
-    "note": "otc_open_options: a missing OTC_{D}.sha256 is an error"
+    "note": "otc_open_options: a missing OTC_{D}.sha256 is OTC_E_CHECKSUM, message \"no OTC_{D}.sha256 next to the file\""
    },
    {
     "name": "error",
@@ -54,7 +54,8 @@
    "required": false,
    "positional": false,
    "default": null,
-   "enum": "station_type"
+   "enum": "station_type",
+   "note": "compares the typed value: an unknown type is other, which type other matches; a raw unknown string matches nothing"
   },
   {
    "name": "kind",
@@ -62,7 +63,8 @@
    "required": false,
    "positional": false,
    "default": null,
-   "enum": "kind"
+   "enum": "kind",
+   "note": "compares the typed value: an unknown quantity is kind other, which kind other matches; a raw unknown string matches nothing"
   },
   {
    "name": "source",
@@ -146,7 +148,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = connect 10 s, read 60 s (spec 5.7); 0 or less is invalid_argument; C passes OTC_TIMEOUT_DEFAULT for the defaults, and 0 is OTC_E_INVALID_ARGUMENT"
+       "note": "null = connect 10 s, read 60 s (spec 5.7); must be from 0.001 to 1e6 seconds, otherwise invalid_argument (0 and negatives included); C passes OTC_TIMEOUT_DEFAULT for the defaults, and 0 or any other value outside the range is OTC_E_INVALID_ARGUMENT"
       },
       {
        "name": "proxy",
@@ -154,7 +156,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = HTTPS_PROXY / HTTP_PROXY / NO_PROXY, either case, except that upper-case HTTP_PROXY is ignored when REQUEST_METHOD is set (httpoxy); checked at construction: not an absolute http or https URL is invalid_argument, never retried, no cache fallback"
+       "note": "null = HTTPS_PROXY / HTTP_PROXY / NO_PROXY, either case, except that upper-case HTTP_PROXY is ignored when REQUEST_METHOD is set (httpoxy); checked at construction: not an absolute http or https URL is invalid_argument, never retried, no cache fallback; TypeScript in a browser: unsupported"
       },
       {
        "name": "ca_file",
@@ -162,7 +164,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = SSL_CERT_FILE, else the system store; checked at construction: a file that does not exist or cannot be read is io, never retried, no cache fallback"
+       "note": "null = SSL_CERT_FILE, else the system store; checked at construction: a ca_file or SSL_CERT_FILE that does not exist or cannot be read is io, never retried, no cache fallback; TypeScript in a browser: unsupported"
       },
       {
        "name": "user_agent",
@@ -170,7 +172,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "a suffix added to opentideconstants-{lang}/{version} (+https://opentideconstants.org)"
+       "note": "a suffix added to opentideconstants-{lang}/{version} (+https://opentideconstants.org); must be a string with no control characters (Python: also latin-1 only), otherwise invalid_argument at construction; ignored in a browser, which owns that header"
       },
       {
        "name": "on_network_error",
@@ -222,7 +224,8 @@
       "reader_too_old",
       "invalid_release",
       "cache",
-      "io"
+      "io",
+      "unsupported"
      ],
      "languages": [
       "ruby",
@@ -272,7 +275,7 @@
       "c"
      ],
      "c": "otc_last_error",
-     "note": "the error behind loaded_from = cache_after_error; C: otc_last_error(rel, buf, len, &needed) gives the message of the last failure on the handle"
+     "note": "the error behind loaded_from = cache_after_error; C: otc_last_error(rel, buf, len, &needed) gives the message of the last failure on the handle; any check that reaches the pointer (manual or automatic) clears it, and loaded_from does not change; a failed automatic update never escapes the query: it is logged with its stack and stored here, an SDK error as it is, any other failure as an SDK error with the original as cause (network for a transport failure, io otherwise)"
     },
     {
      "name": "releases",
@@ -302,7 +305,9 @@
      "errors": [
       "network",
       "offline_unavailable",
-      "invalid_release"
+      "invalid_release",
+      "unsupported_format",
+      "reader_too_old"
      ],
      "languages": [
       "ruby",
@@ -438,7 +443,7 @@
      "c": "otc_fetch_to_dir",
      "typescript_async": true,
      "typescript_env": "node",
-     "note": "spec 4.3.2: writes the data files in formats plus OTC_{D}.sha256 and OTC_{D}.meta.json into to; returns the paths written (an identical existing file is not written and not listed); TypeScript in a browser fails with unsupported; C without otc_fetch returns OTC_E_NOT_BUILT; with release latest and a network error, on_network_error use_cache (the default) writes the newest cached readable release, raise (or no usable cached release) raises network; cache when the cache lock cannot be taken (a stale lock not removed after 3 attempts)"
+     "note": "spec 4.3.2: writes the data files in formats plus OTC_{D}.sha256 and OTC_{D}.meta.json into to; returns the paths written (an identical existing file is not written and not listed); TypeScript in a browser fails with unsupported; C without otc_fetch returns OTC_E_NOT_BUILT; with release latest and a network error, on_network_error use_cache (the default) writes the newest cached readable release, raise (or no usable cached release) raises network; cache when the cache lock cannot be taken (a stale lock not removed after 3 attempts); all or nothing: originals that a new file replaces are renamed aside and restored if any rename fails, and if a restore fails the error lists the paths that changed"
     },
     {
      "name": "verify",
@@ -498,7 +503,7 @@
       "c"
      ],
      "c": "otc_fetch_prune",
-     "note": "never removes the loaded release; a cache operation: works on the configured cache, also on a client opened with file, and never touches the file's folder"
+     "note": "never removes the loaded release; a cache operation: works on the configured cache, also on a client opened with file, and never touches the file's folder; a lock at least 120 s old is stale and is taken, so a crashed process's release is pruned; stops at the first release it cannot remove and fails with cache, reporting the releases removed before it (Ruby, Python, TypeScript: CacheError removed; C: the output array and count)"
     },
     {
      "name": "close",
@@ -912,7 +917,7 @@
      ],
      "c": "otc_search",
      "forwarded_to_client": true,
-     "note": "C returns otc_hit {id, name}"
+     "note": "C returns otc_hit {id, name, name_len}; name may contain NUL, and name_len is its full length"
     },
     {
      "name": "near",
@@ -1013,6 +1018,7 @@
      ],
      "returns": "Station|null",
      "errors": [
+      "invalid_argument",
       "invalid_release"
      ],
      "languages": [
@@ -1022,7 +1028,8 @@
       "c"
      ],
      "c": "otc_reference_station",
-     "forwarded_to_client": true
+     "forwarded_to_client": true,
+     "note": "a null argument, an unknown station or a Station from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT)"
     },
     {
      "name": "subordinates_of",
@@ -1037,6 +1044,7 @@
      ],
      "returns": "Station[]",
      "errors": [
+      "invalid_argument",
       "invalid_release"
      ],
      "languages": [
@@ -1046,7 +1054,8 @@
       "c"
      ],
      "c": "otc_subordinates_of",
-     "forwarded_to_client": true
+     "forwarded_to_client": true,
+     "note": "a null argument, an unknown station or a Station from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT)"
     },
     {
      "name": "attribution",
@@ -1072,7 +1081,7 @@
      ],
      "c": "otc_attribution",
      "forwarded_to_client": true,
-     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI); a station id or Station that is unknown, removed or from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT), never skipped; a licence whose provider is null prints {attribution} alone, with no '{provider}: ' prefix, and is never merged with another entry; an empty stations list gives the same text as none (every licence in the release)"
+     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI); for a subordinate station it follows subordinate_offsets.reference_station_id through at most 16 links (with a seen-set), adding every subordinate_offsets.licence_id on the path and the licence of the first recommended set it reaches, a loop or missing station ending the walk with no error; a station id or Station that is unknown, removed or from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT), never skipped; a licence whose provider is null prints {attribution} alone, with no '{provider}: ' prefix, and is never merged with another entry; an empty stations list gives the same text as none (every licence in the release)"
     }
    ]
   },
@@ -1193,9 +1202,9 @@
      "name": "kind",
      "kind": "field",
      "type": "enum",
-     "nullable": false,
+     "nullable": true,
      "enum": "kind",
-     "note": "from the recommended set's quantity, or the reference station's for a subordinate"
+     "note": "from the recommended set's quantity, or the reference station's for a subordinate; null for a subordinate station with no recommended set whose reference chain ends in a loop, a missing station or no link (spec 6.2)"
     },
     {
      "name": "timezone",
@@ -1216,7 +1225,8 @@
      "kind": "field",
      "type": "enum",
      "nullable": false,
-     "enum": "station_status"
+     "enum": "station_status",
+     "note": "a line with no status is active; a line whose status the SDK does not know reads as other and is not a station: no query returns it, it is not a tombstone, no count includes it, logged once at load (spec 4.4)"
     },
     {
      "name": "is_reference",
@@ -2203,13 +2213,14 @@
      "kind": "field",
      "type": "map<string,integer>",
      "nullable": false,
-     "note": "active stations by type"
+     "note": "active stations by type; counts the typed value: an unknown value is counted under other"
     },
     {
      "name": "kind",
      "kind": "field",
      "type": "map<string,integer>",
-     "nullable": false
+     "nullable": false,
+     "note": "counts the typed value: an unknown value is counted under other"
     },
     {
      "name": "country",
@@ -2328,7 +2339,16 @@
    "xtide",
    "kartverket",
    "slackwater",
-   "webcaltides"
+   "webcaltides",
+   "linz",
+   "shom",
+   "pegelonline",
+   "rws",
+   "mi",
+   "dmi",
+   "smhi",
+   "fmi",
+   "uhslc"
   ],
   "mode": [
    "eager",
@@ -2365,7 +2385,7 @@
    "code": "network",
    "class": "NetworkError",
    "c": "OTC_E_NETWORK",
-   "when": "DNS, TLS, connection or timeout failure, an HTTP 5xx after the retries, or a body shorter than its Content-Length; also on_network_error raise with an empty cache, a 200 pointer or index whose body is not JSON (a captive portal), more than 5 redirects, a redirect from https to http, and a 404 for a data file that OTC_{D}.sha256 lists (status 404, \"file listed in OTC_{D}.sha256 is missing on the server\")",
+   "when": "DNS, TLS, connection or timeout failure, an HTTP 5xx after the retries, or a body shorter than its Content-Length; also on_network_error raise with an empty cache, a 200 pointer or index whose body is not JSON (a captive portal), more than 5 redirects, a redirect from https to http, and a 404 for a data file that OTC_{D}.sha256 lists (status 404, \"file listed in OTC_{D}.sha256 is missing on the server\"); also a 200 pointer, index or .sha256 whose body is not valid for its type (the wrong JSON shape, or a checksum list with no valid row), which never replaces the stored copy",
    "fields": [
     "url",
     "status"
@@ -2407,7 +2427,7 @@
    "code": "checksum_mismatch",
    "class": "ChecksumError",
    "c": "OTC_E_CHECKSUM",
-   "when": "a SHA-256 or size does not match, or the pointer and the .sha256 file disagree; also verify on a client with loaded_from file_unverified (\"no OTC_{D}.sha256 next to the file\")",
+   "when": "a SHA-256 or size does not match, or the pointer and the .sha256 file disagree; also verify on a client with loaded_from file_unverified (\"no OTC_{D}.sha256 next to the file\"); also an eager download whose .sha256 has no .json row (\"not listed\"), and C otc_open_file with require_checksum and no .sha256",
    "fields": [
     "file",
     "expected",
@@ -2450,7 +2470,7 @@
    "code": "invalid_release",
    "class": "InvalidReleaseError",
    "c": "OTC_E_INVALID_RELEASE",
-   "when": "not JSON, a required field missing, or a reference does not resolve; also a repeated station_id across active stations and tombstones, a repeated tombstone id, a repeated (system, alias id) pair, a repeated set_id, convention_id or licence_id, a format_version or min_reader_version present but not MAJOR.MINOR, a string with an unpaired UTF-16 surrogate, a datestamp counter longer than 9 digits from the server, and a stream index entry whose line has a different station_id (the message names index-v1.json)",
+   "when": "not JSON, a required field missing, or a reference does not resolve; also a repeated station_id across active stations and tombstones, a repeated tombstone id, a repeated (system, alias id) pair, a repeated set_id, convention_id or licence_id, a format_version or min_reader_version present but not MAJOR.MINOR, a string with an unpaired UTF-16 surrogate, a datestamp counter longer than 9 digits from the server, and a stream index entry whose line has a different station_id (the message names index-v1.json); also a licence whose attribution is not a string or whose provider is neither a string nor null, a malformed created or record_span time, a pointer or index file entry without a string sha256 and a non-negative integer size, a .sha256 with a repeated name or invalid UTF-8, a repeated constituent name within a set, and a release.datestamp that does not match the datestamp grammar",
    "fields": [],
    "languages": [
     "ruby",
@@ -2505,7 +2525,9 @@
    "class": "CacheError",
    "c": "OTC_E_CACHE",
    "when": "the cache cannot be written (permissions, disk full, a failed rename), or a stale lock cannot be removed after 3 attempts; a failure to write the cached pointer is logged, not this error",
-   "fields": [],
+   "fields": [
+    "removed"
+   ],
    "languages": [
     "ruby",
     "python",
@@ -2532,7 +2554,7 @@
    "code": "unsupported",
    "class": "UnsupportedError",
    "c": null,
-   "when": "TypeScript in a browser: an operation that needs a file system (download)",
+   "when": "TypeScript in a browser: an operation that needs a file system (download), and the options proxy and caFile",
    "fields": [],
    "languages": [
     "typescript"
@@ -2542,7 +2564,7 @@
    "code": "io",
    "class": "FileError",
    "c": "OTC_E_IO",
-   "when": "a local file cannot be opened or read; a ca_file that does not exist or cannot be read; any call on a client after close (\"the release is closed\")",
+   "when": "a local file cannot be opened or read; a ca_file or SSL_CERT_FILE that does not exist or cannot be read; any call on a client after close (\"the release is closed\")",
    "fields": [
     "path",
     "cause"
@@ -2558,7 +2580,7 @@
    "code": "invalid_argument",
    "class": "InvalidArgumentError",
    "c": "OTC_E_INVALID_ARGUMENT",
-   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution",
+   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution; also a timeout outside 0.001 to 1e6 seconds, a user_agent that is not a string or has a control character, and a null, unknown or foreign station in reference_station or subordinates_of",
    "fields": [],
    "languages": [
     "ruby",
@@ -2602,7 +2624,7 @@
   "ruby": "OpenTideConstants::Error",
   "python": "OpenTideConstantsError",
   "typescript": "OpenTideConstantsError",
-  "note": "every error class is a direct subclass of the base and of nothing else; every error has .code; a system error that causes an SDK error is kept as the cause"
+  "note": "every error class is a direct subclass of the base and of nothing else; every error has .code; a system error that causes an SDK error is kept as the cause; the userinfo of every URL in an error message or a log line is replaced with ***@"
  },
  "constants": {
   "SUPPORTED_FORMAT_MAJORS": {
