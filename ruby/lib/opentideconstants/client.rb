@@ -198,7 +198,20 @@ class OpenTideConstants
         dir = @file ? File.dirname(first || @file) : cache.release_dir(d)
         sha_path = File.join(dir, sha_name)
         raise ChecksumError.new("no #{sha_name} next to #{first}", file: first, expected: nil, actual: nil) unless File.file?(sha_path)
-        rows = Reader.parse_sha256(Reader.read_text(sha_path), sha_name)
+        text = Reader.read_text(sha_path)
+        # A cached release: the cached OTC_{D}.sha256 must have the SHA-256
+        # that a cached pointer lists for it, when one lists it. verify
+        # fetches nothing, so a mismatch is checksum_mismatch and the file
+        # stays (CR2 DR45).
+        unless @file
+            actual = Digest::SHA256.hexdigest(text)
+            cached_pointer_sha256(d).each do |expected|
+                next if expected == actual
+                raise ChecksumError.new("#{sha_name}: SHA-256 #{actual}, but the cached pointer lists #{expected}",
+                                        file: sha_path, expected: expected, actual: actual)
+            end
+        end
+        rows = Reader.parse_sha256(text, sha_name)
         @release.send(:verify, rows)
     end
 
@@ -285,6 +298,28 @@ class OpenTideConstants
         @cache ||= Cache.new(@cache_dir || Cache.default_root, logger: @logger)
     end
 
+    # The SHA-256 values (lower case) that the cached pointers
+    # (OTC_latest-f{MAJOR}.json, OTC_latest.json) give for OTC_{D}.sha256.
+    # A cached pointer that is not there, cannot be read or does not parse,
+    # names another release or does not list the .sha256 gives none (CR2
+    # DR45).
+    def cached_pointer_sha256(d)
+        names = SUPPORTED_FORMAT_MAJORS.sort.reverse.map { |m| "OTC_latest-f#{m}.json" } + ["OTC_latest.json"]
+        names.flat_map do |name|
+            begin
+                body, = cache.read_pointer(name)
+                doc = body && JSON.parse(body)
+            rescue CacheError, JSON::ParserError, EncodingError => e
+                log(:debug, "verify: the cached #{name} cannot be used (#{e.message})")
+                next []
+            end
+            next [] unless doc.is_a?(Hash) && doc["files"].is_a?(Array)
+            doc["files"].filter_map do |f|
+                f["sha256"].downcase if f.is_a?(Hash) && f["name"] == "OTC_#{d}.sha256" && f["sha256"].is_a?(String)
+            end
+        end
+    end
+
     # The latest pointer: [entry, url]. OTC_latest-f1.json, then
     # OTC_latest.json on a 404 only.
     def fetch_latest_pointer
@@ -350,7 +385,7 @@ class OpenTideConstants
     end
 
     private :http, :base_url, :offline, :on_network_error, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,
-            :resolve, :log
+            :resolve, :log, :cached_pointer_sha256
 
     private
 

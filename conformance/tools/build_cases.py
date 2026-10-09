@@ -2481,10 +2481,16 @@ def group_rules():
                     requires=["fs"]))
     # PK11: verify hashes the files, and checksum rules
     rdir = f"${{cache}}/v1/releases/{d2}"
-    out.append(case("rules/pk11/verify-missing-data-file", "verify after the cached .jsonl is deleted: checksum_mismatch or io, never verified", "4.3",
+    # CR2 DR44 (orchestrator decision 2026-10-09): a cached data file that is gone is io in every SDK, never
+    # checksum_mismatch (the file cannot be read; nothing was hashed)
+    out.append(case("rules/pk11/verify-missing-data-file", "verify after the cached .jsonl is deleted: io, never verified (DR44)", "4.3",
                     [latest({"datestamp": d2}, mode="stream"), drv("delete", path=f"{rdir}/OTC_{d2}.jsonl"),
-                     step("verify", err({"$any_of": ["checksum_mismatch", "io"]}))],
+                     step("verify", err("io"))],
                     requires=["fs", "stream"]))
+    out.append(case("rules/pk26/verify-missing-data-file-eager", "verify in eager mode after the cached .json is deleted: io, never verified (DR44)", "4.3",
+                    [latest({"datestamp": d2}, mode="eager"), drv("delete", path=f"{rdir}/OTC_{d2}.json"),
+                     step("verify", err("io"))],
+                    requires=["fs", "eager"]))
     out.append(case("rules/pk11/verify-missing-verified", "verify with .verified deleted and the .jsonl changed: the files are hashed against OTC_{D}.sha256, checksum_mismatch", "4.3",
                     [latest({"datestamp": d2}, mode="stream"), drv("delete", path=f"{rdir}/.verified"),
                      drv("corrupt", path=f"{rdir}/OTC_{d2}.jsonl", offset=100),
@@ -2496,6 +2502,34 @@ def group_rules():
                         [latest({"datestamp": d2}, mode=m), drv("delete", path=f"{rdir}/OTC_{d2}.sha256"),
                          step("verify", err("checksum_mismatch"))],
                         requires=["fs", m]))
+    # CR2 DR45 (orchestrator decision 2026-10-09): verify on a cached release checks the cached OTC_{D}.sha256
+    # against the digest a cached pointer (pointer/OTC_latest-f1.json or OTC_latest.json) lists for it, as download
+    # does since DR40; a mismatch is checksum_mismatch, with no request (verify is read-only). The list below has the
+    # release's rows in another order: every file still matches it, only its own SHA-256 differs from the pointer's.
+    # Eager only: C has no cached verify (otc_verify_file is path-based, spec 4.3), and C runs no eager case.
+    rows2 = sha256_rows("good", d2)
+    reordered = "".join(f"{h}  {n}\n" for n, h in sorted(rows2.items(), reverse=True))
+    sp2 = f"{rdir}/OTC_{d2}.sha256"
+    out.append(case("rules/pk26/verify-cached-sha256-not-the-pointers", "verify on a cached release whose OTC_{D}.sha256 still lists every file right but is not the one the cached pointer lists: checksum_mismatch, no request, never verified (DR45)", "4.3, 5.3",
+                    [latest({"datestamp": d2}, mode="eager"), drv("write", path=sp2, text=reordered), drv("clear_log"),
+                     step("verify", err("checksum_mismatch", file={"$contains": f"OTC_{d2}.sha256"})),
+                     drv("assert_requests", source="any", count=0)],
+                    requires=["fs", "eager"]))
+    # DR45 leaves verify as it was when no cached pointer lists a digest for the release: a pinned open stores no
+    # pointer, and the cached pointer of latest (d2) lists nothing for d1
+    rdir1 = f"${{cache}}/v1/releases/{d1}"
+    reordered1 = "".join(f"{h}  {n}\n" for n, h in sorted(sha256_rows("good", d1).items(), reverse=True))
+    out.append(case("rules/pk26/verify-cached-sha256-no-pointer-digest", "verify on cached releases whose OTC_{D}.sha256 is reordered but no cached pointer lists a digest for it (a pinned open; the pointer names another release): verified (DR45)", "4.3, 5.3",
+                    [pinned(d2, mode="eager"), drv("write", path=sp2, text=reordered), step("verify", {"verified": True}),
+                     latest({"datestamp": d2}, mode="eager"), pinned(d1, mode="eager"),
+                     drv("write", path=f"{rdir1}/OTC_{d1}.sha256", text=reordered1), step("verify", {"verified": True})],
+                    requires=["fs", "eager"]))
+    # DR45: the pointer's digest may be in upper case (pk11 pointer-sha256-uppercase); the comparison ignores case
+    upper2 = {f"/files/{i}/sha256": f["sha256"].upper() for i, f in enumerate(pointer_entry("good", d2)["files"])}
+    out.append(case("rules/pk26/verify-cached-pointer-sha256-uppercase", "the cached pointer gives the SHA-256 values in upper case: verify on the cached release passes (DR45)", "4.3, 5.3",
+                    [drv("server_rules", rules=[{"match": pointer_rule, "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "", "set": upper2}]),
+                     latest({"datestamp": d2, "loaded_from": "download"}, mode="eager"), step("verify", {"verified": True})],
+                    requires=["fs", "eager"]))
     out.append(case("rules/pk11/verify-unverified-file", "verify on a file opened with no .sha256 next to it (file_unverified): checksum_mismatch (D20)", "4.3",
                     [drv("copy", files=[f"{FIX}/good/OTC_{d2}.jsonl", f"{FIX}/good/OTC_{d2}.meta.json"], to="${tmp}/rel"),
                      step("open", {"loaded_from": "file_unverified"}, file=f"${{tmp}}/rel/OTC_{d2}.jsonl"),

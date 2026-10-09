@@ -940,7 +940,10 @@ class OpenTideConstants:
 
     def verify(self) -> bool:
         """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A
-        missing file is io; a missing OTC_{D}.sha256, a missing row or another digest is checksum_mismatch."""
+        missing file is io (CR2 DR44); a missing OTC_{D}.sha256, a missing row or another digest is
+        checksum_mismatch. For a cached release, the cached OTC_{D}.sha256 must first have the SHA-256 that a cached
+        pointer lists for it, when one lists it (CR2 DR45); verify fetches nothing, so a mismatch is
+        checksum_mismatch and the file stays."""
         self._check_open()
         rel = self._release
         ds = rel.datestamp
@@ -954,13 +957,39 @@ class OpenTideConstants:
             sha_path = self._cache.release_dir(ds) / f"OTC_{ds}.sha256"
         if not sha_path.exists():
             raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
-        rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
+        sha_body = self._read_bytes(sha_path)
+        if self._loaded_from not in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED):
+            actual = hashlib.sha256(sha_body).hexdigest()
+            for expected in self._cached_pointer_sha256(ds):
+                if expected != actual:
+                    raise ChecksumError(f"{sha_path.name}: SHA-256 {actual}, but the cached pointer lists {expected}",
+                                        file=str(sha_path), expected=expected, actual=actual)
+        rows = _parse_sha256(sha_body, sha_path.name)
         for p in opened:
             if not p.is_file():
                 raise FileError(f"cannot read {p}: no such file", path=str(p))
             self._check_file(p, rows.get(p.name))
         self._log.info("verified %s", ds)
         return True
+
+    def _cached_pointer_sha256(self, datestamp: str) -> List[str]:
+        """The SHA-256 values (lower case) that the cached pointers (OTC_latest-f{MAJOR}.json, OTC_latest.json) give
+        for OTC_{D}.sha256. A cached pointer that is not there, cannot be read or does not parse, names another
+        release or does not list the .sha256 gives none (CR2 DR45)."""
+        out = []
+        for name in (f"OTC_latest-f{max(SUPPORTED_FORMAT_MAJORS)}.json", "OTC_latest.json"):
+            try:
+                body = self._cache.read_pointer_body(name)
+                doc = json.loads(body) if body is not None else None
+            except (CacheError, ValueError) as e:
+                self._log.debug("verify: the cached %s cannot be used (%s)", name, e)
+                continue
+            if not isinstance(doc, dict) or not isinstance(doc.get("files"), list):
+                continue
+            for f in doc["files"]:
+                if isinstance(f, dict) and f.get("name") == f"OTC_{datestamp}.sha256" and isinstance(f.get("sha256"), str):
+                    out.append(f["sha256"].lower())
+        return out
 
     def cached_releases(self) -> Tuple[str, ...]:
         self._check_open()

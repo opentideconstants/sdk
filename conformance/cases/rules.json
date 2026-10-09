@@ -4017,7 +4017,7 @@
   },
   {
    "id": "rules/pk11/verify-missing-data-file",
-   "title": "verify after the cached .jsonl is deleted: checksum_mismatch or io, never verified",
+   "title": "verify after the cached .jsonl is deleted: io, never verified (DR44)",
    "spec": "4.3",
    "requires": [
     "fs",
@@ -4047,12 +4047,44 @@
     {
      "op": "verify",
      "expect": {
-      "error": {
-       "$any_of": [
-        "checksum_mismatch",
-        "io"
-       ]
+      "error": "io"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk26/verify-missing-data-file-eager",
+   "title": "verify in eager mode after the cached .json is deleted: io, never verified (DR44)",
+   "spec": "4.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
       }
+     }
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.json"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "io"
      }
     }
    ]
@@ -4169,6 +4201,192 @@
      "op": "verify",
      "expect": {
       "error": "checksum_mismatch"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk26/verify-cached-sha256-not-the-pointers",
+   "title": "verify on a cached release whose OTC_{D}.sha256 still lists every file right but is not the one the cached pointer lists: checksum_mismatch, no request, never verified (DR45)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$contains": "OTC_20991231.2.sha256"
+       }
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/pk26/verify-cached-sha256-no-pointer-digest",
+   "title": "verify on cached releases whose OTC_{D}.sha256 is reordered but no cached pointer lists a digest for it (a pinned open; the pointer names another release): verified (DR45)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231/OTC_20991231.sha256",
+     "text": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c  OTC_20991231.meta.json\n4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352  OTC_20991231.jsonl\n494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c  OTC_20991231.json.gz\nc8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749  OTC_20991231.json\n"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk26/verify-cached-pointer-sha256-uppercase",
+   "title": "the cached pointer gives the SHA-256 values in upper case: verify on the cached release passes (DR45)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/0/sha256": "3D71BD028039DC06AE9941103566A98E256EF39E1DFBFA09C76AFD067473105E",
+        "/files/1/sha256": "0873F8CE01FA88ED2B796EB16F8172DBCDE5758671360D8B698BE8BC3C62A6BD",
+        "/files/2/sha256": "759D6BB9E54684E82C3A007D8970E2AC5E3DF19A3C2093F74C3FBC1BD69499B1",
+        "/files/3/sha256": "F1CECA5D49337F6228594B5D26EC4A0C7B60807D9C774C51784BF5D8FFA41350",
+        "/files/4/sha256": "03CE8F212577D71A6A6E2EE4F84FD600B65631BB9ACEA04EE2C0B5B84677C088"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2",
+      "loaded_from": "download"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "verified": true
      }
     }
    ]

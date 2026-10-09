@@ -785,7 +785,7 @@ export class OpenTideConstants {
             }
             return true;
         }
-        return verifyCached(this.#ctx, this.#release.datestamp);
+        return verifyCached(this.#ctx, this.#release.datestamp, true);
     }
 
     /**

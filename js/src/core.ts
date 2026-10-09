@@ -1,7 +1,7 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
 import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
-    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, redactCredentials, ReleaseNotFoundError,
+    ChecksumError, FileError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, redactCredentials, ReleaseNotFoundError,
     UnsupportedFormatError,
 } from "./errors.js";
 import { daysInMonth, isObject } from "./json.js";
@@ -755,17 +755,58 @@ export async function prefetchDir(store: CacheStore, d: string, warn: (message: 
 }
 
 /**
- * Hash the cached files of release D again, in full, and compare them with the cached OTC_{D}.sha256 (spec 4.3
- * verify). The files this mode loads must be there; every listed data file that is there is hashed. A file that
- * does not match is deleted from the cache (spec 4.8 checksum_mismatch), so the next open downloads it again.
+ * The SHA-256 values that the cached pointers (OTC_latest-f{MAJOR}.json, OTC_latest.json) give for OTC_{D}.sha256,
+ * in lower case. A cached pointer that is not there, cannot be read or does not parse, names another release or
+ * does not list the .sha256 gives none (CR2 DR45).
  */
-export async function verifyCached(ctx: Ctx, d: string): Promise<true> {
+async function cachedPointerSha256(ctx: Ctx, d: string): Promise<string[]> {
+    const store = ctx.store;
+    if (!store) return [];
+    const out: string[] = [];
+    for (const name of [`OTC_latest-f${Math.max(...SUPPORTED_FORMAT_MAJORS)}.json`, "OTC_latest.json"]) {
+        let doc: unknown;
+        try {
+            const b = await store.read(`pointer/${name}`);
+            if (!b) continue;
+            doc = JSON.parse(dec.decode(b));
+        } catch (e) {
+            log(ctx, "debug", `verify: the cached ${name} cannot be used (${e instanceof Error ? e.message : String(e)})`);
+            continue;
+        }
+        if (!isObject(doc) || !Array.isArray(doc["files"])) continue;
+        for (const f of doc["files"]) {
+            if (isObject(f) && f["name"] === `OTC_${d}.sha256` && typeof f["sha256"] === "string") out.push(f["sha256"].toLowerCase());
+        }
+    }
+    return out;
+}
+
+/**
+ * Hash the cached files of release D again, in full, and compare them with the cached OTC_{D}.sha256 (spec 4.3
+ * verify). The files this mode loads must be there: a missing one is io (CR2 DR44); every listed data file that is
+ * there is hashed. A file that does not match is deleted from the cache (spec 4.8 checksum_mismatch), so the next
+ * open downloads it again. With `againstPointer` (verify), the cached OTC_{D}.sha256 must first have the SHA-256
+ * that a cached pointer lists for it, when one lists it (CR2 DR45); verify fetches nothing, so a mismatch is
+ * checksum_mismatch and the file stays.
+ */
+export async function verifyCached(ctx: Ctx, d: string, againstPointer = false): Promise<true> {
     const store = ctx.store;
     if (!store) throw new OfflineError("no cache");
     const dir = relDir(d);
     const n = names(d);
     const shaBytes = await store.read(`${dir}/${n.sha}`);
     if (!shaBytes) throw new ChecksumError(`${n.sha} is missing from the cache`, { file: store.describe(`${dir}/${n.sha}`), expected: null, actual: null });
+    if (againstPointer) {
+        const shaFile = store.describe(`${dir}/${n.sha}`);
+        const want = await cachedPointerSha256(ctx, d);
+        if (want.length) {
+            const actual = await ctx.platform.sha256(shaBytes);
+            const expected = want.find((w) => w !== actual);
+            if (expected !== undefined) {
+                throw new ChecksumError(`${n.sha}: SHA-256 ${actual}, but the cached pointer lists ${expected}`, { file: shaFile, expected, actual });
+            }
+        }
+    }
     const rows = parseSha256(shaBytes, n.sha);
     const present = new Set(await store.list(dir));
     const needed = ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json];
@@ -776,7 +817,7 @@ export async function verifyCached(ctx: Ctx, d: string): Promise<true> {
         const expected = rows.get(name) ?? null;
         const b = present.has(name) ? await store.read(`${dir}/${name}`) : null;
         if (!b) {
-            if (needed.includes(name)) throw new ChecksumError(`${name} is missing from the cache`, { file, expected, actual: null });
+            if (needed.includes(name)) throw new FileError(`cannot read ${file}: it is missing from the cache`, { path: file });
             continue;
         }
         const actual = await ctx.platform.sha256(b);
