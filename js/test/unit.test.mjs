@@ -404,10 +404,11 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
 
-/** A local server for conformance/fixtures/good; over maps a file name to [status, body]. */
-async function serveGood(over = {}) {
+/** A local server for conformance/fixtures/good; over maps a file name to [status, body]; onRequest sees each name. */
+async function serveGood(over = {}, onRequest = () => undefined) {
     const srv = http.createServer((req, res) => {
         const name = decodeURIComponent(new URL(req.url, "http://x").pathname.slice(1));
+        onRequest(name);
         if (name in over) {
             res.writeHead(over[name][0]);
             res.end(over[name][1]);
@@ -462,5 +463,36 @@ test("CR2 DR32: after close, metadata and client.release stay readable; queries 
         assert.throws(() => rel.referenceStation(sub), isCode("io"), mode);
         assert.throws(() => rel.subordinatesOf(ref), isCode("io"), mode);
         assert.throws(() => rel.stats, isCode("io"), mode);
+    }
+});
+
+test("R2-128: a close while update() waits for the network wins: update is io and no release is swapped in", async () => {
+    const over = { "OTC_latest-f1.json": [200, olderPointer()] };
+    const { srv, url } = await serveGood(over);
+    try {
+        const c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), mode: "stream" });
+        const old = c.release;
+        delete over["OTC_latest-f1.json"];
+        const p = c.update();
+        c.close();
+        await assert.rejects(p, isCode("io"));
+        assert.equal(c.release, old, "update swapped in a release after close");
+    } finally {
+        srv.close();
+    }
+});
+
+test("R2-128: a close while update() downloads the new release wins: update is io and the new release is not swapped in", async () => {
+    let c = null;
+    const over = { "OTC_latest-f1.json": [200, olderPointer()] };
+    const { srv, url } = await serveGood(over, (name) => { if (name === "OTC_20991231.2.sha256") c?.close(); });
+    try {
+        c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), mode: "stream" });
+        const old = c.release;
+        delete over["OTC_latest-f1.json"];
+        await assert.rejects(c.update(), isCode("io"));
+        assert.equal(c.release, old, "update swapped in a release after close");
+    } finally {
+        srv.close();
     }
 });

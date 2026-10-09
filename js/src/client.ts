@@ -541,9 +541,14 @@ export class OpenTideConstants {
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
         this.#reachedPointer();
+        // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
+        this.#check();
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
         const how = await ensureRelease(this.#ctx, entry.datestamp, entry);
-        this.#swap(await OpenTideConstants.#loadStored(this.#ctx, this.#node, entry.datestamp), how);
+        const rel = await OpenTideConstants.#loadStored(this.#ctx, this.#node, entry.datestamp);
+        if (this.#closed) rel._close();
+        this.#check();
+        this.#swap(rel, how);
         log(this.#ctx, "info", `updated from ${from} to ${entry.datestamp}`);
         return Object.freeze({ updated: true, from, to: entry.datestamp });
     }

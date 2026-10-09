@@ -140,6 +140,10 @@ class OpenTideConstants
         # it does not switch to a newer cached release either (CR D6).
         raise OfflineError, "offline: update needs the latest pointer" if @offline
         @lock.synchronize do
+            # Again under the lock: a close that ran since the check above
+            # wins, so no release is swapped in after close that nothing
+            # would close (R2-128).
+            check_open!
             from = @release.datestamp
             entry, url = resolve_latest
             unless newer?(entry["datestamp"], from)

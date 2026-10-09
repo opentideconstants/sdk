@@ -874,6 +874,34 @@ class AfterCloseTest(unittest.TestCase):
                 next(it)
 
 
+class UpdateCloseRaceTest(unittest.TestCase):
+    """R2-128: a close that runs after update() checked that the client is open, and before it took the lock, wins:
+    update is io, and no release is swapped in after close."""
+
+    def test_close_between_the_check_and_the_lock(self):
+        import tempfile
+        idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+        script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
+        srv = _Server(script=script)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                c = otc.OpenTideConstants(base_url=srv.url, cache_dir=tmp, mode="stream")
+                old = c.release
+                del script["/OTC_latest-f1.json"]
+                orig = c._check_open
+
+                def check_then_close():
+                    orig()
+                    c._check_open = orig
+                    c.close()
+                c._check_open = check_then_close
+                with self.assertRaises(otc.FileError):
+                    c.update()
+                self.assertIs(c.release, old, "update swapped in a release after close")
+        finally:
+            srv.close()
+
+
 class OfflineEnvTest(unittest.TestCase):
     """OPENTIDECONSTANTS_OFFLINE: 1, true, yes, on in any case after a trim, and it wins over offline=False (CR D15)."""
 

@@ -122,4 +122,27 @@ class LifecycleTest < Minitest::Test
             end
         end
     end
+
+    # R2-128: a close that runs while update! waits for the lock wins; the
+    # update installs no release that nothing would close.
+    def test_update_racing_close_installs_no_release
+        over = { "OTC_latest-f1.json" => [200, {}, older_pointer] }
+        srv = serve(File.join(FIXTURES, "good"), over)
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream)
+        old = c.release
+        over.delete("OTC_latest-f1.json")
+        lock = c.instance_variable_get(:@lock)
+        t = nil
+        lock.synchronize do
+            t = Thread.new do
+                c.update!
+            rescue OTC::Error => e
+                e
+            end
+            Thread.pass until t.status == "sleep" || !t.alive? # past check_open!, waiting for the lock
+            c.close
+        end
+        assert_kind_of OTC::FileError, t.value
+        assert_same old, c.release, "update! swapped in a release after close"
+    end
 end
