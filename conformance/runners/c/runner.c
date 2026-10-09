@@ -214,7 +214,7 @@ static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
 #define PARSE_UNLOCK() pthread_mutex_unlock(&g_parse_lock)
 #endif
 
-static cJSON *j_parse_or_null(char *text)
+static cJSON *j_parse_or_null(char *text, int *bad)
 {
     cJSON *v = NULL;
     if (text && fault("json") && text[0]) text[0] = 'x';   /* the library returned text that is not JSON */
@@ -223,6 +223,7 @@ static cJSON *j_parse_or_null(char *text)
         v = cJSON_Parse(text);
         PARSE_UNLOCK();
         free(text);
+        if (!v) *bad = 1;   /* the library gave text that is not JSON: a failure, never a null value */
     }
     return v ? v : cJSON_CreateNull();
 }
@@ -531,7 +532,7 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         if (otc_set_qc_flag_at(set, i, &f) != OTC_OK) { *bad = 1; cJSON_Delete(fo); break; }
         cJSON_AddItemToObject(fo, "flag", j_enum(otc_qc_flag_kind_name(otc_qc_flag_flag(f))));
         cJSON_AddItemToObject(fo, "reason", j_take(s_flag_reason(f, bad)));
-        cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad)));
+        cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad), bad));
         cJSON_AddItemToArray(flags, fo);
     }
     cJSON_AddItemToObject(o, "qc_flags", flags);
@@ -580,10 +581,10 @@ static cJSON *enc_convention(const otc_convention *c, int *bad)
     cJSON_AddItemToObject(o, "utc_offset_hours", j_num(otc_convention_utc_offset_hours(c)));
     cJSON_AddItemToObject(o, "v0_model", j_take(s_conv_v0(c, bad)));
     cJSON_AddItemToObject(o, "nodal_handling", j_enum(otc_nodal_handling_name(otc_convention_nodal_handling(c))));
-    cJSON_AddItemToObject(o, "nodal_formula_ids", j_parse_or_null(s_conv_nodal_ids(c, bad)));
+    cJSON_AddItemToObject(o, "nodal_formula_ids", j_parse_or_null(s_conv_nodal_ids(c, bad), bad));
     cJSON_AddItemToObject(o, "constituent_table_version", j_take(s_conv_table_version(c, bad)));
     cJSON_AddItemToObject(o, "tables_sha256", j_take(s_conv_tables_sha(c, bad)));
-    cJSON_AddItemToObject(o, "canary", j_parse_or_null(s_conv_canary(c, bad)));
+    cJSON_AddItemToObject(o, "canary", j_parse_or_null(s_conv_canary(c, bad), bad));
     return o;
 }
 
@@ -725,12 +726,16 @@ static void with_station(request *q, reply *r, otc_station_t **st, const char **
     if (rc != OTC_OK && rc != OTC_E_NOT_FOUND) set_status(r, rc, "otc_station");
 }
 
-static const otc_set *find_set(request *q, const otc_station_t *st)
+/* The set named by set_id, or NULL when there is none (NOT_FOUND); any other status sets *bad. */
+static const otc_set *find_set(request *q, const otc_station_t *st, int *bad)
 {
     const char *set_id = arg_str(&q->a, "set_id");
     const otc_set *set = NULL;
+    otc_status rc;
     if (!st || !set_id) return NULL;
-    if ((fault("lookup") ? OTC_E_IO : otc_station_set(st, set_id, &set)) != OTC_OK) return NULL;
+    rc = fault("lookup") ? OTC_E_IO : otc_station_set(st, set_id, &set);
+    if (rc == OTC_E_NOT_FOUND) return NULL;
+    if (rc != OTC_OK) { *bad = 1; return NULL; }
     return set;
 }
 
@@ -981,10 +986,10 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "convention")) {
         const char *id = arg_str(&q->a, "convention_id");
         const otc_convention *c = NULL;
-        if (!q->a.bad && id && (fault("lookup") ? OTC_E_IO : otc_release_convention(R, id, &c)) == OTC_OK)
-            cJSON_AddItemToObject(o, "convention", enc_convention(c, &bad));
-        else
-            cJSON_AddNullToObject(o, "convention");
+        rc = q->a.bad || !id ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_release_convention(R, id, &c);
+        if (rc == OTC_OK) cJSON_AddItemToObject(o, "convention", enc_convention(c, &bad));
+        else if (rc == OTC_E_NOT_FOUND) cJSON_AddNullToObject(o, "convention");
+        else bad = 1;
     } else if (!strcmp(op, "licences")) {
         cJSON *arr = cJSON_CreateArray();
         size_t i, n = otc_release_licence_count(R);
@@ -997,10 +1002,10 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "licence")) {
         const char *id = arg_str(&q->a, "licence_id");
         const otc_licence *l = NULL;
-        if (!q->a.bad && id && otc_release_licence(R, id, &l) == OTC_OK)
-            cJSON_AddItemToObject(o, "licence", enc_licence(l, &bad));
-        else
-            cJSON_AddNullToObject(o, "licence");
+        rc = q->a.bad || !id ? OTC_E_NOT_FOUND : otc_release_licence(R, id, &l);
+        if (rc == OTC_OK) cJSON_AddItemToObject(o, "licence", enc_licence(l, &bad));
+        else if (rc == OTC_E_NOT_FOUND) cJSON_AddNullToObject(o, "licence");
+        else bad = 1;
     } else if (!strcmp(op, "citation")) {
         cJSON_AddItemToObject(o, "citation", j_take(s_rel_citation(R, &bad)));
     } else if (!strcmp(op, "attribution")) {
@@ -1176,10 +1181,12 @@ static void op_query(request *q, reply *r)
         if (q->a.bad) { otc_station_free(st); set_error(r, "invalid_argument", "station_id"); return; }
         if (!strcmp(op, "reference_station")) {
             otc_station_t *ref = NULL;
-            if (st && (fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref)) == OTC_OK) {
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref);
+            if (rc == OTC_OK) {
                 cJSON_AddItemToObject(o, "station_id", j_take(s_st_id(ref, &bad)));
                 otc_station_free(ref);
             } else {
+                if (rc != OTC_E_NOT_FOUND) bad = 1;
                 cJSON_AddNullToObject(o, "station_id");
             }
         } else if (!strcmp(op, "subordinates_of")) {
@@ -1210,7 +1217,9 @@ static void op_query(request *q, reply *r)
             otc_offsets_t off;
             memset(&off, 0, sizeof off);
             off.struct_size = sizeof off;
-            if (st && (fault("lookup") ? OTC_E_IO : otc_station_offsets(st, &off)) == OTC_OK) {
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_station_offsets(st, &off);
+            if (rc != OTC_OK && rc != OTC_E_NOT_FOUND) bad = 1;
+            if (rc == OTC_OK) {
                 cJSON *x = cJSON_CreateObject();
                 cJSON_AddItemToObject(x, "reference_station_id", j_cstr(off.reference_station_id));
                 cJSON_AddItemToObject(x, "time_offset_high_min", j_num(off.time_offset_high_min));
@@ -1226,10 +1235,12 @@ static void op_query(request *q, reply *r)
             }
         } else if (!strcmp(op, "recommended_set")) {
             const otc_set *set = NULL;
-            if (st && (fault("lookup") ? OTC_E_IO : otc_station_recommended_set(st, &set)) == OTC_OK)
-                cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, &bad)));
-            else
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_station_recommended_set(st, &set);
+            if (rc == OTC_OK) cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, &bad)));
+            else {
+                if (rc != OTC_E_NOT_FOUND) bad = 1;
                 cJSON_AddNullToObject(o, "set_id");
+            }
         } else if (!strcmp(op, "constant_sets")) {
             bool inc = arg_bool(&q->a, "include_no_constants", false);
             cJSON *arr = cJSON_CreateArray();
@@ -1242,11 +1253,11 @@ static void op_query(request *q, reply *r)
             }
             cJSON_AddItemToObject(o, "set_ids", arr);
         } else if (!strcmp(op, "constant_set")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             if (set) cJSON_AddItemToObject(o, "set", enc_set(set, &bad));
             else cJSON_AddNullToObject(o, "set");
         } else if (!strcmp(op, "constituents")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             cJSON *arr = cJSON_CreateArray();
             size_t i, n = set ? otc_set_constituent_count(set) : 0;
             for (i = 0; i < n; i++) {
@@ -1256,7 +1267,7 @@ static void op_query(request *q, reply *r)
             }
             cJSON_AddItemToObject(o, "constituents", arr);
         } else if (!strcmp(op, "constituent")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             const char *name = arg_str(&q->a, "name");
             const otc_constituent_t *c = NULL;
             if (set && name && otc_set_constituent(set, name, &c) == OTC_OK)
@@ -1264,7 +1275,7 @@ static void op_query(request *q, reply *r)
             else
                 cJSON_AddNullToObject(o, "constituent");
         } else if (!strcmp(op, "provenance")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             if (set) {
                 cJSON *p = cJSON_CreateObject();
                 const otc_provenance_build *b = NULL;
@@ -1274,24 +1285,24 @@ static void op_query(request *q, reply *r)
                     cJSON_AddItemToObject(bo, "built_at", j_take(s_build_built_at(b, &bad)));
                     cJSON_AddItemToObject(bo, "fetched_at", j_take(s_build_fetched_at(b, &bad)));
                     cJSON_AddItemToObject(bo, "run_id", j_take(s_build_run_id(b, &bad)));
-                    cJSON_AddItemToObject(bo, "tool_versions", j_parse_or_null(s_build_tool_versions(b, &bad)));
+                    cJSON_AddItemToObject(bo, "tool_versions", j_parse_or_null(s_build_tool_versions(b, &bad), &bad));
                     cJSON_AddItemToObject(p, "build", bo);
                 } else {
                     cJSON_AddNullToObject(p, "build");
                 }
                 cJSON_AddItemToObject(p, "carried_from_release", j_take(s_prov_carried(set, &bad)));
                 cJSON_AddItemToObject(p, "adapter_version", j_take(s_prov_adapter_version(set, &bad)));
-                cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad)));
+                cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad), &bad));
                 cJSON_AddItemToObject(p, "selection_reason", j_take(s_prov_selection_reason(set, &bad)));
-                cJSON_AddItemToObject(p, "decision", j_parse_or_null(s_prov_decision(set, &bad)));
+                cJSON_AddItemToObject(p, "decision", j_parse_or_null(s_prov_decision(set, &bad), &bad));
                 cJSON_AddItemToObject(o, "provenance", p);
-                cJSON_AddItemToObject(o, "raw", j_parse_or_null(s_set_prov_json(set, &bad)));
+                cJSON_AddItemToObject(o, "raw", j_parse_or_null(s_set_prov_json(set, &bad), &bad));
             } else {
                 cJSON_AddNullToObject(o, "provenance");
                 cJSON_AddNullToObject(o, "raw");
             }
         } else if (!strcmp(op, "set_validation")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             cJSON *arr = cJSON_CreateArray();
             size_t i, n = set ? otc_set_validation_count(set) : 0;
             for (i = 0; i < n; i++) {
@@ -1308,19 +1319,19 @@ static void op_query(request *q, reply *r)
                 set_error(r, "invalid_argument", "object");
                 return;
             } else if (!strcmp(obj, "station")) {
-                if (st) raw = j_parse_or_null(s_st_raw(st, &bad));
+                if (st) raw = j_parse_or_null(s_st_raw(st, &bad), &bad);
             } else if (!strcmp(obj, "tombstone")) {
                 otc_tombstone_t *t = NULL;
                 const char *id = arg_str(&q->a, "station_id");
                 if (id && otc_tombstone(R, id, &t) == OTC_OK) {
-                    raw = j_parse_or_null(s_tb_raw(t, &bad));
+                    raw = j_parse_or_null(s_tb_raw(t, &bad), &bad);
                     otc_tombstone_free(t);
                 }
             } else if (!strcmp(obj, "set")) {
-                const otc_set *set = find_set(q, st);
-                if (set) raw = j_parse_or_null(s_set_raw(set, &bad));
+                const otc_set *set = find_set(q, st, &bad);
+                if (set) raw = j_parse_or_null(s_set_raw(set, &bad), &bad);
             } else if (!strcmp(obj, "constituent")) {
-                const otc_set *set = find_set(q, st);
+                const otc_set *set = find_set(q, st, &bad);
                 const char *name = arg_str(&q->a, "name");
                 size_t i, n = set ? otc_set_constituent_count(set) : 0;
                 for (i = 0; i < n && name; i++) {
@@ -1330,7 +1341,7 @@ static void op_query(request *q, reply *r)
                         char *buf;
                         if (otc_constituent_raw_json(set, i, NULL, 0, &need) != OTC_OK) { bad = 1; break; }
                         buf = (char *)malloc(need);
-                        if (buf && otc_constituent_raw_json(set, i, buf, need, &need) == OTC_OK) raw = j_parse_or_null(buf);
+                        if (buf && otc_constituent_raw_json(set, i, buf, need, &need) == OTC_OK) raw = j_parse_or_null(buf, &bad);
                         else { free(buf); bad = 1; }
                         break;
                     }
@@ -1338,11 +1349,11 @@ static void op_query(request *q, reply *r)
             } else if (!strcmp(obj, "convention")) {
                 const otc_convention *c = NULL;
                 const char *id = arg_str(&q->a, "convention_id");
-                if (id && otc_release_convention(R, id, &c) == OTC_OK) raw = j_parse_or_null(s_conv_raw(c, &bad));
+                if (id && otc_release_convention(R, id, &c) == OTC_OK) raw = j_parse_or_null(s_conv_raw(c, &bad), &bad);
             } else if (!strcmp(obj, "licence")) {
                 const otc_licence *l = NULL;
                 const char *id = arg_str(&q->a, "licence_id");
-                if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad));
+                if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad), &bad);
             } else {   /* README "raw": station, tombstone, set, constituent, convention or licence */
                 otc_station_free(st);
                 set_error(r, "uncaught:UnknownRawObject", obj);
