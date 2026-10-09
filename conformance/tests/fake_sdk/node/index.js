@@ -9,7 +9,22 @@ class Release {
     get datestamp() { return "20991231.2"; }
     get format_version() { return "1.0"; }
     get stationCount() { return { inf: Infinity, nan: NaN, bigint: 10n }[MODE] ?? 20; }
-    station(id) { return MODE === "station-no-fields" ? { station_id: id } : null; }
+    station(id) {
+        if (MODE === "station-no-fields") return { station_id: id };
+        if (MODE.startsWith("station-without-")) {   // a full station with one field left out (undefined)
+            const st = { station_id: id, name: "X", country: "GBR", lat: 1, lon: 2, type: "reference", kind: "tide",
+                timezone: "Europe/London", aliases: {}, status: "active", isReference: true, isSubordinate: false,
+                isTide: true, isCurrent: false, recommendedSet: null, validation: [{ set_id: "s", reference_source: "noaa",
+                    reference_station: null, reference_distance_km: null, window: "2099-01", time_mae_min: 1, time_p95_min: null,
+                    time_bias_min: null, height_mae_m: null, range_error_m: null, missed_events: null, extra_events: null,
+                    previous_release: null }] };
+            const field = MODE.slice("station-without-".length);
+            if (field === "previous_release") delete st.validation[0].previous_release;
+            else delete st[field];
+            return st;
+        }
+        return null;
+    }
     requireStation() { throw new OpenTideConstantsError("removed", "station_removed", new Tomb()); }
     subordinatesOf() { return []; }
 }

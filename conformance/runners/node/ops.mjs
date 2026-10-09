@@ -57,7 +57,7 @@ function iso(t) {
 
 function encStation(s) {
     if (s == null) return null;
-    const rec = s.recommendedSet;
+    const rec = need(s, "recommendedSet");
     return {
         station_id: s.station_id, name: s.name, country: s.country, lat: s.lat, lon: s.lon, type: s.type,
         kind: s.kind, timezone: s.timezone, aliases: s.aliases, status: s.status,
@@ -68,40 +68,41 @@ function encStation(s) {
 
 function encSet(cs) {
     if (cs == null) return null;
-    const span = cs.record_span;
-    const datum = cs.datum;
+    const span = need(cs, "record_span");
+    const datum = need(cs, "datum");
     return {
         set_id: cs.set_id, source: cs.source, source_type: cs.source_type, quantity: cs.quantity,
         source_record_id: cs.source_record_id, source_version: cs.source_version,
-        record_span: span == null ? null : { start: iso(span.start), end: iso(span.end), good_samples: span.good_samples },
-        datum: datum == null ? null : { msl_offset_m: datum.msl_offset_m, named: datum.named },
+        record_span: span === null ? null : { start: iso(need(span, "start")), end: iso(need(span, "end")), good_samples: need(span, "good_samples") },
+        datum: datum === null ? null : { msl_offset_m: need(datum, "msl_offset_m"), named: need(datum, "named") },
         qc_status: cs.qc_status,
         qc_flags: cs.qc_flags.map((f) => pick(f, ["flag", "reason", "values"])),
-        dropped_constituents: cs.dropped_constituents.map((d) => ({ name: d.name, dropped_reason: d.dropped_reason, detail: d.detail })),
+        dropped_constituents: cs.dropped_constituents.map((d) => pick(d, ["name", "dropped_reason", "detail"])),
         time_base: encTimeBase(need(cs, "time_base")),
         is_recommended: cs.isRecommended,
-        convention_id: cs.convention.convention_id, licence_id: cs.licence.licence_id,
+        convention_id: need(need(cs, "convention"), "convention_id"), licence_id: need(need(cs, "licence"), "licence_id"),
         constituent_count: cs.constituents.length,
     };
 }
 
 function encValidation(v) {
     const out = pick(v, VALIDATION);
-    out.previous_release = v.previous_release == null ? null : pick(v.previous_release, PREVIOUS);
+    const prev = need(v, "previous_release");
+    out.previous_release = prev === null ? null : pick(prev, PREVIOUS);
     return out;
 }
 
 function encFiles(files) {
-    return [...files].map((f) => ({ name: f.name, url: f.url, size: f.size, sha256: f.sha256 }))
+    return [...files].map((f) => pick(f, ["name", "url", "size", "sha256"]))
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 function encInfo(i) {
     if (i == null) return null;
     return {
-        datestamp: i.datestamp, format_version: i.format_version, concept_doi: need(i, "concept_doi"),
+        datestamp: need(i, "datestamp"), format_version: need(i, "format_version"), concept_doi: need(i, "concept_doi"),
         zenodo_version_doi: need(i, "zenodo_version_doi"), content_sha256: need(i, "content_sha256"),
-        files: encFiles(i.files),
+        files: encFiles(need(i, "files")),
     };
 }
 
@@ -142,7 +143,7 @@ function encTimeBase(t) {
 }
 
 function encStats(s) {
-    return { type: s.type, kind: s.kind, country: s.country, source: s.source, qc_status: s.qc_status };
+    return pick(s, ["type", "kind", "country", "source", "qc_status"]);
 }
 
 // The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded
@@ -159,7 +160,11 @@ function finite(v) {
     if (Array.isArray(v)) return v.map(finite);
     if (v !== null && typeof v === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(v))) {
         const out = {};
-        for (const [k, x] of Object.entries(v)) out[k] = finite(x);
+        for (const [k, x] of Object.entries(v)) {
+            // a field the SDK left out: JSON.stringify would drop the key; fail the step instead
+            if (x === undefined) throw new TypeError(`the SDK gave no value for ${k}`);
+            out[k] = finite(x);
+        }
         return out;
     }
     return v;
@@ -209,9 +214,9 @@ export function makeRunner(sdk) {
         release_metadata(a, msg) {
             const r = release(msg);
             return {
-                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version,
-                concept_doi: r.concept_doi, source_versions: r.source_versions, build_commit: r.build_commit,
-                changelog_url: r.changelog_url, zenodo_version_doi: need(r, "zenodo_version_doi"),
+                datestamp: need(r, "datestamp"), created: iso(need(r, "created")), format_version: need(r, "format_version"),
+                concept_doi: need(r, "concept_doi"), source_versions: need(r, "source_versions"), build_commit: need(r, "build_commit"),
+                changelog_url: need(r, "changelog_url"), zenodo_version_doi: need(r, "zenodo_version_doi"),
             };
         },
         release_files: (a, msg) => ({ files: encFiles(release(msg).files) }),
@@ -221,7 +226,7 @@ export function makeRunner(sdk) {
         newer_format_major: () => ({ newer_format_major: need(client(), "newerFormatMajor") }),
         async update() {
             const u = await client().update();
-            return { updated: u.updated, from: u.from, to: u.to };
+            return pick(u, ["updated", "from", "to"]);
         },
         async download(a) {
             const paths = await client().download(opts(a, ["release", "to", "formats", "overwrite"]));

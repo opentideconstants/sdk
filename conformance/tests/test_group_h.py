@@ -336,3 +336,19 @@ def test_driver_fails_a_case_whose_runner_exits_non_zero(tmp_path):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "station_count", "expect": {"count": 1}}]}])
     r = run_driver("--runner", f"{sys.executable} {script}", "--cases", str(cases))
     assert "FAIL  a" in r.stdout and "exited with status 1" in r.stdout and r.returncode == 1, r.stdout[-500:]
+
+
+# --- T55: a field the SDK leaves out (undefined) fails the step; it never becomes null or an absent key
+
+@pytest.mark.parametrize("field,op", [("recommendedSet", "station"), ("timezone", "station"), ("isCurrent", "station"),
+                                      ("previous_release", "station_validation")])
+def test_node_missing_field_is_an_error(field, op):
+    rc, hello, out, err = talk("node", [OPEN, {"op": op, "args": {"station_id": "OTC-T-0001"}}], mode=f"station-without-{field}")
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+def test_node_full_station_encodes():
+    rc, hello, out, err = talk("node", [OPEN, {"op": "station", "args": {"station_id": "OTC-T-0001"}}], mode="station-without-nothing")
+    reply = strict(out[1])
+    assert reply["ok"] is True and reply["result"]["station"]["recommended_set_id"] is None, reply
