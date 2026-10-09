@@ -30,7 +30,10 @@ export interface CacheStore {
     describe(rel: string): string;
     mkdirs(rel: string): Promise<void>;
     read(rel: string): Promise<Uint8Array | null>;
-    /** Write to a temporary file in the same directory, fsync, rename into place. */
+    /**
+     * Replace an entry in one step, so a reader never sees half of it: on Node a temporary file in the same
+     * directory, fsync, rename (spec 5.4); in a browser one Cache Storage put. A failure is CacheError.
+     */
     write(rel: string, bytes: Uint8Array): Promise<void>;
     remove(rel: string): Promise<void>;
     removeDir(rel: string): Promise<void>;
@@ -48,7 +51,11 @@ export interface Platform {
     readonly name: "node" | "browser";
     sha256(bytes: Uint8Array): Promise<string>;
     gunzip(bytes: Uint8Array): Promise<Uint8Array>;
-    /** One HTTP GET. Transport failures (DNS, connection, timeout, a short body) throw NetworkError. */
+    /**
+     * One HTTP GET, following redirects (spec 5.7). Transport failures (DNS, connection, timeout, a short body, a
+     * refused redirect) throw NetworkError. Node also throws InvalidArgumentError for a proxy that is not a URL and
+     * FileError for a CA file it cannot read. A browser sends no request headers (CORS) and uses its own cache.
+     */
     get(url: string, options: HttpOptions): Promise<HttpResponse>;
     /** The cache store for a root (null = the platform default). */
     cache(root: string | null): Promise<CacheStore>;

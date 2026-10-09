@@ -432,7 +432,11 @@ export class OpenTideConstants {
         return Object.freeze(idx.map(toInfo));
     }
 
-    /** The latest release (one conditional GET of the pointer). It does not switch to it. */
+    /**
+     * The latest release this SDK reads: a conditional GET of the latest pointer (OTC_latest-f{MAJOR}.json, or
+     * OTC_latest.json after a 404), and of OTC_index.json too when the pointer's release is not readable (spec 5.2
+     * steps 2 and 2a, CR D23). It does not switch to it.
+     */
     async latest(): Promise<ReleaseInfo> {
         this.#check();
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
