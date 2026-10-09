@@ -91,7 +91,8 @@ class OpenTideConstants
         # hashed from the same bytes (or the same open file) that the load
         # then reads, against checks {path => sha256}, so a file swapped
         # after its hash is never used.
-        def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false)
+        def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
+                 on_bad_index: nil)
             _, _, ext = parse_name(path)
             expect = ->(p) { verify ? checks[p] : nil }
             case ext
@@ -106,7 +107,8 @@ class OpenTideConstants
                 meta = parse_json(read_text(meta_path, expect.call(meta_path)))
                 Release.check_format!(meta)
                 load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
-                                       zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path))
+                                       zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path),
+                                       on_bad_index: on_bad_index)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
@@ -126,7 +128,7 @@ class OpenTideConstants
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
         def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
-                       expected_sha256: nil)
+                       expected_sha256: nil, on_bad_index: nil)
             io = File.open(path, "rb")
             if expected_sha256
                 digest = Digest::SHA256.new
@@ -159,7 +161,8 @@ class OpenTideConstants
             end
             begin
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
-                                  io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi)
+                                  io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi,
+                                  on_bad_index: index && on_bad_index)
             ensure
                 io.close if mode != :stream || rel.nil?
             end
@@ -192,7 +195,10 @@ class OpenTideConstants
             aliases = (raw["aliases"].is_a?(Hash) ? raw["aliases"] : {}).transform_values do |v|
                 v.is_a?(String) ? [v] : Array(v).grep(String)
             end
-            { "offset" => pos, "length" => len, "station_id" => raw["station_id"], "status" => raw["status"],
+            # A line with no status is an active station to the load, so its entry says so (a nil
+            # status would make the index stale on every open).
+            status = raw["status"].is_a?(String) ? raw["status"] : "active"
+            { "offset" => pos, "length" => len, "station_id" => raw["station_id"], "status" => status,
               "name" => name, "name_folded" => name && Fold.fold(name), "country" => str.call(raw, "country"),
               "type" => str.call(raw, "type"), "lat" => num.call("lat"), "lon" => num.call("lon"), "kind" => kind,
               "aliases" => aliases, "reference_station_id" => str.call(off, "reference_station_id"),
@@ -218,7 +224,11 @@ class OpenTideConstants
         def raw_from_index(e, io)
             if e["status"] == "removed"
                 io.seek(e["offset"])
-                return parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
+                raw = parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
+                unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]
+                    raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} is not #{e['station_id']}"
+                end
+                return raw
             end
             raw = e.slice("station_id", "status", "name", "country", "type", "lat", "lon", "recommended_set_id", "aliases")
             raw["constant_sets"] = e["sets"].map do |cs|

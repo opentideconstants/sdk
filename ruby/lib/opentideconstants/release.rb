@@ -29,9 +29,12 @@ class OpenTideConstants
         # {path => expected sha256} for #verify. io: the open .jsonl file in
         # stream mode (or nil). zenodo_version_doi: from the pointer or index
         # entry of this datestamp (the release document does not hold it).
-        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil)
+        # on_bad_index: called (with the message) when a line read through the
+        # stream index is not the station its entry names (spec §6.2, CR D4).
+        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil)
             @mode = mode
             @io = io
+            @on_bad_index = on_bad_index
             @io_lock = Mutex.new
             @files = files.sort_by(&:name).freeze
             @checks = checks.freeze
@@ -363,15 +366,29 @@ class OpenTideConstants
                 @io.seek(e.pos)
                 @io.read(e.len)
             end
-            build_station(parse_station(line), e.kind)
+            raw = line && line.bytesize == e.len ? parse_station(line) : nil
+            unless raw.is_a?(Hash) && raw["station_id"] == e.station_id
+                bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : "is not a station line")
+            end
+            build_station(raw, e.kind)
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
         end
 
+        # A line that is not the station its entry names: invalid_release. When
+        # the entry came from index-v1.json, the client deletes that index so
+        # the next open rebuilds it (spec §6.2, CR D4).
+        def bad_line!(e, what)
+            source = @on_bad_index ? "index-v1.json" : "the .jsonl"
+            msg = "#{source}: the line at byte #{e.pos} for #{e.station_id} #{what}"
+            @on_bad_index&.call(msg)
+            raise InvalidReleaseError, msg
+        end
+
         def parse_station(line)
-            JSON.parse(line)
-        rescue JSON::ParserError => err
-            raise InvalidReleaseError, "bad station line: #{err.message}"
+            JSON.parse(line.force_encoding(Encoding::UTF_8))
+        rescue JSON::ParserError, EncodingError
+            nil
         end
 
         def build_station(raw, kind)

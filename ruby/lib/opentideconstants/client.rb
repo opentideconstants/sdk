@@ -574,7 +574,7 @@ class OpenTideConstants
         index = fresh_stream_index(d, ver, paths.first)
         if index
             begin
-                return Reader.load(paths.first, index: index, **opts)
+                return Reader.load(paths.first, index: index, on_bad_index: ->(msg) { drop_stream_index(d, msg) }, **opts)
             rescue InvalidReleaseError => e
                 log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
             end
@@ -601,9 +601,30 @@ class OpenTideConstants
         return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
         return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
         return nil unless idx["stations"].is_a?(Array) && idx["stations"].all? { |e| Reader.index_entry_ok?(e) }
+        return nil unless index_in_bounds?(idx["stations"], idx["jsonl_size"])
         idx["stations"]
     rescue JSON::ParserError, EncodingError, SystemCallError, IOError
         nil
+    end
+
+    # The bounds check of a fresh index (spec §6.2, CR D4): each length > 0,
+    # offset + length <= the .jsonl size, and offsets strictly increasing.
+    def index_in_bounds?(entries, size)
+        last = -1
+        entries.all? do |e|
+            ok = e["length"].positive? && e["offset"] > last && e["offset"] + e["length"] <= size
+            last = e["offset"]
+            ok
+        end
+    end
+
+    # Deletes the stream index of release d after a line did not match its
+    # entry (spec §6.2, CR D4); the next open rebuilds it.
+    def drop_stream_index(d, msg)
+        log(:warn, "#{msg}; deleting index-v1.json of #{d}")
+        cache.remove_file(File.join(cache.release_dir(d), "index-v1.json"))
+    rescue CacheError => e
+        log(:warn, e.message)
     end
 
     # Writes index-v1.json (spec §6.2): rows are the entries of every line,
