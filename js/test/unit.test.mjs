@@ -329,3 +329,24 @@ test("T89: NO_PROXY keeps bare IPv6 addresses whole, and strips the port of [v6]
         if (saved === undefined) delete process.env.NO_PROXY; else process.env.NO_PROXY = saved;
     }
 });
+
+test("T44/D21: after close, queries and release calls are io in eager and stream mode; close again does nothing", async () => {
+    for (const mode of ["eager", "stream"]) {
+        const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), mode });
+        const held = c.release;
+        c.close();
+        c.close();
+        assert.throws(() => c.station("OTC-T-0001"), isCode("io"), mode);
+        assert.throws(() => held.stations(), isCode("io"), mode);
+        assert.throws(() => c.cachedReleases(), isCode("io"), mode);
+        await assert.rejects(c.verify(), isCode("io"), mode);
+    }
+});
+
+test("T1: an automatic update worker that cannot start answers at once, not after the timeout", async () => {
+    const { runBlocking } = await import("../dist/node.js");
+    const t0 = Date.now();
+    const r = runBlocking(new URL("./no-such-worker.js", import.meta.url), {}, 20_000);
+    assert.equal(r.ok, false);
+    assert.ok(Date.now() - t0 < 10_000, `waited ${Date.now() - t0} ms`);
+});

@@ -1,6 +1,6 @@
 import { compareDatestamps, foldName } from "./constants.js";
 import {
-    InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
+    FileError, InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
 } from "./errors.js";
 import { arr, deepFreeze, en, isObject, num, obj, str, time, val, type Json, type JsonObject } from "./json.js";
 import type {
@@ -800,11 +800,41 @@ export class Release {
         Object.freeze(this);
     }
 
-    /** @internal Release the file handle (stream mode). */
+    /** @internal Release the file handle (stream mode). After it every query fails with io (spec 4.2, CR D21). */
     _close(): void {
         if (!this.#closed) {
             this.#closed = true;
             this.#source.close();
+        }
+    }
+
+    /** @internal A function that releases the file handle without holding this Release (for a FinalizationRegistry). */
+    _closer(): () => void {
+        const source = this.#source;
+        return () => source.close();
+    }
+
+    /** Every query on a closed release fails with io, the same in eager and stream mode (CR D21). */
+    #open(): void {
+        if (this.#closed) throw new FileError("the release is closed", { path: `release ${this.datestamp}` });
+    }
+
+    /** The station LRU (stream mode, spec 6.2): a hit becomes the newest entry; past the size, the oldest goes. */
+    #cached(key: string): Station | Tombstone | undefined {
+        const hit = this.#cache.get(key);
+        if (hit !== undefined) {
+            this.#cache.delete(key);
+            this.#cache.set(key, hit);
+        }
+        return hit;
+    }
+
+    #remember(key: string, v: Station | Tombstone): void {
+        this.#cache.set(key, v);
+        while (this.#cache.size > this.#lru) {
+            const first = this.#cache.keys().next().value;
+            if (first === undefined) break;
+            this.#cache.delete(first);
         }
     }
 
@@ -815,45 +845,43 @@ export class Release {
     }
 
     #station(e: IndexEntry): Station {
-        const hit = this.#cache.get(e.station_id);
-        if (hit instanceof Station) {
-            this.#cache.delete(e.station_id);
-            this.#cache.set(e.station_id, hit);
-            return hit;
-        }
+        const hit = this.#cached(e.station_id);
+        if (hit instanceof Station) return hit;
         const s = new Station(this.#doc(e), e, this);
-        this.#cache.set(e.station_id, s);
-        if (this.#cache.size > this.#lru) {
-            const first = this.#cache.keys().next().value;
-            if (first !== undefined) this.#cache.delete(first);
-        }
+        this.#remember(e.station_id, s);
         return s;
     }
 
     get conventions(): readonly Convention[] {
+        this.#open();
         return this.#conventions;
     }
 
     convention(conventionId: string): Convention | null {
+        this.#open();
         return this.#conventions.find((c) => c.convention_id === conventionId) ?? null;
     }
 
     get licences(): readonly Licence[] {
+        this.#open();
         return this.#licences;
     }
 
     licence(licenceId: string): Licence | null {
+        this.#open();
         return this.#licences.find((l) => l.licence_id === licenceId) ?? null;
     }
 
     /** The constituent names used by any set, sorted. */
     get constituentNames(): readonly string[] {
+        this.#open();
         const names = new Set<string>();
         for (const e of this.#active) for (const n of e.constituent_names) names.add(n);
         return Object.freeze([...names].sort(cmp));
     }
 
     get stats(): Stats {
+        this.#open();
         const a = this.#active;
         return Object.freeze({
             type: countBy(a.map((e) => e.type)), kind: countBy(a.map((e) => e.kind)), country: countBy(a.map((e) => e.country)),
@@ -863,10 +891,12 @@ export class Release {
 
     /** The number of active stations. */
     get stationCount(): number {
+        this.#open();
         return this.#active.length;
     }
 
     get tombstoneCount(): number {
+        this.#open();
         return this.#tombById.size;
     }
 
@@ -883,12 +913,14 @@ export class Release {
 
     /** An active station by its OTC id, or null. */
     station(stationId: string): Station | null {
+        this.#open();
         const e = this.#byId.get(stationId);
         return e ? this.#station(e) : null;
     }
 
     /** An active station by its OTC id; station_not_found or station_removed otherwise. */
     requireStation(stationId: string): Station {
+        this.#open();
         const s = this.station(stationId);
         if (s) return s;
         const t = this.tombstone(stationId);
@@ -899,9 +931,10 @@ export class Release {
 
     /** The tombstone of a removed station, or null. */
     tombstone(stationId: string): Tombstone | null {
+        this.#open();
         const e = this.#tombById.get(stationId);
         if (!e) return null;
-        const hit = this.#cache.get(`tomb:${stationId}`);
+        const hit = this.#cached(`tomb:${stationId}`);
         if (hit && !(hit instanceof Station)) return hit;
         const raw = this.#doc(e);
         const t: Tombstone = Object.freeze({
@@ -911,23 +944,26 @@ export class Release {
             removed_reason: en(raw["removed_reason"], ["merged", "duplicate"] as const),
             merged_into: str(raw, "merged_into"), detail: str(raw, "detail"), raw,
         });
-        this.#cache.set(`tomb:${stationId}`, t);
+        this.#remember(`tomb:${stationId}`, t);
         return t;
     }
 
     /** A station by an id in another system (noaa, gesla, ticon, xtide, kartverket, slackwater, webcaltides, ...). */
     stationByAlias(system: string, aliasId: string): Station | null {
+        this.#open();
         const e = this.#alias.get(system)?.get(aliasId);
         return e ? this.#station(e) : null;
     }
 
     /** Active stations ordered by station_id. */
     stations(filters: StationFilters = {}): readonly Station[] {
+        this.#open();
         return Object.freeze([...this.iterStations(filters)]);
     }
 
     /** Iterate active stations ordered by station_id. Bad filters fail here, not at the first next(). */
     iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
+        this.#open();
         const f = checkFilters(filters);
         const active = this.#active;
         const station = (e: IndexEntry) => this.#station(e);
@@ -938,6 +974,7 @@ export class Release {
 
     /** Name search, accent-insensitive and ranked (spec 4.4.1). */
     search(options: SearchOptions): readonly Station[] {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("search needs an options object with name");
         const f = checkFilters(options);
         const limit = checkLimit(options.limit);
@@ -978,6 +1015,7 @@ export class Release {
 
     /** Stations within radiusKm (great-circle), nearest first. */
     near(options: NearOptions): readonly Nearby<Station>[] {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("near needs an options object");
         const lat = checkNumber(options.lat, "lat", -90, 90);
         const lon = checkNumber(options.lon, "lon", -180, 180);
@@ -991,6 +1029,7 @@ export class Release {
 
     /** The nearest station, within maxKm if given, or null. */
     nearest(options: NearestOptions): Nearby<Station> | null {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("nearest needs an options object");
         const lat = checkNumber(options.lat, "lat", -90, 90);
         const lon = checkNumber(options.lon, "lon", -180, 180);
@@ -1002,6 +1041,7 @@ export class Release {
 
     /** The reference station of a subordinate station, or null. */
     referenceStation(station: Station): Station | null {
+        this.#open();
         const e = station ? this.#byId.get(station.station_id) : undefined;
         if (!e || !e.reference_station_id) return null;
         return this.station(e.reference_station_id);
@@ -1009,12 +1049,14 @@ export class Release {
 
     /** The subordinate stations of a reference station, ordered by station_id. */
     subordinatesOf(station: Station): readonly Station[] {
+        this.#open();
         const l = station ? this.#subs.get(station.station_id) ?? [] : [];
         return Object.freeze([...l].sort((a, b) => cmp(a.station_id, b.station_id)).map((e) => this.#station(e)));
     }
 
     /** The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). */
     attribution(stations?: readonly (Station | null)[] | null): string {
+        this.#open();
         let ids: Set<string>;
         if (stations === undefined || stations === null) {
             ids = new Set(this.#licences.map((l) => l.licence_id));

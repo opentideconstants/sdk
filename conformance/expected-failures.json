@@ -1218,8 +1218,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK13",
    "reason": "step 5 last_error: result.code: expected \"network\", got null"

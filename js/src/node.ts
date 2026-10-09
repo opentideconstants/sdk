@@ -506,18 +506,40 @@ export interface BlockingResult {
     datestamp?: string;
     how?: string;
     message?: string;
+    /** The SDK error code of a failure (spec 4.8), and its url, status and path when it has them. */
+    code?: string;
+    url?: string | null;
+    status?: number | null;
+    path?: string | null;
 }
 
 /**
  * Run a worker module and block until it answers. The query that triggers an automatic update must
  * already see the new release (spec 5.6), and JavaScript queries are synchronous, so the check runs
- * to completion in a short-lived worker while the calling thread waits. No thread outlives the call.
+ * to completion in a short-lived worker thread while the calling thread waits. (Spec 5.6 says "no thread";
+ * a blocking check is not possible in JavaScript without one, so this is the TypeScript deviation.)
+ *
+ * The worker is started through a bootstrap that always posts an answer and wakes the caller, also when the
+ * module fails to load or throws outside its own try (PK13 T1), so the wait ends when the worker ends, not after
+ * the timeout. The worker is terminated after the wait; a lock it held is then stale and taken over (spec 5.4).
  */
 export function runBlocking(url: URL, data: unknown, timeoutMs = 600_000): BlockingResult {
     const sab = new SharedArrayBuffer(4);
     const flag = new Int32Array(sab);
     const { port1, port2 } = new MessageChannel();
-    const w = new Worker(url, { workerData: { port: port2, sab, data }, transferList: [port2] });
+    const boot = `
+const { workerData } = require("node:worker_threads");
+const { port, sab, url } = workerData;
+const flag = new Int32Array(sab);
+import(url).catch((e) => {
+    port.postMessage({ ok: false, message: "the update check failed to start: " + (e && e.message ? e.message : String(e)) });
+}).finally(() => {
+    Atomics.store(flag, 0, 1);
+    Atomics.notify(flag, 0);
+});`;
+    const w = new Worker(boot, { eval: true, workerData: { port: port2, sab, data, url: url.href }, transferList: [port2] });
+    // an error event after the wait must not become an uncaught exception in the host (PK13 T1)
+    w.on("error", () => undefined);
     try {
         Atomics.wait(flag, 0, 0, timeoutMs);
         const msg = receiveMessageOnPort(port1);

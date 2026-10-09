@@ -19,6 +19,12 @@ import type {
 } from "./types.js";
 
 type NodeMod = typeof import("./node.js");
+type BlockingResult = import("./node.js").BlockingResult;
+
+/** Releases the file handle of a swapped-out release that nobody holds any more. */
+const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
+    try { close(); } catch { /* the handle is gone with the process */ }
+});
 
 const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
 const dec = new TextDecoder();
@@ -66,6 +72,24 @@ interface FileSource {
     shaPath: string | null;
 }
 
+/** The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). */
+function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
+    const m = r.message ?? "the automatic update check failed";
+    switch (r.code) {
+        case "release_not_found": return new ReleaseNotFoundError(m);
+        case "offline_unavailable": return new OfflineError(m);
+        case "unsupported_format": return new UnsupportedFormatError(m);
+        case "reader_too_old": return new ReaderTooOldError(m);
+        case "invalid_release": return new InvalidReleaseError(m);
+        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: null, actual: null });
+        case "cache": return new CacheError(m, { path: r.path ?? null });
+        case "io": return new FileError(m, { path: r.path ?? "" });
+        case "invalid_argument": return new InvalidArgumentError(m);
+        // network, and a worker that did not finish or failed outside the SDK: the check could not reach the data
+        default: return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null });
+    }
+}
+
 /** A Node SyncDir over a cache release directory. */
 function nodeDir(node: NodeMod, dir: string): SyncDir {
     const p = (name: string) => node.nodePath.join(dir, name);
@@ -100,7 +124,9 @@ export class OpenTideConstants {
     #autoUpdate: boolean;
     #interval: number;
     #lastCheck: number;
-    #all: Release[];
+    /** Every release this client loaded, weakly: a swapped-out one stays valid while the caller holds it (T4). */
+    #all: WeakRef<Release>[];
+    #closed = false;
     #newerFormatMajor: number | null = null;
 
     private constructor(ctx: Ctx, node: NodeMod | null, release: Release, loadedFrom: LoadedFrom, extra: {
@@ -118,7 +144,7 @@ export class OpenTideConstants {
         this.#autoUpdate = extra.autoUpdate;
         this.#interval = extra.interval;
         this.#lastCheck = Date.now();
-        this.#all = [release];
+        this.#all = [new WeakRef(release)];
     }
 
     /** Open a release: the latest (default), a pinned datestamp, or a local file (Node). Spec 4.2, 5.2. */
@@ -295,7 +321,8 @@ export class OpenTideConstants {
     // ------------------------------------------------------------------ automatic update (spec 5.6)
 
     #current(): Release {
-        // offline, the automatic check does not run at all (spec 5.6, CR D6)
+        this.#check();
+        // offline, and after close,, the automatic check does not run at all (spec 5.6, CR D6)
         if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
             this.#lastCheck = Date.now();
             this.#autoUpdateNow(this.#node);
@@ -309,32 +336,45 @@ export class OpenTideConstants {
             baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
             userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
         });
+        // a failed check keeps the current release, logs, and records the error as lastError (spec 4.3, 5.6; T29)
         if (!res.ok || typeof res.datestamp !== "string") {
+            this.#lastError = errorFromWorker(res);
             log(ctx, "warn", `automatic update check failed: ${res.message ?? "unknown error"}`);
             return;
         }
         const from = this.#release.datestamp;
-        if (compareDatestamps(res.datestamp, from) <= 0) return;
+        if (compareDatestamps(res.datestamp, from) <= 0) {
+            log(ctx, "debug", `automatic update check: ${from} is current`);
+            return;
+        }
         const store = ctx.store;
         if (!store) return;
         try {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
-            if (!vb) return;
-            const v = parseVerified(vb, res.datestamp);
-            if (!v) return;
+            const v = vb ? parseVerified(vb, res.datestamp) : null;
+            if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
             const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m));
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
+            if (e instanceof OpenTideConstantsError) this.#lastError = e;
             log(ctx, "warn", `automatic update failed: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
 
     #swap(rel: Release, from: LoadedFrom): void {
+        const old = this.#release;
         this.#release = rel;
         this.#loadedFrom = from;
         this.#lastError = null;
-        this.#all.push(rel);
+        // the old release keeps its file handle while someone holds it, and loses it when it is collected (T4)
+        CLOSE_ON_COLLECT.register(old, old._closer());
+        this.#all = [...this.#all.filter((r) => r.deref() !== undefined), new WeakRef(rel)];
+    }
+
+    /** After close, every query and release-management call is io (spec 4.2, CR D21). */
+    #check(): void {
+        if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
     }
 
     // ------------------------------------------------------------------ release management (spec 4.3)
@@ -356,6 +396,7 @@ export class OpenTideConstants {
 
     /** Every release from OTC_index.json, newest first. */
     async releases(): Promise<readonly ReleaseInfo[]> {
+        this.#check();
         const ctx = this.#ctx;
         if (ctx.offline) {
             const idx = await cachedIndex(ctx);
@@ -391,6 +432,7 @@ export class OpenTideConstants {
 
     /** The latest release (one conditional GET of the pointer). It does not switch to it. */
     async latest(): Promise<ReleaseInfo> {
+        this.#check();
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
         return toInfo(await getPointer(this.#ctx));
     }
@@ -400,6 +442,7 @@ export class OpenTideConstants {
      * reads OTC_latest.json and sets `newerFormatMajor` when that names a format major newer than this SDK reads.
      */
     async checkForUpdate(): Promise<ReleaseInfo | null> {
+        this.#check();
         const ctx = this.#ctx;
         if (ctx.offline) throw new OfflineError("offline: checkForUpdate needs the network");
         // newerFormatMajor is set before an unsupported_format or reader_too_old is raised, and keeps its old value
@@ -445,6 +488,7 @@ export class OpenTideConstants {
 
     /** Download and switch to a newer release. A Release held from before keeps showing the old one. */
     async update(): Promise<UpdateResult> {
+        this.#check();
         if (this.#pinned) throw new PinnedReleaseError(this.#file ? "the client was opened on a file" : "the client was opened on a pinned release");
         // offline: no socket, the same as latest and checkForUpdate (spec 5.5, CR D6)
         if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
@@ -459,6 +503,7 @@ export class OpenTideConstants {
 
     /** Write a release into a folder the caller chooses (Node only; spec 4.3.2). Returns the paths written. */
     async download(options: DownloadOptions): Promise<readonly string[]> {
+        this.#check();
         const node = this.#node;
         if (!node) throw new UnsupportedError("download needs a file system (Node)");
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("download needs an options object with to");
@@ -530,6 +575,7 @@ export class OpenTideConstants {
 
     /** Hash the release files again and compare them with OTC_{D}.sha256 (spec 4.3). */
     async verify(): Promise<true> {
+        this.#check();
         const f = this.#file;
         if (f && this.#node) {
             const node = this.#node;
@@ -550,6 +596,7 @@ export class OpenTideConstants {
      * it lists the configured cache (`cacheDir` or the default), never the file's folder (spec 4.3, CR D33).
      */
     cachedReleases(): readonly string[] {
+        this.#check();
         const node = this.#node;
         const store = this.#ctx.store;
         if (!node || !store) throw new UnsupportedError("cachedReleases needs a file system (Node)");
@@ -565,6 +612,7 @@ export class OpenTideConstants {
      * also on a client opened with `file` (CR D33).
      */
     prune(options: PruneOptions = {}): readonly string[] {
+        this.#check();
         // a JavaScript caller can pass null or a non-object; neither is a raw TypeError
         const o: unknown = options;
         if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
@@ -592,7 +640,18 @@ export class OpenTideConstants {
 
     /** Close the client and every release it loaded (stream mode holds a file handle). */
     close(): void {
-        for (const r of this.#all) r._close();
+        // close every release, also when one fails; the first failure is raised after (PK13 T14)
+        this.#closed = true;
+        let first: unknown = null;
+        for (const ref of this.#all) {
+            try {
+                ref.deref()?._close();
+            } catch (e) {
+                first ??= e;
+            }
+        }
+        this.#all = [];
+        if (first !== null) throw first;
     }
 
     [Symbol.dispose](): void {
