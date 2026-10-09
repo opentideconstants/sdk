@@ -145,3 +145,16 @@ def test_merged_into_and_current_bin_names_resolve():
     cur["constant_sets"][0]["current_bins"][0]["constituents"][0]["name"] = "ZZ9"
     errs = bf.cross_ref_errors(doc)
     assert any("OTC-T-9999" in e for e in errs) and any("ZZ9" in e for e in errs), errs
+
+
+# --- B2-9: date-time and uri formats are checked (a FormatChecker, with the packages it needs)
+
+@pytest.mark.parametrize("where,value", [("created", "not-a-date"), ("created", "2099-13-45T00:00:00Z"),
+                                         ("changelog_url", "not a uri")])
+def test_formats_are_checked(schemas, where, value):
+    doc = bf.release_doc(bf.SECOND)
+    doc["release"][where] = value
+    meta = {k: v for k, v in doc.items() if k != "stations"}
+    with pytest.raises(bf.Fail) as e:
+        bf.validate_release(doc, meta, doc["stations"], schemas)
+    assert e.value.code == "invalid_release"

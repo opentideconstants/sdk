@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["jsonschema==4.25.1"]
+# dependencies = ["jsonschema==4.25.1", "rfc3339-validator==0.1.4", "rfc3986-validator==0.1.1"]
 # ///
 """Build and check the conformance fixture releases (SDK spec §7.1).
 
@@ -41,7 +41,23 @@ import urllib.request
 import zlib
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
+
+# The schemas use format date-time and uri. jsonschema checks them only with a format checker and the packages
+# above; without them every format passes. So the checker is required, and proven to work before any check.
+FORMATS = FormatChecker()
+
+
+def _require_formats():
+    probes = [("not-a-date", "date-time"), ("2099-13-45T00:00:00Z", "date-time"), ("not a uri", "uri")]
+    broken = [f"{v!r} as {f}" for v, f in probes if FORMATS.conforms(v, f)]
+    if broken:
+        raise SystemExit("the jsonschema format checker does not check " + ", ".join(broken) +
+                         " (install rfc3339-validator and rfc3986-validator; uv run installs them from the script header)")
+
+
+def validator(schema):
+    return Draft202012Validator(schema, format_checker=FORMATS)
 
 # Format 1.0 and its index schema, from the site repository at the merge that published format 1.0,
 # pinned by commit and SHA-256.
@@ -784,6 +800,7 @@ def fetch_schema(version, schema_dir=None):
 
 def load_schemas(schema_dir=None):
     """Every pinned schema: {"1.0": ..., "index-1.0": ...}."""
+    _require_formats()
     return {v: fetch_schema(v, schema_dir) for v in SCHEMAS}
 
 
@@ -1041,14 +1058,14 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                 if cs["qc_status"] not in known_qc:
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
-    errs = [f"{list(e.path)} {e.message}" for e in Draft202012Validator(schema).iter_errors(checked)]
+    errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
     errs += cross_ref_errors(checked)
     if errs:
         raise Fail("invalid_release", "; ".join(errs[:5]))
     if exact is not None:
         defs = {"$schema": schema["$schema"], "$defs": schema["$defs"]}
-        meta_v = Draft202012Validator({**defs, "$ref": "#/$defs/meta"})
-        st_v = Draft202012Validator({**defs, "$ref": "#/$defs/station"})
+        meta_v = validator({**defs, "$ref": "#/$defs/meta"})
+        st_v = validator({**defs, "$ref": "#/$defs/station"})
         errs = [f"meta {e.message}" for e in meta_v.iter_errors(meta)]
         errs += [f"jsonl line {i + 1}: {e.message}" for i, l in enumerate(lines) for e in st_v.iter_errors(l)]
         if errs:
@@ -1081,8 +1098,8 @@ def index_errors(root, schemas):
     """OTC_index.json validates against otc-index-1.0, each pointer against its release_info."""
     schema = schemas["index-1.0"]
     errs = [f"OTC_index.json {list(e.path)} {e.message}"
-            for e in Draft202012Validator(schema).iter_errors(json.loads((root / "OTC_index.json").read_bytes()))]
-    info = Draft202012Validator({"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/release_info"})
+            for e in validator(schema).iter_errors(json.loads((root / "OTC_index.json").read_bytes()))]
+    info = validator({"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/release_info"})
     for p in sorted(root.glob("OTC_latest*.json")):
         errs += [f"{p.name} {e.message}" for e in info.iter_errors(json.loads(p.read_bytes()))]
     return errs
