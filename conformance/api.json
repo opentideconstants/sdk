@@ -884,7 +884,8 @@
        "type": "integer",
        "required": false,
        "positional": false,
-       "default": null
+       "default": null,
+       "note": "an integer >= 1; null (or absent) = no limit; 0 or a negative value is invalid_argument; C passes OTC_NO_LIMIT (SIZE_MAX) for no limit, and 0 is OTC_E_INVALID_ARGUMENT"
       },
       {
        "name": "match",
@@ -939,7 +940,8 @@
        "type": "integer",
        "required": false,
        "positional": false,
-       "default": null
+       "default": null,
+       "note": "an integer >= 1; null (or absent) = no limit; 0 or a negative value is invalid_argument; C passes OTC_NO_LIMIT (SIZE_MAX) for no limit, and 0 is OTC_E_INVALID_ARGUMENT"
       }
      ],
      "filters": true,
@@ -2622,7 +2624,8 @@
    "OTC_ABI_VERSION",
    "OTC_FORMAT_JSON",
    "OTC_FORMAT_JSON_GZ",
-   "OTC_FORMAT_JSONL"
+   "OTC_FORMAT_JSONL",
+   "OTC_NO_LIMIT"
   ]
  },
  "environment": {
