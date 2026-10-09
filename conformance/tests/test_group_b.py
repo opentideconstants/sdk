@@ -73,7 +73,8 @@ def test_server_variant_requires_fs():
 def test_runner_home_is_isolated(tmp_path):
     probe = tmp_path / "homes"
     cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
-    run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_HOME_PROBE": str(probe)})
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_HOME_PROBE": str(probe)})
+    assert r.returncode == 1 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])  # the fake reply fails the step
     homes = [h for h in probe.read_text().splitlines()]
     assert len(homes) >= 2, homes  # the probe and the case runner
     assert all(h and h != os.environ.get("HOME") for h in homes), homes
