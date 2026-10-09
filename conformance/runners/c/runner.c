@@ -1316,6 +1316,10 @@ static void op_query(request *q, reply *r)
                 const otc_licence *l = NULL;
                 const char *id = arg_str(&q->a, "licence_id");
                 if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad));
+            } else {   /* README "raw": station, tombstone, set, constituent, convention or licence */
+                otc_station_free(st);
+                set_error(r, "uncaught:UnknownRawObject", obj);
+                return;
             }
             cJSON_AddItemToObject(o, "raw", raw ? raw : cJSON_CreateNull());
         } else {
@@ -1325,6 +1329,8 @@ static void op_query(request *q, reply *r)
         }
         otc_station_free(st);
     }
+    /* an argument read after the first check (set_id, name, ...) with the wrong type: never a null result */
+    if (q->a.bad && !r->code) { set_error(r, "invalid_argument", "an argument has the wrong type"); return; }
     if (bad) set_error(r, "uncaught:BufferProtocol", "an accessor broke the buffer or list rules");
 }
 
