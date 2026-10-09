@@ -681,7 +681,7 @@ typedef struct otc_fetch_options {
     bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE = 1, true, yes or on (any case,
                                            trimmed); no socket is ever opened */
     double               timeout_s;     /* OTC_TIMEOUT_DEFAULT (set by init): the defaults (connect 10 s, read
-                                           60 s); else both, in seconds, more than 0 and at most 1e6; any other
+                                           60 s); else both, in seconds, from 0.001 to 1e6; any other
                                            value (0, a negative number, NaN, more): OTC_E_INVALID_ARGUMENT */
     const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
                                            https_proxy / HTTPS_PROXY, ALL_PROXY and NO_PROXY (spec 5.7) */

@@ -181,6 +181,25 @@ class LoneSurrogateTest < Minitest::Test
     end
 end
 
+# CR2 DR19 (spec §5.7): the timeout is 0.001 to 1e6 seconds in every SDK.
+class TimeoutRangeTest < Minitest::Test
+    FILE = File.join(FIXTURES, "good", "OTC_20991231.2.jsonl")
+
+    def test_timeout_outside_the_range_is_invalid_argument
+        [0, -1, 0.0001, 0.000999, 1e6 + 1, 1e7, Float::NAN, Float::INFINITY, Complex(1, 0)].each do |t|
+            assert_raises(OpenTideConstants::InvalidArgumentError, t.inspect) do
+                OpenTideConstants.new(file: FILE, timeout: t)
+            end
+        end
+    end
+
+    def test_timeout_at_the_bounds_is_accepted
+        [0.001, 1e6, 1, 30].each do |t|
+            OpenTideConstants.new(file: FILE, timeout: t).close
+        end
+    end
+end
+
 # The other unit test files (CI runs this file only).
 Dir[File.join(__dir__, "test_*.rb")].sort.each do |f|
     require f unless File.expand_path(f) == File.expand_path(__FILE__)

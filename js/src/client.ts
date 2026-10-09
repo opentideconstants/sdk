@@ -26,6 +26,9 @@ const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
 });
 
 const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
+/** The range of the timeout option, in every SDK (spec 5.7, CR2 DR19). */
+const TIMEOUT_MIN_S = 0.001;
+const TIMEOUT_MAX_S = 1e6;
 
 function toInfo(e: PointerEntry): ReleaseInfo {
     return Object.freeze({
@@ -46,6 +49,18 @@ function optSeconds(v: unknown, name: string): number | null {
     if (v === undefined || v === null) return null;
     if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) throw new InvalidArgumentError(`${name} must be a number of seconds greater than 0; got ${JSON.stringify(v)}`);
     return v;
+}
+
+/**
+ * The timeout: 0.001 to 1e6 seconds, or null when absent (spec 5.7, CR2 DR19). The upper bound keeps every timer
+ * below the setTimeout limit (2^31 - 1 ms, about 24.8 days), above which Node fires the timer after 1 ms.
+ */
+function optTimeout(v: unknown): number | null {
+    const t = optSeconds(v, "timeout");
+    if (t !== null && (t < TIMEOUT_MIN_S || t > TIMEOUT_MAX_S)) {
+        throw new InvalidArgumentError(`timeout must be from ${TIMEOUT_MIN_S} to ${TIMEOUT_MAX_S} seconds; got ${JSON.stringify(v)}`);
+    }
+    return t;
 }
 
 /** True for an absolute http or https URL with a host. */
@@ -139,7 +154,8 @@ export class OpenTideConstants {
         this.#cacheRoot = extra.cacheRoot;
         this.#autoUpdate = extra.autoUpdate;
         this.#interval = extra.interval;
-        this.#lastCheck = Date.now();
+        // a monotonic clock, as in Python and Ruby: a wall clock stepped back must not stop the checks (CR2 R2-119)
+        this.#lastCheck = performance.now();
         this.#all = [new WeakRef(release)];
     }
 
@@ -152,7 +168,7 @@ export class OpenTideConstants {
         if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
         const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
         if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
-        const timeout = optSeconds(options.timeout, "timeout");
+        const timeout = optTimeout(options.timeout);
         const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
         const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
@@ -392,8 +408,8 @@ export class OpenTideConstants {
     #current(): Release {
         this.#check();
         // offline, and after close,, the automatic check does not run at all (spec 5.6, CR D6)
-        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
-            this.#lastCheck = Date.now();
+        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && performance.now() - this.#lastCheck >= this.#interval * 1000) {
+            this.#lastCheck = performance.now();
             this.#autoUpdateNow(this.#node);
         }
         return this.#release;

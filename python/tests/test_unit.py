@@ -602,6 +602,14 @@ class MalformedInputTest(RepeatedIdsTest):
             with self.assertRaises(otc.InvalidArgumentError, msg=kw):
                 otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), **kw)
 
+    def test_timeout_is_from_1_ms_to_1e6_s(self):
+        # CR2 DR19 (spec §5.7): the same range in every SDK
+        for t in (0.0001, 0.000999, 1e6 + 1, 1e7):
+            with self.assertRaises(otc.InvalidArgumentError, msg=t):
+                otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), timeout=t)
+        for t in (0.001, 1e6, 1, 30):
+            otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), timeout=t).close()
+
     def test_objects_are_hashable(self):
         for mode in ("eager", "stream"):
             with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode) as c:

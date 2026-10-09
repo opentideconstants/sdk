@@ -21,7 +21,8 @@ int main(void)
     otc_fetch_options fo;
     otc_error err;
     size_t need;
-    static const double bad[] = {-2.0, -0.001};
+    /* CR2 DR19: from 0.001 to 1e6 s; below 1 ms the libcurl options would round to 0, "no limit" */
+    static const double bad[] = {-2.0, -0.001, 0.0001, 0.000999, 1.0e6 + 1, 1.0e7};
     size_t i;
     unsetenv("OPENTIDECONSTANTS_OFFLINE");
     otc_fetch_options_init(&fo);
@@ -63,6 +64,10 @@ int main(void)
     fo.formats = OTC_FORMATS_DEFAULT;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     fo.timeout_s = 2.5;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
+    fo.timeout_s = 0.001;   /* the bounds are valid (CR2 DR19) */
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
+    fo.timeout_s = 1.0e6;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     /* D19 */
     fo.timeout_s = OTC_TIMEOUT_DEFAULT;

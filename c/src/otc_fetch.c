@@ -45,6 +45,7 @@
 #define USER_AGENT SDK_ID " (+https://opentideconstants.org)"
 #define CONNECT_TIMEOUT_S 10.0
 #define READ_TIMEOUT_S 60.0
+#define TIMEOUT_MIN_S 0.001
 #define TIMEOUT_MAX_S 1.0e6
 #define ATTEMPTS 3
 #define RETRY_AFTER_MAX_S 60.0
@@ -658,12 +659,14 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
                     "formats is empty: name at least one OTC_FORMAT_* bit, or pass OTC_FORMATS_DEFAULT");
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: only OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ and OTC_FORMAT_JSONL");
-    /* timeout_s: OTC_TIMEOUT_DEFAULT is the defaults; otherwise a number of seconds above 0 and at most
-     * TIMEOUT_MAX_S, so that the millisecond options of libcurl stay in a long (CR 4c, C59) */
-    if (o && o->timeout_s != OTC_TIMEOUT_DEFAULT && !(o->timeout_s > 0 && o->timeout_s <= TIMEOUT_MAX_S))
+    /* timeout_s: OTC_TIMEOUT_DEFAULT is the defaults; otherwise a number of seconds from TIMEOUT_MIN_S to
+     * TIMEOUT_MAX_S (spec 5.7, CR2 DR19). Below 1 ms, CONNECTTIMEOUT_MS and LOW_SPEED_TIME would round to 0,
+     * which libcurl reads as "no limit"; above the maximum, the millisecond options would not fit in a long
+     * (CR 4c, C59). */
+    if (o && o->timeout_s != OTC_TIMEOUT_DEFAULT && !(o->timeout_s >= TIMEOUT_MIN_S && o->timeout_s <= TIMEOUT_MAX_S))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL,
-                    "timeout_s must be a number of seconds above 0 and at most %g, or OTC_TIMEOUT_DEFAULT for the defaults",
-                    TIMEOUT_MAX_S);
+                    "timeout_s must be a number of seconds from %g to %g, or OTC_TIMEOUT_DEFAULT for the defaults",
+                    TIMEOUT_MIN_S, TIMEOUT_MAX_S);
     c->connect_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : CONNECT_TIMEOUT_S;
     c->read_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : READ_TIMEOUT_S;
     c->raise = o && o->on_network_error == OTC_ON_NETWORK_ERROR_RAISE;
@@ -947,8 +950,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         }
         errbuf[0] = '\0';
         bad_opt = curl_easy_setopt(h, CURLOPT_URL, url) != CURLE_OK;
-        curl_easy_setopt(h, CURLOPT_USERAGENT, ua);
-        curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
+        /* every option is checked: a timeout or callback that libcurl did not take would send a request with
+         * no limit or with no place for the body (CR2 R2-120) */
+        bad_opt |= curl_easy_setopt(h, CURLOPT_USERAGENT, ua) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L) != CURLE_OK;
         /* redirects (spec 5.7, CR D1): at most 5, only http and https, and never from
          * https to http */
         bad_opt |= curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK;
@@ -961,21 +966,21 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS,
                                     https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
 #endif
-        curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0));
-        curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
-        curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999));
-        curl_easy_setopt(h, CURLOPT_ERRORBUFFER, errbuf);
-        curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, on_body);
-        curl_easy_setopt(h, CURLOPT_WRITEDATA, r);
-        curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header);
-        curl_easy_setopt(h, CURLOPT_HEADERDATA, r);
-        if (accept_gzip) curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip");
+        bad_opt |= curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_ERRORBUFFER, errbuf) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, on_body) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_WRITEDATA, r) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_HEADERDATA, r) != CURLE_OK;
+        if (accept_gzip) bad_opt |= curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip") != CURLE_OK;
         else no_mem |= !add_header(&hdrs, "Accept-Encoding: identity");
         if (if_none_match && if_none_match[0]) {
             snprintf(inm, sizeof inm, "If-None-Match: %s", if_none_match);
             no_mem |= !add_header(&hdrs, inm);
         }
-        if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
+        if (hdrs) bad_opt |= curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs) != CURLE_OK;
         if (proxy) {
             bad_opt |= curl_easy_setopt(h, CURLOPT_PROXY, proxy) != CURLE_OK;
             bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;

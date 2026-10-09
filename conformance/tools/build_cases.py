@@ -2153,6 +2153,10 @@ def group_rules():
                     [latest(err("invalid_argument"), timeout=0)], requires=["fs"]))
     out.append(case("rules/pk07/timeout-negative", "a negative timeout (-5; -1 is the C default sentinel): invalid_argument (R2-152)", "4.2, 4.8",
                     [latest(err("invalid_argument"), timeout=-5)], requires=["fs"]))
+    out.append(case("rules/pk07/timeout-tiny", "timeout below 0.001 s: invalid_argument (CR2 DR19)", "4.8, 5.7",
+                    [latest(err("invalid_argument"), timeout=0.0001)], requires=["fs"]))
+    out.append(case("rules/pk07/timeout-huge", "timeout above 1e6 s: invalid_argument (CR2 DR19)", "4.8, 5.7",
+                    [latest(err("invalid_argument"), timeout=1e7)], requires=["fs"]))
     # CR D31 (spec 4.2): a file client reads no pointer and opens no socket, so these options would be ignored
     for cid, title, extra in (("file-offline", "file with offline true", {"offline": True}),
                               ("file-release", "file with a pinned release", {"release": d2}),
@@ -2320,6 +2324,13 @@ def group_rules():
                     requires=["fs"], timeout_s=90))
     out.append(case("rules/pk12/gz-with-content-encoding", "the .json.gz is sent with Content-Encoding: gzip (as some CDNs do): the SDK keeps the gzip bytes, checks them, and loads", "5.7",
                     [drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d2)}\.json\.gz$", "action": "file", "file": f"good/OTC_{d2}.json.gz",
+                                                 "headers": {"Content-Encoding": "gzip"}}]),
+                     pinned(d2, {"datestamp": d2, "loaded_from": "download"}, mode="eager", on_network_error="raise")],
+                    requires=["fs", "eager"]))
+    out.append(case("rules/pk12/gz-redirect-content-encoding", "the .json.gz redirects to a URL with no .gz suffix that sends it with Content-Encoding: gzip (a CDN): the SDK still keeps the gzip bytes, checks them, and loads (CR2 R2-118)", "5.7",
+                    [drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d2)}\.json\.gz$", "action": "status", "status": 302,
+                                                 "headers": {"Location": "/cdn/blob-1"}},
+                                                {"match": r"^/cdn/blob-1$", "action": "file", "file": f"good/OTC_{d2}.json.gz",
                                                  "headers": {"Content-Encoding": "gzip"}}]),
                      pinned(d2, {"datestamp": d2, "loaded_from": "download"}, mode="eager", on_network_error="raise")],
                     requires=["fs", "eager"]))

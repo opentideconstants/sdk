@@ -15,6 +15,8 @@ class OpenTideConstants
         MAX_RETRY_AFTER = 60
         CONNECT_TIMEOUT = 10
         READ_TIMEOUT = 60
+        TIMEOUT_MIN = 0.001 # the range of the timeout option, in every SDK (spec §5.7, CR2 DR19)
+        TIMEOUT_MAX = 1e6
         USER_AGENT = "opentideconstants-ruby/#{VERSION} (+https://opentideconstants.org)".freeze
         NETWORK_ERRORS = [SocketError, SystemCallError, IOError, EOFError, Timeout::Error, OpenSSL::SSL::SSLError,
                           Net::ProtocolError, Net::OpenTimeout, Net::ReadTimeout, Net::HTTPBadResponse,
@@ -115,6 +117,9 @@ class OpenTideConstants
         # instance, so one HTTP can serve several threads.
         def request(url, etag: nil, &on_ok)
             uri = URI(url)
+            # decided by the URL asked for, not the redirect hop: a CDN may send the .gz
+            # from a URL with no suffix (CR2 R2-118)
+            keep_gz = uri.path.end_with?(".gz")
             attempt = 0
             redirects = 0
             loop do
@@ -122,7 +127,7 @@ class OpenTideConstants
                 wait = nil
                 cause = nil
                 begin
-                    kind, value, retry_wait = once(uri, etag, &on_ok)
+                    kind, value, retry_wait = once(uri, etag, keep_gz, &on_ok)
                     return value if kind == :ok
                     if kind == :redirect
                         redirects += 1
@@ -177,7 +182,7 @@ class OpenTideConstants
 
         # One request: [:ok, the block's value] for a 200, [:redirect, the
         # Location], or [:status, the code, the Retry-After wait or nil].
-        def once(uri, etag)
+        def once(uri, etag, keep_gz)
             http = connection(uri)
             http.start do |conn|
                 req = Net::HTTP::Get.new(uri)
@@ -185,7 +190,7 @@ class OpenTideConstants
                 req["If-None-Match"] = etag if etag
                 # A .gz file is kept as it is sent: its SHA-256 is over the gzip
                 # bytes, also when a server adds Content-Encoding: gzip (spec §5.7).
-                req["Accept-Encoding"] = "identity" if uri.path.end_with?(".gz")
+                req["Accept-Encoding"] = "identity" if keep_gz
                 conn.request(req) do |res|
                     code = res.code.to_i
                     if code == 200

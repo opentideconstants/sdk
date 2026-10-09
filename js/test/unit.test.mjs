@@ -1017,3 +1017,138 @@ test("DR21: the user and password of a URL are not in an error message or a log 
     assert.equal(lines.length, 1);
     clean(lines[0]);
 });
+
+test("CR2 DR19: a timeout outside 0.001 to 1e6 s is invalid_argument, before any network access", async () => {
+    // a server that answers late: before the fix a 1e7 s timer overflowed setTimeout and fired after 1 ms
+    let requests = 0;
+    const srv = http.createServer((req, res) => { requests++; setTimeout(() => { res.statusCode = 404; res.end(); }, 300); });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+        const baseUrl = `http://127.0.0.1:${srv.address().port}/`;
+        for (const timeout of [0.0001, 0.000999, 1e6 + 1, 1e7, 2 ** 31]) {
+            await assert.rejects(otc.OpenTideConstants.open({ baseUrl, cacheDir: tmpdir(), timeout, onNetworkError: "raise" }),
+                isCode("invalid_argument"), String(timeout));
+        }
+        assert.equal(requests, 0);
+        for (const timeout of [0.001, 1e6]) {
+            const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), timeout });
+            c.close();
+        }
+    } finally {
+        srv.close();
+    }
+});
+
+test("R2-118: a .gz that redirects to a URL with no suffix, sent with Content-Encoding: gzip, keeps its gzip bytes", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    const { gzipSync } = await import("node:zlib");
+    const gz = gzipSync(Buffer.from('{"x":1}\n'));
+    const srv = http.createServer((req, res) => {
+        if (req.url === "/OTC_20991231.json.gz") {
+            res.writeHead(302, { Location: "/cdn/blob-1" });
+            res.end();
+        } else {
+            res.writeHead(200, { "Content-Encoding": "gzip", "Content-Length": gz.length });
+            res.end(gz);
+        }
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+        const base = `http://127.0.0.1:${srv.address().port}`;
+        const res = await nodePlatform().get(`${base}/OTC_20991231.json.gz`, { headers: {}, timeout: 5, proxy: null, caFile: null });
+        assert.equal(res.status, 200);
+        assert.deepEqual(Buffer.from(res.body), gz);
+        // a suffix-less URL asked for directly is still decoded
+        const plain = await nodePlatform().get(`${base}/cdn/blob-1`, { headers: {}, timeout: 5, proxy: null, caFile: null });
+        assert.equal(Buffer.from(plain.body).toString(), '{"x":1}\n');
+    } finally {
+        srv.close();
+    }
+});
+
+test("R2-119: the automatic update interval runs on a monotonic clock, so a wall clock stepped back does not stop checks", async () => {
+    // the check blocks this thread (Atomics.wait), so the server runs in another process
+    const { spawn } = await import("node:child_process");
+    const server = `
+        const http = require("node:http"), fs = require("node:fs"), path = require("node:path");
+        let pointer = 0;
+        const srv = http.createServer((req, res) => {
+            const name = path.basename(new URL(req.url, "http://x").pathname);
+            if (name === "count") return res.end(String(pointer));
+            if (name.startsWith("OTC_latest")) pointer++;
+            fs.readFile(path.join(${JSON.stringify(GOOD)}, name), (err, data) => {
+                if (err) { res.statusCode = 404; res.end(); } else res.end(data);
+            });
+        });
+        srv.listen(0, "127.0.0.1", () => console.log(srv.address().port));`;
+    const child = spawn(process.execPath, ["-e", server], { stdio: ["ignore", "pipe", "inherit"] });
+    const realNow = Date.now;
+    let c = null;
+    try {
+        const port = await new Promise((r) => child.stdout.once("data", (d) => r(String(d).trim())));
+        const base = `http://127.0.0.1:${port}/`;
+        const count = async () => Number(await (await fetch(`${base}count`)).text());
+        c = await otc.OpenTideConstants.open({ baseUrl: base, cacheDir: tmpdir(), autoUpdate: true, updateInterval: 0.2 });
+        const before = await count();
+        const stepped = realNow() - 3_600_000;   // the wall clock is stepped back one hour (NTP, a VM resume)
+        Date.now = () => stepped;
+        await new Promise((r) => setTimeout(r, 300));
+        c.station("OTC-T-0001");   // a query after the interval runs the check
+        const after = await count();
+        assert.ok(after > before, `no update check after the interval (pointer requests ${before} -> ${after})`);
+    } finally {
+        Date.now = realNow;
+        c?.close();
+        child.kill();
+    }
+});
+
+test("R2-117: an https proxy is verified against the default roots plus caFile, for https and http targets", async () => {
+    // test/tls: two throwaway CAs (100 years). proxy-ca stands for a CA the system trusts (NODE_EXTRA_CA_CERTS in the
+    // child); target-ca is the caFile, a private CA. NODE_EXTRA_CA_CERTS is read at start-up, so the GET runs in a child.
+    const https = await import("node:https");
+    const net = await import("node:net");
+    const { spawn } = await import("node:child_process");
+    const TLS = new URL("./tls/", import.meta.url).pathname;
+    const pem = (n) => fs.readFileSync(path.join(TLS, n));
+    const target = https.createServer({ key: pem("target.key"), cert: pem("target.pem") }, (req, res) => res.end("target"));
+    const proxyWith = (name) => https.createServer({ key: pem(`${name}.key`), cert: pem(`${name}.pem`) }, (req, res) => res.end("via-proxy"))
+        .on("connect", (req, sock, head) => {
+            const [h, p] = req.url.split(":");
+            const up = net.connect(Number(p), h, () => {
+                sock.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+                up.write(head);
+                up.pipe(sock);
+                sock.pipe(up);
+            });
+            up.on("error", () => sock.destroy());
+            sock.on("error", () => up.destroy());
+        });
+    const publicProxy = proxyWith("proxy");    // a proxy with a certificate from a system-trusted CA
+    const privateProxy = proxyWith("target");  // a proxy with a certificate from the caFile's private CA
+    const servers = [target, publicProxy, privateProxy];
+    await Promise.all(servers.map((s) => new Promise((r) => s.listen(0, "127.0.0.1", r))));
+    const port = (s) => s.address().port;
+    const get = (url, proxy) => new Promise((resolve) => {
+        const script = `
+            const { nodePlatform } = await import(${JSON.stringify(new URL("../dist/node.js", import.meta.url).href)});
+            try {
+                const r = await nodePlatform().get(${JSON.stringify(url)}, { headers: {}, timeout: 5, proxy: ${JSON.stringify(proxy)}, caFile: ${JSON.stringify(path.join(TLS, "target-ca.pem"))} });
+                console.log(r.status + " " + new TextDecoder().decode(r.body));
+            } catch (e) { console.log("error " + e.code + ": " + (e.cause?.code ?? e.message)); }`;
+        const child = spawn(process.execPath, ["--input-type=module", "-e", script],
+            { env: { ...process.env, NODE_EXTRA_CA_CERTS: path.join(TLS, "proxy-ca.pem") }, stdio: ["ignore", "pipe", "ignore"] });
+        let out = "";
+        child.stdout.on("data", (d) => { out += d; });
+        child.on("close", () => resolve(out.trim()));
+    });
+    try {
+        // an https target through a public https proxy: caFile is for the target, not for the proxy
+        // (localhost, not 127.0.0.1: the tunnelled TLS sends the host as SNI, which Node refuses for an IP)
+        assert.equal(await get(`https://localhost:${port(target)}/x`, `https://127.0.0.1:${port(publicProxy)}`), "200 target");
+        // an http target through an https proxy whose CA is the caFile
+        assert.equal(await get(`http://example.invalid/x`, `https://127.0.0.1:${port(privateProxy)}`), "200 via-proxy");
+    } finally {
+        servers.forEach((s) => { s.closeAllConnections(); s.close(); });
+    }
+});

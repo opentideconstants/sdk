@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as http from "node:http";
 import * as https from "node:https";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as tls from "node:tls";
@@ -386,8 +387,10 @@ const MAX_REDIRECTS = 5;
  */
 async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     let current = url;
+    // decided by the URL asked for, not the redirect hop: a CDN may send the .gz from a URL with no suffix (CR2 R2-118)
+    const keepGz = new URL(url).pathname.endsWith(".gz");
     for (let hop = 0; ; hop++) {
-        const res = await nodeGetOnce(current, o);
+        const res = await nodeGetOnce(current, o, keepGz);
         if (!REDIRECTS.has(res.status)) return res;
         const loc = res.header("location");
         let next: URL;
@@ -408,6 +411,11 @@ async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     }
 }
 
+/** The CA certificates Node trusts by default (with NODE_EXTRA_CA_CERTS where Node has getCACertificates). */
+function defaultCaCerts(): readonly string[] {
+    return typeof tls.getCACertificates === "function" ? tls.getCACertificates("default") : tls.rootCertificates;
+}
+
 /** Proxy-Authorization from the user and password of a proxy URL (percent-decoded), or none (PK12 T7). */
 function proxyAuth(proxy: URL): Record<string, string> {
     if (!proxy.username && !proxy.password) return {};
@@ -415,14 +423,23 @@ function proxyAuth(proxy: URL): Record<string, string> {
     return { "Proxy-Authorization": `Basic ${Buffer.from(cred, "utf8").toString("base64")}` };
 }
 
-function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
+function nodeGetOnce(url: string, o: HttpOptions, keepGz: boolean): Promise<HttpResponse> {
     const target = new URL(url);
     const proxy = proxyFor(target, o.proxy);
     const connectMs = (o.timeout ?? 10) * 1000;
     const readMs = (o.timeout ?? 60) * 1000;
     const caPath = o.caFile ?? env("SSL_CERT_FILE");
     // a CA file that cannot be read is io, never a network error to retry (CR D19)
-    const ca = caPath && target.protocol === "https:" ? Buffer.from(readFileOrIo(caPath)) : undefined;
+    const caPem = caPath && (target.protocol === "https:" || proxy?.protocol === "https:") ? Buffer.from(readFileOrIo(caPath)) : undefined;
+    // the target is verified against caFile alone, as libcurl's CAINFO does
+    const ca = target.protocol === "https:" ? caPem : undefined;
+    // an https proxy against the default roots plus caFile: a caFile meant for the target must not drop the roots
+    // the proxy's certificate chains to, and a private-CA proxy is trusted for http targets too (CR2 R2-117)
+    const proxyCa = caPem ? [...defaultCaCerts(), caPem] : undefined;
+    // and against its own name: without servername, Node takes the name from the Host header, the target's.
+    // An IP gets "" (no SNI; the certificate is then checked against the IP).
+    const proxyHost = proxy ? proxy.hostname.replace(/^\[|\]$/g, "") : "";
+    const proxyName = net.isIP(proxyHost) ? "" : proxyHost;
     const fail = (message: string, cause?: unknown) => new NetworkError(`${message}: ${url}`, { url, cause });
 
     return new Promise<HttpResponse>((resolve, reject) => {
@@ -455,7 +472,7 @@ function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
                 let body: Uint8Array = Buffer.concat(chunks);
                 const enc = (res.headers["content-encoding"] ?? "").toLowerCase();
                 // a .gz file sent with Content-Encoding: gzip (some CDNs) is the file itself: keep the bytes (T10)
-                if ((enc === "gzip" || enc === "x-gzip") && !target.pathname.endsWith(".gz")) {
+                if ((enc === "gzip" || enc === "x-gzip") && !keepGz) {
                     try {
                         body = zlib.gunzipSync(body);
                     } catch (e) {
@@ -483,13 +500,13 @@ function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
             const pmod = proxy.protocol === "https:" ? https : http;
             req = pmod.get({
                 host: proxy.hostname, port: proxy.port || (proxy.protocol === "https:" ? 443 : 80), path: target.href,
-                headers: { ...o.headers, Host: target.host, ...proxyAuth(proxy) }, ca,
+                headers: { ...o.headers, Host: target.host, ...proxyAuth(proxy) }, ca: proxyCa, servername: proxyName,
             }, onResponse);
         } else {
             const pmod = proxy.protocol === "https:" ? https : http;
             const c = pmod.request({
                 host: proxy.hostname, port: proxy.port || (proxy.protocol === "https:" ? 443 : 80), method: "CONNECT",
-                path: `${target.hostname}:${target.port || 443}`, ca,
+                path: `${target.hostname}:${target.port || 443}`, ca: proxyCa, servername: proxyName,
                 headers: { Host: `${target.hostname}:${target.port || 443}`, ...proxyAuth(proxy) },
             });
             req = c;
