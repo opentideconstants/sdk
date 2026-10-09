@@ -617,6 +617,30 @@ class ErrorClassTest(unittest.TestCase):
         with self.assertRaises(otc.CacheError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
 
+    def test_a_failed_verified_write_closes_the_loaded_release(self):
+        # R2-089: the release loaded from the download kept its .jsonl handle open when .verified could not be written
+        from unittest import mock
+        import opentideconstants._client as cl
+        loaded, real_load, real_write = [], cl.load_document, cl.atomic_write
+
+        def load(*a, **kw):
+            loaded.append(real_load(*a, **kw))
+            return loaded[-1]
+
+        def write(path, data):
+            if Path(path).name == ".verified":
+                raise OSError(28, "No space left on device")
+            return real_write(path, data)
+        srv = _Server()
+        try:
+            with mock.patch.object(cl, "load_document", load), mock.patch.object(cl, "atomic_write", write):
+                with self.assertRaises(otc.CacheError):
+                    otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream")
+        finally:
+            srv.close()
+        self.assertEqual(len(loaded), 1)
+        self.assertIsNone(loaded[0]._fh, "the loaded release's file handle leaks")
+
     def test_unreadable_cached_index_is_a_cache_error_not_absent(self):
         # R2-090: an unreadable cached OTC_index.json was "absent", so releases() offline said offline_unavailable
         d = self.cached()

@@ -630,6 +630,7 @@ class OpenTideConstants:
             try:
                 atomic_write(d / ".verified", json.dumps(verified, indent=1, sort_keys=True).encode("utf-8"))
             except OSError as e:
+                rel._close()  # the caller never gets it: give its file handle back now (R2-089)
                 raise CacheError(f"cannot write {d / '.verified'}: {e}") from e
             return rel
 
