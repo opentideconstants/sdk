@@ -27,28 +27,6 @@
    "package": "PK-R2-09",
    "step": 3,
    "reason": "Ruby opens latest online over a release a pinned writer cached and reports zenodo_version_doi null in the session, although it writes the pointer's DOI to .verified (DOI parity, DR11)"
-  },
-  {
-   "case": "download/latest-network-error-use-cache",
-   "runners": [
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK-R2-03",
-   "step": 2,
-   "reason": "D22 is not implemented: download with no release raises network when the pointer fails, instead of writing the newest cached readable release (on_network_error use_cache)"
-  },
-  {
-   "case": "net/listed-file-404",
-   "runners": [
-    "python",
-    "typescript",
-    "c-fetch"
-   ],
-   "package": "PK-R2-11",
-   "step": 1,
-   "reason": "D32 is not implemented: a 404 for a data file that OTC_{D}.sha256 lists is release_not_found, not network with status 404"
   }
  ]
 }
