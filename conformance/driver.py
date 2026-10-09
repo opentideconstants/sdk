@@ -630,6 +630,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     srv.set_rules([])
     srv.log.clear()
     srv.errors.clear()
+    srv.trip_errors.clear()
     proxy.log.clear()
     failures = []
     live = {}
@@ -717,6 +718,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "server", "harness_error": True,
                              "problems": [f"harness error: fixture server: {e}" for e in srv.errors[:5]]})
+        if srv.trip_errors:  # the tripwire could not accept: "no connection was made" checks would pass vacuously
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "tripwire", "harness_error": True,
+                             "problems": [f"harness error: the tripwire could not accept connections: {srv.trip_errors[0]}"]})
         if not srv.running:
             srv.resume()
         srv.set_rules([])

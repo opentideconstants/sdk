@@ -31,3 +31,28 @@ def test_server_rule_error_is_a_harness_error(tmp_path):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
     assert "FAIL  a" in r.stdout and "PASS  b" in r.stdout, r.stdout[-800:]
     assert r.returncode == 2, (r.returncode, r.stdout[-800:])
+
+
+# --- K13: a tripwire that cannot accept connections fails the case (a "no socket" check would pass vacuously)
+
+def test_tripwire_accept_errors_fail_the_case(tmp_path, monkeypatch):
+    srv, proxy = FixtureServer().start(), RecordingProxy().start()
+    real_stop = srv.stop
+
+    def broken_stop():
+        real_stop()
+        srv._trip_sock.close()  # accept() now fails at once: the tripwire records nothing
+
+    monkeypatch.setattr(srv, "stop", broken_stop)
+    case = {"id": "t", "steps": [{"driver": "server_stop"}, {"driver": "sleep", "s": 0.3},
+                                 {"driver": "assert_requests", "source": "tripwire", "count": 0},
+                                 {"op": "station_count", "expect": {"count": 1}}]}
+    stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
+    cmd = write_fake_runner(tmp_path).split()
+    monkeypatch.setenv("FAKE_REPLY", OK_REPLY)
+    try:
+        failures, _ = driver.run_case(case, {"main": (cmd, set(driver.FEATURES))}, srv, proxy, False, False, stats)
+    finally:
+        srv.shutdown()
+        proxy.shutdown()
+    assert failures and stats["harness_errors"] == 1, (failures, stats)

@@ -36,6 +36,8 @@ What it does:
   closes it at once. A request that still reaches a handler while stopped is
   also recorded as a tripwire entry and gets no response. So "the server is
   stopped" and "no socket was opened" can both be checked. resume() serves again.
+  An accept() error of the tripwire goes to trip_errors; the driver fails the case with a harness error, because
+  a tripwire that cannot accept records nothing.
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays. Its aliases map a host name (one that
   does not resolve) to the address it connects to instead.
