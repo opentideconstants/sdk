@@ -1246,6 +1246,89 @@ def group_cache():
                     [open_latest_step(G), drv("restart_runner"), drv("server_stop"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
                      step("release_files", {"files": enc_release_info("good", d2, G)["files"]})], requires=["fs"]))
+    return out + corrupt_cache_cases()
+
+
+def corrupt_cache_cases():
+    """A corrupt cached release on the offline and use_cache paths (spec 5.2 step 6, CR2 DR16): it is healed (its
+    .verified and the bad file removed), the next older cached release is tried, and when none loads the original
+    error is raised. A cached file that cannot be read is cache, never absent."""
+    out = []
+    G = f"{SRV}/good/"
+    d2, d1 = "20991231.2", "20991231"
+    r2, r1, rels = "${cache}/v1/releases/" + d2, "${cache}/v1/releases/" + d1, "${cache}/v1/releases"
+    jl2 = f"{r2}/OTC_{d2}.jsonl"
+    p503 = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 503}])
+    no_d2 = drv("assert_requests", match=r"OTC_20991231\.2\.", count=0)
+    healed = drv("assert_files", dir=r2, absent=[".verified", f"OTC_{d2}.jsonl"])
+
+    def pin(d, mode="stream", **kw):
+        return net(step("open", {"datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode=mode, **kw))
+
+    def latest(expect, mode="stream", **kw):
+        return net(step("open", expect, base_url=G, cache_dir="${cache}", mode=mode, **kw))
+
+    both = [pin(d1), pin(d2), drv("restart_runner")]
+    offline = [drv("server_stop"), drv("clear_log")]
+    truncate = drv("write", path=jl2, text="truncated\n")
+    out.append(case("cache/newest-corrupt-offline", "offline, the newest cached .jsonl is truncated: it is healed (.verified and the file removed) and the older cached release loads", "5.2",
+                    both + [truncate] + offline + [
+                        latest({"loaded_from": "cache", "datestamp": d1}, offline=True), healed,
+                        net(step("cached_releases", {"datestamps": [d1]})), drv("assert_requests", source="any", count=0)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/newest-corrupt-network-error", "the pointer answers 503 and the newest cached .jsonl is truncated: it is healed and the older release loads as cache_after_error, with the network error", "5.2",
+                    both + [truncate, p503, drv("clear_log"),
+                            latest({"loaded_from": "cache_after_error", "datestamp": d1}),
+                            step("last_error", {"code": "network"}), healed, no_d2],
+                    requires=["fs", "stream"], timeout_s=90))
+    out.append(case("cache/newest-bitrot-verify-on-open-network-error", "the pointer answers 503, the newest cached .jsonl has one byte changed and verify_on_open is on: the older release loads as cache_after_error, and nothing of the corrupt release is downloaded", "5.2, 5.3",
+                    both + [drv("corrupt", path=jl2, offset=100), p503, drv("clear_log"),
+                            latest({"loaded_from": "cache_after_error", "datestamp": d1}, verify_on_open=True),
+                            step("last_error", {"code": "network"}),
+                            drv("assert_files", dir=r2, absent=[".verified"]), no_d2],
+                    requires=["fs", "stream"], timeout_s=90))
+    out.append(case("cache/only-cached-corrupt-offline", "offline, the only cached release is truncated: offline_unavailable, and it is healed", "5.2",
+                    [pin(d2), drv("restart_runner"), truncate] + offline + [
+                        latest(err("offline_unavailable"), offline=True), healed],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/only-cached-corrupt-network-error", "the pointer answers 503 and the only cached release is truncated: the network error, and it is healed", "5.2",
+                    [pin(d2), drv("restart_runner"), truncate, p503,
+                     latest(err("network", status=503)), healed],
+                    requires=["fs", "stream"], timeout_s=90))
+    out.append(case("cache/newest-unparsable-offline-eager", "offline in eager mode, the newest cached .json has one byte changed so that it does not parse (same size, verify_on_open off): it is healed and the older release loads", "5.2",
+                    [pin(d1, "eager"), pin(d2, "eager"), drv("restart_runner"),
+                     drv("corrupt", path=f"{r2}/OTC_{d2}.json", offset=0)] + offline + [
+                        latest({"loaded_from": "cache", "datestamp": d1}, mode="eager", offline=True),
+                        drv("assert_files", dir=r2, absent=[".verified", f"OTC_{d2}.json"])],
+                    requires=["fs", "eager"]))
+    out.append(case("cache/newest-corrupt-undeletable-offline", "offline, the newest cached .jsonl is truncated and its directory is read-only: the failure to delete it is logged, and the older release loads", "5.2",
+                    both + [truncate, drv("chmod", path=r2, mode="555")] + offline + [
+                        latest({"loaded_from": "cache", "datestamp": d1}, offline=True)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/pinned-wrong-size-heals-online", "a pinned cached release whose .jsonl has the wrong size: the open downloads it again, and the next open uses the cache", "5.2, 5.3",
+                    [pin(d2), drv("restart_runner"), truncate,
+                     net(step("open", {"loaded_from": "download", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}", mode="stream")),
+                     drv("assert_sha256", path=jl2, equals=f"{FIX}/good/OTC_{d2}.jsonl"), drv("restart_runner"),
+                     net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}", mode="stream"))],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/old-verified-bad-version-offline", "offline, the .verified of the older cached release has format_version \"x\": the newest release loads", "5.2",
+                    both + [drv("json_set", path=f"{r1}/.verified", pointer="/format_version", value="x")] + offline + [
+                        latest({"loaded_from": "cache", "datestamp": d2}, offline=True)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/newest-verified-row-not-object-offline", "offline, a files row of the newest .verified is not an object: that release is not trusted, and the older one loads", "5.2, 5.4",
+                    both + [drv("json_set", path=f"{r2}/.verified", pointer=f"/files/OTC_{d2}.sha256", value=5)] + offline + [
+                        latest({"loaded_from": "cache", "datestamp": d1}, offline=True)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/verified-row-not-object-pinned-online", "a files row of a pinned release's .verified is not an object: the release is downloaded again", "5.2, 5.4",
+                    [pin(d2), drv("restart_runner"), drv("json_set", path=f"{r2}/.verified", pointer=f"/files/OTC_{d2}.sha256", value=5),
+                     net(step("open", {"loaded_from": "download", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}", mode="stream"))],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/releases-dir-unreadable-offline", "offline, the cache's releases directory cannot be read: cache, not offline_unavailable", "5.2",
+                    both + [drv("chmod", path=rels, mode="000")] + offline + [latest(err("cache"), offline=True)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/verified-unreadable-offline", "offline, the newest .verified cannot be read: cache, not io and not absent", "5.2",
+                    both + [drv("chmod", path=f"{r2}/.verified", mode="000")] + offline + [latest(err("cache"), offline=True)],
+                    requires=["fs", "stream"]))
     return out
 
 

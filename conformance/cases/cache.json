@@ -554,6 +554,1066 @@
      }
     }
    ]
+  },
+  {
+   "id": "cache/newest-corrupt-offline",
+   "title": "offline, the newest cached .jsonl is truncated: it is healed (.verified and the file removed) and the older cached release loads",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified",
+      "OTC_20991231.2.jsonl"
+     ]
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cache/newest-corrupt-network-error",
+   "title": "the pointer answers 503 and the newest cached .jsonl is truncated: it is healed and the older release loads as cache_after_error, with the network error",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 503
+      }
+     ]
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified",
+      "OTC_20991231.2.jsonl"
+     ]
+    },
+    {
+     "driver": "assert_requests",
+     "match": "OTC_20991231\\.2\\.",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cache/newest-bitrot-verify-on-open-network-error",
+   "title": "the pointer answers 503, the newest cached .jsonl has one byte changed and verify_on_open is on: the older release loads as cache_after_error, and nothing of the corrupt release is downloaded",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "corrupt",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "offset": 100
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 503
+      }
+     ]
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "verify_on_open": true
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified"
+     ]
+    },
+    {
+     "driver": "assert_requests",
+     "match": "OTC_20991231\\.2\\.",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cache/only-cached-corrupt-offline",
+   "title": "offline, the only cached release is truncated: offline_unavailable, and it is healed",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "error": "offline_unavailable"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified",
+      "OTC_20991231.2.jsonl"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/only-cached-corrupt-network-error",
+   "title": "the pointer answers 503 and the only cached release is truncated: the network error, and it is healed",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 503
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 503
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified",
+      "OTC_20991231.2.jsonl"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/newest-unparsable-offline-eager",
+   "title": "offline in eager mode, the newest cached .json has one byte changed so that it does not parse (same size, verify_on_open off): it is healed and the older release loads",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "corrupt",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.json",
+     "offset": 0
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "absent": [
+      ".verified",
+      "OTC_20991231.2.json"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/newest-corrupt-undeletable-offline",
+   "title": "offline, the newest cached .jsonl is truncated and its directory is read-only: the failure to delete it is logged, and the older release loads",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231.2",
+     "mode": "555"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/pinned-wrong-size-heals-online",
+   "title": "a pinned cached release whose .jsonl has the wrong size: the open downloads it again, and the next open uses the cache",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "text": "truncated\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/old-verified-bad-version-offline",
+   "title": "offline, the .verified of the older cached release has format_version \"x\": the newest release loads",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231/.verified",
+     "pointer": "/format_version",
+     "value": "x"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/newest-verified-row-not-object-offline",
+   "title": "offline, a files row of the newest .verified is not an object: that release is not trusted, and the older one loads",
+   "spec": "5.2, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.sha256",
+     "value": 5
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/verified-row-not-object-pinned-online",
+   "title": "a files row of a pinned release's .verified is not an object: the release is downloaded again",
+   "spec": "5.2, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.sha256",
+     "value": 5
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/releases-dir-unreadable-offline",
+   "title": "offline, the cache's releases directory cannot be read: cache, not offline_unavailable",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases",
+     "mode": "000"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "error": "cache"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/verified-unreadable-offline",
+   "title": "offline, the newest .verified cannot be read: cache, not io and not absent",
+   "spec": "5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "mode": "000"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "error": "cache"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
   }
  ]
 }

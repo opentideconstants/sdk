@@ -1,4 +1,133 @@
 {
  "description": "Cases that are expected to fail for a runner today: the RED baseline of the cross-SDK behaviour rules that the SDK lanes (review round 1, packages PK01-PK15) have yet to fix. The driver reports a listed case that fails as XFAIL (the run still passes) and a listed case that passes as XPASS (the run fails, so the entry must be removed). A lane that fixes a case removes its entry. See conformance/README.md \"Expected failures\".",
- "entries": []
+ "entries": [
+  {
+   "case": "cache/newest-bitrot-verify-on-open-network-error",
+   "runners": [
+    "c-fetch",
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/newest-corrupt-network-error",
+   "runners": [
+    "c-fetch",
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/newest-corrupt-offline",
+   "runners": [
+    "c-fetch",
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/newest-corrupt-undeletable-offline",
+   "runners": [
+    "c-fetch",
+    "python",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/newest-unparsable-offline-eager",
+   "runners": [
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/newest-verified-row-not-object-offline",
+   "runners": [
+    "c-fetch",
+    "ruby"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/old-verified-bad-version-offline",
+   "runners": [
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/only-cached-corrupt-network-error",
+   "runners": [
+    "c-fetch",
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/only-cached-corrupt-offline",
+   "runners": [
+    "c-fetch",
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/pinned-wrong-size-heals-online",
+   "runners": [
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/releases-dir-unreadable-offline",
+   "runners": [
+    "python",
+    "ruby"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/verified-row-not-object-pinned-online",
+   "runners": [
+    "c-fetch",
+    "ruby"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  },
+  {
+   "case": "cache/verified-unreadable-offline",
+   "runners": [
+    "python",
+    "ruby",
+    "typescript"
+   ],
+   "package": "PK-R2-10",
+   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
+  }
+ ]
 }
