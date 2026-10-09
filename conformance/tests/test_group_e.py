@@ -142,17 +142,37 @@ def test_almost_runner_fails_on_later_steps(tmp_path):
 
 
 def check_almost_report(doc):
-    """Every case failed after the open step; no case passed or was skipped (a SKIP has no failures list)."""
+    """Every case is a matrix variant (its step 0 is the driver's open) and failed after the open step: not at the open,
+    and at some later step. No case passed or was skipped (a SKIP has no failures list)."""
     assert doc["counts"]["PASS"] == 0 and doc["counts"]["SKIP"] == 0 and doc["counts"]["FAIL"] > 0, doc["counts"]
     for c in doc["cases"]:
         assert c["status"] == "FAIL", (c["id"], c["status"])
+        assert "@" in c["id"], (c["id"], "not a matrix variant: its step 0 need not be the open")
         steps = [f["step"] for f in c["failures"]]
-        assert 0 not in steps or "@" not in c["id"], (c["id"], c["failures"][:1])
+        assert 0 not in steps, (c["id"], c["failures"][:1])
         assert any(s and s > 0 for s in steps), c["id"]
 
 
-def test_almost_report_check_rejects_a_skip():
-    doc = {"counts": {"PASS": 0, "FAIL": 1, "SKIP": 1},
-           "cases": [{"id": "x@json", "status": "FAIL", "failures": [{"step": 1}]}, {"id": "y", "status": "SKIP", "missing_features": ["fs"]}]}
+GOOD_FAIL = {"id": "x@json", "status": "FAIL", "failures": [{"step": 1}]}
+
+
+@pytest.mark.parametrize("doc", [
+    # the counts say a case was skipped
+    {"counts": {"PASS": 0, "FAIL": 1, "SKIP": 1}, "cases": [GOOD_FAIL, {"id": "y@json", "status": "SKIP", "missing_features": ["fs"]}]},
+    # consistent counts, but a case's status is SKIP (the per-case check, not the counts, must catch it)
+    {"counts": {"PASS": 0, "FAIL": 2, "SKIP": 0}, "cases": [GOOD_FAIL, {"id": "y@json", "status": "SKIP", "failures": [{"step": 1}]}]},
+    # a case that failed only at the open step
+    {"counts": {"PASS": 0, "FAIL": 2, "SKIP": 0}, "cases": [GOOD_FAIL, {"id": "y@json", "status": "FAIL", "failures": [{"step": 0}]}]},
+    # a case that failed at the open and later
+    {"counts": {"PASS": 0, "FAIL": 2, "SKIP": 0},
+     "cases": [GOOD_FAIL, {"id": "y@json", "status": "FAIL", "failures": [{"step": 0}, {"step": 2}]}]},
+    # a case that is not a matrix variant
+    {"counts": {"PASS": 0, "FAIL": 2, "SKIP": 0}, "cases": [GOOD_FAIL, {"id": "y", "status": "FAIL", "failures": [{"step": 1}]}]},
+])
+def test_almost_report_check_rejects(doc):
     with pytest.raises(AssertionError):
         check_almost_report(doc)
+
+
+def test_almost_report_check_accepts_a_good_report():
+    check_almost_report({"counts": {"PASS": 0, "FAIL": 1, "SKIP": 0}, "cases": [GOOD_FAIL]})
