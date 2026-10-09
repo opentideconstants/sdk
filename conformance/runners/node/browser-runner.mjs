@@ -74,10 +74,18 @@ await page.goto(origin + "/");
 const version = await page.evaluate(async () => {
     const sdk = await import("/sdk/index.js");
     const { makeRunner } = await import("/ops.mjs");
+    if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "string") return null;
     const runner = makeRunner(sdk);
     window.__otc = { runner, isNodeVisible: typeof process !== "undefined" };
     return sdk.VERSION;
 });
+
+if (version === null) {   // no error base class or no version: fail the handshake (exit 3)
+    process.stderr.write("cannot load the SDK: it has no OpenTideConstantsError class or no VERSION string\n");
+    await browser.close();
+    server.close();
+    process.exit(3);
+}
 
 out({ hello: { runner: "typescript-browser", version, origin, features: ["fetch", "json", "eager", "stream"] } });
 

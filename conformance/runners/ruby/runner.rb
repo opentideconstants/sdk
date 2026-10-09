@@ -15,8 +15,14 @@ require "opentideconstants"
 
 $stdout.sync = true
 
-# The SDK base error class (a stand-in only while the gem has none, so the RED run is clean).
-SDK_ERROR = OpenTideConstants.const_defined?(:Error) ? OpenTideConstants::Error : Class.new(StandardError)
+# The SDK base error class and version. A gem without either fails the handshake (stderr and exit status 3): a
+# stand-in would hide a missing class or version.
+%i[Error VERSION].each do |name|
+    next if OpenTideConstants.const_defined?(name, false)
+    $stderr.puts("cannot load the SDK: OpenTideConstants::#{name} is not defined")
+    exit(3)
+end
+SDK_ERROR = OpenTideConstants::Error
 
 class Runner
     FILTERS = %w[country type kind source source_type].freeze
@@ -27,8 +33,7 @@ class Runner
     end
 
     def hello
-        version = defined?(OpenTideConstants::VERSION) ? OpenTideConstants::VERSION : "0.0.0"
-        { "hello" => { "runner" => "ruby", "version" => version,
+        { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
                        "features" => %w[fs fetch json eager stream] } }
     end
 

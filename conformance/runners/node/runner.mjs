@@ -34,6 +34,12 @@ try {
     process.exit(3);
 }
 
+// The SDK's error base class and version must be there: a runner without them fails the handshake (exit 3).
+if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "string") {
+    process.stderr.write(`cannot load the SDK from ${sdkSpec}: it has no OpenTideConstantsError class or no VERSION string\n`);
+    process.exit(3);
+}
+
 out({ hello: { runner: "typescript", version: sdk.VERSION, features: ["fs", "fetch", "json", "eager", "stream"] } });
 
 const runner = makeRunner(sdk);

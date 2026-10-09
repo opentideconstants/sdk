@@ -25,12 +25,11 @@ from pathlib import Path
 FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 
 
-def _version():
-    try:
-        import opentideconstants
-        return opentideconstants.__version__
-    except Exception:  # the hello must go out even when the SDK does not import
-        return "0.0.0"
+def _load_sdk():
+    """The SDK module, its version and its error base class. A runner that cannot find all three fails the
+    handshake (stderr and exit status 3): a stand-in would hide a missing class or version."""
+    import opentideconstants
+    return opentideconstants, opentideconstants.__version__, opentideconstants.OpenTideConstantsError
 
 
 # --------------------------------------------------------------------------- encodings (README "Result encodings")
@@ -371,8 +370,13 @@ def main():
     a = ap.parse_args()
     if not a.installed:
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python" / "src"))
+    try:
+        _, version, base = _load_sdk()
+    except Exception as e:  # noqa: BLE001 - no hello: the driver reports a failed handshake with this stderr
+        print(f"cannot load the SDK: {type(e).__name__}: {e}", file=sys.stderr)
+        return 3
     out = sys.stdout
-    out.write(json.dumps({"hello": {"runner": "python", "version": _version(), "features": FEATURES}}) + "\n")
+    out.write(json.dumps({"hello": {"runner": "python", "version": version, "features": FEATURES}}) + "\n")
     out.flush()
     runner = Runner()
     for line in sys.stdin:
@@ -390,12 +394,7 @@ def main():
         try:
             reply = {"ok": True, "result": finite(runner.handle(req))}
         except Exception as e:  # noqa: BLE001 - the protocol reports every exception
-            base = None
-            try:
-                base = runner._sdk().OpenTideConstantsError
-            except Exception:
-                pass
-            if base is not None and isinstance(e, base):
+            if isinstance(e, base):
                 reply = encode_sdk_error(e)
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)

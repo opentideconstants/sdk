@@ -346,7 +346,7 @@ export function makeRunner(sdk) {
             const result = finite(await fn(msg.args || {}, msg));
             return { ok: true, result };
         } catch (e) {
-            if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
+            if (e instanceof sdk.OpenTideConstantsError) {
                 try {
                     return encodeSdkError(e);
                 } catch (x) { // an error while encoding the SDK error is still one reply

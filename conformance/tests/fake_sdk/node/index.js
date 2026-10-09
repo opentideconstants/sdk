@@ -1,7 +1,7 @@
 // A fake SDK module for the runner self-tests (see ../README.md). FAKE_SDK_MODE comes through globalThis.process.
 const MODE = (globalThis.process && globalThis.process.env.FAKE_SDK_MODE) || "";
-export const VERSION = "9.9.9-fake";
-export class OpenTideConstantsError extends Error {
+export const VERSION = MODE === "no-version" ? undefined : "9.9.9-fake";
+class SdkError extends Error {
     constructor(msg, code, tombstone) { super(msg); this.code = code; this.tombstone = tombstone; }
 }
 class Tomb { constructor() { this.station_id = "OTC-T-0005"; this.name = "Old Pier"; this.status = "removed"; this.removed_in = "20991231"; this.removed_reason = "duplicate"; this.merged_into = "OTC-T-0001"; } }
@@ -25,7 +25,7 @@ class Release {
         }
         return null;
     }
-    requireStation() { throw new OpenTideConstantsError("removed", "station_removed", new Tomb()); }
+    requireStation() { throw new SdkError("removed", "station_removed", new Tomb()); }
     subordinatesOf() { return []; }
 }
 class Client {
@@ -36,3 +36,4 @@ class Client {
     async close() { if (MODE === "close-raises") throw new Error("close failed"); }
 }
 export const OpenTideConstants = { open: async () => new Client() };
+export const OpenTideConstantsError = MODE === "no-error-class" ? undefined : SdkError;

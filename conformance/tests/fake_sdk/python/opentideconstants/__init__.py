@@ -1,17 +1,24 @@
 """A fake opentideconstants package for the runner self-tests (see ../../README.md)."""
 import os
 
-__version__ = "9.9.9-fake"
 MODE = os.environ.get("FAKE_SDK_MODE", "")
+if MODE == "import-fails":
+    raise ImportError("fake: the SDK does not import")
+if MODE != "no-version":
+    __version__ = "9.9.9-fake"
 
 
-class OpenTideConstantsError(Exception):
+class _Error(Exception):
     code = "fake"
 
     def __init__(self, msg, code="fake", tombstone=None):
         super().__init__(msg)
         self.code = code
         self.tombstone = tombstone
+
+
+if MODE != "no-error-class":
+    OpenTideConstantsError = _Error
 
 
 class _Tomb:
@@ -39,7 +46,7 @@ class _Release:
         return 1
 
     def require_station(self, station_id):
-        raise OpenTideConstantsError("removed", code="station_removed", tombstone=_Tomb())
+        raise _Error("removed", code="station_removed", tombstone=_Tomb())
 
     def station(self, station_id):
         return None

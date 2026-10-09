@@ -407,3 +407,13 @@ def test_ruby_nil_stats_field_is_an_error():
     rc, hello, out, err = talk("ruby", [OPEN, {"op": "stats"}], mode="stats-nil")
     reply = strict(out[1])
     assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+# --- R88 (and P61): a runner whose SDK has no error base class or no version fails the handshake
+
+@pytest.mark.parametrize("lang,mode", [("python", "no-error-class"), ("python", "no-version"), ("python", "import-fails"),
+                                       ("ruby", "no-error-class"), ("ruby", "no-version"),
+                                       ("node", "no-error-class"), ("node", "no-version")])
+def test_runner_without_sdk_error_class_or_version_fails_the_handshake(lang, mode):
+    rc, hello, out, err = talk(lang, [OPEN], mode=mode)
+    assert hello is None and rc != 0 and err.strip(), (rc, hello, out, err[-300:])
