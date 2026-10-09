@@ -30,6 +30,24 @@ class OpenTideConstants
             raise InvalidReleaseError, "bad time: #{value.inspect}"
         end
 
+        SURROGATE_ESCAPE = /\\u[dD][89a-fA-F]/.freeze
+        # One escape of a JSON text: a surrogate pair, a lone surrogate (group
+        # 1), another \u escape, or any other escaped character (so an escaped
+        # backslash before "ud800" is not read as an escape).
+        ESCAPE = /\\(?:u[dD][89abAB]\h{2}\\u[dD][c-fC-F]\h{2}|(u[dD][89a-fA-F]\h{2})|u\h{4}|.)/m.freeze
+
+        # invalid_release when a \u escape of a JSON text makes an unpaired
+        # UTF-16 surrogate (spec §7.3, CR D17). Checked on the text, before
+        # JSON.parse: some versions of the json gem replace a lone surrogate
+        # with "?" (and drop the next character) instead of raising.
+        def no_lone_surrogate!(text)
+            return unless SURROGATE_ESCAPE.match?(text)
+            text.scan(ESCAPE) do |lone|
+                raise InvalidReleaseError, "a string with an unpaired surrogate (\\#{lone[0]})" if lone[0]
+            end
+            nil
+        end
+
         # A build-only time (provenance.build): a malformed one is nil, not a
         # failed station (spec §4.6, §7.3).
         def time_or_nil(value)

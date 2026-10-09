@@ -438,8 +438,10 @@ class OpenTideConstants
         end
 
         def parse_station(line)
-            JSON.parse(line.force_encoding(Encoding::UTF_8))
-        rescue JSON::ParserError, EncodingError
+            line = line.force_encoding(Encoding::UTF_8)
+            Util.no_lone_surrogate!(line)
+            JSON.parse(line)
+        rescue JSON::ParserError, EncodingError, InvalidReleaseError
             nil
         end
 
