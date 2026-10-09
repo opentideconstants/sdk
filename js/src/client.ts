@@ -316,7 +316,16 @@ export class OpenTideConstants {
             if (!idx) throw new OfflineError("offline and the release index is not cached");
             return Object.freeze(idx.map(toInfo));
         }
-        const idx = await getIndex(ctx);
+        let idx: PointerEntry[];
+        try {
+            idx = await getIndex(ctx);
+        } catch (e) {
+            // a network error with use_cache gives the cached index (spec 5.2 step 5); lastError is not touched
+            const cached = e instanceof NetworkError && ctx.onNetworkError === "use_cache" ? await cachedIndex(ctx) : null;
+            if (!cached) throw e;
+            log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
+            return Object.freeze(cached.map(toInfo));
+        }
         if (ctx.store) {
             // a cached release keeps the version DOI of the newest entry read for it (spec 4.3)
             for (const e of idx) {

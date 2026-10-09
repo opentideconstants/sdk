@@ -150,29 +150,63 @@ export function readable(e: { format_version: string | null; min_reader_version?
     return (e.format_version === null || supportedFormat(e.format_version)) && readerReads(e.min_reader_version ?? null);
 }
 
-/** A GET of a changing file with If-None-Match and the stored ETag; 304 reads the stored copy. Null on 404. */
-async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Array; url: string } | null> {
+/**
+ * A GET of a changing file (the pointer or OTC_index.json) with If-None-Match and the stored ETag; 304 reads the
+ * stored copy. Null on 404. The body must be JSON before it is stored: a 200 that is not JSON (a captive portal, a
+ * proxy error page) is a network error (spec 5.2 step 5, CR D8), and the good stored copy stays. The body and its
+ * ETag are written under pointer/.lock, the ETag removed first and written last, so no body is paired with
+ * another body's ETag (spec 5.4). A failure to store them is logged, not raised (CR D8).
+ */
+async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Array; url: string; doc: unknown } | null> {
     const url = new URL(name, ctx.baseUrl).href;
     const rel = `pointer/${name}`;
     const store = ctx.store;
-    const cached = store ? await store.read(rel) : null;
-    const etagBytes = store && cached ? await store.read(`${rel}.etag`) : null;
-    const etag = etagBytes ? dec.decode(etagBytes).trim() : null;
+    const readEtag = async () => {
+        const b = store ? await store.read(`${rel}.etag`) : null;
+        return b ? dec.decode(b).trim() : null;
+    };
+    let etag = await readEtag();
+    let cached = store ? await store.read(rel) : null;
+    let cachedDoc: unknown = undefined;
+    if (cached) {
+        try {
+            cachedDoc = JSON.parse(dec.decode(cached));
+        } catch {
+            cached = null; // a broken stored copy is the same as none: no If-None-Match, so the server sends a 200
+        }
+    }
+    // the ETag is read before and after the body; a writer in between means they may not pair, so send none
+    if (!cached || (await readEtag()) !== etag) etag = null;
     const res = await httpGet(ctx, url, etag);
     if (res.status === 404) return null;
     if (res.status === 304 && cached) {
         log(ctx, "debug", `pointer ${name}: 304, the stored copy is current`);
-        return { body: cached, url };
+        return { body: cached, url, doc: cachedDoc };
     }
-    if (res.status === 304) throw new NetworkError(`unexpected 304: ${url}`, { url, status: 304 });
+    if (res.status === 304) throw new NetworkError(`unexpected 304 with no stored copy: ${url}`, { url, status: 304 });
+    let doc: unknown;
+    try {
+        doc = JSON.parse(dec.decode(res.body));
+    } catch (e) {
+        throw new NetworkError(`${url}: the 200 response is not JSON (a captive portal or a proxy page?)`, { url, status: res.status, cause: e });
+    }
     if (store) {
-        await store.write(rel, res.body);
-        const tag = res.header("etag");
-        if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
-        else await store.remove(`${rel}.etag`);
+        try {
+            const unlock = await store.lock("pointer");
+            try {
+                await store.remove(`${rel}.etag`);
+                await store.write(rel, res.body);
+                const tag = res.header("etag");
+                if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
+            } finally {
+                await unlock();
+            }
+        } catch (e) {
+            log(ctx, "warn", `cannot store ${name} in the cache: ${e instanceof Error ? e.message : String(e)}`);
+        }
     }
     log(ctx, "debug", `pointer ${name}: 200`);
-    return { body: res.body, url };
+    return { body: res.body, url, doc };
 }
 
 function newestReadable(entries: PointerEntry[]): PointerEntry | null {
@@ -183,11 +217,14 @@ function newestReadable(entries: PointerEntry[]): PointerEntry | null {
 export async function getIndex(ctx: Ctx): Promise<PointerEntry[]> {
     const r = await getConditional(ctx, "OTC_index.json");
     if (!r) throw new ReleaseNotFoundError(`no release index at ${new URL("OTC_index.json", ctx.baseUrl).href}`);
-    return parseIndex(r.body, r.url);
+    return indexEntries(r.doc, r.url);
 }
 
 export function parseIndex(body: Uint8Array, url: string): PointerEntry[] {
-    const doc = parseJson(body, "OTC_index.json");
+    return indexEntries(parseJson(body, "OTC_index.json"), url);
+}
+
+function indexEntries(doc: unknown, url: string): PointerEntry[] {
     const rels = isObject(doc) ? doc["releases"] : undefined;
     if (!Array.isArray(rels)) throw new InvalidReleaseError(`OTC_index.json ${url}: releases is missing or not a list`);
     return rels.map((e) => parseEntry(e, url, "OTC_index.json")).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
@@ -221,7 +258,7 @@ export async function readPointer(ctx: Ctx): Promise<PointerRead> {
         r = await getConditional(ctx, "OTC_latest.json");
     }
     if (!r) throw new ReleaseNotFoundError(`no latest pointer at ${ctx.baseUrl}`);
-    const entry = parseEntry(parseJson(r.body, "the latest pointer"), r.url);
+    const entry = parseEntry(r.doc, r.url);
     const out = (e: PointerEntry): PointerRead => ({ entry: e, generic: generic ? entry : null });
     if (readable(entry)) return out(entry);
     if (!supportedFormat(entry.format_version)) {
@@ -247,7 +284,7 @@ export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
 export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
     const r = await getConditional(ctx, "OTC_latest.json");
     if (!r) return null;
-    const major = formatMajorOf(parseEntry(parseJson(r.body, "OTC_latest.json"), r.url, "OTC_latest.json").format_version);
+    const major = formatMajorOf(parseEntry(r.doc, r.url, "OTC_latest.json").format_version);
     return Number.isNaN(major) ? null : major;
 }
 

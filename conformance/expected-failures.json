@@ -282,8 +282,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK02",
    "reason": "step 3 open: expected a result, got error 'invalid_release' (http://127.0.0.1:51308/good/OTC_latest-f1.json: not JSON)"
@@ -292,8 +291,7 @@
    "case": "rules/pk02/releases-use-cache",
    "runners": [
     "c-fetch",
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK02",
    "reason": "step 5 releases: expected a result, got error 'network' (HTTP 500 for http://127.0.0.1:51308/good/OTC_index.json)"
