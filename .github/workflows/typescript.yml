@@ -134,6 +134,10 @@ jobs:
           npm ci
           mkdir -p "$RUNNER_TEMP/pkg"
           npm pack --pack-destination "$RUNNER_TEMP/pkg"
+          # spec 7.4: the tarball ships supported-formats.json, the same bytes (R2-246)
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf "$RUNNER_TEMP"/pkg/opentideconstants-*.tgz -C "$RUNNER_TEMP/unpacked" package/supported-formats.json
+          cmp supported-formats.json "$RUNNER_TEMP/unpacked/package/supported-formats.json"
           cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
           node -p 'require("./package.json").devDependencies.typescript' > "$RUNNER_TEMP/pkg/typescript-version"
       - name: Install the tarball in a clean container and run the quickstart against the fixture server
