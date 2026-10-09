@@ -5,6 +5,10 @@
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
+/* 64-bit off_t on 32-bit Linux, so pread reaches past 2 GiB of a .jsonl */
+#if !defined(_WIN32) && !defined(_FILE_OFFSET_BITS)
+#define _FILE_OFFSET_BITS 64
+#endif
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -39,6 +43,18 @@ extern const size_t otc__fold_table_size;
 
 /* Folds and normalises a name (spec 4.4.1). Returns a malloc'd string or NULL (no memory). */
 char *otc__fold(const char *s);
+/* The same for n bytes that may hold a NUL; *out_len (may be NULL) gets the length. */
+char *otc__fold_n(const char *s, size_t n, size_t *out_len);
+
+/* JSON strings with a NUL inside (cJSON's decoded strings end at the first NUL). */
+/* 1 when the JSON text has a \u0000 escape. */
+int otc__json_has_nul(const char *text, size_t len);
+/* The string member key of the top-level object in text, decoded with its full
+ * length: 1 found (*out malloc'd, NUL-terminated after *out_len bytes), 0 absent
+ * or not a string, -1 out of memory. */
+int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len);
+/* n bytes as a JSON string literal (quotes included; control characters as \u00XX). */
+char *otc__json_escape_n(const char *s, size_t n);
 
 /* ---------------------------------------------------------------- platform */
 
@@ -49,8 +65,17 @@ otc_status otc__file_open(const char *path, otc__file **out);
 int otc__file_pread(otc__file *f, void *buf, size_t n, uint64_t off);
 int64_t otc__file_size(otc__file *f);
 void otc__file_close(otc__file *f);
+/* 1 when the n bytes at s are a datestamp: ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$
+ * (spec 4.2; the counter has at most 9 digits, CR D18). */
+int otc__valid_datestamp(const char *s, size_t n);
+/* An HTTP-date (IMF-fixdate, RFC 9110 5.6.7) as seconds since 1970, or -1. */
+int64_t otc__http_date(const char *s);
+/* An RFC 3339 time as UTC "YYYY-MM-DDTHH:MM:SSZ" (whole seconds); 0 when s is not one. */
+int otc__utc_time(const char *s, char out[21]);
 /* The size of a file, or -1 if it does not exist or is not a regular file. */
 int64_t otc__path_size(const char *path);
+/* Removes a file; 0 on success. */
+int otc__remove_file(const char *path);
 /* Reads a whole (small) file into a NUL-terminated malloc'd buffer. */
 otc_status otc__read_all(const char *path, char **out, size_t *len);
 
@@ -68,7 +93,9 @@ void otc__mutex_destroy(otc__mutex *m);
 
 /* cJSON_Parse* writes a process-wide error slot on every call (cJSON.c,
  * global_error), so concurrent parses race. Every parse in the library goes
- * through this wrapper, which holds one process-wide lock while it parses. */
+ * through this wrapper, which holds one process-wide lock while it parses.
+ * text[len] must be '\0'. The whole text must be one JSON value (whitespace
+ * around it is fine): anything after the value fails the parse. */
 cJSON *otc__json_parse(const char *text, size_t len);
 
 /* ----------------------------------------------------------------- helpers */
@@ -82,9 +109,15 @@ otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed)
 const char *otc__jstr(const cJSON *obj, const char *key);
 /* A number member, or NaN. */
 double otc__jnum(const cJSON *obj, const char *key);
-/* An integer member, or -1. */
+/* A whole, non-negative number member, or -1 (missing, not a number, or with a fraction). */
 int64_t otc__jint(const cJSON *obj, const char *key);
 const cJSON *otc__jget(const cJSON *obj, const char *key);
+/* An otc_error the library may write: err when its struct_size is the size the
+ * library knows, else NULL (spec 6.4: a smaller struct is never written past). */
+otc_error *otc__err_usable(otc_error *err);
+/* Clears a usable err (otc_error_init for the library's own use); else nothing. */
+void otc__err_reset(otc_error *err);
+/* Records an error in a usable err; else nothing. */
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...);
 int otc__strcmp_null(const char *a, const char *b);
 int otc__ends_with(const char *s, const char *suffix);
@@ -92,6 +125,9 @@ char *otc__join(const char *a, const char *b);
 
 /* SHA-256 of a whole file as 64 lower-case hex digits. */
 otc_status otc__sha256_file(const char *path, char hex[65]);
+/* The same for an open file (the bytes that will be read), and for bytes in memory. */
+otc_status otc__sha256_handle(otc__file *f, char hex[65]);
+void otc__sha256_mem(const void *data, size_t len, char hex[65]);
 /* The digest of name in a sha256sum file (malloc'd hex), or NULL. *found_file is 0 if the file does not exist. */
 otc_status otc__sha256_rows(const char *sha_path, char ***names, char ***digests, size_t *n);
 /* The same for the text of a sha256sum file. */
@@ -107,11 +143,15 @@ otc_quantity otc__parse_quantity(const char *s);
 otc_qc_status otc__parse_qc_status(const char *s);
 otc_removed_reason otc__parse_removed_reason(const char *s);
 otc_time_base_code_t otc__parse_time_base_code(const char *s);
+/* 1 when v is MAJOR.MINOR: two non-negative integers (at most 9 digits) with no
+ * leading zeros, joined by one dot (spec 7.4, CR D9). */
+int otc__version_valid(const char *v);
 /* Compares two "MAJOR.MINOR" format versions numerically (-1, 0, 1); an
  * unparsable version sorts as 0.0. */
 int otc__version_cmp(const char *a, const char *b);
 /* 1 when this library reads a release of format_version fv whose
- * release.min_reader_version is mrv (either may be NULL). */
+ * release.min_reader_version is mrv (either may be NULL; a malformed one is
+ * never readable). */
 int otc__readable(const char *fv, const char *mrv);
 otc_phase_reference otc__parse_phase_reference(const char *s);
 otc_nodal_handling otc__parse_nodal_handling(const char *s);
@@ -167,6 +207,8 @@ typedef struct otc__entry {
     char              *id;
     char              *name;
     char              *folded;
+    size_t             name_len;        /* a schema-valid name may hold a NUL (spec 4.4.1) */
+    size_t             folded_len;
     char              *country;
     char              *type_s;          /* the type as the file gives it */
     otc_station_type_t type;
@@ -217,6 +259,7 @@ struct otc_release {
     otc_file_info  *files;
     size_t          n_files;
     char           *zenodo_version_doi; /* set by otc_fetch_open from .verified (spec 4.3) */
+    char            created[21];        /* release.created in UTC (spec 4.3); "" when absent or not a time */
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
     otc__kvlist     source_counts;
@@ -238,6 +281,9 @@ const otc_licence *otc__find_licence(const otc_release *rel, const char *id);
 cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by);
 /* Reads and parses one line of the .jsonl file. */
 otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length, cJSON **out);
+/* Reads the line of station id: invalid_release when the line is another
+ * station's (a stale index, spec 6.2 / CR D4; the index file is then deleted). */
+otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length, cJSON **out);
 int otc__filter_match(const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */

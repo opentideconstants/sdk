@@ -21,6 +21,10 @@ static void fill_validation(otc_validation_t *v, const cJSON *row)
     v->range_error_m = otc__jnum(row, "range_error_m");
     v->missed_events = otc__jint(row, "missed_events");
     v->extra_events = otc__jint(row, "extra_events");
+    /* without previous_release its numbers read as missing (NaN, -1), not as zeros */
+    v->previous_release.time_mae_min = v->previous_release.time_p95_min = v->previous_release.time_bias_min = NAN;
+    v->previous_release.height_mae_m = v->previous_release.range_error_m = NAN;
+    v->previous_release.missed_events = v->previous_release.extra_events = -1;
     if (cJSON_IsObject(prev)) {
         v->has_previous_release = true;
         v->previous_release.time_mae_min = otc__jnum(prev, "time_mae_min");
@@ -33,22 +37,21 @@ static void fill_validation(otc_validation_t *v, const cJSON *row)
     }
 }
 
-static void copy_fixed(char *dst, size_t cap, const char *src)
+/* A string of the parsed line (borrowed from the station), or "" when absent. */
+static const char *borrowed(const cJSON *j, const char *key)
 {
-    size_t n = src ? strlen(src) : 0;
-    if (n >= cap) n = cap - 1; /* cannot happen: lengths are checked at open */
-    if (n) memcpy(dst, src, n);
-    dst[n] = '\0';
+    const char *v = otc__jstr(j, key);
+    return v ? v : "";
 }
 
 static void fill_constituent(otc_constituent_t *c, const cJSON *j)
 {
     memset(c, 0, sizeof *c);
     c->struct_size = sizeof *c;
-    copy_fixed(c->name, sizeof c->name, otc__jstr(j, "name"));
-    copy_fixed(c->source_name, sizeof c->source_name, otc__jstr(j, "source_name"));
-    copy_fixed(c->doodson, sizeof c->doodson, otc__jstr(j, "doodson"));
-    copy_fixed(c->kept_reason, sizeof c->kept_reason, otc__jstr(j, "kept_reason"));
+    c->name = borrowed(j, "name");
+    c->source_name = borrowed(j, "source_name");
+    c->doodson = borrowed(j, "doodson");
+    c->kept_reason = borrowed(j, "kept_reason");
     c->speed_deg_per_hour = otc__jnum(j, "speed_deg_per_hour");
     c->amplitude_m = otc__jnum(j, "amplitude_m");
     c->phase_deg = otc__jnum(j, "phase_deg");
@@ -81,6 +84,7 @@ static void sort_by_window(const otc_validation_t **v, size_t n)
 static void free_sets(otc_station_t *st)
 {
     size_t i;
+    if (!st->sets) return;   /* the calloc failed: there is nothing in it to free */
     for (i = 0; i < st->n_sets; i++) {
         free(st->sets[i].cons);
         free((void *)st->sets[i].val);
@@ -312,6 +316,12 @@ otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out)
 {
     const cJSON *off;
     if (!st || !out || out->struct_size < sizeof *out) return OTC_E_INVALID_ARGUMENT;
+    /* every field is set, also on NOT_FOUND: no value from an earlier call stays */
+    out->reference_station_id = NULL;
+    out->time_offset_high_min = out->time_offset_low_min = NAN;
+    out->height_offset_high = out->height_offset_low = NAN;
+    out->height_adjusted_type = OTC_HEIGHT_ADJUSTED_TYPE_UNSET;
+    out->licence_id = NULL;
     off = otc__jget(st->root, "subordinate_offsets");
     if (!cJSON_IsObject(off)) return OTC_E_NOT_FOUND;
     out->reference_station_id = otc__jstr(off, "reference_station_id");
@@ -503,8 +513,7 @@ otc_status otc_set_provenance_json(const otc_set *s, char *buf, size_t len, size
     const cJSON *p;
     if (!s) return OTC_E_INVALID_ARGUMENT;
     p = prov_of(s);
-    if (!p) return otc__copy_str("{}", buf, len, needed); /* a missing provenance reads as {} */
-    return otc__copy_json(p, buf, len, needed);
+    return otc__copy_json(p, buf, len, needed);   /* absent: OTC_E_NOT_FOUND, as for every other value (CR D34) */
 }
 
 #define PROV_STR(NAME, KEY)                                                                    \

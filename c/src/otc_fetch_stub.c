@@ -3,6 +3,8 @@
  * (SDK spec 4.3.2, 4.8, 6.4). The real module is c/src/otc_fetch.c (K3d2). */
 #include "otc_internal.h"
 
+#include <stddef.h>
+
 void otc_fetch_options_init(otc_fetch_options *opts)
 {
     if (!opts) return;
@@ -13,8 +15,8 @@ void otc_fetch_options_init(otc_fetch_options *opts)
 
 static otc_status not_built(const otc_fetch_options *opts, const char *fn)
 {
-    if (opts && opts->struct_size >= sizeof *opts && opts->error) {
-        otc_error_init(opts->error);
+    if (opts && opts->struct_size >= offsetof(otc_fetch_options, error) + sizeof opts->error && opts->error) {
+        otc__err_reset(opts->error);
         otc__err_set(opts->error, OTC_E_NOT_BUILT, NULL,
                      "%s: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)", fn);
     }
@@ -40,7 +42,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     (void)release;
     if (out) *out = NULL;
     if (oopts && oopts->struct_size >= sizeof *oopts && oopts->error && (!fopts || oopts->error != fopts->error)) {
-        otc_error_init(oopts->error);
+        otc__err_reset(oopts->error);
         otc__err_set(oopts->error, OTC_E_NOT_BUILT, NULL,
                      "otc_fetch_open: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)");
     }

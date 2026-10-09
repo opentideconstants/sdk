@@ -1,0 +1,1 @@
+[{"match": "^/good/OTC_20991231\\.2\\.jsonl$", "action": "slow", "delay_s": 2}]

@@ -11,7 +11,9 @@ int otc__filter_match(const otc_filter *f, const otc__entry *e)
     if (f->country && otc__strcmp_null(e->country, f->country) != 0) return 0;
     if (f->type && strcmp(e->type_s, f->type) != 0) return 0;
     if (f->kind) {
-        const char *k = otc_kind_name(e->kind);
+        /* only the schema values match; "other" (the name of an unknown kind) is an
+         * unknown filter value, which gives an empty result (spec 4.4) */
+        const char *k = (e->kind == OTC_KIND_TIDE || e->kind == OTC_KIND_CURRENT) ? otc_kind_name(e->kind) : NULL;
         if (!k || strcmp(k, f->kind) != 0) return 0;
     }
     if (f->source) {
@@ -35,7 +37,7 @@ static int filter_ok(const otc_filter *f)
 static otc_status load_entry(const otc_release *rel, const otc__entry *e, otc_station_t **out)
 {
     cJSON *root = NULL;
-    otc_status st = otc__read_line(rel, e->offset, e->length, &root);
+    otc_status st = otc__read_station_line(rel, e->id, e->offset, e->length, &root);
     if (st != OTC_OK) return st;
     st = otc__station_build(rel, root, e->kind, out);
     return st == OTC_OK ? st : otc__fail(rel, st, "cannot build station %s", e->id);
@@ -60,12 +62,11 @@ otc_status otc_require_station(const otc_release *rel, const char *id, otc_stati
          * otc_tombstone(rel, id, &t) gives the object */
         otc_tombstone_t *t = NULL;
         const char *in = NULL, *reason = NULL, *into = NULL;
-        otc_status st2;
-        if (otc_tombstone(rel, id, &t) == OTC_OK) {
-            in = otc__jstr(t->root, "removed_in");
-            reason = otc__jstr(t->root, "removed_reason");
-            into = otc__jstr(t->root, "merged_into");
-        }
+        otc_status st2 = otc_tombstone(rel, id, &t);
+        if (st2 != OTC_OK) return st2;   /* the tombstone cannot be read: that failure (already recorded) */
+        in = otc__jstr(t->root, "removed_in");
+        reason = otc__jstr(t->root, "removed_reason");
+        into = otc__jstr(t->root, "merged_into");
         if (into)
             st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s), merged into %s", id,
                             in ? in : "?", reason ? reason : "?", into);
@@ -87,7 +88,7 @@ otc_status otc_tombstone(const otc_release *rel, const char *id, otc_tombstone_t
     if (!rel || !out || !id) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_tombstone: NULL argument");
     t = otc__find_tomb(rel, id);
     if (!t) return OTC_E_NOT_FOUND;
-    st = otc__read_line(rel, t->offset, t->length, &root);
+    st = otc__read_station_line(rel, t->id, t->offset, t->length, &root);
     if (st != OTC_OK) return st;
     *out = (otc_tombstone_t *)malloc(sizeof **out);
     if (!*out) { cJSON_Delete(root); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
@@ -199,26 +200,43 @@ typedef struct ranked {
     const otc__entry *e;
 } ranked;
 
+/* Folded names are compared as byte strings with a length: a name may hold a NUL (spec 4.4.1). */
+static int bytes_cmp(const char *a, size_t an, const char *b, size_t bn)
+{
+    int c = memcmp(a, b, an < bn ? an : bn);
+    return c ? c : (an < bn ? -1 : an > bn);
+}
+
 static int ranked_cmp(const void *a, const void *b)
 {
     const ranked *x = (const ranked *)a, *y = (const ranked *)b;
     int c;
     if (x->rank != y->rank) return x->rank < y->rank ? -1 : 1;
-    c = strcmp(x->e->folded, y->e->folded);
+    c = bytes_cmp(x->e->folded, x->e->folded_len, y->e->folded, y->e->folded_len);
     return c ? c : strcmp(x->e->id, y->e->id);
 }
 
-static int name_rank(const char *n, const char *q, int exact)
+/* The first q in n at or after from, or NULL. */
+static const char *find_in(const char *n, size_t nl, size_t from, const char *q, size_t ql)
+{
+    size_t i;
+    for (i = from; i + ql <= nl; i++)
+        if (!memcmp(n + i, q, ql)) return n + i;
+    return NULL;
+}
+
+/* 0 exact, 1 prefix, 2 the start of a later word, 3 anywhere; -1 no match */
+static int name_rank(const char *n, size_t nl, const char *q, int exact)
 {
     size_t ql = strlen(q);
     const char *p;
-    if (!strcmp(n, q)) return 0;
+    if (nl == ql && !memcmp(n, q, ql)) return 0;
     if (exact) return -1;
-    if (!strncmp(n, q, ql)) return 1;
-    if (!n[0]) return -1;
-    for (p = strstr(n + 1, q); p; p = strstr(p + 1, q))
+    if (nl >= ql && !memcmp(n, q, ql)) return 1;
+    if (!nl) return -1;
+    for (p = find_in(n, nl, 1, q, ql); p; p = find_in(n, nl, (size_t)(p - n) + 1, q, ql))
         if (p[-1] == ' ') return 2;
-    return strstr(n, q) ? 3 : -1;
+    return find_in(n, nl, 0, q, ql) ? 3 : -1;
 }
 
 otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
@@ -229,6 +247,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     size_t i, n = 0, total;
     if (!rel || !name || !count || (!out && cap) || !filter_ok(filter))
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_search: bad argument");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
     q = otc__fold(name);
     if (!q) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (!q[0]) {
@@ -240,7 +259,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     for (i = 0; i < rel->n_st; i++) {
         int k;
         if (!otc__filter_match(filter, &rel->st[i])) continue;
-        k = name_rank(rel->st[i].folded, q, filter && filter->match_exact);
+        k = name_rank(rel->st[i].folded, rel->st[i].folded_len, q, filter && filter->match_exact);
         if (k < 0) continue;
         r[n].rank = k;
         r[n].e = &rel->st[i];
@@ -248,7 +267,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     }
     free(q);
     if (n > 1) qsort(r, n, sizeof *r, ranked_cmp);
-    total = (limit && limit < n) ? limit : n;
+    total = limit < n ? limit : n;
     for (i = 0; out && i < total && i < cap; i++) {
         out[i].id = r[i].e->id;
         out[i].name = r[i].e->name;
@@ -318,9 +337,10 @@ otc_status otc_near(const otc_release *rel, double lat, double lon, double radiu
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_near: bad argument");
     if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
     if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
     st = geo_scan(rel, lat, lon, radius_km, filter, &hits, &n);
     if (st != OTC_OK) return otc__fail(rel, st, "out of memory");
-    total = (limit && limit < n) ? limit : n;
+    total = limit < n ? limit : n;
     for (i = 0; out && i < total && i < cap; i++) out[i] = hits[i];
     free(hits);
     *count = total;

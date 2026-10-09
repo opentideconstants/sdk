@@ -14,12 +14,16 @@
 #if !defined(_WIN32) && !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE 700
 #endif
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S   /* rand_s, for the lock token */
+#endif
 #include "otc_internal.h"
 #include "otc_sha256_rename.h"
 #include "sha-256.h"
 
 #include <curl/curl.h>
 #include <errno.h>
+#include <stddef.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -41,10 +45,20 @@
 #define USER_AGENT SDK_ID " (+https://opentideconstants.org)"
 #define CONNECT_TIMEOUT_S 10.0
 #define READ_TIMEOUT_S 60.0
+#define TIMEOUT_MAX_S 1.0e6
 #define ATTEMPTS 3
 #define RETRY_AFTER_MAX_S 60.0
+/* spec 5.4 Locks; the tests (c/tests/test_fetch_lock.c) build a copy with short timers */
+#ifdef OTC_LOCK_POLL_MS
+#define LOCK_POLL_MS OTC_LOCK_POLL_MS
+#else
 #define LOCK_POLL_MS 500
+#endif
+#ifdef OTC_LOCK_STALE_MS
+#define LOCK_STALE_MS OTC_LOCK_STALE_MS
+#else
 #define LOCK_STALE_MS 120000
+#endif
 
 /* ------------------------------------------------------------- one-time init */
 
@@ -154,8 +168,10 @@ static int fs_mkdir(const char *path)
 {
 #ifdef _WIN32
     wchar_t *w = widen(path);
-    int r = w ? _wmkdir(w) : -1;
-    int e = errno;
+    int r, e;
+    if (!w) return -1;   /* no conversion: an error, never "exists" from a stale errno */
+    r = _wmkdir(w);
+    e = errno;
     free(w);
     if (r == 0) return 0;
     return e == EEXIST ? 1 : -1;
@@ -256,7 +272,7 @@ static otc_status fs_list(const char *dir, char ***out, size_t *n_out)
     struct dirent *e;
     *out = NULL;
     *n_out = 0;
-    if (!d) return OTC_E_IO;
+    if (!d) return errno == ENOMEM ? OTC_E_NOMEM : OTC_E_IO;
     while ((e = readdir(d)) != NULL) {
         char *name;
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
@@ -288,24 +304,53 @@ static char *path2(const char *a, const char *b)
     return p;
 }
 
-/* rm -r */
-static void fs_rm_rf(const char *path)
+/* 1 a real directory (not a symlink or junction to one), 2 anything else that
+ * exists, 0 nothing there. Unlike fs_kind it never follows a link. */
+static int fs_kind_nofollow(const char *path)
 {
-    if (fs_kind(path) == 1) {
+#ifdef _WIN32
+    wchar_t *w = widen(path);
+    DWORD a = w ? GetFileAttributesW(w) : INVALID_FILE_ATTRIBUTES;
+    free(w);
+    if (a == INVALID_FILE_ATTRIBUTES) return 0;
+    return (a & FILE_ATTRIBUTE_DIRECTORY) && !(a & FILE_ATTRIBUTE_REPARSE_POINT) ? 1 : 2;
+#else
+    struct stat sb;
+    if (lstat(path, &sb) != 0) return 0;
+    return S_ISDIR(sb.st_mode) ? 1 : 2;
+#endif
+}
+
+/* rm -r that never follows a symlink: a link is removed, not what it points
+ * to. 0 when nothing is left at path, -1 when something could not be removed,
+ * -2 when memory ran out (something may be left). */
+static int fs_rm_rf(const char *path)
+{
+    int k = fs_kind_nofollow(path), bad = 0;
+    if (k == 0) return 0;
+    if (k == 1) {
         char **names = NULL;
         size_t n = 0, i;
-        if (fs_list(path, &names, &n) == OTC_OK) {
-            for (i = 0; i < n; i++) {
-                char *p = path2(path, names[i]);
-                if (p) fs_rm_rf(p);
-                free(p);
-            }
-            free_list(names, n);
+        otc_status st = fs_list(path, &names, &n);
+        if (st != OTC_OK) return st == OTC_E_NOMEM ? -2 : -1;
+        for (i = 0; i < n; i++) {
+            char *p = path2(path, names[i]);
+            int r = p ? fs_rm_rf(p) : -2;
+            if (r == -2 || (r && !bad)) bad = r;
+            free(p);
         }
-        fs_rmdir(path);
+        free_list(names, n);
+        if (bad == -2) return -2;
+        if (fs_rmdir(path) != 0) bad = -1;
     } else {
-        fs_unlink(path);
+#ifdef _WIN32
+        /* a directory junction or symlink is removed with rmdir, a file with unlink */
+        if (fs_unlink(path) != 0 && fs_rmdir(path) != 0) bad = 1;
+#else
+        if (fs_unlink(path) != 0) bad = 1;
+#endif
     }
+    return (bad || fs_kind_nofollow(path) != 0) ? -1 : 0;
 }
 
 /* mkdir -p; 0 when path is a directory afterwards */
@@ -314,10 +359,19 @@ static int fs_mkdir_p(const char *path)
     char *p = otc__strdup(path);
     size_t i, n;
     int ok;
+    size_t start = 1;
     if (!p) return -1;
     n = strlen(p);
     while (n > 1 && (p[n - 1] == '/' || p[n - 1] == '\\')) p[--n] = '\0';
-    for (i = 1; i < n; i++) {
+#ifdef _WIN32
+    /* a UNC root (\\server\share\...): the server and the share are not directories to create */
+    if (n > 2 && (p[0] == '\\' || p[0] == '/') && (p[1] == '\\' || p[1] == '/')) {
+        int parts = 0;
+        for (start = 2; start < n && parts < 2; start++)
+            if (p[start] == '\\' || p[start] == '/') parts++;
+    }
+#endif
+    for (i = start; i < n; i++) {
         if (p[i] == '/' || p[i] == '\\') {
             char c = p[i];
             if (p[i - 1] == ':' || p[i - 1] == '/' || p[i - 1] == '\\') continue; /* C:\ or // */
@@ -368,7 +422,21 @@ typedef struct fctx {
     double      connect_s, read_s;
     int         raise;     /* on_network_error RAISE */
     otc_error   own;       /* the error detail when the caller passed none */
+    const otc_open_options *oo;   /* otc_fetch_open's caller options (log_fn, require_checksum), or NULL */
 } fctx;
+
+/* The options of an open of a cached file: the caller's (otc_fetch_open), with
+ * the error detail going to the fetch context. */
+static void cache_open_options(const fctx *c, otc_open_options *oo)
+{
+    otc_open_options_init(oo);
+    if (c->oo) {
+        oo->require_checksum = c->oo->require_checksum;
+        oo->log_fn = c->oo->log_fn;
+        oo->log_user_data = c->oo->log_user_data;
+    }
+    oo->error = c->err;
+}
 
 static void logf_(const fctx *c, int level, const char *fmt, ...)
 {
@@ -409,6 +477,28 @@ static const char *env_get(const char *name)
     return v && v[0] ? v : NULL;
 }
 
+/* An "on" value of a boolean environment variable (spec 4.2, CR D15): 1, true,
+ * yes or on, without regard to case, after trimming spaces and tabs. */
+static int env_on(const char *v)
+{
+    static const char *const ON[] = {"1", "true", "yes", "on", NULL};
+    size_t n, i, k;
+    if (!v) return 0;
+    while (*v == ' ' || *v == '\t') v++;
+    n = strlen(v);
+    while (n && (v[n - 1] == ' ' || v[n - 1] == '\t')) n--;
+    for (k = 0; ON[k]; k++) {
+        if (strlen(ON[k]) != n) continue;
+        for (i = 0; i < n; i++) {
+            char ch = v[i];
+            if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32);
+            if (ch != ON[k][i]) break;
+        }
+        if (i == n) return 1;
+    }
+    return 0;
+}
+
 static char *default_root(void)
 {
     const char *v;
@@ -426,6 +516,25 @@ static char *default_root(void)
 #endif
 }
 
+/* 1 for an absolute http:// or https:// URL with a host. */
+static int http_url(const char *u)
+{
+    size_t n = !strncmp(u, "http://", 7) ? 7 : !strncmp(u, "https://", 8) ? 8 : 0;
+    return n && u[n] && u[n] != '/' && !strchr(u, ' ');
+}
+
+/* 1 when the environment names a home for the default cache root. */
+static int default_root_env(void)
+{
+#ifdef _WIN32
+    return env_get("LOCALAPPDATA") || env_get("USERPROFILE");
+#elif defined(__APPLE__)
+    return env_get("HOME") != NULL;
+#else
+    return env_get("XDG_CACHE_HOME") || env_get("HOME");
+#endif
+}
+
 static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
 {
     const char *v;
@@ -434,25 +543,53 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     init_once();
     otc_error_init(&c->own);
     c->err = &c->own;
-    if (o && o->struct_size < sizeof *o) return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "otc_fetch_options: struct_size is too small");
+    if (o && o->struct_size < sizeof *o) {
+        /* the error field is at the same place in every layout that has it: the caller
+         * still learns why (C56) */
+        if (o->struct_size >= offsetof(otc_fetch_options, error) + sizeof o->error && otc__err_usable(o->error)) {
+            c->err = o->error;
+            otc_error_init(c->err);
+        }
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "otc_fetch_options: struct_size is too small");
+    }
     c->o = o;
-    if (o && o->error) c->err = o->error;
+    if (o && otc__err_usable(o->error)) c->err = o->error;   /* else the detail stays in own: never written past */
     otc_error_init(c->err);
     if (!g_curl_ok) return fail(c, OTC_E_NETWORK, NULL, "curl_global_init failed");
     if (o && o->cache_dir) root = otc__strdup(o->cache_dir);
     else if ((v = env_get("OPENTIDECONSTANTS_CACHE_DIR")) != NULL) root = otc__strdup(v);
-    else root = default_root();
-    if (!root) return fail(c, OTC_E_CACHE, NULL, "no cache directory: set cache_dir or OPENTIDECONSTANTS_CACHE_DIR");
+    else if (!(root = default_root()) && !default_root_env()) {
+        return fail(c, OTC_E_CACHE, NULL, "no cache directory: set cache_dir or OPENTIDECONSTANTS_CACHE_DIR");
+    }
+    if (!root) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     c->base = path2(root, LAYOUT);
     free(root);
     v = (o && o->base_url) ? o->base_url : env_get("OPENTIDECONSTANTS_BASE_URL");
-    c->base_url = otc__strdup(v ? v : DEFAULT_BASE_URL);
+    if (!v) v = DEFAULT_BASE_URL;
+    /* a base_url is a folder: without its trailing slash the last segment would be
+     * dropped when a file name is resolved against it (spec 4.2, 5.2) */
+    c->base_url = (v[0] && v[strlen(v) - 1] != '/') ? otc__join(v, "/") : otc__strdup(v);
     if (!c->base || !c->base_url) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-    v = env_get("OPENTIDECONSTANTS_OFFLINE");
-    c->offline = (o && o->offline) || (v && !strcmp(v, "1"));
+    /* spec 4.2, 5.7 (CR D19): checked here, before any network access; never retried, never a
+     * reason to fall back to the cache */
+    if (!http_url(c->base_url))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "base_url must be an absolute http or https URL: %s", c->base_url);
+    if (o && o->proxy && o->proxy[0] && !http_url(o->proxy))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "proxy must be an absolute http or https URL: %s", o->proxy);
+    if (o && o->ca_file) {
+        FILE *f = fs_kind(o->ca_file) == 2 ? fs_fopen(o->ca_file, "rb") : NULL;
+        if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
+        fclose(f);
+    }
+    c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
     c->formats = (o && o->formats) ? o->formats : (unsigned)OTC_FORMAT_JSONL;
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: unknown bits");
+    /* timeout_s: 0 is the defaults; otherwise a finite number of seconds, at most
+     * TIMEOUT_MAX_S so that the millisecond options of libcurl stay in a long */
+    if (o && (!(o->timeout_s >= 0) || o->timeout_s > TIMEOUT_MAX_S))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "timeout_s must be 0 (the defaults) or a number of seconds up to %g",
+                    TIMEOUT_MAX_S);
     c->connect_s = (o && o->timeout_s > 0) ? o->timeout_s : CONNECT_TIMEOUT_S;
     c->read_s = (o && o->timeout_s > 0) ? o->timeout_s : READ_TIMEOUT_S;
     c->raise = o && o->on_network_error == OTC_ON_NETWORK_ERROR_RAISE;
@@ -467,21 +604,14 @@ static void ctx_free(fctx *c)
 
 /* ------------------------------------------------------------------ datestamps */
 
-/* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]+)?$ */
+/* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$ (spec 4.2, CR D18): the counter has at
+ * most 9 digits, so a datestamp has at most DS_MAX characters, every cache
+ * file name fits NAME_CAP, and ds_cmp's strtoul never saturates. */
+#define DS_MAX 18
+#define NAME_CAP (4 + DS_MAX + sizeof ".meta.json")   /* "OTC_" + D + the longest suffix */
 static int valid_datestamp(const char *s)
 {
-    size_t i, n;
-    if (!s) return 0;
-    n = strlen(s);
-    if (n < 8) return 0;
-    for (i = 0; i < 8; i++)
-        if (s[i] < '0' || s[i] > '9') return 0;
-    if (n == 8) return 1;
-    if (s[8] != '.' || n < 10) return 0;
-    for (i = 9; i < n; i++)
-        if (s[i] < '0' || s[i] > '9') return 0;
-    if (n == 10) return s[9] >= '2';
-    return s[9] != '0';
+    return s && otc__valid_datestamp(s, strlen(s));
 }
 
 /* the date, then the counter; no counter = counter 1 */
@@ -500,14 +630,13 @@ static int ds_cmp_desc(const void *x, const void *y)
     return ds_cmp(*(const char *const *)y, *(const char *const *)x);
 }
 
-/* The major of "MAJOR.MINOR", or -1. */
+/* The major of "MAJOR.MINOR", or -1 when fv is not a valid version (spec 7.4, CR D9). */
 static int format_major(const char *fv)
 {
-    char *end;
     long m;
-    if (!fv || !strchr(fv, '.') || fv[0] < '0' || fv[0] > '9') return -1;
-    m = strtol(fv, &end, 10);
-    return (*end == '.' && m >= 0 && m < 1000000) ? (int)m : -1;
+    if (!otc__version_valid(fv)) return -1;
+    m = strtol(fv, NULL, 10);
+    return m < 1000000 ? (int)m : -1;
 }
 
 /* --------------------------------------------------------------------- URLs */
@@ -647,19 +776,40 @@ static size_t on_header(char *line, size_t sz, size_t nm, void *user)
         memcpy(buf, v, vl);
         buf[vl] = '\0';
         d = strtod(buf, &end);
-        if (end != buf && d >= 0) r->retry_after = d;
+        if (end != buf && *end == '\0' && d >= 0) {
+            r->retry_after = d;
+        } else {   /* Retry-After may also be an HTTP-date (spec 5.7) */
+            int64_t at = otc__http_date(buf), now = (int64_t)time(NULL);
+            if (at >= 0) r->retry_after = at > now ? (double)(at - now) : 0.0;
+        }
     }
     return n;
 }
 
-static const char *proxy_env(int https)
-{
-    const char *v = https ? env_get("https_proxy") : env_get("http_proxy");
-    if (!v) v = https ? env_get("HTTPS_PROXY") : env_get("HTTP_PROXY");
-    return v;
-}
-
 enum { GET_OK = 0, GET_NOT_MODIFIED, GET_NOT_FOUND };
+
+/* A libcurl failure that another attempt may cure (spec 5.7: "connection
+ * errors"). A refused protocol, a bad URL, too many redirects or a TLS
+ * certificate failure stay the same, so they are not retried. */
+static int transient(CURLcode rc)
+{
+    switch (rc) {
+    case CURLE_COULDNT_RESOLVE_PROXY:
+    case CURLE_COULDNT_RESOLVE_HOST:
+    case CURLE_COULDNT_CONNECT:
+    case CURLE_PARTIAL_FILE:
+    case CURLE_OPERATION_TIMEDOUT:
+    case CURLE_SSL_CONNECT_ERROR:
+    case CURLE_GOT_NOTHING:
+    case CURLE_SEND_ERROR:
+    case CURLE_RECV_ERROR:
+    case CURLE_HTTP2:
+    case CURLE_HTTP2_STREAM:
+        return 1;
+    default:
+        return 0;
+    }
+}
 
 /*
  * GET url with the retries of spec 5.7 (3 attempts on connection errors, 5xx
@@ -668,6 +818,16 @@ enum { GET_OK = 0, GET_NOT_MODIFIED, GET_NOT_FOUND };
  * file (fsynced); otherwise it is kept in r->body. r->hex and r->size
  * describe the decoded body.
  */
+/* Appends a header line; 0 when libcurl could not (out of memory): the list so far is
+ * kept in *list, and the request must not go out without the header. */
+static int add_header(struct curl_slist **list, const char *line)
+{
+    struct curl_slist *n = curl_slist_append(*list, line);
+    if (!n) return 0;
+    *list = n;
+    return 1;
+}
+
 static otc_status http_get(fctx *c, const char *url, const char *if_none_match, int accept_gzip,
                            const char *sink_path, http_resp *r, int *result)
 {
@@ -676,8 +836,11 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
     int attempt, https = !strncmp(url, "https://", 8);
     long last_status = 0;
     char last_msg[512];
-    const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : proxy_env(https);
-    const char *noproxy = (c->o && c->o->proxy) ? "" : (env_get("no_proxy") ? env_get("no_proxy") : env_get("NO_PROXY"));
+    /* The proxy option wins. Without it libcurl reads the environment itself (spec
+     * 5.7, CR D7): only lower-case http_proxy for http (httpoxy: in CGI a client's
+     * Proxy: header arrives as HTTP_PROXY), https_proxy / HTTPS_PROXY, ALL_PROXY and
+     * NO_PROXY. So neither CURLOPT_PROXY nor CURLOPT_NOPROXY is set then. */
+    const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : NULL;
     const char *ca = (c->o && c->o->ca_file) ? c->o->ca_file : env_get("SSL_CERT_FILE");
     *result = GET_OK;
     if (strncmp(url, "http://", 7) != 0 && !https) {
@@ -693,7 +856,7 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         CURL *h;
         CURLcode rc;
         struct curl_slist *hdrs = NULL;
-        int retry = 0;
+        int retry = 0, bad_opt, no_mem = 0;
         free(r->body);
         memset(r, 0, sizeof *r);
         r->retry_after = -1;
@@ -709,11 +872,21 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             return fail(c, OTC_E_NOMEM, url, "curl_easy_init failed");
         }
         errbuf[0] = '\0';
-        curl_easy_setopt(h, CURLOPT_URL, url);
+        bad_opt = curl_easy_setopt(h, CURLOPT_URL, url) != CURLE_OK;
         curl_easy_setopt(h, CURLOPT_USERAGENT, ua);
         curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-        curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
+        /* redirects (spec 5.7, CR D1): at most 5, only http and https, and never from
+         * https to http */
+        bad_opt |= curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L) != CURLE_OK;
+#if LIBCURL_VERSION_NUM >= 0x075500
+        bad_opt |= curl_easy_setopt(h, CURLOPT_PROTOCOLS_STR, "http,https") != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https") != CURLE_OK;
+#else
+        bad_opt |= curl_easy_setopt(h, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS,
+                                    https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
+#endif
         curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0));
         curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999));
@@ -723,16 +896,25 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header);
         curl_easy_setopt(h, CURLOPT_HEADERDATA, r);
         if (accept_gzip) curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip");
-        else hdrs = curl_slist_append(hdrs, "Accept-Encoding: identity");
+        else no_mem |= !add_header(&hdrs, "Accept-Encoding: identity");
         if (if_none_match && if_none_match[0]) {
             snprintf(inm, sizeof inm, "If-None-Match: %s", if_none_match);
-            hdrs = curl_slist_append(hdrs, inm);
+            no_mem |= !add_header(&hdrs, inm);
         }
         if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
-        if (proxy) curl_easy_setopt(h, CURLOPT_PROXY, proxy);
-        else curl_easy_setopt(h, CURLOPT_PROXY, "");
-        if (noproxy) curl_easy_setopt(h, CURLOPT_NOPROXY, noproxy);
-        if (ca) curl_easy_setopt(h, CURLOPT_CAINFO, ca);
+        if (proxy) {
+            bad_opt |= curl_easy_setopt(h, CURLOPT_PROXY, proxy) != CURLE_OK;
+            bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;
+        }
+        if (ca) bad_opt |= curl_easy_setopt(h, CURLOPT_CAINFO, ca) != CURLE_OK;
+        if (bad_opt || no_mem) {   /* a header, limit or URL that libcurl did not take: no request without it */
+            curl_easy_cleanup(h);
+            curl_slist_free_all(hdrs);
+            if (r->sink) fclose(r->sink);
+            r->sink = NULL;
+            if (no_mem) return fail(c, OTC_E_NOMEM, url, "out of memory for the request headers (%s)", url);
+            return fail(c, OTC_E_NETWORK, url, "libcurl refused an option the request needs (%s)", url);
+        }
         rc = curl_easy_perform(h);
         curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &r->status);
         curl_easy_cleanup(h);
@@ -751,6 +933,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             snprintf(last_msg, sizeof last_msg, "%s for %s: %s", curl_easy_strerror(rc), url,
                      errbuf[0] ? errbuf : curl_easy_strerror(rc));
             last_status = 0;
+            if (!transient(rc)) {   /* spec 5.7: only connection errors are retried */
+                fail(c, OTC_E_NETWORK, url, "%s", last_msg);
+                return OTC_E_NETWORK;
+            }
             retry = 1;
         } else if (r->status == 200) {
             logf_(c, 0, "GET %s -> 200", url);
@@ -815,6 +1001,27 @@ static otc_status write_atomic(fctx *c, const char *dir, const char *path, const
     return OTC_OK;
 }
 
+/* Writes data to <dir>/.tmp-* (fsynced) and returns that path; the caller renames it. */
+static otc_status write_tmp(fctx *c, const char *dir, const void *data, size_t len, char **tmp_out)
+{
+    char *tmp = tmp_path(dir);
+    FILE *f;
+    int bad;
+    *tmp_out = NULL;
+    if (!tmp) return fail(c, OTC_E_NOMEM, dir, "out of memory");
+    f = fs_fopen(tmp, "wb");
+    if (!f) { free(tmp); return fail(c, OTC_E_IO, dir, "cannot write into %s", dir); }
+    bad = (len && fwrite(data, 1, len, f) != len) || fs_fsync(f) != 0;
+    if (fclose(f) != 0) bad = 1;
+    if (bad) {
+        fs_unlink(tmp);
+        free(tmp);
+        return fail(c, OTC_E_IO, dir, "cannot write into %s", dir);
+    }
+    *tmp_out = tmp;
+    return OTC_OK;
+}
+
 /* Copies src to <dir>/.tmp-* (fsynced); returns the tmp path and its SHA-256. */
 static otc_status copy_to_tmp(fctx *c, const char *src, const char *dir, char **tmp_out, char hex[65])
 {
@@ -862,11 +1069,108 @@ static otc_status copy_to_tmp(fctx *c, const char *src, const char *dir, char **
 
 typedef int (*done_fn)(fctx *c, const char *ds);
 
-/* Takes <dir>/.lock (spec 5.4). *held = 0 when done() became true while waiting. */
-static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn done, int *held)
+/* A random token of 128 bits as 32 hex digits (spec 5.4, CR D3). */
+static void lock_token(char out[33])
+{
+    static const char digits[] = "0123456789abcdef";
+    unsigned char b[16];
+    size_t i;
+    int ok = 0;
+#ifdef _WIN32
+    for (i = 0; i < 16; i += 4) {
+        unsigned int r;
+        if (rand_s(&r) != 0) break;
+        memcpy(b + i, &r, 4);
+    }
+    ok = i >= 16;
+#else
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f) {
+        ok = fread(b, 1, sizeof b, f) == sizeof b;
+        fclose(f);
+    }
+#endif
+    if (!ok) {   /* no OS randomness: the tmp-name mixer (unique per process and call) */
+        char *t = tmp_path("x");
+        size_t n = t ? strlen(t) : 0;
+        for (i = 0; i < 16; i++) b[i] = (unsigned char)(n > i ? t[n - 1 - i] : (unsigned char)(i * 37 + get_pid()));
+        free(t);
+    }
+    for (i = 0; i < 16; i++) {
+        out[2 * i] = digits[b[i] >> 4];
+        out[2 * i + 1] = digits[b[i] & 15];
+    }
+    out[32] = '\0';
+}
+
+/* Writes <lock>/owner.json with a fresh token (spec 5.4). A failure is logged:
+ * the lock still works, but it then cannot be released (lock_release finds no
+ * token), so it goes stale. */
+static void lock_write_owner(fctx *c, const char *lock, char token[33])
+{
+    char *owner = path2(lock, "owner.json"), *txt = NULL;
+    char host[256] = "", when[32];
+    time_t now = time(NULL);
+    struct tm tmv;
+    cJSON *o = cJSON_CreateObject();
+    FILE *f;
+    lock_token(token);
+#ifdef _WIN32
+    {
+        DWORD hl = (DWORD)sizeof host;
+        if (!GetComputerNameA(host, &hl)) host[0] = '\0';
+    }
+    gmtime_s(&tmv, &now);
+#else
+    if (gethostname(host, sizeof host - 1) != 0) host[0] = '\0';
+    host[sizeof host - 1] = '\0';
+    gmtime_r(&now, &tmv);
+#endif
+    strftime(when, sizeof when, "%Y-%m-%dT%H:%M:%SZ", &tmv);
+    if (o) {
+        cJSON_AddNumberToObject(o, "pid", (double)get_pid());
+        cJSON_AddStringToObject(o, "host", host);
+        cJSON_AddStringToObject(o, "sdk", SDK_ID);
+        cJSON_AddStringToObject(o, "started_at", when);
+        cJSON_AddStringToObject(o, "token", token);
+        txt = cJSON_PrintUnformatted(o);
+    }
+    f = (owner && txt) ? fs_fopen(owner, "wb") : NULL;
+    if (f) {
+        int bad = fputs(txt, f) < 0;
+        if (fclose(f) != 0) bad = 1;
+        if (bad) logf_(c, 2, "cannot write %s", owner);
+    } else {
+        logf_(c, 2, "cannot write %s", owner ? owner : lock);
+    }
+    cJSON_free(txt);
+    cJSON_Delete(o);
+    free(owner);
+}
+
+/* One attempt at <dir>/.lock: *held = 1 when this call took it. */
+static otc_status lock_try(fctx *c, const char *dir, int *held, char token[33])
+{
+    char *lock = path2(dir, ".lock");
+    int m;
+    *held = 0;
+    if (!lock) return fail(c, OTC_E_NOMEM, dir, "out of memory");
+    m = fs_mkdir(lock);
+    if (m == 0) {
+        *held = 1;
+        lock_write_owner(c, lock, token);
+    }
+    free(lock);
+    return m < 0 ? fail(c, OTC_E_CACHE, dir, "cannot create the lock in %s", dir) : OTC_OK;
+}
+
+/* Takes <dir>/.lock (spec 5.4). *held = 0 when done() became true while waiting.
+ * token gets the random token written to owner.json; lock_release needs it. */
+static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn done, int *held, char token[33])
 {
     char *lock = path2(dir, ".lock");
     long waited = 0;
+    int failed_removals = 0;
     *held = 0;
     if (!lock) return fail(c, OTC_E_NOMEM, dir, "out of memory");
     for (;;) {
@@ -879,57 +1183,39 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
         }
         if (done && done(c, ds)) break;
         if (waited >= LOCK_STALE_MS) {
+            /* spec 5.4 (CR D3): a stale lock that cannot be removed 3 times is a cache error */
             logf_(c, 2, "removing the stale lock %s", lock);
-            fs_rm_rf(lock);
-            waited = 0;
-            continue;
+            if (fs_rm_rf(lock) == 0) continue;
+            if (++failed_removals >= 3) {
+                otc_status st = fail(c, OTC_E_CACHE, lock, "cannot remove the stale lock %s", lock);
+                free(lock);
+                return st;
+            }
         }
         sleep_ms(LOCK_POLL_MS);
         waited += LOCK_POLL_MS;
     }
-    if (*held) {
-        char *owner = path2(lock, "owner.json");
-        FILE *f = owner ? fs_fopen(owner, "wb") : NULL;
-        if (f) {
-            char host[256] = "";
-            char when[32];
-            time_t now = time(NULL);
-            struct tm tmv;
-#ifdef _WIN32
-            DWORD hl = (DWORD)sizeof host;
-            if (!GetComputerNameA(host, &hl)) host[0] = '\0';
-            gmtime_s(&tmv, &now);
-#else
-            if (gethostname(host, sizeof host - 1) != 0) host[0] = '\0';
-            host[sizeof host - 1] = '\0';
-            gmtime_r(&now, &tmv);
-#endif
-            strftime(when, sizeof when, "%Y-%m-%dT%H:%M:%SZ", &tmv);
-            {
-                cJSON *o = cJSON_CreateObject();
-                char *txt;
-                cJSON_AddNumberToObject(o, "pid", (double)get_pid());
-                cJSON_AddStringToObject(o, "host", host);
-                cJSON_AddStringToObject(o, "sdk", SDK_ID);
-                cJSON_AddStringToObject(o, "started_at", when);
-                txt = cJSON_PrintUnformatted(o);
-                if (txt) fputs(txt, f);
-                cJSON_free(txt);
-                cJSON_Delete(o);
-            }
-            fclose(f);
-        }
-        free(owner);
-    }
+    if (*held) lock_write_owner(c, lock, token);
     free(lock);
     return OTC_OK;
 }
 
-static void lock_release(const char *dir)
+static char *slurp(const char *path);
+
+/* Releases <dir>/.lock only when its owner.json carries this process's token:
+ * a lock that another process took over as stale is left alone (spec 5.4, CR D3). */
+static void lock_release(fctx *c, const char *dir, const char *token)
 {
-    char *lock = path2(dir, ".lock"), *owner = lock ? path2(lock, "owner.json") : NULL;
-    if (owner) fs_unlink(owner);
-    if (lock) fs_rmdir(lock);
+    char *lock = path2(dir, ".lock"), *owner = lock ? path2(lock, "owner.json") : NULL, *t = owner ? slurp(owner) : NULL;
+    cJSON *o = t ? otc__json_parse(t, strlen(t)) : NULL;
+    if (owner && !otc__strcmp_null(otc__jstr(o, "token"), token)) {
+        fs_unlink(owner);
+        fs_rmdir(lock);
+    } else {
+        logf_(c, 1, "the lock %s now belongs to another process; it is left alone", lock ? lock : dir);
+    }
+    cJSON_Delete(o);
+    free(t);
     free(owner);
     free(lock);
 }
@@ -965,6 +1251,10 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     *out = NULL;
     if (!cJSON_IsObject(e) || !ds || !valid_datestamp(ds) || (files && !cJSON_IsArray(files)))
         return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a release entry without a valid datestamp or files", doc_url);
+    if ((otc__jget(e, "format_version") && !otc__version_valid(fv))   /* spec 7.4 (CR D9) */
+        || (otc__jget(e, "min_reader_version") && !otc__version_valid(mrv)))
+        return fail(c, OTC_E_INVALID_RELEASE, doc_url,
+                    "%s: release %s has a format_version or min_reader_version that is not MAJOR.MINOR", doc_url, ds);
     ri = (otc_release_info *)calloc(1, sizeof *ri);
     if (!ri) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     ri->datestamp = otc__strdup(ds);
@@ -981,7 +1271,6 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     }
     cJSON_ArrayForEach(f, files) {
         const char *name = otc__jstr(f, "name"), *u = otc__jstr(f, "url"), *sha = otc__jstr(f, "sha256");
-        const cJSON *size = otc__jget(f, "size");
         otc_file_info *fi = &ri->files[n];
         if (!name) {
             ri->n_files = n;
@@ -991,7 +1280,7 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
         fi->name = otc__strdup(name);
         fi->url = url_resolve(doc_url, u ? u : name);
         fi->sha256 = sha ? otc__strdup(sha) : NULL;
-        fi->size = cJSON_IsNumber(size) ? (int64_t)size->valuedouble : -1;
+        fi->size = otc__jint(f, "size");   /* a whole number in range, else unknown (-1); never a bad cast */
         n++;
         if (!fi->name || !fi->url || (sha && !fi->sha256)) {
             ri->n_files = n;
@@ -1024,13 +1313,22 @@ static const otc_file_info *info_file(const otc_release_info *ri, const char *na
 
 static char *pointer_dir(fctx *c) { return path2(c->base, "pointer"); }
 
-/* Reads a whole file; NULL if it is missing. */
+/* Reads a whole file; NULL if it is missing (or cannot be read). */
 static char *slurp(const char *path)
 {
     char *t = NULL;
     if (fs_kind(path) != 2) return NULL;
     if (otc__read_all(path, &t, NULL) != OTC_OK) return NULL;
     return t;
+}
+
+/* The same with a status: OTC_OK with *out NULL when the file is missing,
+ * OTC_E_NOMEM, or OTC_E_IO when it is there but cannot be read. */
+static otc_status slurp_st(const char *path, char **out)
+{
+    *out = NULL;
+    if (fs_kind(path) != 2) return OTC_OK;
+    return otc__read_all(path, out, NULL);
 }
 
 /*
@@ -1050,6 +1348,15 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     memset(&r, 0, sizeof r);
     if (!dir || !path || !etag_path || !url) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto done; }
     body = slurp(path);
+    if (body) {   /* a cached copy that is not JSON is never revalidated (a 304 would keep it): fetch it again */
+        cJSON *probe = otc__json_parse(body, strlen(body));
+        if (!probe) {
+            logf_(c, 2, "the cached %s is not JSON; fetching it again", path);
+            free(body);
+            body = NULL;
+        }
+        cJSON_Delete(probe);
+    }
     etag = body ? slurp(etag_path) : NULL;
     if (etag) {
         size_t n = strlen(etag);
@@ -1060,23 +1367,37 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     if (res == GET_NOT_FOUND) goto done;
     if (res == GET_NOT_MODIFIED && body) {
         logf_(c, 0, "pointer %s: 304", name);
+        *doc = otc__json_parse(body, strlen(body));
+        if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, path, "%s: not JSON", path); goto done; }
     } else {
+        /* spec 5.2 step 2 (CR D8): the body is parsed before it is stored, so a
+         * captive portal's page never replaces a good cached copy. A 200 that is
+         * not JSON stands in for the network: a network error, which the
+         * use_cache fallback handles. */
         logf_(c, 0, "pointer %s: 200", name);
-        free(body);
-        body = r.body ? (char *)r.body : otc__strdup("");
-        r.body = NULL;
-        if (!body) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto done; }
-        if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto done; }
-        if ((st = write_atomic(c, dir, path, body, strlen(body))) != OTC_OK) goto done;
-        if (r.etag[0]) st = write_atomic(c, dir, etag_path, r.etag, strlen(r.etag));
-        else fs_unlink(etag_path);
-        if (st != OTC_OK) goto done;
+        *doc = otc__json_parse(r.body ? (const char *)r.body : "", r.len);
+        if (!*doc) {
+            st = fail(c, OTC_E_NETWORK, url, "%s: the 200 response is not JSON (a captive portal or proxy page?)", url);
+            if (c->err) c->err->http_status = 200;
+            goto done;
+        }
+        /* the cached copy only saves work: a failure to write it is logged and the call goes on
+         * (spec 4.8 cache, 5.2, CR D8); the .etag goes first, so a stale one never pairs with a new body */
+        fs_unlink(etag_path);
+        if (fs_mkdir_p(dir) != 0
+            || write_atomic(c, dir, path, r.body ? (const char *)r.body : "", r.len) != OTC_OK
+            || (r.etag[0] && write_atomic(c, dir, etag_path, r.etag, strlen(r.etag)) != OTC_OK)) {
+            logf_(c, 2, "cannot write the cached %s (%s); going on without it", path, c->err->message);
+            otc_error_init(c->err);
+        }
     }
-    *doc = otc__json_parse(body, strlen(body));
-    if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, url, "%s: not JSON", url); goto done; }
     *doc_url = url;
     url = NULL;
 done:
+    if (st != OTC_OK) {
+        cJSON_Delete(*doc);
+        *doc = NULL;
+    }
     resp_free(&r);
     free(dir);
     free(path);
@@ -1137,10 +1458,13 @@ static otc_status fetch_index(fctx *c, otc_release_info ***out, size_t *n)
 }
 
 /* A release this library reads: a supported format major and a
- * min_reader_version no newer than OTC_FORMAT_VERSION (spec 7.4). */
+ * min_reader_version no newer than OTC_FORMAT_VERSION (spec 7.4). An entry
+ * without format_version is judged as the cache path judges it: the
+ * release's own .meta.json is checked when it is opened. */
 static int info_readable(const otc_release_info *ri)
 {
-    return format_major(ri->format_version) == OTC_FORMAT_MAJOR && otc__readable(NULL, ri->min_reader_version);
+    return (!ri->format_version || format_major(ri->format_version) == OTC_FORMAT_MAJOR)
+           && otc__readable(NULL, ri->min_reader_version);
 }
 
 static void note_entry(fctx *c, const otc_release_info *ri);
@@ -1192,7 +1516,10 @@ static otc_status latest_info(fctx *c, otc_release_info **out, int *read_main)
         logf_(c, 1, "release %s needs a reader for format %s; looking for an older release", ri->datestamp,
               ri->min_reader_version ? ri->min_reader_version : "?");
     } else {
-        logf_(c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", format_major(ri->format_version));
+        int m = format_major(ri->format_version);
+        if (m > OTC_FORMAT_MAJOR) logf_(c, 2, "a newer format (%d) exists; upgrade opentideconstants to read it", m);
+        else logf_(c, 1, "the pointer names release %s of format %s, which this library does not read", ri->datestamp,
+                   ri->format_version);
     }
     otc_release_info_free(ri);
     /* step 2a: one GET of the index, only in this case */
@@ -1237,7 +1564,7 @@ static char *rel_dir(fctx *c, const char *ds)
 
 static char *rel_file(fctx *c, const char *ds, const char *suffix)
 {
-    char name[64], *d = rel_dir(c, ds), *p;
+    char name[NAME_CAP], *d = rel_dir(c, ds), *p;
     if (!d) return NULL;
     snprintf(name, sizeof name, "OTC_%s%s", ds, suffix);
     p = path2(d, name);
@@ -1245,14 +1572,25 @@ static char *rel_file(fctx *c, const char *ds, const char *suffix)
     return p;
 }
 
-static cJSON *read_verified(fctx *c, const char *ds)
+/* A release's .verified record: OTC_OK with *out NULL when it is missing or not a
+ * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. */
+static otc_status read_verified_st(fctx *c, const char *ds, cJSON **out)
 {
-    char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = p ? slurp(p) : NULL;
+    char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = NULL;
+    otc_status st = p ? slurp_st(p, &t) : OTC_E_NOMEM;
     cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
     free(d);
     free(p);
     free(t);
     if (doc && !cJSON_IsObject(otc__jget(doc, "files"))) { cJSON_Delete(doc); doc = NULL; }
+    *out = doc;
+    return st;
+}
+
+static cJSON *read_verified(fctx *c, const char *ds)
+{
+    cJSON *doc = NULL;
+    (void)read_verified_st(c, ds, &doc);
     return doc;
 }
 
@@ -1265,7 +1603,8 @@ static void note_entry(fctx *c, const otc_release_info *ri)
 {
     cJSON *v = read_verified(c, ri->datestamp);
     const cJSON *old;
-    char *d = NULL, *p = NULL, *txt = NULL;
+    char *d = NULL, *p = NULL, *txt = NULL, token[33] = "";
+    int held = 0;
     if (!v) return;
     old = cJSON_GetObjectItemCaseSensitive(v, "zenodo_version_doi");
     if (old && (ri->zenodo_version_doi ? (cJSON_IsString(old) && !strcmp(old->valuestring, ri->zenodo_version_doi))
@@ -1273,16 +1612,30 @@ static void note_entry(fctx *c, const otc_release_info *ri)
         cJSON_Delete(v);
         return;
     }
-    cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
-    cJSON_AddItemToObject(v, "zenodo_version_doi",
-                          ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+    cJSON_Delete(v);
+    /* the read-modify-write of .verified runs under the release's lock; when another
+     * process holds it (a download or index build writes .verified too), the note waits
+     * for a later call rather than racing it */
     d = rel_dir(c, ri->datestamp);
-    p = d ? path2(d, ".verified") : NULL;
-    txt = p ? cJSON_Print(v) : NULL;
-    if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
-        logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
+    if (!d || lock_try(c, d, &held, token) != OTC_OK || !held) {
+        logf_(c, 1, "release %s is locked by another process; its version DOI is noted later", ri->datestamp);
         if (c->err) otc_error_init(c->err);
+        free(d);
+        return;
     }
+    v = read_verified(c, ri->datestamp);   /* again, now under the lock */
+    if (v) {
+        cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
+        cJSON_AddItemToObject(v, "zenodo_version_doi",
+                              ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+        p = path2(d, ".verified");
+        txt = p ? cJSON_Print(v) : NULL;
+        if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
+            logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
+            if (c->err) otc_error_init(c->err);
+        }
+    }
+    lock_release(c, d, token);
     cJSON_free(txt);
     free(p);
     free(d);
@@ -1309,31 +1662,56 @@ static int usable_impl(fctx *c, const char *ds, int strict)
 static int usable_strict(fctx *c, const char *ds) { return usable_impl(c, ds, 1); }
 static int usable_loose(fctx *c, const char *ds) { return usable_impl(c, ds, 0); }
 
-/* Datestamps of verified cached releases, newest first. */
+/* Datestamps of verified cached releases, newest first. A cache with no
+ * releases directory is empty; one that is there but cannot be listed or read
+ * is OTC_E_CACHE (or OTC_E_NOMEM), never "empty". */
 static otc_status cached_list(fctx *c, char ***out, size_t *n_out)
 {
     char *r = path2(c->base, "releases"), **names = NULL;
     size_t n = 0, i, k = 0;
+    int kind;
+    otc_status st;
     *out = NULL;
     *n_out = 0;
     if (!r) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-    if (fs_kind(r) != 1 || fs_list(r, &names, &n) != OTC_OK) { free(r); return OTC_OK; }
-    free(r);
+    kind = fs_kind(r);
+    if (kind == 0) { free(r); return OTC_OK; }
+    st = kind == 1 ? fs_list(r, &names, &n) : OTC_E_IO;
+    if (st != OTC_OK) {
+        st = st == OTC_E_NOMEM ? fail(c, st, r, "out of memory") : fail(c, OTC_E_CACHE, r, "cannot list the cache %s", r);
+        free(r);
+        return st;
+    }
     for (i = 0; i < n; i++) {
-        cJSON *v = valid_datestamp(names[i]) ? read_verified(c, names[i]) : NULL;
+        cJSON *v = NULL;
+        if (st == OTC_OK && valid_datestamp(names[i])) {
+            st = read_verified_st(c, names[i], &v);
+            if (st != OTC_OK)
+                st = st == OTC_E_NOMEM ? fail(c, st, r, "out of memory")
+                                       : fail(c, OTC_E_CACHE, r, "cannot read the .verified record of %s in %s", names[i], r);
+        }
         if (v) names[k++] = names[i];
         else free(names[i]);
         cJSON_Delete(v);
     }
+    free(r);
+    if (st != OTC_OK) { free_list(names, k); return st; }
     if (k > 1) qsort(names, k, sizeof *names, ds_cmp_desc);
     *out = names;
     *n_out = k;
     return OTC_OK;
 }
 
-static int ver_ok(const char *fv, const char *mrv)
+/* The versions of obj (a .verified record, an index entry, or a .meta.json and
+ * its release object) are readable. An absent one is taken as readable (the
+ * release's own files are checked at open); a present one that is not
+ * MAJOR.MINOR, a string or not, is not (spec 7.4, CR D9). */
+static int ver_ok(const cJSON *fv_obj, const cJSON *mrv_obj)
 {
-    return (!fv || format_major(fv) == OTC_FORMAT_MAJOR) && otc__readable(NULL, mrv);
+    const cJSON *fv = otc__jget(fv_obj, "format_version"), *mrv = otc__jget(mrv_obj, "min_reader_version");
+    if (fv && format_major(cJSON_IsString(fv) ? fv->valuestring : NULL) != OTC_FORMAT_MAJOR) return 0;
+    if (mrv && !cJSON_IsString(mrv)) return 0;
+    return otc__readable(NULL, mrv ? mrv->valuestring : NULL);
 }
 
 /* A cached release this library reads (spec 5.2 step 1): its format_version
@@ -1343,40 +1721,43 @@ static int cached_readable(fctx *c, const char *ds, const cJSON *index)
     cJSON *v = read_verified(c, ds), *meta = NULL;
     const cJSON *e;
     char *mp, *t;
-    int ok = ver_ok(otc__jstr(v, "format_version"), otc__jstr(v, "min_reader_version"));
+    int ok = ver_ok(v, v);
     cJSON_Delete(v);
     cJSON_ArrayForEach(e, otc__jget(index, "releases"))
         if (ok && !otc__strcmp_null(otc__jstr(e, "datestamp"), ds))
-            ok = ver_ok(otc__jstr(e, "format_version"), otc__jstr(e, "min_reader_version"));
+            ok = ver_ok(e, e);
     if (!ok) return 0;
     mp = rel_file(c, ds, ".meta.json");
     t = mp ? slurp(mp) : NULL;
     meta = t ? otc__json_parse(t, strlen(t)) : NULL;
-    if (meta) ok = ver_ok(otc__jstr(meta, "format_version"), otc__jstr(otc__jget(meta, "release"), "min_reader_version"));
+    if (meta) ok = ver_ok(meta, otc__jget(meta, "release"));
     cJSON_Delete(meta);
     free(t);
     free(mp);
     return ok;
 }
 
-/* The newest cached release that C can open and read (spec 5.2 step 1, 7.4). */
-static char *newest_cached(fctx *c)
+/* The newest cached release that C can open and read (spec 5.2 step 1, 7.4):
+ * OTC_OK with *out NULL when there is none; OTC_E_CACHE or OTC_E_NOMEM when
+ * the cache cannot be read. */
+static otc_status newest_cached(fctx *c, char **out)
 {
-    char **list = NULL, *best = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
+    char **list = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
     char *it = ip ? slurp(ip) : NULL;
     cJSON *index = it ? otc__json_parse(it, strlen(it)) : NULL;
     size_t n = 0, i;
+    otc_status st = (dir && ip) ? cached_list(c, &list, &n) : fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    *out = NULL;
     free(dir);
     free(ip);
     free(it);
-    if (cached_list(c, &list, &n) != OTC_OK) { cJSON_Delete(index); return NULL; }
-    for (i = 0; i < n && !best; i++) {
+    for (i = 0; st == OTC_OK && i < n && !*out; i++) {
         if (!usable_loose(c, list[i]) || !cached_readable(c, list[i], index)) continue;
-        best = otc__strdup(list[i]);
+        if (!(*out = otc__strdup(list[i]))) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
     }
     free_list(list, n);
     cJSON_Delete(index);
-    return best;
+    return st;
 }
 
 /* release.files from .verified (spec 4.3.1), sorted by name. */
@@ -1393,11 +1774,10 @@ static otc_status files_from_verified(fctx *c, const char *ds, otc_file_info **o
     if (!arr) { cJSON_Delete(v); return fail(c, OTC_E_NOMEM, NULL, "out of memory"); }
     cJSON_ArrayForEach(f, files) {
         const char *u = otc__jstr(f, "url"), *sha = otc__jstr(f, "sha256");
-        const cJSON *size = otc__jget(f, "size");
         arr[n].name = otc__strdup(f->string);
         arr[n].url = u ? otc__strdup(u) : NULL;
         arr[n].sha256 = sha ? otc__strdup(sha) : NULL;
-        arr[n].size = cJSON_IsNumber(size) ? (int64_t)size->valuedouble : -1;
+        arr[n].size = otc__jint(f, "size");
         n++;
         if (!arr[n - 1].name || (u && !arr[n - 1].url) || (sha && !arr[n - 1].sha256)) {
             free_file_infos(arr, n);
@@ -1421,12 +1801,11 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
     size_t i;
     otc_status st = OTC_OK;
     for (i = 0; suffixes[i] && st == OTC_OK; i++) {
-        char name[64], *p = rel_file(c, ds, suffixes[i]);
-        const cJSON *rec, *size;
+        char name[NAME_CAP], *p = rel_file(c, ds, suffixes[i]);
+        const cJSON *rec;
         snprintf(name, sizeof name, "OTC_%s%s", ds, suffixes[i]);
         rec = otc__jget(files, name);
-        size = otc__jget(rec, "size");
-        if (p && cJSON_IsNumber(size) && otc__path_size(p) != (int64_t)size->valuedouble)
+        if (p && otc__jint(rec, "size") >= 0 && otc__path_size(p) != otc__jint(rec, "size"))
             st = fail_checksum(c, p, otc__jstr(rec, "sha256"), "", "the size does not match .verified");
         free(p);
     }
@@ -1445,7 +1824,7 @@ static cJSON *str_or_null(const char *s) { return s ? cJSON_CreateString(s) : cJ
  */
 static void write_stream_index(fctx *c, const char *ds, const otc_release *rel)
 {
-    char *d, *p, *txt = NULL, jn[80];
+    char *d, *p, *txt = NULL, jn[NAME_CAP];
     const char *sha = NULL;
     cJSON *doc;
     size_t i;
@@ -1478,16 +1857,28 @@ static const char *row_of(char **names, char **digests, size_t n, const char *na
     return NULL;
 }
 
-static otc_status check_pointer(fctx *c, const otc_release_info *info, char **names, char **digests, size_t n)
+/* Spec 5.2 step 4.1: the pointer (or index entry) and OTC_{D}.sha256 agree. The
+ * .sha256 file's own digest is the pointer's row for it, each data file's row
+ * is the pointer's, and the .sha256 lists no file the pointer does not list.
+ * sums_hex is the SHA-256 of the .sha256 file. */
+static otc_status check_pointer(fctx *c, const otc_release_info *info, char **names, char **digests, size_t n,
+                                const char *sums_name, const char *sums_hex)
 {
     size_t i;
-    if (!info) return OTC_OK;
+    const otc_file_info *self;
+    if (!info || !info->n_files) return OTC_OK;
+    self = info_file(info, sums_name);
+    if (self && self->sha256 && strcmp(self->sha256, sums_hex) != 0)
+        return fail_checksum(c, sums_name, self->sha256, sums_hex, "the pointer's SHA-256 of the .sha256 file does not match it");
     for (i = 0; i < info->n_files; i++) {
         const char *row = row_of(names, digests, n, info->files[i].name);
         if (row && info->files[i].sha256 && strcmp(row, info->files[i].sha256) != 0)
             return fail_checksum(c, info->files[i].name, row, info->files[i].sha256,
                                  "the pointer and the .sha256 file disagree");
     }
+    for (i = 0; i < n; i++)
+        if (!info_file(info, names[i]))
+            return fail_checksum(c, names[i], digests[i], "", "the .sha256 file lists a file that the pointer does not");
     return OTC_OK;
 }
 
@@ -1555,11 +1946,12 @@ static void utc_now(char out[32])
 static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_info *info, otc_release **rel_out)
 {
     char *dir = rel_dir(c, ds), *sha_tmp = NULL, *sha_url = NULL, *jsonl_path = NULL;
-    char **names = NULL, **digests = NULL, sha_name[64];
+    char **names = NULL, **digests = NULL, sha_name[NAME_CAP], sums_hex[65];
     size_t n_rows = 0, n_pend = 0, i;
     pending pend[4];
     cJSON *old = NULL, *ver = NULL, *files;
     int held = 0, res;
+    char token[33] = "";
     http_resp r;
     otc_status st = OTC_OK;
     otc_release *rel = NULL;
@@ -1570,28 +1962,32 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     memset(pend, 0, sizeof pend);
     if (!dir) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto out; }
-    if ((st = lock_take(c, dir, ds, usable_strict, &held)) != OTC_OK) goto out;
+    if ((st = lock_take(c, dir, ds, usable_strict, &held, token)) != OTC_OK) goto out;
     if (!held || usable_strict(c, ds)) goto out;   /* another process finished it */
 
     /* 1. the .sha256 list */
     snprintf(sha_name, sizeof sha_name, "OTC_%s.sha256", ds);
-    sha_url = url_resolve(c->base_url, sha_name);
+    {   /* the pointer's url for it when the pointer lists it (spec 4.3.1), else base_url */
+        const otc_file_info *pf = info_file(info, sha_name);
+        sha_url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c->base_url, sha_name);
+    }
     sha_tmp = tmp_path(dir);
     if (!sha_url || !sha_tmp) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
     st = http_get(c, sha_url, NULL, 1, sha_tmp, &r, &res);
     if (st == OTC_OK && res == GET_NOT_FOUND) st = fail(c, OTC_E_RELEASE_NOT_FOUND, sha_url, "release %s not found (%s)", ds, sha_url);
+    memcpy(sums_hex, r.hex, sizeof sums_hex);
     resp_free(&r);
     if (st != OTC_OK) goto out;
     if ((st = otc__sha256_rows(sha_tmp, &names, &digests, &n_rows)) != OTC_OK) {
         st = fail(c, st == OTC_E_NOMEM ? st : OTC_E_CACHE, sha_tmp, "cannot read %s", sha_tmp);
         goto out;
     }
-    if ((st = check_pointer(c, info, names, digests, n_rows)) != OTC_OK) goto out;
+    if ((st = check_pointer(c, info, names, digests, n_rows, sha_name, sums_hex)) != OTC_OK) goto out;
 
     /* 2. the data files (a file already there and recorded with the same SHA-256 is kept) */
     old = read_verified(c, ds);
     for (i = 0; want_all[i]; i++) {
-        char name[64], *url, *dest;
+        char name[NAME_CAP], *url, *dest;
         const char *row;
         const otc_file_info *pf;
         const cJSON *orec;
@@ -1615,7 +2011,19 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         pend[n_pend++].dest = dest;
     }
 
-    /* 3. renames: the .sha256 first, then the data files */
+    /* 3. renames: the .sha256 first, then the data files. An old .verified goes first, so that
+     * it never vouches for a directory whose files are being replaced (spec 5.4: .verified
+     * is written last, and a reader trusts a directory only when it exists). */
+    if (old) {
+        char *vpath = path2(dir, ".verified");
+        int gone = vpath && (fs_unlink(vpath) == 0 || fs_kind(vpath) == 0);
+        if (!gone) {
+            st = fail(c, OTC_E_CACHE, vpath, "cannot remove %s", vpath ? vpath : dir);
+            free(vpath);
+            goto out;
+        }
+        free(vpath);
+    }
     {
         char *sha_dest = path2(dir, sha_name);
         if (!sha_dest || fs_rename(sha_tmp, sha_dest) != 0) {
@@ -1642,8 +2050,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     if (!jsonl_path) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
     {
         otc_open_options oo;
-        otc_open_options_init(&oo);
-        oo.error = c->err;
+        cache_open_options(c, &oo);
         st = otc_open_file(jsonl_path, &oo, &rel);
         if (st != OTC_OK) goto out;
     }
@@ -1654,17 +2061,9 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         const cJSON *f;
         cJSON_ArrayForEach(f, otc__jget(old, "files")) cJSON_AddItemToObject(files, f->string, cJSON_Duplicate(f, 1));
     }
-    if (info) {
-        for (i = 0; i < info->n_files; i++) {
-            const otc_file_info *f = &info->files[i];
-            cJSON *o = cJSON_CreateObject();
-            cJSON_AddItemToObject(o, "sha256", str_or_null(f->sha256));
-            cJSON_AddItemToObject(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull());
-            cJSON_AddItemToObject(o, "url", str_or_null(f->url));
-            cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
-            cJSON_AddItemToObject(files, f->name, o);
-        }
-    } else {
+    /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
+     * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */
+    {
         for (i = 0; i < n_rows; i++) {
             char *p = path2(dir, names[i]), *u = url_resolve(c->base_url, names[i]);
             int64_t size = p ? otc__path_size(p) : -1;
@@ -1674,11 +2073,20 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
             if (size >= 0) cJSON_AddNumberToObject(o, "size", (double)size);
             else if (cJSON_IsNumber(prev)) cJSON_AddNumberToObject(o, "size", prev->valuedouble);
             else cJSON_AddNullToObject(o, "size");
-            cJSON_AddItemToObject(o, "url", str_or_null(u));
+            cJSON_AddItemToObject(o, "url", info ? cJSON_CreateNull() : str_or_null(u));
             cJSON_DeleteItemFromObjectCaseSensitive(files, names[i]);
             cJSON_AddItemToObject(files, names[i], o);
             free(p);
             free(u);
+        }
+        for (i = 0; info && i < info->n_files; i++) {
+            const otc_file_info *f = &info->files[i];
+            cJSON *o = cJSON_CreateObject();
+            cJSON_AddItemToObject(o, "sha256", str_or_null(f->sha256));
+            cJSON_AddItemToObject(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull());
+            cJSON_AddItemToObject(o, "url", str_or_null(f->url));
+            cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
+            cJSON_AddItemToObject(files, f->name, o);
         }
     }
     cJSON_AddItemToObject(ver, "files", files);
@@ -1708,7 +2116,7 @@ out:
     }
     pending_free(pend, n_pend, 1);
     if (sha_tmp) fs_unlink(sha_tmp);
-    if (held) lock_release(dir);
+    if (held) lock_release(c, dir, token);
     otc__free_rows(names, digests, n_rows);
     cJSON_Delete(old);
     cJSON_Delete(ver);
@@ -1739,8 +2147,7 @@ static otc_status open_cached(fctx *c, const char *ds, otc_release **out)
     *out = NULL;
     if (!p) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     if ((st = check_cached_sizes(c, ds)) == OTC_OK) {
-        otc_open_options_init(&oo);
-        oo.error = c->err;
+        cache_open_options(c, &oo);
         st = otc_open_file(p, &oo, out);
         if (st == OTC_OK) write_stream_index(c, ds, *out);
     }
@@ -1755,7 +2162,19 @@ static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info 
     otc_status st;
     if (usable_strict(c, ds)) {
         *lf = OTC_LOADED_FROM_CACHE;
-        return open_cached(c, ds, rel);
+        st = open_cached(c, ds, rel);
+        if (st != OTC_E_CHECKSUM) return st;
+        /* spec 4.8, 5.3: a cached file that fails its check is not used again. Online, the
+         * release is downloaded again: its .verified goes first, so every file is fetched */
+        {
+            char *d = rel_dir(c, ds), *v = d ? path2(d, ".verified") : NULL;
+            int gone = v && (fs_unlink(v) == 0 || fs_kind(v) == 0);
+            logf_(c, 2, "the cached release %s failed its check (%s); downloading it again", ds, c->err->message);
+            free(v);
+            free(d);
+            if (!gone) return st;
+            otc_error_init(c->err);
+        }
     }
     st = download_to_cache(c, ds, info, rel);
     if (st == OTC_OK && !*rel) {   /* another process finished it while we waited */
@@ -1785,17 +2204,17 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         if ((st = ensure_root(c)) != OTC_OK) return st;
         *ds_out = otc__strdup(release);
         if (!*ds_out) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-        if (usable_strict(c, release) || (c->offline && usable_loose(c, release))) {
+        if (c->offline) {
+            if (!usable_loose(c, release))
+                return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
             *lf = OTC_LOADED_FROM_CACHE;
             return open_cached(c, release, rel);
         }
-        if (c->offline)
-            return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
         return ensure_cached(c, release, NULL, rel, lf);
     }
     if ((st = ensure_root(c)) != OTC_OK) return st;
     if (c->offline) {
-        *ds_out = newest_cached(c);
+        if ((st = newest_cached(c, ds_out)) != OTC_OK) return st;
         if (!*ds_out) return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache");
         *lf = OTC_LOADED_FROM_CACHE;
         return open_cached(c, *ds_out, rel);
@@ -1807,16 +2226,29 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         otc_release_info_free(info);
     }
     if (st == OTC_E_NETWORK && !c->raise) {
-        char *ds = newest_cached(c);
+        char *ds = NULL;
+        otc_error net = *c->err;
+        if (newest_cached(c, &ds) != OTC_OK) *c->err = net;   /* the network error stays the one reported */
         if (ds) {
-            snprintf(last_msg, last_len, "%s", c->err->message);
+            otc_status cst;
+            snprintf(last_msg, last_len, "%s", net.message);
             logf_(c, 2, "network error (%s); using the cached release %s", last_msg, ds);
             free(*ds_out);
             *ds_out = ds;
             *last_status = OTC_E_NETWORK;
             *lf = OTC_LOADED_FROM_CACHE_AFTER_ERROR;
             otc_error_init(c->err);
-            return open_cached(c, ds, rel);
+            cst = open_cached(c, ds, rel);
+            if (cst != OTC_OK) {
+                /* the cache cannot stand in: the error is the network's, with what the cache said */
+                char cmsg[512];
+                snprintf(cmsg, sizeof cmsg, "%s", c->err->message);
+                *c->err = net;
+                logf_(c, 2, "the cached release %s cannot be used either: %s", ds, cmsg);
+                *last_status = OTC_OK;
+                return OTC_E_NETWORK;
+            }
+            return OTC_OK;
         }
     }
     return st;
@@ -1885,12 +2317,13 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     otc_loaded_from lf = OTC_LOADED_FROM_UNSET;
     char *ds = NULL, msg[512];
     otc_status last = OTC_OK, st;
-    otc_error *oerr = (oopts && oopts->struct_size >= sizeof *oopts) ? oopts->error : NULL;
+    otc_error *oerr = (oopts && oopts->struct_size >= sizeof *oopts) ? otc__err_usable(oopts->error) : NULL;
     if (out) *out = NULL;
     st = ctx_init(&c, fopts);
     if (st == OTC_OK && !out) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "out is NULL");
     if (st == OTC_OK && oopts && oopts->struct_size < sizeof *oopts)
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
+    if (st == OTC_OK) c.oo = oopts;   /* require_checksum and log_fn apply to the open of the cached file (C25) */
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
     if (st == OTC_OK) {
         otc_file_info *files = NULL;
@@ -1935,6 +2368,29 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     return st;
 }
 
+/* The cached OTC_index.json -> ReleaseInfo list; missing_st / missing_msg when it is not cached. */
+static otc_status cached_index(fctx *c, otc_status missing_st, const char *missing_msg, otc_release_info ***v,
+                               size_t *n)
+{
+    char *dir = pointer_dir(c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = p ? slurp(p) : NULL;
+    char *url = url_resolve(c->base_url, "OTC_index.json");
+    cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+    otc_status st;
+    if (!dir || !p || !url) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    else if (!t) st = fail(c, missing_st, NULL, "%s", missing_msg);
+    else if (!doc) st = fail(c, OTC_E_INVALID_RELEASE, p, "cached OTC_index.json: not JSON");
+    else {
+        otc_error_init(c->err);
+        st = index_infos(c, doc, url, v, n);
+    }
+    cJSON_Delete(doc);
+    free(url);
+    free(dir);
+    free(p);
+    free(t);
+    return st;
+}
+
 otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap, size_t *count)
 {
     fctx c;
@@ -1945,20 +2401,16 @@ otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **
     if (st == OTC_OK && (!count || (cap && !out))) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "count is NULL");
     if (st == OTC_OK) {
         if (c.offline) {
-            char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = p ? slurp(p) : NULL;
-            char *url = url_resolve(c.base_url, "OTC_index.json");
-            cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
-            if (!t) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and the release index is not in the cache");
-            else if (!doc) st = fail(&c, OTC_E_INVALID_RELEASE, p, "cached OTC_index.json: not JSON");
-            else if (!url) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-            else st = index_infos(&c, doc, url, &v, &n);
-            cJSON_Delete(doc);
-            free(url);
-            free(dir);
-            free(p);
-            free(t);
+            st = cached_index(&c, OTC_E_OFFLINE_UNAVAILABLE, "offline, and the release index is not in the cache", &v, &n);
         } else {
             st = fetch_index(&c, &v, &n);
+            if (st == OTC_E_NETWORK && !c.raise) {
+                /* spec 4.3, 5.2 step 5: with use_cache, a network error gives the cached index */
+                char msg[512];
+                snprintf(msg, sizeof msg, "%s", c.err->message);
+                st = cached_index(&c, OTC_E_NETWORK, msg, &v, &n);
+                if (st == OTC_OK) logf_(&c, 2, "network error (%s); using the cached release index", msg);
+            }
         }
     }
     for (i = 0; st == OTC_OK && i < n; i++) note_entry(&c, v[i]);
@@ -2000,19 +2452,21 @@ otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char 
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; info and found must not be NULL");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = latest_info(&c, &ri, &read_main);
-    if (st == OTC_OK && !read_main) {
+    /* spec 7.4 (CR D10): the OTC_latest.json check is made also when the call fails
+     * because no release it reads exists, so newer_format_major is set before it fails */
+    if ((st == OTC_OK || st == OTC_E_UNSUPPORTED_FORMAT || st == OTC_E_READER_TOO_OLD) && !read_main) {
+        otc_error kept = *c.err;
         /* spec 7.4: a conditional GET of OTC_latest.json tells whether a newer
          * format major exists (otc_fetch_newer_format_major reads it back) */
         cJSON *doc = NULL;
         char *url = NULL;
-        if (get_changing(&c, "OTC_latest.json", &doc, &url) != OTC_OK) {
+        if (get_changing(&c, "OTC_latest.json", &doc, &url) != OTC_OK)
             logf_(&c, 2, "cannot read OTC_latest.json: %s", c.err->message);
-            otc_error_init(c.err);
-        }
+        *c.err = kept;   /* the call's own result stays the one reported */
         cJSON_Delete(doc);
         free(url);
     }
-    if (st == OTC_OK) {
+    if (st == OTC_OK || st == OTC_E_UNSUPPORTED_FORMAT || st == OTC_E_READER_TOO_OLD) {
         int major = -1;
         char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
         cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
@@ -2041,12 +2495,20 @@ otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *majo
     if (major) *major = 0;
     if (st == OTC_OK && !major) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "major is NULL");
     if (st == OTC_OK) {
-        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
-        cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
-        int m = format_major(otc__jstr(doc, "format_version"));
+        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = NULL;
+        cJSON *doc = NULL;
+        int m = -1;
         if (!dir || !p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (fs_kind(p) != 2)
+            st = fail(&c, OTC_E_NOT_FOUND, p, "no newer format major is known: %s is not cached (otc_fetch_check_for_update reads it)", p);
+        else if (otc__read_all(p, &t, NULL) != OTC_OK)
+            st = fail(&c, OTC_E_IO, p, "cannot read %s", p);
+        else if (!(doc = otc__json_parse(t, strlen(t))))
+            st = fail(&c, OTC_E_INVALID_RELEASE, p, "%s: not JSON", p);
+        else if ((m = format_major(otc__jstr(doc, "format_version"))) < 0)
+            st = fail(&c, OTC_E_INVALID_RELEASE, p, "%s: format_version is missing or not MAJOR.MINOR", p);
         else if (m > OTC_FORMAT_MAJOR) *major = m;
-        else st = OTC_E_NOT_FOUND;
+        else st = fail(&c, OTC_E_NOT_FOUND, p, "no newer format major: the latest release has format major %d", m);
         cJSON_Delete(doc);
         free(t);
         free(p);
@@ -2066,24 +2528,27 @@ otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, 
     otc_status st = ctx_init(&c, opts);
     if (updated) *updated = false;
     if (path && len) path[0] = '\0';
-    if (st == OTC_OK && (!updated || !valid_datestamp(current)))
-        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; updated must not be NULL");
+    if (st == OTC_OK && (!updated || !valid_datestamp(current) || !path || !len))
+        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; path, len and updated must be set");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = ensure_root(&c);
     if (st == OTC_OK) st = latest_info(&c, &ri, NULL);
     if (st == OTC_OK && ds_cmp(ri->datestamp, current) > 0) {
-        st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
-        otc_close(rel);
+        /* the path is known before the download: a buffer that cannot hold it downloads nothing */
+        char *p = rel_file(&c, ri->datestamp, ".jsonl");
+        size_t need;
+        if (!p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (strlen(p) + 1 > len) st = copy_path(&c, p, path, len, &need);
         if (st == OTC_OK) {
-            char *p = rel_file(&c, ri->datestamp, ".jsonl");
-            size_t need;
-            st = p ? copy_path(&c, p, path, len, &need) : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-            free(p);
-            if (st == OTC_OK) {
-                *updated = true;
-                logf_(&c, 1, "updated from %s to %s", current, ri->datestamp);
-            }
+            st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
+            otc_close(rel);
         }
+        if (st == OTC_OK) st = copy_path(&c, p, path, len, &need);
+        if (st == OTC_OK) {
+            *updated = true;   /* the new release is in the cache and path names it */
+            logf_(&c, 1, "updated from %s to %s", current, ri->datestamp);
+        }
+        free(p);
     }
     otc_release_info_free(ri);
     ctx_free(&c);
@@ -2111,6 +2576,12 @@ otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char **dates
     if (st == OTC_OK) {
         *count = n;
         if (n > cap) st = OTC_E_BUFFER_TOO_SMALL;
+    } else if (datestamps) {   /* a failure hands the caller nothing to free */
+        size_t j;
+        for (j = 0; j < i && j < cap; j++) {
+            free(datestamps[j]);
+            datestamps[j] = NULL;
+        }
     }
     free_list(list, n);
     ctx_free(&c);
@@ -2128,22 +2599,38 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
     if (st == OTC_OK && (!count || (cap && !removed))) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "count is NULL");
     if (st == OTC_OK) st = cached_list(&c, &list, &n);
     for (i = keep; st == OTC_OK && i < n; i++) {
-        char *d, *v;
+        char *d, *v, token[33];
+        int held = 0, rm;
         if (current && !strcmp(current, list[i])) continue;
         d = rel_dir(&c, list[i]);
         v = d ? path2(d, ".verified") : NULL;
         if (!d || !v) { free(d); free(v); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); break; }
-        fs_unlink(v);              /* readers stop trusting it first */
-        fs_rm_rf(d);
+        /* a release whose .lock another process holds (a download or an index build) is
+         * left alone; with the lock taken, the removal below takes the lock with it */
+        if ((st = lock_try(&c, d, &held, token)) != OTC_OK || !held) {
+            if (st == OTC_OK) logf_(&c, 1, "not pruning %s: another process holds its lock", list[i]);
+            free(d);
+            free(v);
+            continue;
+        }
+        /* readers stop trusting it first; a release whose .verified cannot be removed is left whole */
+        if (fs_unlink(v) != 0 && fs_kind_nofollow(v) != 0) {
+            st = fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
+            lock_release(&c, d, token);
+        } else if ((rm = fs_rm_rf(d)) != 0) {
+            /* .verified is gone, so the release is no longer listed; the rest is left over */
+            st = rm == -2 ? fail(&c, OTC_E_NOMEM, d, "out of memory while removing %s", d)
+                          : fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
+            lock_release(&c, d, token);
+        } else {
+            logf_(&c, 1, "pruned %s", list[i]);
+            st = put_string(&c, removed, cap, k++, list[i]);
+        }
         free(d);
         free(v);
-        logf_(&c, 1, "pruned %s", list[i]);
-        st = put_string(&c, removed, cap, k++, list[i]);
     }
-    if (st == OTC_OK) {
-        *count = k;
-        if (k > cap) st = OTC_E_BUFFER_TOO_SMALL;
-    }
+    if (count) *count = k;   /* the releases removed; on a failure, those removed before it */
+    if (st == OTC_OK && k > cap) st = OTC_E_BUFFER_TOO_SMALL;
     free_list(list, n);
     ctx_free(&c);
     return st;
@@ -2160,14 +2647,15 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         {OTC_FORMAT_JSON, ".json"}, {OTC_FORMAT_JSON_GZ, ".json.gz"}, {OTC_FORMAT_JSONL, ".jsonl"}, {0, NULL}};
     fctx c;
     otc_release_info *info = NULL;
-    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8];
-    char sha_digest[65], targets[8][64];
+    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8], *staged[8];
+    char sha_digest[65], targets[8][NAME_CAP];
     const char *target_sha[8];
     size_t n_rows = 0, n_t = 0, n_todo = 0, i, written = 0, sha_len = 0;
     int cached = 0;
     otc_status st = ctx_init(&c, opts);
     if (count) *count = 0;
     memset(todo_name, 0, sizeof todo_name);
+    memset(staged, 0, sizeof staged);
     if (st != OTC_OK) goto out;
     if (!count || !dir || (cap && !paths)) { st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "dir and count must not be NULL"); goto out; }
     if (formats == 0) formats = OTC_FORMAT_JSONL;
@@ -2182,11 +2670,22 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     /* which release */
     if (!release || !strcmp(release, "latest")) {
         if (c.offline) {
-            ds = newest_cached(&c);
+            if ((st = newest_cached(&c, &ds)) != OTC_OK) goto out;
             if (!ds) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache"); goto out; }
         } else {
-            if ((st = latest_info(&c, &info, NULL)) != OTC_OK) goto out;
-            ds = otc__strdup(info->datestamp);
+            st = latest_info(&c, &info, NULL);
+            if (st == OTC_E_NETWORK && !c.raise) {
+                /* spec 4.3.2 (CR D22): use_cache writes the newest cached readable release */
+                otc_error net = *c.err;
+                if (newest_cached(&c, &ds) != OTC_OK || !ds) { *c.err = net; goto out; }
+                logf_(&c, 2, "network error (%s); writing the cached release %s", net.message, ds);
+                otc_error_init(c.err);
+                st = OTC_OK;
+            } else if (st != OTC_OK) {
+                goto out;
+            } else {
+                ds = otc__strdup(info->datestamp);
+            }
         }
     } else {
         ds = otc__strdup(release);
@@ -2206,12 +2705,15 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         free(sp);
     }
     if (!cached) {
-        char name[64], *url;
+        char name[NAME_CAP], *url;
         http_resp r;
         int res;
         if (c.offline) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", ds); goto out; }
         snprintf(name, sizeof name, "OTC_%s.sha256", ds);
-        url = url_resolve(c.base_url, name);
+        {
+            const otc_file_info *pf = info_file(info, name);
+            url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
+        }
         if (!url) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         memset(&r, 0, sizeof r);
         st = http_get(&c, url, NULL, 1, NULL, &r, &res);
@@ -2227,14 +2729,16 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         if (st != OTC_OK) goto out;
     }
     if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) { fail(&c, st, NULL, "out of memory"); goto out; }
-    if ((st = check_pointer(&c, info, names, digests, n_rows)) != OTC_OK) goto out;
     {
         struct Sha_256 s;
         uint8_t h[SIZE_OF_SHA_256_HASH];
+        char sums_name[NAME_CAP];
         sha_256_init(&s, h);
         sha_256_write(&s, sha_body, sha_len);
         sha_256_close(&s);
         hex_of(h, sha_digest);
+        snprintf(sums_name, sizeof sums_name, "OTC_%s.sha256", ds);
+        if ((st = check_pointer(&c, info, names, digests, n_rows, sums_name, sha_digest)) != OTC_OK) goto out;
     }
     /* the targets: the formats asked for, the .meta.json, then the .sha256 */
     for (i = 0; FMT[i].ext; i++) {
@@ -2254,7 +2758,13 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         char *p = path2(dir, targets[i]), hex[65];
         if (!p) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         if (fs_kind(p) == 2) {
-            if (file_sha(p, hex) == OTC_OK && !strcmp(hex, target_sha[i])) { free(p); continue; }
+            otc_status hs = file_sha(p, hex);
+            if (hs != OTC_OK) {   /* a file that cannot be read is that error, not "a different SHA-256" */
+                st = fail(&c, hs == OTC_E_NOMEM ? hs : OTC_E_IO, p, "cannot read %s", p);
+                free(p);
+                goto out;
+            }
+            if (!strcmp(hex, target_sha[i])) { free(p); continue; }
             if (!overwrite) {
                 st = fail(&c, OTC_E_FILE_EXISTS, p, "%s exists with a different SHA-256", p);
                 free(p);
@@ -2265,45 +2775,44 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         todo_name[n_todo++] = targets[i];
     }
     if (fs_mkdir_p(dir) != 0) { st = fail(&c, OTC_E_IO, dir, "cannot create %s", dir); goto out; }
+    /* spec 4.3.2 "check, then rename": every file goes to a temporary file in dir first;
+     * only when all of them are there and checked are they renamed into place, so a
+     * failure (network, offline, checksum) leaves nothing in dir */
     for (i = 0; i < n_todo; i++) {
         const char *name = todo_name[i];
         const char *sha = row_of(names, digests, n_rows, name);
-        char *dest = path2(dir, name), *src = path2(cdir, name), *tmp = NULL;
-        if (!dest || !src) { free(dest); free(src); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+        char *src = path2(cdir, name);
+        if (!src) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         if (otc__ends_with(name, ".sha256")) {
-            st = write_atomic(&c, dir, dest, sha_body, sha_len);
-            if (st != OTC_OK) {
-                st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-                free(dest);
-                free(src);
-                goto out;
-            }
+            st = write_tmp(&c, dir, sha_body, sha_len, &staged[i]);
+        } else if (cached && fs_kind(src) == 2) {
+            char hex[65];
+            st = copy_to_tmp(&c, src, dir, &staged[i], hex);
+            if (st == OTC_OK && strcmp(hex, sha) != 0)
+                st = fail_checksum(&c, name, sha, hex, "the cached copy does not match");
+        } else if (c.offline) {
+            st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and %s is not in the cache", name);
         } else {
-            if (cached && fs_kind(src) == 2) {
-                char hex[65];
-                st = copy_to_tmp(&c, src, dir, &tmp, hex);
-                if (st == OTC_OK && strcmp(hex, sha) != 0) {
-                    fs_unlink(tmp);
-                    st = fail_checksum(&c, dest, sha, hex, "the cached copy does not match");
-                }
-            } else if (c.offline) {
-                st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and %s is not in the cache", name);
-            } else {
-                const otc_file_info *pf = info_file(info, name);
-                char *url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
-                st = url ? fetch_file(&c, url, dir, name, sha, pf ? pf->size : -1, &tmp)
-                         : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-                if (st == OTC_E_CACHE) st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-                free(url);
-            }
-            if (st == OTC_OK && fs_rename(tmp, dest) != 0) {
-                fs_unlink(tmp);
-                st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-            }
-            free(tmp);
-            if (st != OTC_OK) { free(dest); free(src); goto out; }
+            const otc_file_info *pf = info_file(info, name);
+            char *url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
+            st = url ? fetch_file(&c, url, dir, name, sha, pf ? pf->size : -1, &staged[i])
+                     : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+            free(url);
         }
+        if (st == OTC_E_CACHE) st = fail(&c, OTC_E_IO, dir, "cannot write into %s", dir);   /* the folder is the caller's */
         free(src);
+        if (st != OTC_OK) goto out;
+    }
+    for (i = 0; i < n_todo; i++) {
+        char *dest = path2(dir, todo_name[i]);
+        if (!dest) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+        if (fs_rename(staged[i], dest) != 0) {
+            st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
+            free(dest);
+            goto out;
+        }
+        free(staged[i]);
+        staged[i] = NULL;
         if (written < cap) paths[written] = dest;
         else free(dest);
         written++;
@@ -2311,6 +2820,10 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     *count = written;
     if (written > cap) st = OTC_E_BUFFER_TOO_SMALL;
 out:
+    for (i = 0; i < 8; i++) {   /* a failure leaves no temporary file behind */
+        if (staged[i]) fs_unlink(staged[i]);
+        free(staged[i]);
+    }
     if (st != OTC_OK && st != OTC_E_BUFFER_TOO_SMALL) {   /* nothing is reported on a failure */
         for (i = 0; i < written && i < cap; i++) {
             free(paths[i]);

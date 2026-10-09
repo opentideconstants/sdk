@@ -14,6 +14,7 @@ with any C99 compiler: cc -std=c99 -c opentideconstants.c (link with -lm, and
 """
 import argparse
 import re
+import sys
 from pathlib import Path
 
 C = Path(__file__).resolve().parents[1]
@@ -34,7 +35,9 @@ PARTS = [
     "vendor/sha256/sha-256.c",
     "vendor/cjson/cJSON.c",
 ]
-LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"\s*$')
+# A local include, also with a comment after it (C81).
+LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"\s*(?:/\*.*?\*/\s*|//.*)?$')
+ANY_LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"')
 
 PRELUDE = """/*
  * opentideconstants.c - single-file amalgamation of the OpenTideConstants C
@@ -47,6 +50,9 @@ PRELUDE = """/*
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
+#if !defined(_WIN32) && !defined(_FILE_OFFSET_BITS)
+#define _FILE_OFFSET_BITS 64
+#endif
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -58,7 +64,25 @@ PRELUDE = """/*
 """
 
 
+def check_parts_match_cmake():
+    """PARTS is the CMake library without otc_fetch (C88): the same sources, the vendor
+    wrappers counted as the files they include. A source added to one and not the
+    other stops the tool."""
+    text = (C / "CMakeLists.txt").read_text()
+    m = re.search(r"set\(OTC_SOURCES(.*?)\)", text, re.S)
+    if not m:
+        sys.exit("amalgamate: no set(OTC_SOURCES ...) in c/CMakeLists.txt")
+    cmake = set(m.group(1).split()) | {"src/otc_fetch_stub.c"}
+    wrapped = {"src/otc_vendor_cjson.c": "vendor/cjson/cJSON.c", "src/otc_vendor_sha256.c": "vendor/sha256/sha-256.c"}
+    cmake = {wrapped.get(f, f) for f in cmake}
+    parts = {p for p in PARTS if p.endswith(".c")}
+    if cmake != parts:
+        sys.exit(f"amalgamate: PARTS and the CMake sources differ: only in CMake {sorted(cmake - parts)}, "
+                 f"only in PARTS {sorted(parts - cmake)}")
+
+
 def main():
+    check_parts_match_cmake()
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(C / "dist"))
     a = ap.parse_args()
@@ -69,12 +93,17 @@ def main():
     cjson = re.search(r"#define CJSON_VERSION_MAJOR (\d+)\s+#define CJSON_VERSION_MINOR (\d+)\s+#define CJSON_VERSION_PATCH (\d+)",
                       (C / "vendor/cjson/cJSON.h").read_text())
     chunks = [PRELUDE.format(version=version, cjson=".".join(cjson.groups()))]
+    # a local include is dropped only when the file it names is in the bundle already
+    # (a part, or the public header of the prelude); any other one is an error (C81)
+    inlined = {Path(p).name for p in PARTS} | {"opentideconstants.h"}
     for part in PARTS:
         lines = []
-        for line in (C / part).read_text().splitlines():
+        for n, line in enumerate((C / part).read_text().splitlines(), 1):
             m = LOCAL_INCLUDE.match(line)
-            if m:
+            if m and Path(m.group(1)).name in inlined:
                 lines.append(f"/* #include \"{m.group(1)}\" (inlined) */")
+            elif m or ANY_LOCAL_INCLUDE.match(line):
+                sys.exit(f"amalgamate: {part}:{n}: {line.strip()} names a file that is not in the amalgamation")
             else:
                 lines.append(line)
         chunks.append(f"\n/* ======================================== {part} */\n" + "\n".join(lines) + "\n")

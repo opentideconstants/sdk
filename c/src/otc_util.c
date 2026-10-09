@@ -58,10 +58,22 @@ static void copy_trunc(char *dst, size_t cap, const char *src)
     dst[n] = '\0';
 }
 
+otc_error *otc__err_usable(otc_error *err)
+{
+    return (err && err->struct_size >= sizeof *err) ? err : NULL;
+}
+
+void otc__err_reset(otc_error *err)
+{
+    if (!otc__err_usable(err)) return;   /* a smaller struct (an older caller, or not initialised) is left alone */
+    memset(err, 0, sizeof *err);
+    err->struct_size = sizeof *err;
+}
+
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...)
 {
     va_list ap;
-    if (!err) return;
+    if (!otc__err_usable(err)) return;
     err->status = st;
     if (file) copy_trunc(err->file, sizeof err->file, file);
     va_start(ap, fmt);
@@ -70,6 +82,23 @@ void otc__err_set(otc_error *err, otc_status st, const char *file, const char *f
 }
 
 /* ----------------------------------------------------------- format versions */
+
+/* One non-negative integer with no leading zero; returns the end, or NULL. */
+static const char *version_part(const char *p)
+{
+    const char *start = p;
+    while (*p >= '0' && *p <= '9') p++;
+    if (p == start || p - start > 9 || (p - start > 1 && *start == '0')) return NULL;
+    return p;
+}
+
+int otc__version_valid(const char *v)
+{
+    const char *p;
+    if (!v || !(p = version_part(v)) || *p != '.') return 0;
+    p = version_part(p + 1);
+    return p && *p == '\0';
+}
 
 static void version_parse(const char *v, long *major, long *minor)
 {
@@ -98,9 +127,11 @@ int otc__readable(const char *fv, const char *mrv)
 {
     long major, minor;
     if (fv) {
+        if (!otc__version_valid(fv)) return 0;
         version_parse(fv, &major, &minor);
         if (major != OTC_FORMAT_MAJOR) return 0;
     }
+    if (mrv && !otc__version_valid(mrv)) return 0;   /* fail closed (spec 7.4, CR D9) */
     return !mrv || otc__version_cmp(mrv, OTC_FORMAT_VERSION) <= 0;
 }
 
@@ -205,7 +236,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
 {
     cJSON *v;
     AcquireSRWLockExclusive(&g_parse_lock);
-    v = cJSON_ParseWithLength(text, len);
+    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     ReleaseSRWLockExclusive(&g_parse_lock);
     return v;
 }
@@ -215,7 +246,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
 {
     cJSON *v;
     pthread_mutex_lock(&g_parse_lock);
-    v = cJSON_ParseWithLength(text, len);
+    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     pthread_mutex_unlock(&g_parse_lock);
     return v;
 }
@@ -273,8 +304,11 @@ otc_status otc__copy_str(const char *src, char *buf, size_t len, size_t *needed)
     if (!buf) return OTC_E_INVALID_ARGUMENT;
     if (len < n) {
         if (len) {
-            memcpy(buf, src, len - 1);
-            buf[len - 1] = '\0';
+            /* cut on a whole UTF-8 character: never leave the lead bytes of a cut one */
+            size_t k = len - 1;
+            while (k > 0 && ((unsigned char)src[k] & 0xC0) == 0x80) k--;
+            memcpy(buf, src, k);
+            memset(buf + k, 0, len - k);   /* the rest of the buffer too: buf[len - 1] is always the NUL */
         }
         return OTC_E_BUFFER_TOO_SMALL;
     }
@@ -317,7 +351,9 @@ double otc__jnum(const cJSON *obj, const char *key)
 int64_t otc__jint(const cJSON *obj, const char *key)
 {
     const cJSON *v = otc__jget(obj, key);
-    if (!cJSON_IsNumber(v) || v->valuedouble < 0 || v->valuedouble > 9.0e18) return -1;
+    /* a count is a whole number; a fraction is not cut to one, it reads as missing */
+    if (!cJSON_IsNumber(v) || !(v->valuedouble >= 0) || v->valuedouble > 9.0e18 || v->valuedouble != floor(v->valuedouble))
+        return -1;
     return (int64_t)v->valuedouble;
 }
 
@@ -452,7 +488,11 @@ otc_status otc__file_open(const char *path, otc__file **out)
     otc__file *f;
     struct stat sb;
     *out = NULL;
-    do { fd = open(path, O_RDONLY); } while (fd < 0 && errno == EINTR);
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+    /* close-on-exec: the handle a release keeps does not leak into the app's child processes */
+    do { fd = open(path, O_RDONLY | O_CLOEXEC); } while (fd < 0 && errno == EINTR);
     if (fd < 0) return OTC_E_IO;
     if (fstat(fd, &sb) != 0 || !S_ISREG(sb.st_mode)) { close(fd); return OTC_E_IO; }
     f = (otc__file *)malloc(sizeof *f);
@@ -503,6 +543,18 @@ void otc__mutex_unlock(otc__mutex *m) { pthread_mutex_unlock(&m->m); }
 void otc__mutex_destroy(otc__mutex *m) { pthread_mutex_destroy(&m->m); }
 #endif
 
+int otc__remove_file(const char *path)
+{
+#ifdef _WIN32
+    wchar_t *w = widen(path);
+    int r = w ? _wremove(w) : -1;
+    free(w);
+    return r;
+#else
+    return remove(path);
+#endif
+}
+
 otc_status otc__read_all(const char *path, char **out, size_t *len)
 {
     otc__file *f = NULL;
@@ -529,37 +581,58 @@ otc_status otc__read_all(const char *path, char **out, size_t *len)
 
 /* ----------------------------------------------------------------- SHA-256 */
 
-otc_status otc__sha256_file(const char *path, char hex[65])
+static void to_hex(const uint8_t *hash, char hex[65])
 {
     static const char digits[] = "0123456789abcdef";
-    otc__file *f = NULL;
-    struct Sha_256 ctx;
-    uint8_t hash[SIZE_OF_SHA_256_HASH];
-    unsigned char *buf;
-    uint64_t off = 0;
-    int64_t size;
     size_t i;
-    otc_status st = otc__file_open(path, &f);
-    if (st != OTC_OK) return st;
-    size = otc__file_size(f);
-    buf = (unsigned char *)malloc(65536);
-    if (!buf || size < 0) { free(buf); otc__file_close(f); return buf ? OTC_E_IO : OTC_E_NOMEM; }
-    sha_256_init(&ctx, hash);
-    while (off < (uint64_t)size) {
-        size_t n = (uint64_t)size - off > 65536 ? 65536 : (size_t)((uint64_t)size - off);
-        if (otc__file_pread(f, buf, n, off) != 0) { free(buf); otc__file_close(f); return OTC_E_IO; }
-        sha_256_write(&ctx, buf, n);
-        off += n;
-    }
-    sha_256_close(&ctx);
-    free(buf);
-    otc__file_close(f);
     for (i = 0; i < SIZE_OF_SHA_256_HASH; i++) {
         hex[2 * i] = digits[hash[i] >> 4];
         hex[2 * i + 1] = digits[hash[i] & 15];
     }
     hex[64] = '\0';
+}
+
+otc_status otc__sha256_handle(otc__file *f, char hex[65])
+{
+    struct Sha_256 ctx;
+    uint8_t hash[SIZE_OF_SHA_256_HASH];
+    unsigned char *buf;
+    uint64_t off = 0;
+    int64_t size = otc__file_size(f);
+    if (size < 0) return OTC_E_IO;
+    buf = (unsigned char *)malloc(65536);
+    if (!buf) return OTC_E_NOMEM;
+    sha_256_init(&ctx, hash);
+    while (off < (uint64_t)size) {
+        size_t n = (uint64_t)size - off > 65536 ? 65536 : (size_t)((uint64_t)size - off);
+        if (otc__file_pread(f, buf, n, off) != 0) { free(buf); return OTC_E_IO; }
+        sha_256_write(&ctx, buf, n);
+        off += n;
+    }
+    sha_256_close(&ctx);
+    free(buf);
+    to_hex(hash, hex);
     return OTC_OK;
+}
+
+void otc__sha256_mem(const void *data, size_t len, char hex[65])
+{
+    struct Sha_256 ctx;
+    uint8_t hash[SIZE_OF_SHA_256_HASH];
+    sha_256_init(&ctx, hash);
+    sha_256_write(&ctx, data, len);
+    sha_256_close(&ctx);
+    to_hex(hash, hex);
+}
+
+otc_status otc__sha256_file(const char *path, char hex[65])
+{
+    otc__file *f = NULL;
+    otc_status st = otc__file_open(path, &f);
+    if (st != OTC_OK) return st;
+    st = otc__sha256_handle(f, hex);
+    otc__file_close(f);
+    return st;
 }
 
 void otc__free_rows(char **names, char **digests, size_t n)
@@ -609,7 +682,7 @@ otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***di
             name = q;
             while (name < e && (*name == ' ' || *name == '\t')) name++;
             if (name < e && *name == '*') name++;
-            while (e > name && (e[-1] == '\r' || e[-1] == ' ')) e--;
+            while (e > name && (e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
             if (e > name) {
                 if (n == cap) {
                     size_t nc = cap ? cap * 2 : 8;
@@ -672,7 +745,8 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     const char *expected = NULL, *name;
     size_t n = 0, i;
     otc_status st;
-    if (err) otc_error_init(err);
+    err = otc__err_usable(err);
+    otc__err_reset(err);
     if (!path) {
         otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "path is NULL");
         return OTC_E_INVALID_ARGUMENT;
@@ -681,6 +755,11 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
         own = sha_path_for(path);
         if (!own) { otc__err_set(err, OTC_E_NOMEM, path, "out of memory"); return OTC_E_NOMEM; }
         sha256_path = own;
+        if (otc__path_size(own) < 0) {   /* file_unverified: nothing to compare with (spec 4.3, CR D20) */
+            otc__err_set(err, OTC_E_CHECKSUM, path, "no %s next to %s, so it cannot be verified", base_name(own), path);
+            free(own);
+            return OTC_E_CHECKSUM;
+        }
     }
     st = otc__sha256_rows(sha256_path, &names, &digests, &n);
     if (st != OTC_OK) {
@@ -705,6 +784,297 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     otc__free_rows(names, digests, n);
     free(own);
     return st;
+}
+
+/* ------------------------------------------------------------- datestamps */
+
+int otc__valid_datestamp(const char *s, size_t n)
+{
+    size_t i;
+    if (n < 8 || n > 18) return 0;   /* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$ (spec 4.2, CR D18) */
+    for (i = 0; i < 8; i++)
+        if (s[i] < '0' || s[i] > '9') return 0;
+    if (n == 8) return 1;
+    if (s[8] != '.' || n < 10) return 0;
+    for (i = 9; i < n; i++)
+        if (s[i] < '0' || s[i] > '9') return 0;
+    if (n == 10) return s[9] >= '2';
+    return s[9] != '0';
+}
+
+/* ------------------------------------------------------------------- times */
+
+static int digits_at(const char *s, int n, int *v)
+{
+    int i;
+    *v = 0;
+    for (i = 0; i < n; i++) {
+        if (s[i] < '0' || s[i] > '9') return 0;
+        *v = *v * 10 + (s[i] - '0');
+    }
+    return 1;
+}
+
+/* Days since 1970-01-01 of a proleptic Gregorian date (H. Hinnant's days_from_civil). */
+static long long days_from_civil(long long y, int m, int d)
+{
+    long long era, yoe, doy, doe;
+    y -= m <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+
+static void civil_from_days(long long z, long long *y, int *m, int *d)
+{
+    long long era, doe, yoe, doy, mp;
+    z += 719468;
+    era = (z >= 0 ? z : z - 146096) / 146097;
+    doe = z - era * 146097;
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    *y = yoe + era * 400;
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp = (5 * doy + 2) / 153;
+    *d = (int)(doy - (153 * mp + 2) / 5 + 1);
+    *m = (int)(mp < 10 ? mp + 3 : mp - 9);
+    *y += *m <= 2;
+}
+
+int otc__utc_time(const char *s, char out[21])
+{
+    int Y, M, D, h, mi, sec, oh = 0, om = 0, sign = 0;
+    long long t, days;
+    long long y;
+    const char *p;
+    if (!s || strlen(s) < 19 || !digits_at(s, 4, &Y) || s[4] != '-' || !digits_at(s + 5, 2, &M) || s[7] != '-'
+        || !digits_at(s + 8, 2, &D) || (s[10] != 'T' && s[10] != 't' && s[10] != ' ') || !digits_at(s + 11, 2, &h)
+        || s[13] != ':' || !digits_at(s + 14, 2, &mi) || s[16] != ':' || !digits_at(s + 17, 2, &sec))
+        return 0;
+    if (M < 1 || M > 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return 0;
+    p = s + 19;
+    if (*p == '.') {   /* a fraction: whole seconds are kept (RFC 3339 §5.6) */
+        if (p[1] < '0' || p[1] > '9') return 0;
+        for (p++; *p >= '0' && *p <= '9'; p++) {}
+    }
+    if (*p == 'Z' || *p == 'z') {
+        p++;
+    } else if (*p == '+' || *p == '-') {
+        sign = *p == '-' ? -1 : 1;
+        if (!digits_at(p + 1, 2, &oh) || p[3] != ':' || !digits_at(p + 4, 2, &om) || oh > 23 || om > 59) return 0;
+        p += 6;
+    } else if (*p == '\0') {
+        sign = 0;   /* no offset: UTC, as the other SDKs read it */
+    } else {
+        return 0;
+    }
+    if (*p != '\0') return 0;
+    if (sec == 60) sec = 59;   /* a leap second is the last second of its minute */
+    t = days_from_civil(Y, M, D) * 86400LL + h * 3600LL + mi * 60LL + sec - (long long)sign * (oh * 3600LL + om * 60LL);
+    days = t >= 0 ? t / 86400 : -((-t + 86399) / 86400);
+    t -= days * 86400;
+    civil_from_days(days, &y, &M, &D);
+    if (y < 0 || y > 9999) return 0;
+    {   /* the fields are in range here; gcc cannot see that, so format into room to spare */
+        char tmp[64];
+        snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, M, D, (int)(t / 3600), (int)(t / 60 % 60),
+                 (int)(t % 60));
+        if (strlen(tmp) != 20) return 0;
+        memcpy(out, tmp, 21);
+    }
+    return 1;
+}
+
+int64_t otc__http_date(const char *s)
+{
+    static const char *const MON[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    int D, Y, h, mi, sec, M;
+    /* IMF-fixdate: "Sun, 06 Nov 1994 08:49:37 GMT" (RFC 9110 5.6.7) */
+    if (!s || strlen(s) != 29 || s[3] != ',' || s[4] != ' ' || !digits_at(s + 5, 2, &D) || s[7] != ' '
+        || s[11] != ' ' || !digits_at(s + 12, 4, &Y) || s[16] != ' ' || !digits_at(s + 17, 2, &h) || s[19] != ':'
+        || !digits_at(s + 20, 2, &mi) || s[22] != ':' || !digits_at(s + 23, 2, &sec) || strcmp(s + 25, " GMT") != 0)
+        return -1;
+    for (M = 0; M < 12; M++)
+        if (!strncmp(s + 8, MON[M], 3)) break;
+    if (M == 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return -1;
+    return days_from_civil(Y, M + 1, D) * 86400LL + h * 3600LL + mi * 60LL + sec;
+}
+
+/* ------------------------------------------- strings with a NUL inside */
+
+/* cJSON ends a decoded string at its first NUL, so a JSON string with \u0000 in
+ * it (valid JSON, and schema-valid for a station name) loses its tail. These
+ * helpers read such a string from the JSON text itself, with its length. */
+
+static const char *js_ws(const char *p, const char *end)
+{
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
+    return p;
+}
+
+/* p at an opening quote: the position after the closing quote, or NULL. */
+static const char *js_skip_string(const char *p, const char *end)
+{
+    for (p++; p < end; p++) {
+        if (*p == '\\') { p++; continue; }
+        if (*p == '"') return p + 1;
+    }
+    return NULL;
+}
+
+/* p at a value: the position after it, or NULL. */
+static const char *js_skip_value(const char *p, const char *end)
+{
+    int depth = 0;
+    p = js_ws(p, end);
+    if (p >= end) return NULL;
+    if (*p == '"') return js_skip_string(p, end);
+    if (*p != '{' && *p != '[') {
+        while (p < end && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') p++;
+        return p;
+    }
+    while (p < end) {
+        if (*p == '"') {
+            if (!(p = js_skip_string(p, end))) return NULL;
+            continue;
+        }
+        if (*p == '{' || *p == '[') depth++;
+        else if ((*p == '}' || *p == ']') && --depth == 0) return p + 1;
+        p++;
+    }
+    return NULL;
+}
+
+static int js_hex4(const char *p, const char *end, uint32_t *v)
+{
+    int i;
+    *v = 0;
+    if (end - p < 4) return 0;
+    for (i = 0; i < 4; i++) {
+        char c = p[i];
+        *v <<= 4;
+        if (c >= '0' && c <= '9') *v |= (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f') *v |= (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') *v |= (uint32_t)(c - 'A' + 10);
+        else return 0;
+    }
+    return 1;
+}
+
+/* Decodes the JSON string at p (an opening quote) into out (at least the token's length). */
+static int js_decode(const char *p, const char *end, char *out, size_t *n)
+{
+    size_t o = 0;
+    for (p++; p < end && *p != '"'; p++) {
+        uint32_t cp;
+        if (*p != '\\') { out[o++] = *p; continue; }
+        if (++p >= end) return 0;
+        switch (*p) {
+        case '"': case '\\': case '/': out[o++] = *p; continue;
+        case 'b': out[o++] = '\b'; continue;
+        case 'f': out[o++] = '\f'; continue;
+        case 'n': out[o++] = '\n'; continue;
+        case 'r': out[o++] = '\r'; continue;
+        case 't': out[o++] = '\t'; continue;
+        case 'u': break;
+        default: return 0;
+        }
+        if (!js_hex4(p + 1, end, &cp)) return 0;
+        p += 4;
+        if (cp >= 0xD800 && cp <= 0xDBFF) {   /* a pair; an unpaired surrogate is not valid (cJSON refuses it too) */
+            uint32_t lo;
+            if (end - p < 7 || p[1] != '\\' || p[2] != 'u' || !js_hex4(p + 3, end, &lo) || lo < 0xDC00 || lo > 0xDFFF) return 0;
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+            p += 6;
+        } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+            return 0;
+        }
+        if (cp < 0x80) out[o++] = (char)cp;
+        else if (cp < 0x800) { out[o++] = (char)(0xC0 | (cp >> 6)); out[o++] = (char)(0x80 | (cp & 0x3F)); }
+        else if (cp < 0x10000) {
+            out[o++] = (char)(0xE0 | (cp >> 12));
+            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[o++] = (char)(0x80 | (cp & 0x3F));
+        } else {
+            out[o++] = (char)(0xF0 | (cp >> 18));
+            out[o++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[o++] = (char)(0x80 | (cp & 0x3F));
+        }
+    }
+    if (p >= end) return 0;
+    *n = o;
+    return 1;
+}
+
+int otc__json_has_nul(const char *text, size_t len)
+{
+    size_t i;
+    for (i = 0; i + 6 <= len; i++) {
+        if (text[i] == '\\') {
+            if (!memcmp(text + i + 1, "u0000", 5)) return 1;
+            i++;   /* the escaped character */
+        }
+    }
+    return 0;
+}
+
+int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len)
+{
+    const char *p = text, *end = text + len;
+    size_t kl = strlen(key);
+    *out = NULL;
+    *out_len = 0;
+    p = js_ws(p, end);
+    if (p >= end || *p != '{') return 0;
+    p++;
+    for (;;) {
+        const char *k, *kend, *v;
+        p = js_ws(p, end);
+        if (p >= end || *p != '"') return 0;
+        k = p;
+        if (!(p = js_skip_string(p, end))) return 0;
+        kend = p;
+        p = js_ws(p, end);
+        if (p >= end || *p != ':') return 0;
+        v = js_ws(p + 1, end);
+        if (!(p = js_skip_value(v, end))) return 0;
+        if ((size_t)(kend - k) == kl + 2 && !memcmp(k + 1, key, kl) && v < end && *v == '"') {
+            char *buf = (char *)malloc((size_t)(p - v) + 1);
+            size_t n;
+            if (!buf) return -1;
+            if (!js_decode(v, p, buf, &n)) { free(buf); return 0; }
+            buf[n] = '\0';
+            *out = buf;
+            *out_len = n;
+            return 1;
+        }
+        p = js_ws(p, end);
+        if (p < end && *p == ',') { p++; continue; }
+        return 0;
+    }
+}
+
+char *otc__json_escape_n(const char *s, size_t n)
+{
+    static const char hex[] = "0123456789abcdef";
+    size_t i, o = 0;
+    char *out = (char *)malloc(n * 6 + 3);
+    if (!out) return NULL;
+    out[o++] = '"';
+    for (i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '"' || c == '\\') { out[o++] = '\\'; out[o++] = (char)c; }
+        else if (c < 0x20) {
+            out[o++] = '\\'; out[o++] = 'u'; out[o++] = '0'; out[o++] = '0';
+            out[o++] = hex[c >> 4]; out[o++] = hex[c & 15];
+        } else out[o++] = (char)c;
+    }
+    out[o++] = '"';
+    out[o] = '\0';
+    return out;
 }
 
 /* -------------------------------------------------------------------- fold */
@@ -747,15 +1117,22 @@ static int is_ws(char c)
 
 char *otc__fold(const char *s)
 {
-    const unsigned char *p = (const unsigned char *)s;
-    size_t cap = strlen(s) * 4 + 1, n = 0, i, o;
+    return otc__fold_n(s, strlen(s), NULL);
+}
+
+char *otc__fold_n(const char *s, size_t sn, size_t *out_len)
+{
+    const unsigned char *p = (const unsigned char *)s, *pend = p + sn;
+    size_t cap = sn * 4 + 1, n = 0, i, o;
     char *tmp = (char *)malloc(cap), *out;
     int in_ws;
     if (!tmp) return NULL;
-    while (*p) {
-        uint32_t cp;
-        size_t len = utf8_next(p, &cp);
-        const char *f = (cp & 0x80000000u) ? NULL : fold_lookup(cp);
+    while (p < pend) {
+        uint32_t cp = 0;
+        size_t len = *p ? utf8_next(p, &cp) : 1;   /* a NUL is a character like any other (spec 4.4.1, D12 e) */
+        const char *f;
+        if (len > (size_t)(pend - p)) len = (size_t)(pend - p);
+        f = (!cp || (cp & 0x80000000u)) ? NULL : fold_lookup(cp);
         if (f) {
             size_t fl = strlen(f);
             memcpy(tmp + n, f, fl);
@@ -785,7 +1162,8 @@ char *otc__fold(const char *s)
     while (o > 0 && out[o - 1] == ' ') o--;
     out[o] = '\0';
     i = 0;
-    while (out[i] == ' ') i++;
+    while (i < o && out[i] == ' ') i++;
     if (i) memmove(out, out + i, o - i + 1);
+    if (out_len) *out_len = o - i;
     return out;
 }

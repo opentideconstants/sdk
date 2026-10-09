@@ -5,6 +5,9 @@
 
     uv run c/tools/gen_sources.py           write the files
     uv run c/tools/gen_sources.py --check   exit 1 if a committed file differs
+    uv run c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
+                                            exit 1 if the built library defines a global
+                                            symbol without the otc_ prefix (nm)
 
 - c/src/otc_cjson_rename.h: renames every public cJSON symbol to otc__cJSON_*,
   so an application can link its own cJSON next to this library.
@@ -30,19 +33,41 @@ def rename_header(guard, names, source):
     return "\n".join(lines)
 
 
+# An external function definition at the start of a line: a return type (any
+# words and stars), the name, "(" (C80: not only "void" and "uint8_t *").
+EXTERNAL_DEF = re.compile(r"^(?!static\b)(?!typedef\b)[A-Za-z_][\w \t\*\(\)]*?[\s\*\)]([A-Za-z_]\w*)\s*\(", re.M)
+
+
+def external_functions(path, prefix=""):
+    names = {n for n in EXTERNAL_DEF.findall(path.read_text()) if n.startswith(prefix)}
+    return names - {"if", "for", "while", "switch", "return", "sizeof"}
+
+
+def checked(names, what, minimum):
+    """A list that is too short means a parse that missed the source: fail, never write it (C80)."""
+    if len(names) < minimum:
+        sys.exit(f"gen_sources: found {len(names)} {what} symbols (at least {minimum} expected); "
+                 "the vendored source changed shape - fix the parse before generating")
+    return sorted(names)
+
+
 def cjson_names():
     text = (C / "vendor/cjson/cJSON.h").read_text()
-    names = re.findall(r"CJSON_PUBLIC\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", text)
+    declared = set(re.findall(r"CJSON_PUBLIC\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", text))
     # cJSON.c also has external functions that cJSON.h does not declare (cJSON_Duplicate_rec)
-    source = (C / "vendor/cjson/cJSON.c").read_text()
-    names += re.findall(r"^(?!static)[A-Za-z][^\n(;#]*?\b(cJSON_[A-Za-z0-9_]+)\s*\(", source, re.M)
-    return sorted(set(n for n in names if n.startswith("cJSON_")))
+    defined = external_functions(C / "vendor/cjson/cJSON.c", "cJSON_")
+    if not declared:
+        sys.exit("gen_sources: no CJSON_PUBLIC declarations in cJSON.h; the vendored header changed shape")
+    return checked({n for n in declared | defined if n.startswith("cJSON_")}, "cJSON", 60)
 
 
 def sha_names():
     text = (C / "vendor/sha256/sha-256.h").read_text()
-    names = re.findall(r"^\s*(?:void|uint8_t \*)\s*([a-z_0-9]+)\s*\(", text, re.M)
-    return sorted(set(names))
+    declared = {n for n in re.findall(r"^\s*[A-Za-z_][\w \t\*]*?[\s\*]([a-z_0-9]+)\s*\(", text, re.M)}
+    defined = external_functions(C / "vendor/sha256/sha-256.c")
+    if declared != defined:
+        sys.exit(f"gen_sources: sha-256.h declares {sorted(declared)} but sha-256.c defines {sorted(defined)}")
+    return checked(declared, "SHA-256", 4)
 
 
 def c_escape(s):
@@ -67,13 +92,40 @@ def fold_table():
     return "\n".join(lines)
 
 
+def check_symbols(lib):
+    """The nm backstop (C80): every global symbol a built library defines starts with otc_."""
+    import subprocess
+    out = subprocess.run(["nm", "-g", lib], capture_output=True, text=True)
+    if out.returncode != 0:
+        print(f"nm {lib} failed: {out.stderr.strip()}")
+        return 1
+    bad = []
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 3 or parts[-2] in ("U", "w", "v"):
+            continue   # an undefined (or weak undefined) reference, or an archive member line
+        name = parts[-1]
+        if sys.platform == "darwin" and name.startswith("_"):
+            name = name[1:]
+        if not name.startswith("otc_"):
+            bad.append(name)
+    for name in sorted(set(bad)):
+        print(f"{lib}: global symbol without the otc_ prefix: {name}")
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--symbols", metavar="LIB", help="check that every global symbol LIB defines starts with otc_")
     a = ap.parse_args()
+    if a.symbols:
+        return check_symbols(a.symbols)
     files = {
-        C / "src/otc_cjson_rename.h": rename_header("OTC_CJSON_RENAME_H", cjson_names(), "c/vendor/cjson/cJSON.h"),
-        C / "src/otc_sha256_rename.h": rename_header("OTC_SHA256_RENAME_H", sha_names(), "c/vendor/sha256/sha-256.h"),
+        C / "src/otc_cjson_rename.h": rename_header("OTC_CJSON_RENAME_H", cjson_names(),
+                                                   "c/vendor/cjson/cJSON.h and cJSON.c"),
+        C / "src/otc_sha256_rename.h": rename_header("OTC_SHA256_RENAME_H", sha_names(),
+                                                    "c/vendor/sha256/sha-256.h and sha-256.c"),
         C / "src/otc_fold_table.c": fold_table(),
     }
     bad = 0

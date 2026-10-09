@@ -51,8 +51,18 @@ extern "C" {
  * OTC_E_READER_TOO_OLD. Equals supported_format_version in c/supported-formats.json. */
 #define OTC_FORMAT_VERSION "1.0"
 
+/* OTC_API marks the public functions. A build of the library defines
+ * OTC_BUILDING (and OTC_SHARED for a shared library): then only these
+ * functions are exported (the build hides every other symbol, B4-5). An
+ * application needs to define nothing. */
 #ifndef OTC_API
+#if defined(OTC_BUILDING) && defined(OTC_SHARED) && defined(_WIN32)
+#define OTC_API __declspec(dllexport)
+#elif defined(OTC_BUILDING) && defined(OTC_SHARED) && (defined(__GNUC__) || defined(__clang__))
+#define OTC_API __attribute__((visibility("default")))
+#else
 #define OTC_API
+#endif
 #endif
 
 /* ------------------------------------------------------------------ status */
@@ -83,7 +93,10 @@ typedef enum otc_status {
 /* The stable error code of a status ("checksum_mismatch", ...); "ok" for OTC_OK. */
 OTC_API const char *otc_status_code(otc_status status);
 
-/* Error detail for calls with no release handle (spec 4.8). */
+/* Error detail for calls with no release handle (spec 4.8). The library
+ * writes into it only when struct_size is at least the size it knows (set
+ * it with otc_error_init()); a smaller struct is left alone, never written
+ * past (spec 6.4 ABI). */
 typedef struct otc_error {
     size_t     struct_size;        /* set by otc_error_init() */
     otc_status status;
@@ -241,13 +254,16 @@ OTC_API otc_status otc_last_error_status(const otc_release *rel);
 
 /* Hashes path again in full and compares it with its row in sha256_path
  * (NULL: the OTC_{D}.sha256 next to path). OTC_E_CHECKSUM on a mismatch, with
- * file, expected_sha256 and actual_sha256 in err. */
+ * file, expected_sha256 and actual_sha256 in err; also when sha256_path is
+ * NULL and there is no OTC_{D}.sha256 next to path (a file_unverified
+ * release, spec 4.3). */
 OTC_API otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error *err);
 
 /* --------------------------------------------------------- release metadata */
 
 OTC_API otc_loaded_from otc_release_loaded_from(const otc_release *rel);
 OTC_API otc_status otc_release_datestamp(const otc_release *rel, char *buf, size_t len, size_t *needed);
+/* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ" (whole seconds), as the other SDKs give it. */
 OTC_API otc_status otc_release_created(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_format_version(const otc_release *rel, char *buf, size_t len, size_t *needed);
 /* The all-versions (concept) DOI, from the release document; OTC_E_NOT_FOUND when null. */
@@ -282,10 +298,12 @@ OTC_API otc_status otc_release_constituent_names(const otc_release *rel, const c
 OTC_API otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, size_t *needed);
 /* The CC BY 4.0 attribution text (spec 4.6): "Tidal constants: OpenTideConstants
  * {D}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ...".
- * ids = NULL: every licence in the release; else the licences of these
- * stations (the recommended set's, plus for a subordinate station its
- * offsets' licence and its reference station's). Each provider once, by
- * licence_id. It never carries the version DOI. */
+ * ids = NULL or n_ids = 0: every licence in the release; else the licences
+ * of these stations (the recommended set's, plus for a subordinate station
+ * its offsets' licence and its reference station's). An id that is not an
+ * active station of the release is OTC_E_INVALID_ARGUMENT. Each provider
+ * once, by licence_id; a licence with no provider gives its attribution
+ * alone and is never merged. It never carries the version DOI. */
 OTC_API otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_t n_ids, char *buf, size_t len,
                                    size_t *needed);
 
@@ -348,6 +366,9 @@ typedef struct otc_filter {
 } otc_filter;
 OTC_API void otc_filter_init(otc_filter *filter);
 
+/* The limit of otc_search and otc_near that means "no limit" (spec 4.4, CR D36). */
+#define OTC_NO_LIMIT SIZE_MAX
+
 typedef struct otc_hit {      /* otc_search; the strings are borrowed from the release */
     const char *id;
     const char *name;
@@ -377,9 +398,11 @@ OTC_API otc_status otc_iter_open(const otc_release *rel, const otc_filter *filte
 /* The next station (caller frees it), or OTC_E_NOT_FOUND at the end. */
 OTC_API otc_status otc_iter_next(otc_iter *it, otc_station_t **out);
 OTC_API void otc_iter_close(otc_iter *it);
-/* limit 0 means no limit. */
+/* limit: the most hits to return, 1 or more, or OTC_NO_LIMIT for all of them;
+ * 0 is OTC_E_INVALID_ARGUMENT (spec 4.4, CR D36). */
 OTC_API otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
                               otc_hit *out, size_t cap, size_t *count);
+/* limit as for otc_search. */
 OTC_API otc_status otc_near(const otc_release *rel, double lat, double lon, double radius_km,
                             const otc_filter *filter, size_t limit, otc_nearby *out, size_t cap, size_t *count);
 /* max_km NaN or +infinity means no limit. OTC_E_NOT_FOUND if nothing is in range. */
@@ -393,7 +416,8 @@ OTC_API otc_status otc_subordinates_of(const otc_release *rel, const otc_station
 /* ----------------------------------------------------------- station fields */
 
 OTC_API otc_status otc_station_station_id(const otc_station_t *st, char *buf, size_t len, size_t *needed);
-#define otc_station_id otc_station_station_id
+/* The spec 6.4 name; a function-like macro, so it does not rewrite other uses of the name. */
+#define otc_station_id(st, buf, len, needed) otc_station_station_id((st), (buf), (len), (needed))
 OTC_API otc_status otc_station_name(const otc_station_t *st, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_station_country(const otc_station_t *st, char *buf, size_t len, size_t *needed);
 OTC_API double otc_station_lat(const otc_station_t *st);
@@ -461,7 +485,7 @@ typedef struct otc_validation_t {
     int64_t                missed_events;
     int64_t                extra_events;
     bool                   has_previous_release;
-    otc_previous_release_t previous_release;
+    otc_previous_release_t previous_release;   /* NaN and -1 throughout when has_previous_release is false */
 } otc_validation_t;
 /* Every row of the station, in file order. */
 OTC_API size_t otc_station_validation_count(const otc_station_t *st);
@@ -556,11 +580,12 @@ OTC_API otc_status otc_set_convention(const otc_set *set, const otc_convention *
 OTC_API otc_status otc_set_licence(const otc_set *set, const otc_licence **out);
 
 /* Provenance (spec 4.6): one field (a string field as its text, any other
- * value as JSON), or the whole object as JSON (raw, with any further fields). */
+ * value as JSON), or the whole object as JSON (raw, with any further fields).
+ * OTC_E_NOT_FOUND when the set has no provenance object (CR D34). */
 OTC_API otc_status otc_set_provenance_field(const otc_set *set, const char *field, char *buf, size_t len,
                                             size_t *needed);
 OTC_API otc_status otc_set_provenance_json(const otc_set *set, char *buf, size_t len, size_t *needed);
-#define otc_set_provenance_raw_json otc_set_provenance_json
+#define otc_set_provenance_raw_json(set, buf, len, needed) otc_set_provenance_json((set), (buf), (len), (needed))
 OTC_API otc_status otc_set_provenance_adapter_version(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_input_sha256_json(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_selection_reason(const otc_set *set, char *buf, size_t len, size_t *needed);
@@ -587,18 +612,20 @@ OTC_API otc_status otc_provenance_build_tool_versions_json(const otc_provenance_
 OTC_API size_t otc_set_validation_count(const otc_set *set);
 OTC_API otc_status otc_set_validation_at(const otc_set *set, size_t i, const otc_validation_t **out);
 
-/* Constituents, in file order. Strings in fixed arrays: "" means absent. */
+/* Constituents, in file order. The strings are borrowed from the station and
+ * stay valid until it is freed; they have no length limit, and "" means absent
+ * (spec 4.5, 6.4, CR D13). */
 typedef struct otc_constituent_t {
-    size_t struct_size;
-    char   name[16];
-    char   source_name[32];
-    char   doodson[8];
-    double speed_deg_per_hour;    /* NaN if absent */
-    double amplitude_m;
-    double phase_deg;             /* Greenwich (or convention) phase lag, 0 <= g < 360 */
-    double amp_uncertainty_m;     /* NaN if absent */
-    double phase_uncertainty_deg; /* NaN if absent */
-    char   kept_reason[32];
+    size_t      struct_size;
+    const char *name;
+    const char *source_name;
+    const char *doodson;
+    double      speed_deg_per_hour;    /* NaN if absent */
+    double      amplitude_m;
+    double      phase_deg;             /* Greenwich (or convention) phase lag, 0 <= g < 360 */
+    double      amp_uncertainty_m;     /* NaN if absent */
+    double      phase_uncertainty_deg; /* NaN if absent */
+    const char *kept_reason;
 } otc_constituent_t;
 OTC_API size_t otc_set_constituent_count(const otc_set *set);
 OTC_API otc_status otc_set_constituent_at(const otc_set *set, size_t i, const otc_constituent_t **out);
@@ -627,11 +654,16 @@ OTC_API otc_status otc_constituent_raw_json(const otc_set *set, size_t i, char *
 typedef struct otc_fetch_options {
     size_t               struct_size;   /* set by otc_fetch_options_init() */
     const char          *cache_dir;     /* NULL: OPENTIDECONSTANTS_CACHE_DIR, else the platform default (spec 5.4) */
-    const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/ */
-    bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE=1; no socket is ever opened */
-    double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both */
-    const char          *proxy;         /* NULL: HTTP(S)_PROXY / http(s)_proxy and NO_PROXY / no_proxy */
-    const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default */
+    const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/;
+                                           an absolute http(s) URL, else OTC_E_INVALID_ARGUMENT */
+    bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE = 1, true, yes or on (any case,
+                                           trimmed); no socket is ever opened */
+    double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both, in seconds
+                                           (at most 1e6); NaN, negative or larger: OTC_E_INVALID_ARGUMENT */
+    const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
+                                           https_proxy / HTTPS_PROXY, ALL_PROXY and NO_PROXY (spec 5.7) */
+    const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default; a file that cannot be
+                                           read is OTC_E_IO before any network access */
     const char          *user_agent;    /* a suffix, added after one space */
     otc_on_network_error on_network_error; /* latest only: USE_CACHE (default) or RAISE */
     otc_error           *error;
@@ -661,29 +693,42 @@ OTC_API otc_status otc_fetch_release(const otc_fetch_options *opts, const char *
  * errors go to fopts->error (and oopts->error). */
 OTC_API otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, const otc_open_options *oopts,
                                   otc_release **out);
+/* Every release in OTC_index.json, newest first. On a network error with
+ * on_network_error USE_CACHE it gives the cached index (spec 4.3, 5.2 step 5);
+ * offline, the cached index or OTC_E_OFFLINE_UNAVAILABLE. */
 OTC_API otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap,
                                       size_t *count);
 OTC_API otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_release_info **info);
 /* *found is true and *info is set when the latest readable release (a
  * supported major and a readable min_reader_version, spec 7.4) is newer than
  * current. It also makes a conditional GET of OTC_latest.json, which
- * otc_fetch_newer_format_major reads. */
+ * otc_fetch_newer_format_major reads. That GET is a side probe: when it fails,
+ * the call still answers, the failure goes to log_fn at level 2 with its
+ * cause, and otc_fetch_newer_format_major keeps the value from before (spec
+ * 7.4). Without a log_fn the probe's failure is not reported. */
 OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char *current,
                                               otc_release_info **info, bool *found);
 /* The format major of the newest release on the server when it is newer than
  * every major this library reads (spec 7.4): the value the last
  * otc_fetch_check_for_update on this cache found (it reads the cached
- * OTC_latest.json; no network access). OTC_E_NOT_FOUND when there is none. */
+ * OTC_latest.json; no network access). OTC_E_NOT_FOUND when there is none;
+ * OTC_E_INVALID_RELEASE when the cached OTC_latest.json is corrupt. */
 OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major);
 /* If a release newer than current exists, downloads it into the cache, sets
  * *updated and writes the path of its .jsonl; the app then opens it and
- * closes the old handle (C has no automatic update, spec 5.6). */
+ * closes the old handle (C has no automatic update, spec 5.6). path and len
+ * are checked before the download: a buffer too small for the path is
+ * OTC_E_BUFFER_TOO_SMALL (the error message names the size) and downloads
+ * nothing. *updated is true only when the new release is in the cache and
+ * path names it. */
 OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                                     bool *updated);
 /* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":
- * the latest. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL. paths gets
- * the full paths written (a file left alone because it was identical is not
- * listed). */
+ * the latest; on a network error with on_network_error USE_CACHE, the newest
+ * readable cached release. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL.
+ * paths gets the full paths written (a file left alone because it was
+ * identical is not listed). Every file is checked before any is renamed into
+ * dir, so a failure writes nothing there. */
 OTC_API otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, const char *dir,
                                     unsigned formats, bool overwrite, char **paths, size_t cap, size_t *count);
 /* Datestamps of the verified cached releases, newest first. */
@@ -691,7 +736,9 @@ OTC_API otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char
                                              size_t *count);
 /* Removes the cached releases after the newest keep, never current (the
  * datestamp of the release the app has open; NULL = none). removed gets the
- * datestamps removed, newest first. */
+ * datestamps removed, newest first. A release directory that cannot be removed
+ * is OTC_E_CACHE; *count and removed then name the releases removed before the
+ * failure. A symlink in the cache is removed, never followed. */
 OTC_API otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const char *current, char **removed,
                                    size_t cap, size_t *count);
 /* Frees a string that the library allocated (lists of the otc_fetch module). */

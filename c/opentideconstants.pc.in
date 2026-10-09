@@ -1,11 +1,12 @@
-prefix=@CMAKE_INSTALL_PREFIX@
-libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
-includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+prefix=@OTC_PC_PREFIX@
+libdir=@OTC_PC_LIBDIR@
+includedir=@OTC_PC_INCLUDEDIR@
 
 Name: opentideconstants
 Description: Read OpenTideConstants tidal-constant releases (.jsonl + .meta.json)
 Version: @PROJECT_VERSION@
+Requires: @OTC_PC_REQUIRES@
 Requires.private: @OTC_PC_REQUIRES_PRIVATE@
-Libs: -L${libdir} -lopentideconstants
-Libs.private: -lm -pthread
+Libs: -L${libdir} -lopentideconstants @OTC_PC_LIBS@
+Libs.private: @OTC_PC_LIBS_PRIVATE@
 Cflags: -I${includedir}
