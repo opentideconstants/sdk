@@ -350,3 +350,24 @@ test("T1: an automatic update worker that cannot start answers at once, not afte
     assert.equal(r.ok, false);
     assert.ok(Date.now() - t0 < 10_000, `waited ${Date.now() - t0} ms`);
 });
+
+test("T23/D2: attribution prints a provider-less licence alone, counts a subordinate's offsets licence, refuses a foreign Station", async () => {
+    const { releaseFromJson } = await import("../dist/loader.js");
+    const set = (sid, lic) => ({ set_id: sid, source: "x", quantity: "water_level", qc_status: "ok", convention_id: "c", licence_id: lic, constituents: [] });
+    const doc = {
+        format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }],
+        licences: [{ licence_id: "a", provider: null, attribution: "A text" }, { licence_id: "b", provider: null, attribution: "B text" },
+            { licence_id: "o", provider: "Offsets Co", attribution: "O text" }],
+        stations: [
+            { station_id: "R", status: "active", type: "reference", lat: 0, lon: 0, recommended_set_id: "R/s", constant_sets: [set("R/s", "a")] },
+            { station_id: "S", status: "active", type: "subordinate", lat: 0, lon: 0, recommended_set_id: null,
+                subordinate_offsets: { reference_station_id: null, licence_id: "o" } },
+            { station_id: "T", status: "active", type: "reference", lat: 0, lon: 0, recommended_set_id: "T/s", constant_sets: [set("T/s", "b")] },
+        ],
+    };
+    const r = releaseFromJson(enc(doc), []);
+    const text = r.attribution([r.station("R"), r.station("T"), r.station("S")]);
+    assert.match(text, /Sources: A text; B text; Offsets Co: O text$/);
+    const other = releaseFromJson(enc(doc), []);
+    assert.throws(() => r.attribution([other.station("R")]), isCode("invalid_argument"));
+});

@@ -543,10 +543,12 @@ export class Station {
     readonly #recommended: ConstantSet | null;
     readonly #validation: readonly Validation[];
     readonly #offsets: SubordinateOffsets | null;
+    readonly #release: Release;
 
     /** @internal */
     constructor(raw: JsonObject, entry: IndexEntry, release: Release) {
         this.raw = raw;
+        this.#release = release;
         this.station_id = entry.station_id;
         this.name = str(raw, "name") ?? "";
         this.country = str(raw, "country");
@@ -580,6 +582,11 @@ export class Station {
             licence_id: str(off, "licence_id"),
         });
         Object.freeze(this);
+    }
+
+    /** @internal True if this station was read from release `r`. */
+    _from(r: Release): boolean {
+        return this.#release === r;
     }
 
     get isReference(): boolean {
@@ -1054,22 +1061,31 @@ export class Release {
         return Object.freeze([...l].sort((a, b) => cmp(a.station_id, b.station_id)).map((e) => this.#station(e)));
     }
 
-    /** The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). */
+    /**
+     * The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). An empty list is the
+     * whole release. A station that is not an active Station of this release (null, unknown, removed, from another
+     * release) is invalid_argument, never skipped (CR D2).
+     */
     attribution(stations?: readonly (Station | null)[] | null): string {
         this.#open();
         let ids: Set<string>;
-        if (stations === undefined || stations === null) {
+        if (stations === undefined || stations === null || (Array.isArray(stations) && stations.length === 0)) {
             ids = new Set(this.#licences.map((l) => l.licence_id));
         } else {
             if (!Array.isArray(stations)) throw new InvalidArgumentError("stations must be a list of Station objects");
             ids = new Set();
             for (const s of stations) {
-                const e = s ? this.#byId.get(s.station_id) : undefined;
-                if (!e) continue;
+                if (!(s instanceof Station) || !s._from(this)) {
+                    throw new InvalidArgumentError(`attribution needs Stations of release ${this.datestamp}; got ${s instanceof Station ? `${s.station_id} from another release` : JSON.stringify(s)}`);
+                }
+                const e = this.#byId.get(s.station_id);
+                if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
                 if (e.recommended_licence_id) ids.add(e.recommended_licence_id);
-                if (e.type === "subordinate" && e.reference_station_id !== null) {
+                if (e.type === "subordinate") {
+                    // a subordinate's tides come from its offsets and its reference station (spec 4.6), also with
+                    // offsets only
                     if (e.offsets_licence_id) ids.add(e.offsets_licence_id);
-                    const ref = this.#byId.get(e.reference_station_id);
+                    const ref = e.reference_station_id === null ? undefined : this.#byId.get(e.reference_station_id);
                     if (ref && ref.recommended_licence_id) ids.add(ref.recommended_licence_id);
                 }
             }
@@ -1078,9 +1094,15 @@ export class Release {
         const seen = new Set<string>();
         for (const id of [...ids].sort(cmp)) {
             const l = this.licence(id);
-            if (!l || seen.has(l.provider ?? "")) continue;
-            seen.add(l.provider ?? "");
-            parts.push(`${l.provider ?? ""}: ${l.attribution ?? ""}`);
+            if (!l) continue; // cannot happen: every licence reference is checked at load
+            if (l.provider === null) {
+                // no provider: the attribution alone, never merged with another entry (CR D2)
+                parts.push(l.attribution ?? "");
+                continue;
+            }
+            if (seen.has(l.provider)) continue;
+            seen.add(l.provider);
+            parts.push(`${l.provider}: ${l.attribution ?? ""}`);
         }
         const ident = this.concept_doi ? `doi:${this.concept_doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
         return `Tidal constants: OpenTideConstants ${this.datestamp}, ${ident}, CC BY 4.0. Sources: ${parts.join("; ")}`;

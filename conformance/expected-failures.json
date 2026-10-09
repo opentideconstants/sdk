@@ -1237,8 +1237,7 @@
    "case": "rules/pk15/attribution-empty-list@json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: result.attribution: expected \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge"
@@ -1247,8 +1246,7 @@
    "case": "rules/pk15/attribution-empty-list@json.gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: result.attribution: expected \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge"
@@ -1257,8 +1255,7 @@
    "case": "rules/pk15/attribution-empty-list@jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: result.attribution: expected \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge"
@@ -1269,8 +1266,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: result.attribution: expected \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge"
@@ -1279,50 +1275,16 @@
    "case": "rules/pk15/attribution-empty-list@server",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: result.attribution: expected \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge"
   },
   {
-   "case": "rules/pk15/attribution-unknown-station@json",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK15",
-   "reason": "step 1 attribution: expected error 'invalid_argument', got a result {\"attribution\": \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: \"}"
-  },
-  {
-   "case": "rules/pk15/attribution-unknown-station@json.gz",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK15",
-   "reason": "step 1 attribution: expected error 'invalid_argument', got a result {\"attribution\": \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: \"}"
-  },
-  {
-   "case": "rules/pk15/attribution-unknown-station@jsonl",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK15",
-   "reason": "step 1 attribution: expected error 'invalid_argument', got a result {\"attribution\": \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: \"}"
-  },
-  {
    "case": "rules/pk15/attribution-unknown-station@jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "typescript"
-   ],
-   "package": "PK15",
-   "reason": "step 1 attribution: expected error 'invalid_argument', got a result {\"attribution\": \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: \"}"
-  },
-  {
-   "case": "rules/pk15/attribution-unknown-station@server",
-   "runners": [
-    "typescript"
+    "c-fetch"
    ],
    "package": "PK15",
    "reason": "step 1 attribution: expected error 'invalid_argument', got a result {\"attribution\": \"Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: \"}"
