@@ -1,5 +1,5 @@
 import {
-    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
+    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
@@ -8,7 +8,7 @@ import {
 } from "./core.js";
 import {
     ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
-    OpenTideConstantsError, PinnedReleaseError, ReleaseNotFoundError, UnsupportedError,
+    OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
 import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
 import { isNode, type Platform } from "./platform.js";
@@ -349,12 +349,20 @@ export class OpenTideConstants {
     async checkForUpdate(): Promise<ReleaseInfo | null> {
         const ctx = this.#ctx;
         if (ctx.offline) throw new OfflineError("offline: checkForUpdate needs the network");
-        const { entry, generic } = await readPointer(ctx);
+        // newerFormatMajor is set before an unsupported_format or reader_too_old is raised, and keeps its old value
+        // when OTC_latest.json cannot be read (spec 7.4, CR D10)
+        let read: { entry: PointerEntry; generic: PointerEntry | null } | null = null;
+        let tooNew: OpenTideConstantsError | null = null;
+        try {
+            read = await readPointer(ctx);
+        } catch (e) {
+            if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
+            tooNew = e;
+        }
         let major: number | null = null;
         let known = true;
-        if (generic) {
-            const m = /^([0-9]+)\./.exec(generic.format_version);
-            major = m ? Number(m[1]) : null;
+        if (read?.generic) {
+            major = Number.isNaN(formatMajor(read.generic.format_version)) ? null : formatMajor(read.generic.format_version);
         } else {
             try {
                 major = await genericPointerMajor(ctx);
@@ -369,6 +377,8 @@ export class OpenTideConstants {
             if (newer !== null) log(ctx, "warn", `a newer format (${newer}) exists; upgrade opentideconstants to read it`);
             this.#newerFormatMajor = newer;
         }
+        if (tooNew || !read) throw tooNew ?? new UnsupportedFormatError("no readable release");
+        const entry = read.entry;
         return compareDatestamps(entry.datestamp, this.#release.datestamp) > 0 ? toInfo(entry) : null;
     }
 

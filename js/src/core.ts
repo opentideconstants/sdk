@@ -1,5 +1,5 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
-import { compareDatestamps, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
+import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
     ChecksumError, InvalidReleaseError, NetworkError, OfflineError, ReleaseNotFoundError, UnsupportedFormatError,
 } from "./errors.js";
@@ -117,6 +117,8 @@ function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry
         throw new InvalidReleaseError(`${what} ${url}: an entry has no datestamp or format_version`);
     }
     const d = v["datestamp"];
+    checkVersion(v["format_version"], `${what} ${url}: format_version of ${d}`);
+    checkVersion(v["min_reader_version"], `${what} ${url}: min_reader_version of ${d}`);
     if (!isDatestamp(d)) throw new InvalidReleaseError(`${what} ${url}: bad datestamp ${JSON.stringify(d)}`);
     const rawFiles = v["files"] ?? [];
     if (!Array.isArray(rawFiles)) throw new InvalidReleaseError(`${what} ${url}: files of ${d} is not a list`);
@@ -262,7 +264,7 @@ export async function readPointer(ctx: Ctx): Promise<PointerRead> {
     const out = (e: PointerEntry): PointerRead => ({ entry: e, generic: generic ? entry : null });
     if (readable(entry)) return out(entry);
     if (!supportedFormat(entry.format_version)) {
-        log(ctx, "warn", `a newer format (${formatMajorOf(entry.format_version)}) exists; upgrade opentideconstants to read it`);
+        log(ctx, "warn", `a newer format (${formatMajor(entry.format_version)}) exists; upgrade opentideconstants to read it`);
     } else {
         log(ctx, "warn", `release ${entry.datestamp} needs a reader for format ${entry.min_reader_version}; looking for the newest release this SDK reads`);
     }
@@ -284,13 +286,8 @@ export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
 export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
     const r = await getConditional(ctx, "OTC_latest.json");
     if (!r) return null;
-    const major = formatMajorOf(parseEntry(r.doc, r.url, "OTC_latest.json").format_version);
+    const major = formatMajor(parseEntry(r.doc, r.url, "OTC_latest.json").format_version);
     return Number.isNaN(major) ? null : major;
-}
-
-function formatMajorOf(v: string): number {
-    const m = /^([0-9]+)\.[0-9]+$/.exec(v);
-    return m ? Number(m[1]) : NaN;
 }
 
 export async function readVerified(store: CacheStore, d: string): Promise<Verified | null> {

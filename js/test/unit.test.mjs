@@ -111,3 +111,14 @@ test("T79: a 200 pointer body that is not JSON is a network error and the stored
     assert.equal(store.files.get("pointer/OTC_index.json"), good);
     assert.equal(store.calls.some((c) => c[0] === "write"), false);
 });
+
+test("T45/D9: a malformed version string is invalid_release, in a release and in an index entry", async () => {
+    const { readerReads, formatMajor } = await import("../dist/constants.js");
+    const { parseIndex } = await import("../dist/core.js");
+    for (const v of ["2", "1.x", "01.0", "1.0.0", " 1.0", "+1.0"]) assert.throws(() => readerReads(v), isCode("invalid_release"), v);
+    assert.ok(Number.isNaN(formatMajor("01.0")));
+    const url = "https://example.invalid/OTC_index.json";
+    const e = { datestamp: "20991231", format_version: "1.0", files: [] };
+    assert.throws(() => parseIndex(enc({ releases: [{ ...e, min_reader_version: "2" }] }), url), isCode("invalid_release"));
+    assert.throws(() => parseIndex(enc({ releases: [{ ...e, format_version: "1." }] }), url), isCode("invalid_release"));
+});
