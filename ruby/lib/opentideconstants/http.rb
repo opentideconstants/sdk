@@ -43,6 +43,11 @@ class OpenTideConstants
             @open_timeout = timeout || CONNECT_TIMEOUT
             @read_timeout = timeout || READ_TIMEOUT
             @proxy = proxy && HTTP.check_url!(proxy, "proxy")
+            # Net::HTTP speaks plain HTTP to every proxy: an https:// proxy would get plaintext. Refuse it here,
+            # not at the first request (R2-105). A CONNECT tunnel through an http:// proxy is still TLS end to end.
+            if @proxy&.scheme == "https"
+                raise InvalidArgumentError, "proxy: Net::HTTP cannot use TLS to a proxy; use an http:// proxy, not #{proxy.inspect}"
+            end
             # A ca_file, else SSL_CERT_FILE, that does not exist or cannot be read is io, at construction:
             # never retried, never a reason to fall back to the cache (CR D19, CR2 DR20).
             what = "ca_file"
