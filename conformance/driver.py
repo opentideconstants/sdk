@@ -842,8 +842,9 @@ def expand_cross(cases, hellos):
         roles = list(c.get("roles") or {})
         if not roles:
             raise ValueError(f"{c.get('id')}: a cross case needs roles")
+        need = set(c.get("requires", []))  # the case's own requires applies to every role
         for names in itertools.permutations(hellos, len(roles)):
-            if any(set(c["roles"][r]) - hellos[n][1] for r, n in zip(roles, names)):
+            if any((set(c["roles"][r]) | need) - hellos[n][1] for r, n in zip(roles, names)):
                 continue
             v = copy.deepcopy(c)
             v["id"] = f"{c['id']}[{'>'.join(names)}]"

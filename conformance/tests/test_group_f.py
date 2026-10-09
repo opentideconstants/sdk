@@ -149,3 +149,13 @@ def test_assert_requests_all_with_no_request_fails():
         srv.shutdown()
         proxy.shutdown()
     assert out, "all: true passed with no request to check"
+
+
+# --- K70: a cross case's own "requires" applies to every runner it assigns
+
+def test_cross_case_requires_applies_to_every_role():
+    c = {"id": "x", "requires": ["json"], "roles": {"writer": ["fs"], "reader": ["fs"]}, "steps": []}
+    hellos = {"a": (["a"], {"fs", "json"}), "b": (["b"], {"fs"})}
+    assert [v["id"] for v in driver.expand_cross([c], hellos)] == []
+    hellos["b"] = (["b"], {"fs", "json"})
+    assert sorted(v["id"] for v in driver.expand_cross([c], hellos)) == ["x[a>b]", "x[b>a]"]
