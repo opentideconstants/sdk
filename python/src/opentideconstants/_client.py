@@ -20,7 +20,7 @@ from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
                       ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError)
-from ._http import Http
+from ._http import Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
 from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
                        meta_path_for, readable, version_key)
@@ -97,6 +97,7 @@ class OpenTideConstants:
         self._mode = mode
         self._offline = offline or _flag(os.environ.get("OPENTIDECONSTANTS_OFFLINE", ""))
         base = base_url or os.environ.get("OPENTIDECONSTANTS_BASE_URL") or DEFAULT_BASE_URL
+        check_http_url("base_url", base)  # at construction, never retried (CR D19)
         self._base_url = base if base.endswith("/") else base + "/"
         root = cache_dir if cache_dir is not None else default_root()
         self._cache = Cache(Path(root))
@@ -237,8 +238,12 @@ class OpenTideConstants:
         for p in check:
             rec = v["files"].get(p.name) or {}
             size = rec.get("size")
-            if size is not None and p.stat().st_size != size:
-                raise ChecksumError(f"{p.name}: size {p.stat().st_size} does not match {size}", file=str(p),
+            try:
+                actual_size = p.stat().st_size
+            except OSError as e:  # removed or unreadable since it was found
+                raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
+            if size is not None and actual_size != size:
+                raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
                                     expected=rec.get("sha256"), actual=None)
             if self._verify_on_open:
                 self._check_file(p, rec.get("sha256"))
@@ -483,23 +488,27 @@ class OpenTideConstants:
                 elif f"{base}.json.gz" in rows:
                     gzn, jn = f"{base}.json.gz", f"{base}.json"
                     tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, gz=True)
+                    wanted.append((gzn, tmp_gz))  # removed in the finally below if anything fails
                     try:
                         raw = gzip.decompress(Path(tmp_gz).read_bytes())
-                    except (OSError, EOFError, zlib.error) as e:
+                    except (EOFError, zlib.error, gzip.BadGzipFile) as e:
                         raise InvalidReleaseError(f"{gzn}: not gzip") from e
-                    finally:
+                    wanted.pop()
+                    try:
                         Path(tmp_gz).unlink()
+                    except OSError as e:
+                        self._log.warning("cannot remove %s: %s", tmp_gz, e)
                     import hashlib
                     actual = hashlib.sha256(raw).hexdigest()
                     if jn in rows and actual != rows[jn]:
                         raise ChecksumError(f"{jn}: SHA-256 {actual} does not match {rows[jn]}", file=jn,
                                             expected=rows[jn], actual=actual)
                     tmp = tmp_name(d)
+                    wanted.append((jn, tmp))
                     with open(tmp, "wb") as f:
                         f.write(raw)
                         f.flush()
                         os.fsync(f.fileno())
-                    wanted.append((jn, tmp))
                     written[jn] = len(raw)
                     data_name = jn
                 else:
@@ -761,8 +770,14 @@ class OpenTideConstants:
         cdir = self._cache.release_dir(ds)
         cached = self._cache.read_verified(ds) is not None and (cdir / f"{base}.sha256").is_file()
         if cached:
-            sha_body = (cdir / f"{base}.sha256").read_bytes()
-            rows = _parse_sha256(sha_body.decode("utf-8"))
+            sp = cdir / f"{base}.sha256"
+            try:
+                sha_body = sp.read_bytes()
+                rows = _parse_sha256(sha_body.decode("utf-8"))
+            except OSError as e:
+                raise FileError(f"cannot read {sp}: {e}", path=str(sp), cause=e) from e
+            except UnicodeDecodeError as e:
+                raise InvalidReleaseError(f"{sp}: not text") from e
         elif self._offline:
             raise OfflineError(f"offline, and release {ds} is not in the cache")
         else:
@@ -836,9 +851,19 @@ class OpenTideConstants:
                 if self._offline:
                     raise OfflineError(f"offline, and {n} is not in the cache")
                 url = ptr[n].url if n in ptr and ptr[n].url else self._url(n)
-                tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
-                                       gz=n.endswith(".gz"))
-            os.replace(tmp, dest)
+                try:
+                    tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
+                                           gz=n.endswith(".gz"))
+                except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
+                    raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
+            try:
+                os.replace(tmp, dest)
+            except OSError as e:
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+                raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
             written.append(str(dest))
         return tuple(written)
 

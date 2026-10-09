@@ -531,6 +531,99 @@ class OfflineTest(unittest.TestCase):
                     c.station("OTC-T-0001")
 
 
+class ErrorClassTest(unittest.TestCase):
+    """Network vs local IO vs configuration errors (spec §4.8, §5.7, CR D19; review PK10)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.cache = self.root / "cache"
+
+    def tearDown(self):
+        for p in self.root.rglob("*"):
+            p.chmod(0o755 if p.is_dir() else 0o644)
+        self.tmp.cleanup()
+
+    def cached(self):
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+        finally:
+            srv.close()
+        return self.cache / "v1" / "releases" / "20991231.2"
+
+    def test_a_sink_write_error_is_local_io_and_not_retried(self):
+        from opentideconstants._http import Http
+        srv = _Server()
+
+        class Full:
+            def seek(self, n):
+                pass
+
+            def truncate(self):
+                pass
+
+            def write(self, b):
+                raise OSError(28, "No space left on device")
+        try:
+            with self.assertRaises(OSError) as cm:
+                Http(user_agent="t").get(srv.url + "OTC_20991231.2.jsonl", sink=Full())
+            self.assertNotIsInstance(cm.exception, otc.OpenTideConstantsError)
+            self.assertEqual(len(srv.requests), 1)
+        finally:
+            srv.close()
+
+    def test_bad_base_url_and_proxy_are_invalid_argument(self):
+        for kw in ({"base_url": "data.example.org/"}, {"base_url": "ftp://data.example.org/"},
+                   {"proxy": "http://proxy:notaport"}, {"proxy": "proxy.example.org:3128"}):
+            with self.assertRaises(otc.InvalidArgumentError, msg=kw):
+                otc.OpenTideConstants(cache_dir=str(self.cache), on_network_error="raise", **kw)
+
+    def test_a_certificate_failure_is_not_retried(self):
+        import shutil
+        import ssl
+        import subprocess
+        import threading
+        import time
+        if not shutil.which("openssl"):
+            self.skipTest("no openssl")
+        key, crt = self.root / "k.pem", self.root / "c.pem"
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=127.0.0.1",
+                        "-keyout", str(key), "-out", str(crt), "-days", "1"], check=True, capture_output=True)
+        srv = _Server()
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(str(crt), str(key))
+        srv.httpd.socket = ctx.wrap_socket(srv.httpd.socket, server_side=True, do_handshake_on_connect=False)
+        url = srv.url.replace("http://", "https://")
+        t0 = time.monotonic()
+        try:
+            with self.assertRaises(otc.NetworkError):
+                otc.OpenTideConstants(base_url=url, cache_dir=str(self.cache), on_network_error="raise")
+            self.assertLess(time.monotonic() - t0, 2.5, "a certificate failure was retried")
+        finally:
+            srv.close()
+
+    def test_corrupt_verified_is_not_trusted(self):
+        d = self.cached()
+        (d / ".verified").write_text(json.dumps({"files": {"OTC_20991231.2.json": "not an object"}}))
+        with self.assertRaises(otc.OfflineError):
+            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
+
+    def test_unreadable_verified_is_an_io_error_not_absent(self):
+        d = self.cached()
+        (d / ".verified").chmod(0)
+        with self.assertRaises(otc.FileError):
+            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
+
+    def test_download_with_a_cached_sha256_that_is_not_text(self):
+        d = self.cached()
+        (d / "OTC_20991231.2.sha256").write_bytes(b"\xff\xfe")
+        with otc.OpenTideConstants(cache_dir=str(self.cache), offline=True) as c:
+            with self.assertRaises(otc.OpenTideConstantsError):
+                c.download("20991231.2", to=str(self.root / "out"))
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

@@ -1016,7 +1016,6 @@
    "case": "rules/pk10/bad-ca-file-no-retry",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1026,7 +1025,6 @@
   {
    "case": "rules/pk10/readonly-to-is-io",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK10",

@@ -16,7 +16,7 @@ from typing import Optional
 from urllib.parse import urlsplit
 from urllib.request import proxy_bypass_environment
 
-from ._errors import NetworkError
+from ._errors import FileError, InvalidArgumentError, NetworkError
 
 CONNECT_TIMEOUT_S = 10.0
 READ_TIMEOUT_S = 60.0
@@ -33,6 +33,27 @@ class Response:
     body: bytes = b""
     sha256: Optional[str] = None
     size: int = 0
+
+
+class _SinkError(Exception):
+    """A local write to the sink failed: local IO, not a network error, and never retried."""
+
+    def __init__(self, error: OSError):
+        super().__init__(str(error))
+        self.error = error
+
+
+def check_http_url(name: str, url) -> None:
+    """An absolute http or https URL with a host and a valid port, else InvalidArgumentError (CR D19)."""
+    try:
+        u = urlsplit(url) if isinstance(url, str) else None
+        ok = u is not None and u.scheme in ("http", "https") and bool(u.hostname)
+        if ok:
+            u.port  # noqa: B018 - raises ValueError for a bad port
+    except ValueError:
+        ok = False
+    if not ok:
+        raise InvalidArgumentError(f"{name} must be an absolute http or https URL, not {url!r}")
 
 
 class _Retry(Exception):
@@ -56,10 +77,24 @@ class Http:
         self.user_agent = user_agent
         self.connect_timeout = CONNECT_TIMEOUT_S if timeout is None else float(timeout)
         self.read_timeout = READ_TIMEOUT_S if timeout is None else float(timeout)
+        if proxy is not None:
+            check_http_url("proxy", proxy)
         self.proxy = proxy
-        self.ca_file = ca_file or os.environ.get("SSL_CERT_FILE")
         self.log = logger or logging.getLogger("opentideconstants")
         self._ctx = None
+        if ca_file is not None:
+            # checked at construction, before any network access; never retried (spec §4.2, CR D19)
+            try:
+                with open(ca_file, "rb"):
+                    pass
+            except (OSError, TypeError) as e:
+                raise FileError(f"cannot read ca_file {ca_file}: {e}", path=str(ca_file),
+                                cause=e if isinstance(e, OSError) else None) from e
+            try:
+                self._ctx = ssl.create_default_context(cafile=ca_file)
+            except ssl.SSLError as e:
+                raise InvalidArgumentError(f"ca_file {ca_file} is not a PEM certificate file: {e}") from e
+        self.ca_file = ca_file or os.environ.get("SSL_CERT_FILE")
 
     # ---- connection
 
@@ -81,14 +116,18 @@ class Http:
 
     def _connect(self, url: str):
         u = urlsplit(url)
-        if u.scheme not in ("http", "https") or not u.hostname:
-            raise NetworkError(f"not an http(s) URL: {url}", url=url)
+        try:
+            if u.scheme not in ("http", "https") or not u.hostname:
+                raise ValueError("not an http(s) URL")
+            port = u.port or (443 if u.scheme == "https" else 80)
+            proxy = self._proxy_for(u)
+            p = urlsplit(proxy if "://" in proxy else "http://" + proxy) if proxy else None
+            if p is not None:
+                ph, pp = p.hostname, p.port or (443 if p.scheme == "https" else 80)
+        except ValueError as e:  # a bad URL or port: retrying cannot help
+            raise NetworkError(f"bad URL {url} (or its proxy): {e}", url=url) from e
         path = (u.path or "/") + (f"?{u.query}" if u.query else "")
-        proxy = self._proxy_for(u)
-        port = u.port or (443 if u.scheme == "https" else 80)
         if proxy:
-            p = urlsplit(proxy if "://" in proxy else "http://" + proxy)
-            ph, pp = p.hostname, p.port or (443 if p.scheme == "https" else 80)
             if u.scheme == "https":
                 conn = http.client.HTTPSConnection(ph, pp, timeout=self.connect_timeout, context=self._context())
                 conn.set_tunnel(u.hostname, port)
@@ -144,7 +183,7 @@ class Http:
                 sha.update(chunk)
                 size += len(chunk)
                 if sink is not None:
-                    sink.write(chunk)
+                    _write(sink, chunk)
                 else:
                     parts.append(chunk)
             clen = rh.get("content-length")
@@ -157,12 +196,16 @@ class Http:
                 sha.update(tail)
                 size += len(tail)
                 if sink is not None:
-                    sink.write(tail)
+                    _write(sink, tail)
                 else:
                     parts.append(tail)
             return Response(status, rh, b"".join(parts), sha.hexdigest(), size)
-        except (_Retry, NetworkError):
+        except (_Retry, NetworkError, _SinkError):
             raise
+        except ssl.SSLCertVerificationError as e:  # TLS: a network error, but retrying cannot help
+            raise NetworkError(f"TLS certificate check failed for {url}: {e}", url=url) from e
+        except http.client.InvalidURL as e:
+            raise NetworkError(f"bad URL {url}: {e}", url=url) from e
         except (http.client.IncompleteRead, http.client.HTTPException, OSError, zlib.error, EOFError) as e:
             err = NetworkError(f"{type(e).__name__} for {url}: {e}", url=url)
             err.__cause__ = e
@@ -189,6 +232,8 @@ class Http:
                 r = self._once(url, h, sink)
                 self.log.debug("GET %s -> %s", url, r.status)
                 return r
+            except _SinkError as e:
+                raise e.error from None  # a local write failed (ENOSPC, EIO): the caller's io/cache error
             except _Retry as e:
                 last = e.error
                 if attempt + 1 < ATTEMPTS:
@@ -198,6 +243,13 @@ class Http:
                     self.log.debug("GET %s failed (%s); retry in %.1f s", url, e.error, wait)
                     time.sleep(wait)
         raise last
+
+
+def _write(sink, data: bytes) -> None:
+    try:
+        sink.write(data)
+    except OSError as e:
+        raise _SinkError(e) from e
 
 
 def gunzip(data: bytes) -> bytes:

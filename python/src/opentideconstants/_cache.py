@@ -12,7 +12,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from ._errors import CacheError, InvalidReleaseError
+from ._errors import CacheError, FileError, InvalidReleaseError
 
 LAYOUT = "v1"
 # spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
@@ -28,6 +28,10 @@ def datestamp_key(d: str):
         raise InvalidReleaseError(f"not a datestamp: {d!r}")
     date, _, counter = d.partition(".")
     return (date, int(counter) if counter else 1)
+
+
+def _opt(v, t) -> bool:
+    return v is None or isinstance(v, t)
 
 
 def default_root() -> Path:
@@ -97,20 +101,41 @@ class Cache:
         return ensure_dir(p) if create else p
 
     def read_verified(self, datestamp: str):
+        """The .verified object, or None when it is absent or not a usable record (then the release is not
+        trusted). A .verified that exists but cannot be read is FileError, not "not cached"."""
         p = self.release_dir(datestamp) / ".verified"
         try:
-            doc = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            text = p.read_text(encoding="utf-8")
+        except (FileNotFoundError, NotADirectoryError):
             return None
-        return doc if isinstance(doc, dict) and isinstance(doc.get("files"), dict) else None
+        except OSError as e:
+            raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
+        except UnicodeDecodeError:
+            return None
+        try:
+            doc = json.loads(text)
+        except (ValueError, RecursionError):
+            return None
+        if not isinstance(doc, dict) or not isinstance(doc.get("files"), dict):
+            return None
+        for rec in doc["files"].values():
+            if not isinstance(rec, dict) or not _opt(rec.get("sha256"), str) or not _opt(rec.get("url"), str) \
+                    or not _opt(rec.get("size"), int) or isinstance(rec.get("size"), bool):
+                return None
+        for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp"):
+            if not _opt(doc.get(k), str):
+                return None
+        return doc
 
     def cached(self):
         """Datestamps of verified releases, newest first."""
         d = self.base / "releases"
         try:
             names = [p.name for p in d.iterdir() if DATESTAMP_RE.match(p.name) and (p / ".verified").is_file()]
-        except OSError:
+        except (FileNotFoundError, NotADirectoryError):
             return []
+        except OSError as e:
+            raise FileError(f"cannot list {d}: {e}", path=str(d), cause=e) from e
         return sorted(names, key=datestamp_key, reverse=True)
 
     def remove_release(self, datestamp: str) -> bool:
