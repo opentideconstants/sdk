@@ -944,6 +944,67 @@ static void lock_token(char out[33])
     out[32] = '\0';
 }
 
+/* Writes <lock>/owner.json with a fresh token (spec 5.4). A failure is logged:
+ * the lock still works, but it then cannot be released (lock_release finds no
+ * token), so it goes stale. */
+static void lock_write_owner(fctx *c, const char *lock, char token[33])
+{
+    char *owner = path2(lock, "owner.json"), *txt = NULL;
+    char host[256] = "", when[32];
+    time_t now = time(NULL);
+    struct tm tmv;
+    cJSON *o = cJSON_CreateObject();
+    FILE *f;
+    lock_token(token);
+#ifdef _WIN32
+    {
+        DWORD hl = (DWORD)sizeof host;
+        if (!GetComputerNameA(host, &hl)) host[0] = '\0';
+    }
+    gmtime_s(&tmv, &now);
+#else
+    if (gethostname(host, sizeof host - 1) != 0) host[0] = '\0';
+    host[sizeof host - 1] = '\0';
+    gmtime_r(&now, &tmv);
+#endif
+    strftime(when, sizeof when, "%Y-%m-%dT%H:%M:%SZ", &tmv);
+    if (o) {
+        cJSON_AddNumberToObject(o, "pid", (double)get_pid());
+        cJSON_AddStringToObject(o, "host", host);
+        cJSON_AddStringToObject(o, "sdk", SDK_ID);
+        cJSON_AddStringToObject(o, "started_at", when);
+        cJSON_AddStringToObject(o, "token", token);
+        txt = cJSON_PrintUnformatted(o);
+    }
+    f = (owner && txt) ? fs_fopen(owner, "wb") : NULL;
+    if (f) {
+        int bad = fputs(txt, f) < 0;
+        if (fclose(f) != 0) bad = 1;
+        if (bad) logf_(c, 2, "cannot write %s", owner);
+    } else {
+        logf_(c, 2, "cannot write %s", owner ? owner : lock);
+    }
+    cJSON_free(txt);
+    cJSON_Delete(o);
+    free(owner);
+}
+
+/* One attempt at <dir>/.lock: *held = 1 when this call took it. */
+static otc_status lock_try(fctx *c, const char *dir, int *held, char token[33])
+{
+    char *lock = path2(dir, ".lock");
+    int m;
+    *held = 0;
+    if (!lock) return fail(c, OTC_E_NOMEM, dir, "out of memory");
+    m = fs_mkdir(lock);
+    if (m == 0) {
+        *held = 1;
+        lock_write_owner(c, lock, token);
+    }
+    free(lock);
+    return m < 0 ? fail(c, OTC_E_CACHE, dir, "cannot create the lock in %s", dir) : OTC_OK;
+}
+
 /* Takes <dir>/.lock (spec 5.4). *held = 0 when done() became true while waiting.
  * token gets the random token written to owner.json; lock_release needs it. */
 static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn done, int *held, char token[33])
@@ -975,42 +1036,7 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
         sleep_ms(LOCK_POLL_MS);
         waited += LOCK_POLL_MS;
     }
-    if (*held) {
-        char *owner = path2(lock, "owner.json");
-        lock_token(token);
-        FILE *f = owner ? fs_fopen(owner, "wb") : NULL;
-        if (f) {
-            char host[256] = "";
-            char when[32];
-            time_t now = time(NULL);
-            struct tm tmv;
-#ifdef _WIN32
-            DWORD hl = (DWORD)sizeof host;
-            if (!GetComputerNameA(host, &hl)) host[0] = '\0';
-            gmtime_s(&tmv, &now);
-#else
-            if (gethostname(host, sizeof host - 1) != 0) host[0] = '\0';
-            host[sizeof host - 1] = '\0';
-            gmtime_r(&now, &tmv);
-#endif
-            strftime(when, sizeof when, "%Y-%m-%dT%H:%M:%SZ", &tmv);
-            {
-                cJSON *o = cJSON_CreateObject();
-                char *txt;
-                cJSON_AddNumberToObject(o, "pid", (double)get_pid());
-                cJSON_AddStringToObject(o, "host", host);
-                cJSON_AddStringToObject(o, "sdk", SDK_ID);
-                cJSON_AddStringToObject(o, "started_at", when);
-                cJSON_AddStringToObject(o, "token", token);
-                txt = cJSON_PrintUnformatted(o);
-                if (txt) fputs(txt, f);
-                cJSON_free(txt);
-                cJSON_Delete(o);
-            }
-            fclose(f);
-        }
-        free(owner);
-    }
+    if (*held) lock_write_owner(c, lock, token);
     free(lock);
     return OTC_OK;
 }
@@ -1395,7 +1421,8 @@ static void note_entry(fctx *c, const otc_release_info *ri)
 {
     cJSON *v = read_verified(c, ri->datestamp);
     const cJSON *old;
-    char *d = NULL, *p = NULL, *txt = NULL;
+    char *d = NULL, *p = NULL, *txt = NULL, token[33] = "";
+    int held = 0;
     if (!v) return;
     old = cJSON_GetObjectItemCaseSensitive(v, "zenodo_version_doi");
     if (old && (ri->zenodo_version_doi ? (cJSON_IsString(old) && !strcmp(old->valuestring, ri->zenodo_version_doi))
@@ -1403,16 +1430,30 @@ static void note_entry(fctx *c, const otc_release_info *ri)
         cJSON_Delete(v);
         return;
     }
-    cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
-    cJSON_AddItemToObject(v, "zenodo_version_doi",
-                          ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+    cJSON_Delete(v);
+    /* the read-modify-write of .verified runs under the release's lock; when another
+     * process holds it (a download or index build writes .verified too), the note waits
+     * for a later call rather than racing it */
     d = rel_dir(c, ri->datestamp);
-    p = d ? path2(d, ".verified") : NULL;
-    txt = p ? cJSON_Print(v) : NULL;
-    if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
-        logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
+    if (!d || lock_try(c, d, &held, token) != OTC_OK || !held) {
+        logf_(c, 1, "release %s is locked by another process; its version DOI is noted later", ri->datestamp);
         if (c->err) otc_error_init(c->err);
+        free(d);
+        return;
     }
+    v = read_verified(c, ri->datestamp);   /* again, now under the lock */
+    if (v) {
+        cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
+        cJSON_AddItemToObject(v, "zenodo_version_doi",
+                              ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull());
+        p = path2(d, ".verified");
+        txt = p ? cJSON_Print(v) : NULL;
+        if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
+            logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
+            if (c->err) otc_error_init(c->err);
+        }
+    }
+    lock_release(c, d, token);
     cJSON_free(txt);
     free(p);
     free(d);
