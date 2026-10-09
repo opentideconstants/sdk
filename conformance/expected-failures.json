@@ -949,7 +949,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@json",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -958,7 +957,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@json.gz",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -967,7 +965,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -976,7 +973,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl-stream",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -985,7 +981,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@server",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",

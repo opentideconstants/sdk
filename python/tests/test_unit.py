@@ -502,6 +502,17 @@ class MalformedInputTest(RepeatedIdsTest):
                 self.assertIn(c.station("OTC-T-0001"), {c.station("OTC-T-0001")})
 
 
+class ValueParityTest(RepeatedIdsTest):
+    """Values the four SDKs must report the same way (review PK08)."""
+
+    def test_stats_bucket_unknown_type_as_the_station_reports_it(self):
+        with otc.OpenTideConstants(file=self.write(lambda d: d.__setitem__("type", "lighthouse"))) as c:
+            st = c.stations()[0]
+            self.assertIs(st.type, otc.StationType.OTHER)
+            self.assertIn("other", c.release.stats.type)
+            self.assertNotIn("lighthouse", c.release.stats.type)
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

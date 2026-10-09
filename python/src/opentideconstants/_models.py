@@ -282,8 +282,11 @@ class Validation:
     @classmethod
     def _parse(cls, d):
         prev = d.get("previous_release")
-        if prev is not None:
-            prev = MappingProxyType({k: prev.get(k) for k in _PREVIOUS})
+        if isinstance(prev, dict):
+            # a value that is not a number is null, as in the other SDKs (spec §4.6)
+            prev = MappingProxyType({k: (prev.get(k) if _finite(prev.get(k)) else None) for k in _PREVIOUS})
+        else:
+            prev = None
         return cls(d.get("set_id"), d.get("reference_source"), d.get("reference_station"),
                    d.get("reference_distance_km"), d.get("window"), d.get("time_mae_min"), d.get("time_p95_min"),
                    d.get("time_bias_min"), d.get("height_mae_m"), d.get("range_error_m"), d.get("missed_events"),

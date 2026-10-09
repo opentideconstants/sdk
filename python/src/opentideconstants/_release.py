@@ -436,8 +436,11 @@ class Release:
                 return MappingProxyType(dict(sorted(out.items())))
             sets = [s for e in self._entries for s in e.get("sets") or ()]
             qc = [E.enum_or_raw(E.QcStatus, s.get("qc_status")) for s in sets]
-            self._stats = Stats(count(e.get("type") for e in self._entries),
-                                count(e.get("kind") for e in self._entries),
+            def norm(cls, v):  # bucket a value as the Station reports it (an unknown one is "other")
+                m = E.enum_or_raw(cls, v)
+                return None if m is None else m.value
+            self._stats = Stats(count(norm(E.StationType, e.get("type")) for e in self._entries),
+                                count(norm(E.Kind, e.get("kind")) for e in self._entries),
                                 count(e.get("country") for e in self._entries),
                                 count(s.get("source") for s, q in zip(sets, qc) if q in _USABLE),
                                 count(None if q is None else q.value for q in qc))
