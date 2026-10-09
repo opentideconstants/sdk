@@ -734,7 +734,13 @@ export class OpenTideConstants {
         }
         const wanted = [...new Set(formats.map((f) => (f === "json" ? n.json : f === "json.gz" ? n.gz : n.jsonl)))];
         wanted.push(n.meta);
-        for (const w of wanted) if (!rows.has(w)) throw new ReleaseNotFoundError(`${w} is not part of release ${d}`);
+        for (const w of wanted) {
+            if (rows.has(w)) continue;
+            // the eager data file is always published, so a .sha256 without its row is a bad list, as for an eager open
+            // (CR2 DR15, DR42)
+            if (w === n.json) throw new ChecksumError(`${w} is not listed in ${n.sha}`, { file: w, expected: null, actual: null });
+            throw new ReleaseNotFoundError(`${w} is not part of release ${d}`);
+        }
         wanted.push(n.sha);
         node.mkdirp(to);
         const expected = (name: string) => (name === n.sha ? node.sha256Sync(shaBytes as Uint8Array) : rows.get(name) ?? null);

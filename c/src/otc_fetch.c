@@ -3300,6 +3300,14 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     snprintf(targets[n_t++], sizeof targets[0], "OTC_%s.meta.json", ds);
     for (i = 0; i < n_t; i++) {
         target_sha[i] = row_of(names, digests, n_rows, targets[i]);
+        if (!target_sha[i] && otc__ends_with(targets[i], ".json") && !otc__ends_with(targets[i], ".meta.json")) {
+            /* the eager data file is always published, so a .sha256 without its row is a bad list, as for an
+             * eager open (CR2 DR15, DR42) */
+            char what[NAME_CAP + 32];
+            snprintf(what, sizeof what, "not listed in OTC_%s.sha256", ds);
+            st = fail_checksum(&c, targets[i], NULL, NULL, what);
+            goto out;
+        }
         if (!target_sha[i]) { st = fail(&c, OTC_E_RELEASE_NOT_FOUND, targets[i], "%s is not part of release %s", targets[i], ds); goto out; }
     }
     snprintf(targets[n_t], sizeof targets[0], "OTC_%s.sha256", ds);

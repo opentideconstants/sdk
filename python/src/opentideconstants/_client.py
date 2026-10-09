@@ -1063,6 +1063,10 @@ class OpenTideConstants:
         self._check_pointer(info, rows)
         names = [base + FORMAT_EXT[f] for f in dict.fromkeys(formats)] + [f"{base}.meta.json"]
         for n in names:
+            if n == f"{base}.json" and n not in rows:
+                # the eager data file is always published, so a .sha256 without its row is a bad list, as for an
+                # eager open (CR2 DR15, DR42)
+                raise ChecksumError(f"{n} is not listed in {base}.sha256", file=n, expected=None, actual=None)
             if n not in rows:
                 raise ReleaseNotFoundError(f"{n} is not part of release {ds}")
         sha_digest = hashlib.sha256(sha_body).hexdigest()

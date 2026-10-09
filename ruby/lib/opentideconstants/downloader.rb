@@ -146,8 +146,12 @@ class OpenTideConstants
             sha_name = "OTC_#{d}.sha256"
             sha_digest = Digest::SHA256.hexdigest(sha_bytes)
             names.each do |n|
+                next if rows[n]
+                # The eager data file is always published, so a .sha256 without its row is a bad list, as for an
+                # eager open (CR2 DR15, DR42).
+                raise ChecksumError.new("#{n} is not listed in #{sha_name}", file: n, expected: nil, actual: nil) if n == "OTC_#{d}.json"
                 # A format that the release does not publish (spec §4.8 release_not_found).
-                raise ReleaseNotFoundError, "release #{d} does not publish #{n} (#{sha_name} does not list it)" unless rows[n]
+                raise ReleaseNotFoundError, "release #{d} does not publish #{n} (#{sha_name} does not list it)"
             end
 
             # Check every existing file before writing any file.

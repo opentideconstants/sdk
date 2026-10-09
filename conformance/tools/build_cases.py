@@ -1762,7 +1762,30 @@ def group_download():
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}"),
                      dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"], env={"OPENTIDECONSTANTS_OFFLINE": "1"}))
-    return out + download_cached_sha256_cases()
+    return out + download_cached_sha256_cases() + download_no_json_row_cases()
+
+
+def download_no_json_row_cases():
+    """download with formats ["json"] from a release whose .sha256 lists the .json.gz but not the .json:
+    checksum_mismatch "not listed", as for an eager open (DR15), and not release_not_found (CR2 DR42, orchestrator
+    decision 2026-10-09). Nothing is written."""
+    NJ = f"{SRV}/bad/sha256-no-json-row/"
+    d = "20991231"
+    B = "${tmp}/bundle"
+    not_listed = {**err("checksum_mismatch"), "error_message": {"$contains": "not listed"}}
+    client = step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_20991231.2.jsonl", base_url=NJ, cache_dir="${cache}")
+    nothing = drv("assert_files", dir=B, exactly=[], may_be_missing=True)
+
+    def dl(expect, **kw):
+        return net(step("download", expect, **kw), fs=True)
+
+    gz = [f"OTC_{d}.json.gz", f"OTC_{d}.jsonl", f"OTC_{d}.meta.json", f"OTC_{d}.sha256"]
+    return [case("download/no-json-row", "download of json from bad/sha256-no-json-row (.json.gz listed, .json not), pinned and latest: checksum_mismatch \"not listed\", nothing is written; json.gz and jsonl download (CR2 DR42)", "4.3.2, 5.3, 4.8",
+                 [client, dl(not_listed, release=d, to=B, formats=["json"]), nothing,
+                  dl(not_listed, to=B, formats=["json", "jsonl"]), nothing,
+                  dl({"paths": gz}, release=d, to=B, formats=["json.gz", "jsonl"]),
+                  drv("assert_files", dir=B, exactly=gz, no_tmp=True)],
+                 requires=["fs"])]
 
 
 def download_cached_sha256_cases():
