@@ -11,10 +11,10 @@ export { OpenTideConstants } from "./client.js";
 export { Release, Station, ConstantSet } from "./release.js";
 export {
     OpenTideConstantsError, NetworkError, ReleaseNotFoundError, OfflineError, ChecksumError, UnsupportedFormatError,
-    InvalidReleaseError, StationNotFoundError, StationRemovedError, PinnedReleaseError, CacheError, FileExistsError,
+    ReaderTooOldError, InvalidReleaseError, StationNotFoundError, StationRemovedError, PinnedReleaseError, CacheError, FileExistsError,
     UnsupportedError, FileError, InvalidArgumentError,
 } from "./errors.js";
 export type { ErrorCode } from "./errors.js";
-export { VERSION, SUPPORTED_FORMAT_MAJORS, DEFAULT_BASE_URL, CACHE_LAYOUT_VERSION } from "./constants.js";
+export { VERSION, SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, DEFAULT_BASE_URL, CACHE_LAYOUT_VERSION } from "./constants.js";
 export type { JsonObject, Json } from "./json.js";
 export type * from "./types.js";

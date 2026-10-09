@@ -19,7 +19,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "LICENSE", "supported-formats.json"],
   "sideEffects": false,
   "engines": { "node": ">=22.12" },
   "scripts": {

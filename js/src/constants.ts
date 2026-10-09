@@ -4,7 +4,9 @@ import { FOLD_TABLE } from "./fold-table.js";
 /** The SDK version. Its MAJOR.MINOR is the conformance suite version it passes (spec 7.2). */
 export const VERSION = "0.1.0";
 /** The format majors this SDK reads (spec 7.4). */
-export const SUPPORTED_FORMAT_MAJORS: readonly number[] = Object.freeze([0]);
+export const SUPPORTED_FORMAT_MAJORS: readonly number[] = Object.freeze([1]);
+/** The newest format version this SDK reads (spec 7.4). A release whose min_reader_version is newer is refused. */
+export const SUPPORTED_FORMAT_VERSION = "1.0";
 /** The default data host. */
 export const DEFAULT_BASE_URL = "https://data.opentideconstants.org/";
 /** The cache layout version: the subdirectory of the cache root (spec 5.4). */
@@ -45,9 +47,27 @@ export function formatMajor(v: unknown): number {
     return m ? Number(m[1]) : NaN;
 }
 
-/** @internal True if this SDK reads the format version. */
+/** @internal True if this SDK reads the format version's major. */
 export function supportedFormat(v: unknown): boolean {
     return SUPPORTED_FORMAT_MAJORS.includes(formatMajor(v));
+}
+
+/** @internal [major, minor] of a "MAJOR.MINOR" version, or null. */
+function majorMinor(v: unknown): [number, number] | null {
+    if (typeof v !== "string") return null;
+    const m = /^([0-9]+)\.([0-9]+)$/.exec(v);
+    return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/**
+ * @internal True if this SDK reads a release with this `min_reader_version` (spec 7.4): it is not newer than
+ * SUPPORTED_FORMAT_VERSION. A missing or malformed value does not block the read (spec 7.3).
+ */
+export function readerReads(minReaderVersion: unknown): boolean {
+    const want = majorMinor(minReaderVersion);
+    const have = majorMinor(SUPPORTED_FORMAT_VERSION) as [number, number];
+    if (want === null) return true;
+    return want[0] < have[0] || (want[0] === have[0] && want[1] <= have[1]);
 }
 
 /** @internal Fold a name through the shared fold table, trim, and collapse whitespace (spec 4.4.1). */

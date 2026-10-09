@@ -7,14 +7,17 @@ export type StationType = "reference" | "subordinate";
 export type StationStatus = "active" | "removed";
 export type SourceType = "official" | "gauge" | "model";
 export type Quantity = "water_level" | "current";
-export type QcStatus = "accepted" | "fallback" | "excluded";
+export type QcStatus = "ok" | "flagged" | "no_constants";
+export type RemovedReason = "merged" | "duplicate";
+export type TimeBaseCode = "verified" | "corrected" | "unverified" | "disputed";
 export type LoadedFrom = "download" | "cache" | "cache_after_error" | "file" | "file_unverified";
 export type PhaseReference = "greenwich_utc" | "local";
 export type NodalHandling = "f_u_at_prediction" | "none";
 export type CanaryStatus = "pass" | "fail" | "not_applicable";
 export type HeightAdjustedType = "R" | "A";
 export type DroppedReason = "rayleigh" | "noise" | "long_period_rule" | "non_tidal_rule" | "convention" | "other";
-export type QcFlagName = "time_base" | "broken_record" | "microtidal" | "non_tidal_signal" | "short_record" | "sibling_disagreement";
+export type QcFlagName = "time_base" | "broken_record" | "microtidal" | "non_tidal_signal" | "short_record" | "sibling_disagreement"
+    | "carried_over";
 export type DecisionTier = "rule" | "review" | "fallback";
 export type DecisionOutcome = "accept" | "fallback";
 export type AliasSystem = "noaa" | "gesla" | "ticon" | "xtide" | "kartverket" | "slackwater" | "webcaltides";
@@ -38,7 +41,12 @@ export interface FileInfo {
 export interface ReleaseInfo {
     readonly datestamp: string;
     readonly format_version: string;
-    readonly doi: string | null;
+    /** The all-versions (concept) DOI, or null. */
+    readonly concept_doi: string | null;
+    /** The DOI of this release's own Zenodo version, or null when it has none. */
+    readonly zenodo_version_doi: string | null;
+    /** The digest of the release's data-bearing content (passed through). */
+    readonly content_sha256: string | null;
     readonly files: readonly FileInfo[];
 }
 
@@ -64,7 +72,10 @@ export interface Tombstone {
     readonly name: string | null;
     readonly status: StationStatus | Other;
     readonly removed_in: string | null;
-    readonly removed_reason: string | null;
+    readonly removed_reason: RemovedReason | Other | null;
+    /** The OTC station id that holds the records of a merged station, or null. */
+    readonly merged_into: string | null;
+    readonly detail: string | null;
     readonly raw: JsonObject;
 }
 
@@ -108,22 +119,65 @@ export interface Licence {
     readonly raw: JsonObject;
 }
 
+/** The build that wrote a constant set (`provenance.build`). */
+export interface ProvenanceBuild {
+    readonly build_commit: string | null;
+    readonly built_at: Date | null;
+    readonly fetched_at: Date | null;
+    readonly run_id: string | null;
+    readonly tool_versions: Readonly<Record<string, Json>> | null;
+}
+
 /** Where a constant set came from. `raw` holds every field, the extra ones included. */
 export interface Provenance {
-    readonly build_commit: string | null;
+    /** The build metadata, or null in malformed input that has none (spec 4.6). */
+    readonly build: ProvenanceBuild | null;
     readonly adapter_version: string | null;
     readonly input_sha256: Json;
-    readonly time_base: Json;
     readonly selection_reason: string | null;
     readonly decision: Json;
+    /** The datestamp a carried-over set comes from, or null. */
+    readonly carried_from_release: string | null;
     readonly raw: JsonObject;
 }
 
 /** A QC flag of a constant set. */
 export interface QcFlag {
     readonly flag: QcFlagName | Other;
-    readonly verdict: Json;
-    readonly values: Json;
+    /** A one-line reason. */
+    readonly reason: string | null;
+    /** Named numbers (or null values), or null when the flag has none. */
+    readonly values: Readonly<Record<string, number | null>> | null;
+}
+
+/** A time-base correction: from one time-base label to another. */
+export interface TimeBaseCorrection {
+    readonly from: string | null;
+    readonly to: string | null;
+}
+
+/** One piece of evidence for a time-base decision. */
+export interface TimeBaseEvidence {
+    readonly comparator_kind: string | null;
+    readonly comparator_id: string | null;
+    readonly distance_km: number | null;
+    readonly lag_min: number | null;
+    readonly detail: string | null;
+}
+
+/** The time-base annotation of a constant set's record (spec 4.5). */
+export interface TimeBase {
+    readonly code: TimeBaseCode | Other | null;
+    readonly reason: string | null;
+    readonly declared: string | null;
+    readonly published: string | null;
+    /** `{from, to}` when `code` is corrected, else null. */
+    readonly correction: TimeBaseCorrection | null;
+    /** Months ("YYYY-MM") dropped from the record; empty when none. */
+    readonly months_dropped: readonly string[];
+    readonly decided_in: string | null;
+    readonly decided_build_commit: string | null;
+    readonly evidence: readonly TimeBaseEvidence[];
 }
 
 /** A constituent that the fit dropped, and why. */
@@ -225,7 +279,8 @@ export interface NearestOptions extends StationFilters {
 
 /** Options of `constantSets`. */
 export interface ConstantSetsOptions {
-    includeExcluded?: boolean;
+    /** List the sets with qc_status no_constants too (default false). */
+    includeNoConstants?: boolean | null;
 }
 
 /** A logger: an object with debug, info and warn. */
