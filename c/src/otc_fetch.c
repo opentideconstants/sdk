@@ -771,6 +771,16 @@ static int transient(CURLcode rc)
  * file (fsynced); otherwise it is kept in r->body. r->hex and r->size
  * describe the decoded body.
  */
+/* Appends a header line; 0 when libcurl could not (out of memory): the list so far is
+ * kept in *list, and the request must not go out without the header. */
+static int add_header(struct curl_slist **list, const char *line)
+{
+    struct curl_slist *n = curl_slist_append(*list, line);
+    if (!n) return 0;
+    *list = n;
+    return 1;
+}
+
 static otc_status http_get(fctx *c, const char *url, const char *if_none_match, int accept_gzip,
                            const char *sink_path, http_resp *r, int *result)
 {
@@ -799,7 +809,7 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         CURL *h;
         CURLcode rc;
         struct curl_slist *hdrs = NULL;
-        int retry = 0, bad_opt;
+        int retry = 0, bad_opt, no_mem = 0;
         free(r->body);
         memset(r, 0, sizeof *r);
         r->retry_after = -1;
@@ -839,10 +849,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header);
         curl_easy_setopt(h, CURLOPT_HEADERDATA, r);
         if (accept_gzip) curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip");
-        else hdrs = curl_slist_append(hdrs, "Accept-Encoding: identity");
+        else no_mem |= !add_header(&hdrs, "Accept-Encoding: identity");
         if (if_none_match && if_none_match[0]) {
             snprintf(inm, sizeof inm, "If-None-Match: %s", if_none_match);
-            hdrs = curl_slist_append(hdrs, inm);
+            no_mem |= !add_header(&hdrs, inm);
         }
         if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
         if (proxy) {
@@ -850,11 +860,12 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;
         }
         if (ca) bad_opt |= curl_easy_setopt(h, CURLOPT_CAINFO, ca) != CURLE_OK;
-        if (bad_opt) {   /* a limit or a URL that libcurl did not take: no request without it */
+        if (bad_opt || no_mem) {   /* a header, limit or URL that libcurl did not take: no request without it */
             curl_easy_cleanup(h);
             curl_slist_free_all(hdrs);
             if (r->sink) fclose(r->sink);
             r->sink = NULL;
+            if (no_mem) return fail(c, OTC_E_NOMEM, url, "out of memory for the request headers (%s)", url);
             return fail(c, OTC_E_NETWORK, url, "libcurl refused an option the request needs (%s)", url);
         }
         rc = curl_easy_perform(h);
