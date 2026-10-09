@@ -1718,7 +1718,13 @@ static void maybe_auto_update(void)
     now = now_s();
     if (now - g_client.last_check < g_client.update_interval) return;
     g_client.last_check = now;
-    if (otc_release_datestamp(g_current, ds, sizeof ds, &need) != OTC_OK) return;
+    rc = otc_release_datestamp(g_current, ds, sizeof ds, &need);
+    if (rc != OTC_OK) {
+        /* the check cannot run: never a silent skip; the failure is the client's last_error, as below */
+        g_client.auto_update_status = rc;
+        fprintf(stderr, "automatic update failed: otc_release_datestamp: %s\n", otc_status_code(rc));
+        return;
+    }
     rc = do_update(ds, &updated, to, sizeof to, &err, &nomove);
     /* offline (the option or OPENTIDECONSTANTS_OFFLINE, which the library reads) the check does not run (spec 5.6) */
     if (rc == OTC_E_OFFLINE_UNAVAILABLE) return;
