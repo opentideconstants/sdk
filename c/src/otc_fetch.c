@@ -1899,7 +1899,16 @@ static otc_status fetch_file(fctx *c, const char *url, const char *dir, const ch
     memset(&r, 0, sizeof r);
     if (!tmp) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     st = http_get(c, url, NULL, !otc__ends_with(name, ".gz"), tmp, &r, &res);
-    if (st == OTC_OK && res == GET_NOT_FOUND) st = fail(c, OTC_E_RELEASE_NOT_FOUND, url, "%s: 404", url);
+    if (st == OTC_OK && res == GET_NOT_FOUND) {
+        /* the release exists (its .sha256 lists the file): a server inconsistency, network
+         * with status 404 (spec 4.8, CR D32) */
+        size_t dl = strlen(name);
+        const char *dot = strchr(name + (dl > 4 ? 4 : dl), '.');
+        if (dot && dot[1] >= '0' && dot[1] <= '9') dot = strchr(dot + 1, '.');   /* skip the counter of D.N */
+        st = fail(c, OTC_E_NETWORK, url, "%s: 404; file listed in OTC_%.*s.sha256 is missing on the server", url,
+                  dot && !strncmp(name, "OTC_", 4) ? (int)(dot - name - 4) : 3, dot && !strncmp(name, "OTC_", 4) ? name + 4 : "{D}");
+        if (c->err) c->err->http_status = 404;
+    }
     if (st == OTC_OK && ((expected_size >= 0 && (int64_t)r.size != expected_size) || !expected_sha
                          || strcmp(r.hex, expected_sha) != 0))
         st = fail_checksum(c, name, expected_sha, r.hex, "the SHA-256 or size does not match");
