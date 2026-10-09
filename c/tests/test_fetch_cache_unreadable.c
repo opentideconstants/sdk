@@ -26,6 +26,7 @@ int main(void)
     if (access(p, R_OK) == 0) {
         printf("test_fetch_cache_unreadable: skipped (running as root)\n");
         chmod(p, 0755);
+        free(cache);
         return 0;
     }
     n = 7;

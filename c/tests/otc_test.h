@@ -78,6 +78,17 @@ static void test_write(const char *dir, const char *name, const char *text)
     free(p);
 }
 
+/* 1 when file permissions do not stop this process (root): the parts of a test
+ * that make a file unreadable or unwritable are then skipped. */
+static int test_is_root(void)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    return geteuid() == 0;
+#endif
+}
+
 /* The conformance fixture server's base URL, or NULL (the test is then skipped). */
 static const char *test_server(void)
 {

@@ -53,16 +53,21 @@ int main(void)
     snprintf(p, sizeof p, "%s/v1/releases/20990101", cache);
     CHECK(!exists(p));
 
-    /* 2. a release directory that cannot be removed: cache error, not reported as removed */
+    /* 2. a release directory that cannot be removed: cache error, not reported as removed
+     *    (as root every directory can be removed: skipped) */
     mkrel(cache, "20990103");
     snprintf(p, sizeof p, "%s/v1/releases/20990102", cache);
-    chmod(p, 0555);
-    memset(removed, 0, sizeof removed);
-    n = 99;
-    CHECK_STATUS(otc_fetch_prune(&fo, 1, NULL, removed, 8, &n), OTC_E_CACHE);
-    CHECK(n == 0);
-    for (i = 0; i < 8; i++) CHECK(removed[i] == NULL);
-    chmod(p, 0755);
+    if (!test_is_root()) {
+        chmod(p, 0555);
+        memset(removed, 0, sizeof removed);
+        n = 99;
+        CHECK_STATUS(otc_fetch_prune(&fo, 1, NULL, removed, 8, &n), OTC_E_CACHE);
+        CHECK(n == 0);
+        for (i = 0; i < 8; i++) CHECK(removed[i] == NULL);
+        chmod(p, 0755);
+    } else {
+        printf("test_fetch_prune: part 2 skipped (running as root)\n");
+    }
     snprintf(p, sizeof p, "%s/v1/releases/20990102/.verified", cache);
     CHECK(exists(p));
 

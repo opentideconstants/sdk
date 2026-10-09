@@ -8,6 +8,7 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <time.h>
 
 static otc_fetch_options g_fo;
 static otc_status g_st;
@@ -52,7 +53,7 @@ int main(void)
     alarm(30);
     snprintf(base, sizeof base, "%s/good/", test_server());
 
-    /* 1. an unremovable stale lock */
+    /* 1. an unremovable stale lock (as root nothing is unremovable: skipped) */
     otc_fetch_options_init(&g_fo);
     otc_error_init(&err);
     g_fo.cache_dir = cache;
@@ -62,8 +63,12 @@ int main(void)
     mkdir(lock, 0777);
     test_write(lock, "owner.json", "{\"pid\":1,\"token\":\"someone-else\"}");
     chmod(lock, 0555);
-    CHECK_STATUS(otc_fetch_release(&g_fo, "20991231.2", path, sizeof path, &need), OTC_E_CACHE);
-    CHECK(strstr(err.message, "stale lock") != NULL);
+    if (!test_is_root()) {
+        CHECK_STATUS(otc_fetch_release(&g_fo, "20991231.2", path, sizeof path, &need), OTC_E_CACHE);
+        CHECK(strstr(err.message, "stale lock") != NULL);
+    } else {
+        printf("test_fetch_lock: part 1 skipped (running as root)\n");
+    }
     chmod(lock, 0755);
     free(lock);
 
@@ -76,7 +81,10 @@ int main(void)
     lock = mkdirs(cache2, "20991231.2");
     owner = test_join(lock, "owner.json");
     pthread_create(&t, NULL, fetch_thread, NULL);
-    usleep(1000 * 1000);   /* the .jsonl is slow (2 s): the lock is held now */
+    {   /* the .jsonl is slow (2 s): the lock is held after 1 s */
+        struct timespec ts = {1, 0};
+        nanosleep(&ts, NULL);
+    }
     CHECK(access(owner, F_OK) == 0);
     unlink(owner);
     rmdir(lock);

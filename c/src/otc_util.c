@@ -876,7 +876,13 @@ int otc__utc_time(const char *s, char out[21])
     t -= days * 86400;
     civil_from_days(days, &y, &M, &D);
     if (y < 0 || y > 9999) return 0;
-    snprintf(out, 21, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, M, D, (int)(t / 3600), (int)(t / 60 % 60), (int)(t % 60));
+    {   /* the fields are in range here; gcc cannot see that, so format into room to spare */
+        char tmp[64];
+        snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, M, D, (int)(t / 3600), (int)(t / 60 % 60),
+                 (int)(t % 60));
+        if (strlen(tmp) != 20) return 0;
+        memcpy(out, tmp, 21);
+    }
     return 1;
 }
 
