@@ -576,6 +576,7 @@ export interface SyncDir {
     read(name: string): Uint8Array | null;
     size(name: string): number | null;
     lineReader(name: string): { read: LineReader; close: () => void } | null;
+    /** Write index-v1.json. Throws when it cannot; the caller logs that. */
     writeIndex(bytes: Uint8Array): void;
     /** Delete index-v1.json (a line did not match it). Throws when it cannot; the caller logs that. */
     removeIndex(): void;
@@ -627,7 +628,14 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         const { entries } = indexJsonl(header, jsonl, false);
         index = { entries };
         // .verified gives the .jsonl digest the index records; without it there is no index to write
-        if (jsonlSha !== null) dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
+        if (jsonlSha !== null) {
+            // the index only saves work: a failure to write it is logged, not raised (spec 6.2)
+            try {
+                dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
+            } catch (e) {
+                warn(`cannot write index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }
     }
     const dropIndex = () => {
         try {
@@ -661,7 +669,7 @@ export async function prefetchDir(store: CacheStore, d: string, warn: (message: 
         read: (name) => files.get(name) ?? null,
         size: (name) => files.get(name)?.length ?? null,
         lineReader: () => null,
-        writeIndex: (bytes) => void store.write(`${dir}/index-v1.json`, bytes).catch(() => undefined),
+        writeIndex: (bytes) => void store.write(`${dir}/index-v1.json`, bytes).catch((e: unknown) => warn(`cannot write index-v1.json of ${d}: ${String(e)}`)),
         removeIndex: () => void store.remove(`${dir}/index-v1.json`).catch((e: unknown) => warn(`cannot delete index-v1.json of ${d}: ${String(e)}`)),
     };
 }

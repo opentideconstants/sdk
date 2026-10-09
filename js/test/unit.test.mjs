@@ -442,3 +442,21 @@ test("CR2 DR9 / DR10: usableIndex rejects an entry with no byte for the previous
     assert.equal(use([entry({ length: 50 }), entry({ station_id: "T", offset: 10 })]), null, "overlapping entries");
     assert.ok(use([entry({ offset: 0.0, length: 10.0 })], { index_version: 1.0, jsonl_size: 100.0 }), "integral floats");
 });
+
+test("PK-R2-07 / spec 6.2: a failure to write the index is logged, not raised", async () => {
+    const { loadCached } = await import("../dist/core.js");
+    const d = "20991231.2";
+    const read = (n) => { try { return fs.readFileSync(path.join(GOOD, n)); } catch { return null; } };
+    const files = Object.fromEntries([`OTC_${d}.jsonl`, `OTC_${d}.meta.json`].map((n) => [n, { sha256: "ab", size: read(n).length, url: null }]));
+    const warnings = [];
+    const dir = {
+        read: (n) => (n === "index-v1.json" ? null : read(n)),
+        size: (n) => read(n)?.length ?? null,
+        lineReader: () => null,
+        writeIndex: () => { throw new Error("EROFS: read-only file system"); },
+        removeIndex: () => undefined,
+    };
+    const rel = loadCached(dir, { files, verified_at: "x", by: "x", datestamp: d, format_version: null }, d, "stream", (m) => warnings.push(m));
+    assert.equal(rel.station("OTC-T-0001").station_id, "OTC-T-0001");
+    assert.ok(warnings.some((m) => m.includes("index-v1.json") && m.includes("EROFS")), JSON.stringify(warnings));
+});

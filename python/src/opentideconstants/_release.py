@@ -894,8 +894,8 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
                "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
         try:
             atomic_write(index_path, json.dumps(doc, ensure_ascii=False).encode("utf-8"))
-        except OSError:
-            pass  # the index only saves work; the release loads without it
+        except OSError as e:  # the index only saves work: the release loads without it (spec §6.2)
+            _log.warning("cannot write %s: %s", index_path, e)
     return entries
 
 
