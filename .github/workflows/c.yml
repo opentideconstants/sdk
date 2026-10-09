@@ -51,6 +51,11 @@ jobs:
       # The library, c/tests and the runner, all with warnings as errors
       - name: Build
         run: cmake --build c/build --config Debug --parallel
+      # The vendored cJSON and SHA-256 are renamed otc__*, so an application can
+      # link its own copies; nm fails the job on any other global symbol (C80)
+      - name: Every global symbol of the library starts with otc_ (nm)
+        if: runner.os != 'Windows'
+        run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
       # The C library's own tests (c/tests); they use POSIX calls, so not on Windows
       - name: C library tests (c/tests)
         if: runner.os != 'Windows'
@@ -97,6 +102,9 @@ jobs:
       # The library, c/tests and the runner, all with warnings as errors
       - name: Build
         run: cmake --build c/build --config Debug --parallel
+      - name: Every global symbol of the library starts with otc_ (nm)
+        if: runner.os != 'Windows'
+        run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
       # The C library's own tests (c/tests), the test_fetch_* ones against the fixture server; not on Windows (POSIX calls)
       - name: C library tests (c/tests)
         if: runner.os != 'Windows'
@@ -216,6 +224,8 @@ jobs:
         run: cmp c/supported-formats.json dist/supported-formats.json
       - name: Build with only cc -std=c99
         run: $CC -std=c99 -c dist/opentideconstants.c -o dist/otc.o
+      - name: Every global symbol of the bundle starts with otc_ (nm)
+        run: python c/tools/gen_sources.py --symbols dist/otc.o
       - name: No warnings with -Wall -Wextra -pedantic
         run: $CC -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
       - name: The runner on the amalgamation passes the suite
