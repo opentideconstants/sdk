@@ -4,9 +4,9 @@
  * (cached_releases), or exactly the entries it reports (prune: *count names
  * the releases removed, each one by name, and every release it removed is
  * named), and nothing leaks. The run with no failure gives the whole answer.
+ * A .verified whose parse ran out of memory (a cJSON allocation) must give
+ * OTC_E_NOMEM, never "not verified" (OK with fewer releases; PK-R2-23, fixed).
  * Known library defects are PENDING, each only in the form it has today:
- *  PK-R2-23  a .verified whose parse ran out of memory (a cJSON allocation)
- *            reads as "not verified", so the call gives OK with fewer releases
  *  PK-R2-03  prune removes a release and then cannot allocate its name: it is
  *            counted, but its slot is NULL (R2-025) */
 #include "otc_test.h"
@@ -177,7 +177,7 @@ int main(void)
         fprintf(stderr, "%ld runs: a .verified whose parse ran out of memory read as not verified (ok, fewer releases)\n",
                 g_unverified);
     if (g_holes) fprintf(stderr, "%ld runs: prune removed a release and did not name it\n", g_holes);
-    PENDING("PK-R2-23", g_unverified == 0);
+    CHECK(g_unverified == 0);
     PENDING("PK-R2-03", g_holes == 0);
     printf("oom: %d runs\n", runs);
     return test_done("test_fetch_oom_lists");

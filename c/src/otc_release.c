@@ -575,13 +575,16 @@ static int entry_ok(const cJSON *e, int64_t size)
     return 1;
 }
 
-static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as)
+static void put(cJSON *o, const char *key, cJSON *item, int *ok);
+
+static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as, int *ok)
 {
     const cJSON *v = otc__jget(from, key);
-    if (v && !cJSON_IsNull(v)) cJSON_AddItemToObject(to, as, cJSON_Duplicate(v, 1));
+    if (v && !cJSON_IsNull(v)) put(to, as, cJSON_Duplicate(v, 1), ok);
 }
 
-/* The station document the index pass needs, from an index entry. */
+/* The station document the index pass needs, from an index entry; NULL when
+ * memory runs out (a partial document, with a field left out, is never given). */
 static cJSON *line_from_entry(const cJSON *e)
 {
     static const char *const keys[] = {"station_id", "status", "name", "country", "type", "lat", "lon",
@@ -589,27 +592,32 @@ static cJSON *line_from_entry(const cJSON *e)
     cJSON *o = cJSON_CreateObject(), *sets = cJSON_CreateArray();
     const cJSON *cs;
     size_t i;
+    int ok = 1;
     if (!o || !sets) { cJSON_Delete(o); cJSON_Delete(sets); return NULL; }
-    for (i = 0; keys[i]; i++) dup_if_set(o, e, keys[i], keys[i]);
+    for (i = 0; keys[i]; i++) dup_if_set(o, e, keys[i], keys[i], &ok);
     cJSON_ArrayForEach(cs, otc__jget(e, "sets")) {
         cJSON *s = cJSON_CreateObject(), *cons = cJSON_CreateArray();
         const cJSON *n;
         size_t k;
-        for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k]);
+        for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k], &ok);
         cJSON_ArrayForEach(n, otc__jget(cs, "constituents")) {
             cJSON *c = cJSON_CreateObject();
-            cJSON_AddStringToObject(c, "name", n->valuestring);
-            cJSON_AddItemToArray(cons, c);
+            if (cJSON_IsString(n)) put(c, "name", cJSON_CreateString(n->valuestring), &ok);
+            put(cons, NULL, c, &ok);
         }
-        cJSON_AddItemToObject(s, "constituents", cons);
-        cJSON_AddItemToArray(sets, s);
+        put(s, "constituents", cons, &ok);
+        put(sets, NULL, s, &ok);
     }
-    cJSON_AddItemToObject(o, "constant_sets", sets);
+    put(o, "constant_sets", sets, &ok);
     if (otc__jstr(e, "reference_station_id") || otc__jstr(e, "offsets_licence_id")) {
         cJSON *off = cJSON_CreateObject();
-        dup_if_set(off, e, "reference_station_id", "reference_station_id");
-        dup_if_set(off, e, "offsets_licence_id", "licence_id");
-        cJSON_AddItemToObject(o, "subordinate_offsets", off);
+        dup_if_set(off, e, "reference_station_id", "reference_station_id", &ok);
+        dup_if_set(off, e, "offsets_licence_id", "licence_id", &ok);
+        put(o, "subordinate_offsets", off, &ok);
+    }
+    if (!ok) {
+        cJSON_Delete(o);
+        return NULL;
     }
     return o;
 }
