@@ -5,12 +5,15 @@ import {
 import { arr, deepFreeze, en, isObject, num, obj, str, time, val, type Json, type JsonObject } from "./json.js";
 import type {
     ConstantSetsOptions, Constituent, Convention, Datum, DroppedConstituent, FileInfo, HeightAdjustedType, Kind,
-    Licence, NearOptions, NearestOptions, Nearby, Other, Provenance, QcFlag, QcStatus, Quantity, RecordSpan,
-    SearchOptions, SourceType, StationFilters, StationStatus, StationType, Stats, SubordinateOffsets, Tombstone,
-    Validation,
+    Licence, NearOptions, NearestOptions, Nearby, Other, Provenance, ProvenanceBuild, QcFlag, QcStatus, Quantity,
+    RecordSpan, SearchOptions, SourceType, StationFilters, StationStatus, StationType, Stats, SubordinateOffsets,
+    TimeBase, TimeBaseEvidence, Tombstone, Validation,
 } from "./types.js";
 
 const EARTH_R_KM = 6371.0088;
+const QC_STATUSES = ["ok", "flagged", "no_constants"] as const;
+/** The qc_status values of a set with constants: only these count as a usable source (spec 4.3, 4.4). */
+const WITH_CONSTANTS: ReadonlySet<string> = new Set(["ok", "flagged"]);
 const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------------------------------ index
@@ -174,6 +177,7 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
     const rec = s.recommended_set_id === null ? undefined : s.sets.find((cs) => cs.set_id === s.recommended_set_id);
     const names = new Set<string>();
     for (const cs of s.sets) for (const c of cs.constituents) names.add(c);
+    const usable = s.sets.filter((cs) => cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
     return {
         stored: s, offset: s.offset, length: s.length, station_id: s.station_id, status: s.status,
         name: s.name ?? "", name_folded: s.name_folded ?? "",
@@ -184,9 +188,9 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
         recommended_source_type: rec ? rec.source_type : null,
         recommended_licence_id: rec ? rec.licence_id : null,
         offsets_licence_id: s.offsets_licence_id,
-        usable_sources: [...new Set(s.sets.filter((cs) => cs.qc_status !== "excluded").map((cs) => cs.source).filter((x): x is string => x !== null))],
-        set_sources: s.sets.map((cs) => cs.source ?? ""),
-        set_qc_statuses: s.sets.map((cs) => cs.qc_status ?? ""),
+        usable_sources: [...new Set(usable.map((cs) => cs.source).filter((x): x is string => x !== null))],
+        set_sources: usable.map((cs) => cs.source).filter((x): x is string => x !== null),
+        set_qc_statuses: s.sets.map((cs) => en(cs.qc_status, QC_STATUSES)).filter((x): x is QcStatus | Other => x !== null),
         constituent_names: [...names].sort(),
     };
 }
@@ -266,6 +270,35 @@ function constituentOf(c: JsonObject): Constituent {
     });
 }
 
+function timeBaseOf(t: JsonObject): TimeBase {
+    const corr = obj(t, "correction");
+    return Object.freeze({
+        code: en(t["code"], ["verified", "corrected", "unverified", "disputed"] as const),
+        reason: str(t, "reason"), declared: str(t, "declared"), published: str(t, "published"),
+        correction: corr === null ? null : Object.freeze({ from: str(corr, "from"), to: str(corr, "to") }),
+        months_dropped: Object.freeze(arr(t, "months_dropped").filter((m): m is string => typeof m === "string")),
+        decided_in: str(t, "decided_in"), decided_build_commit: str(t, "decided_build_commit"),
+        evidence: Object.freeze(arr(t, "evidence").filter(isObject).map((e): TimeBaseEvidence => Object.freeze({
+            comparator_kind: str(e, "comparator_kind"), comparator_id: str(e, "comparator_id"),
+            distance_km: num(e, "distance_km"), lag_min: num(e, "lag_min"), detail: str(e, "detail"),
+        }))),
+    });
+}
+
+function buildOf(b: JsonObject): ProvenanceBuild {
+    const tv = obj(b, "tool_versions");
+    return Object.freeze({
+        build_commit: str(b, "build_commit"), built_at: time(b["built_at"]), fetched_at: time(b["fetched_at"]),
+        run_id: str(b, "run_id"), tool_versions: tv,
+    });
+}
+
+function qcValues(v: Json | undefined): Readonly<Record<string, number | null>> | null {
+    if (!isObject(v)) return null;
+    return Object.freeze(Object.fromEntries(Object.entries(v)
+        .filter((e): e is [string, number | null] => e[1] === null || typeof e[1] === "number")));
+}
+
 function validationOf(v: JsonObject): Validation {
     const p = obj(v, "previous_release");
     return Object.freeze({
@@ -295,6 +328,8 @@ export class ConstantSet {
     readonly qc_status: QcStatus | Other | null;
     readonly qc_flags: readonly QcFlag[];
     readonly dropped_constituents: readonly DroppedConstituent[];
+    /** The time-base annotation of the record, or null (spec 4.5). */
+    readonly time_base: TimeBase | null;
     readonly raw: JsonObject;
     readonly #recommended: boolean;
     readonly #convention: Convention;
@@ -319,16 +354,19 @@ export class ConstantSet {
             msl_offset_m: num(datum, "msl_offset_m"),
             named: Object.freeze(Object.fromEntries(Object.entries(obj(datum, "named") ?? {}).filter((e): e is [string, number] => typeof e[1] === "number"))),
         });
-        this.qc_status = en(raw["qc_status"], ["accepted", "fallback", "excluded"] as const);
-        this.qc_flags = Object.freeze(arr(raw, "qc_flags").filter(isObject).map((f) => Object.freeze({
-            flag: en(f["flag"], ["time_base", "broken_record", "microtidal", "non_tidal_signal", "short_record", "sibling_disagreement"] as const) ?? "other",
-            verdict: val(f, "verdict"), values: val(f, "values"),
+        this.qc_status = en(raw["qc_status"], QC_STATUSES);
+        this.qc_flags = Object.freeze(arr(raw, "qc_flags").filter(isObject).map((f): QcFlag => Object.freeze({
+            flag: en(f["flag"], ["time_base", "broken_record", "microtidal", "non_tidal_signal", "short_record",
+                "sibling_disagreement", "carried_over"] as const) ?? "other",
+            reason: str(f, "reason"), values: qcValues(f["values"]),
         })));
         this.dropped_constituents = Object.freeze(arr(raw, "dropped_constituents").filter(isObject).map((d) => Object.freeze({
             name: str(d, "name") ?? "",
             dropped_reason: en(d["dropped_reason"], ["rayleigh", "noise", "long_period_rule", "non_tidal_rule", "convention", "other"] as const) ?? "other",
             detail: val(d, "detail"),
         })));
+        const tb = obj(raw, "time_base");
+        this.time_base = tb === null ? null : timeBaseOf(tb);
         this.#recommended = recommended;
         this.#convention = convention;
         this.#licence = licence;
@@ -352,10 +390,11 @@ export class ConstantSet {
     get provenance(): Provenance {
         if (this.#provenance === null) {
             const p = obj(this.raw, "provenance") ?? Object.freeze({});
+            const b = obj(p, "build");
             this.#provenance = Object.freeze({
-                build_commit: str(p, "build_commit"), adapter_version: str(p, "adapter_version"),
-                input_sha256: val(p, "input_sha256"), time_base: val(p, "time_base"),
-                selection_reason: str(p, "selection_reason"), decision: val(p, "decision"), raw: p,
+                build: b === null ? null : buildOf(b), adapter_version: str(p, "adapter_version"),
+                input_sha256: val(p, "input_sha256"), selection_reason: str(p, "selection_reason"),
+                decision: val(p, "decision"), carried_from_release: str(p, "carried_from_release"), raw: p,
             });
         }
         return this.#provenance;
@@ -455,11 +494,15 @@ export class Station {
         return this.#recommended;
     }
 
-    /** The recommended set first, then the others by set_id. Excluded sets are left out unless asked for. */
+    /**
+     * The recommended set first, then the others by set_id. Sets with qc_status no_constants (no fitted
+     * constants) are left out unless includeNoConstants is true.
+     */
     constantSets(options: ConstantSetsOptions = {}): readonly ConstantSet[] {
-        const inc = options.includeExcluded ?? false;
-        if (typeof inc !== "boolean") throw new InvalidArgumentError("includeExcluded must be a boolean");
-        const sets = this.#sets.filter((s) => inc || s.qc_status !== "excluded");
+        if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
+        const inc = options.includeNoConstants ?? false;
+        if (typeof inc !== "boolean") throw new InvalidArgumentError("includeNoConstants must be a boolean");
+        const sets = this.#sets.filter((s) => inc || s.qc_status !== "no_constants");
         const rec = sets.filter((s) => s.isRecommended);
         const rest = sets.filter((s) => !s.isRecommended).sort((a, b) => cmp(a.set_id, b.set_id));
         return Object.freeze([...rec, ...rest]);
@@ -559,8 +602,13 @@ export class Release {
     readonly datestamp: string;
     readonly created: Date | null;
     readonly format_version: string;
-    readonly doi: string | null;
+    /** The all-versions (concept) DOI, from the release document, or null. */
     readonly concept_doi: string | null;
+    /**
+     * The DOI of this release's own Zenodo version, from the pointer or index entry the SDK read for it, or null
+     * (always null for a file; spec 4.3).
+     */
+    readonly zenodo_version_doi: string | null;
     readonly source_versions: Readonly<Record<string, string>>;
     readonly build_commit: string | null;
     readonly changelog_url: string | null;
@@ -580,15 +628,16 @@ export class Release {
     #closed = false;
 
     /** @internal */
-    constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean) {
+    constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
+        zenodoVersionDoi: string | null) {
         this.#source = source;
         this.#lru = eager ? Infinity : LRU_SIZE;
         const r = header.release;
         this.datestamp = str(r, "datestamp") ?? "";
         this.created = time(r["created"]);
         this.format_version = header.format_version;
-        this.doi = str(r, "doi");
         this.concept_doi = str(r, "concept_doi");
+        this.zenodo_version_doi = zenodoVersionDoi;
         this.source_versions = Object.freeze(Object.fromEntries(Object.entries(obj(r, "source_versions") ?? {})
             .filter((e): e is [string, string] => typeof e[1] === "string")));
         this.build_commit = str(r, "build_commit");
@@ -697,11 +746,15 @@ export class Release {
         return this.#tombById.size;
     }
 
-    /** The dataset citation (spec 4.6); the year is the first four digits of the datestamp. */
+    /**
+     * The dataset citation (spec 4.6): the year is the first four digits of the datestamp, the link is the concept
+     * DOI (or the release URL when there is none), and the version DOI follows when the release has one.
+     */
     get citation(): string {
         const year = this.datestamp.slice(0, 4);
-        const where = this.doi ? `https://doi.org/${this.doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
-        return `OpenTideConstants contributors (${year}). OpenTideConstants, release ${this.datestamp} [Data set]. ${where}`;
+        const link = this.concept_doi ? `https://doi.org/${this.concept_doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
+        const version = this.zenodo_version_doi ? ` (version DOI: https://doi.org/${this.zenodo_version_doi})` : "";
+        return `OpenTideConstants contributors (${year}). OpenTideConstants, release ${this.datestamp} [Data set]. ${link}${version}`;
     }
 
     /** An active station by its OTC id, or null. */
@@ -729,7 +782,9 @@ export class Release {
         const t: Tombstone = Object.freeze({
             station_id: e.station_id, name: str(raw, "name"),
             status: en(raw["status"], ["active", "removed"] as const) ?? "other",
-            removed_in: str(raw, "removed_in"), removed_reason: str(raw, "removed_reason"), raw,
+            removed_in: str(raw, "removed_in"),
+            removed_reason: en(raw["removed_reason"], ["merged", "duplicate"] as const),
+            merged_into: str(raw, "merged_into"), detail: str(raw, "detail"), raw,
         });
         this.#cache.set(`tomb:${stationId}`, t);
         return t;
@@ -856,7 +911,7 @@ export class Release {
             seen.add(l.provider ?? "");
             parts.push(`${l.provider ?? ""}: ${l.attribution ?? ""}`);
         }
-        const ident = this.doi ? `doi:${this.doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
+        const ident = this.concept_doi ? `doi:${this.concept_doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
         return `Tidal constants: OpenTideConstants ${this.datestamp}, ${ident}, CC BY 4.0. Sources: ${parts.join("; ")}`;
     }
 }

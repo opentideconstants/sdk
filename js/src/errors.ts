@@ -3,6 +3,7 @@
  * and of nothing else, and every error has a stable string `code`. A system error that causes an
  * SDK error is kept as `cause`.
  */
+import type { Tombstone } from "./types.js";
 
 export type ErrorCode =
     | "network"
@@ -10,6 +11,7 @@ export type ErrorCode =
     | "offline_unavailable"
     | "checksum_mismatch"
     | "unsupported_format"
+    | "reader_too_old"
     | "invalid_release"
     | "station_not_found"
     | "station_removed"
@@ -83,6 +85,13 @@ export class UnsupportedFormatError extends OpenTideConstantsError {
     }
 }
 
+/** The release's `min_reader_version` is newer than the format version this SDK reads (spec 7.4). */
+export class ReaderTooOldError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("reader_too_old", message, options);
+    }
+}
+
 /** Not JSON, a required field is missing, or a reference does not resolve. */
 export class InvalidReleaseError extends OpenTideConstantsError {
     constructor(message: string, options?: CauseOption) {
@@ -103,10 +112,10 @@ export class StationNotFoundError extends OpenTideConstantsError {
 /** `requireStation` with a removed id. The tombstone is attached. */
 export class StationRemovedError extends OpenTideConstantsError {
     readonly stationId: string;
-    /** The removed station's tombstone (a `Tombstone`). */
-    readonly tombstone: unknown;
+    /** The removed station's tombstone. */
+    readonly tombstone: Tombstone;
 
-    constructor(stationId: string, tombstone: unknown, reason: string | null) {
+    constructor(stationId: string, tombstone: Tombstone, reason: string | null) {
         super("station_removed", `station ${stationId} was removed${reason ? `: ${reason}` : ""}`);
         this.stationId = stationId;
         this.tombstone = tombstone;

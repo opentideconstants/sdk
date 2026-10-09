@@ -1,10 +1,10 @@
 import {
-    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, USER_AGENT,
+    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
 import {
-    cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, getIndex, getPointer, loadCached, log,
-    newestCached, prefetchDir, readVerified, relDir, releaseNames, verifyCached, checkBytes,
-    type Ctx, type PointerEntry, type SyncDir, type Verified,
+    cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
+    loadCached, log, newestCached, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
+    checkBytes, type Ctx, type PointerEntry, type SyncDir, type Verified,
 } from "./core.js";
 import {
     ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
@@ -25,7 +25,8 @@ const dec = new TextDecoder();
 
 function toInfo(e: PointerEntry): ReleaseInfo {
     return Object.freeze({
-        datestamp: e.datestamp, format_version: e.format_version, doi: e.doi,
+        datestamp: e.datestamp, format_version: e.format_version, concept_doi: e.concept_doi,
+        zenodo_version_doi: e.zenodo_version_doi, content_sha256: e.content_sha256,
         files: Object.freeze(e.files.map((f) => Object.freeze({ ...f }))),
     });
 }
@@ -88,6 +89,7 @@ export class OpenTideConstants {
     #interval: number;
     #lastCheck: number;
     #all: Release[];
+    #newerFormatMajor: number | null = null;
 
     private constructor(ctx: Ctx, node: NodeMod | null, release: Release, loadedFrom: LoadedFrom, extra: {
         lastError: OpenTideConstantsError | null; pinned: boolean; file: FileSource | null; cacheRoot: string | null;
@@ -307,12 +309,21 @@ export class OpenTideConstants {
 
     /** Every release from OTC_index.json, newest first. */
     async releases(): Promise<readonly ReleaseInfo[]> {
-        if (this.#ctx.offline) {
-            const idx = await cachedIndex(this.#ctx);
+        const ctx = this.#ctx;
+        if (ctx.offline) {
+            const idx = await cachedIndex(ctx);
             if (!idx) throw new OfflineError("offline and the release index is not cached");
             return Object.freeze(idx.map(toInfo));
         }
-        return Object.freeze((await getIndex(this.#ctx)).map(toInfo));
+        const idx = await getIndex(ctx);
+        if (ctx.store) {
+            // a cached release keeps the version DOI of the newest entry read for it (spec 4.3)
+            for (const e of idx) {
+                const v = await readVerified(ctx.store, e.datestamp);
+                if (v) await syncZenodo(ctx, v, e);
+            }
+        }
+        return Object.freeze(idx.map(toInfo));
     }
 
     /** The latest release (one conditional GET of the pointer). It does not switch to it. */
@@ -321,10 +332,42 @@ export class OpenTideConstants {
         return toInfo(await getPointer(this.#ctx));
     }
 
-    /** A release newer than the loaded one, or null. */
+    /**
+     * The newest release this SDK reads that is newer than the loaded one, or null (spec 4.3, 5.2 step 2a). It also
+     * reads OTC_latest.json and sets `newerFormatMajor` when that names a format major newer than this SDK reads.
+     */
     async checkForUpdate(): Promise<ReleaseInfo | null> {
-        const info = await this.latest();
-        return compareDatestamps(info.datestamp, this.#release.datestamp) > 0 ? info : null;
+        const ctx = this.#ctx;
+        if (ctx.offline) throw new OfflineError("offline: checkForUpdate needs the network");
+        const { entry, generic } = await readPointer(ctx);
+        let major: number | null = null;
+        let known = true;
+        if (generic) {
+            const m = /^([0-9]+)\./.exec(generic.format_version);
+            major = m ? Number(m[1]) : null;
+        } else {
+            try {
+                major = await genericPointerMajor(ctx);
+            } catch (e) {
+                if (!(e instanceof OpenTideConstantsError)) throw e;
+                known = false;
+                log(ctx, "warn", `cannot read OTC_latest.json: ${e.message}`);
+            }
+        }
+        if (known) {
+            const newer = major !== null && major > Math.max(...SUPPORTED_FORMAT_MAJORS) ? major : null;
+            if (newer !== null) log(ctx, "warn", `a newer format (${newer}) exists; upgrade opentideconstants to read it`);
+            this.#newerFormatMajor = newer;
+        }
+        return compareDatestamps(entry.datestamp, this.#release.datestamp) > 0 ? toInfo(entry) : null;
+    }
+
+    /**
+     * The format major of the newest release on the server when this SDK cannot read it, or null. Set by
+     * `checkForUpdate` (spec 7.4).
+     */
+    get newerFormatMajor(): number | null {
+        return this.#newerFormatMajor;
     }
 
     /** Download and switch to a newer release. A Release held from before keeps showing the old one. */
@@ -361,7 +404,7 @@ export class OpenTideConstants {
         let entry: PointerEntry | null = null;
         if (release !== "latest") d = release;
         else if (ctx.offline) {
-            const c = (await cachedDatestamps(store))[0];
+            const c = (await cachedDatestamps(ctx))[0];
             if (!c) throw new OfflineError("offline and no release is cached");
             d = c;
         } else {

@@ -1,6 +1,6 @@
 /** @internal Turn release bytes into a Release (spec 6.1, 6.2). No I/O here. */
-import { formatMajor, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
-import { InvalidReleaseError, UnsupportedFormatError } from "./errors.js";
+import { formatMajor, readerReads, supportedFormat, SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION } from "./constants.js";
+import { InvalidReleaseError, ReaderTooOldError, UnsupportedFormatError } from "./errors.js";
 import { deepFreeze, isObject, type Json, type JsonObject } from "./json.js";
 import {
     Release, indexDoc, indexStations, parseHeader, resolveKinds,
@@ -19,17 +19,32 @@ export function parseJson(bytes: Uint8Array, what: string): unknown {
     }
 }
 
-function checkFormat(doc: unknown): void {
+/**
+ * @internal Check a release document's (or `.meta.json`'s) format: unsupported_format for a major this SDK
+ * does not read, reader_too_old for a `release.min_reader_version` newer than SUPPORTED_FORMAT_VERSION (spec 7.4).
+ */
+export function checkFormat(doc: unknown): void {
     if (!isObject(doc)) throw new InvalidReleaseError("the release document is not a JSON object");
     const fv = doc["format_version"];
     if (typeof fv !== "string" || Number.isNaN(formatMajor(fv))) throw new InvalidReleaseError("format_version is missing or not MAJOR.MINOR");
     if (!supportedFormat(fv)) {
         throw new UnsupportedFormatError(`format ${fv} is not supported (this SDK reads majors ${SUPPORTED_FORMAT_MAJORS.join(", ")}); upgrade opentideconstants`);
     }
+    const rel = doc["release"];
+    const min = isObject(rel) ? rel["min_reader_version"] : undefined;
+    if (!readerReads(min)) {
+        const d = isObject(rel) && typeof rel["datestamp"] === "string" ? rel["datestamp"] : "?";
+        throw readerTooOld(d, String(min));
+    }
+}
+
+/** @internal The reader_too_old error for release D, which needs a reader for format `min`. */
+export function readerTooOld(d: string, min: string): ReaderTooOldError {
+    return new ReaderTooOldError(`release ${d} needs a reader for format ${min}; this SDK reads format ${SUPPORTED_FORMAT_VERSION} (upgrade opentideconstants)`);
 }
 
 /** @internal A release from the full `.json` document (eager). */
-export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[]): Release {
+export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -38,7 +53,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[]): 
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -94,6 +109,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     index?: StreamIndex | null;
     reader?: LineReader | null;
     close?: () => void;
+    zenodoVersionDoi?: string | null;
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -118,7 +134,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null);
 }
 
 /** @internal Parse a `sha256sum` file: name -> digest. */

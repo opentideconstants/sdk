@@ -25,3 +25,17 @@ test("every error class is a direct subclass of the base", () => {
         assert.equal(Object.getPrototypeOf(otc[name]), otc.OpenTideConstantsError, name);
     }
 });
+
+test("min_reader_version gate: this SDK reads format 1.0 and refuses anything newer", async () => {
+    const { readerReads } = await import("../dist/constants.js");
+    assert.equal(otc.SUPPORTED_FORMAT_VERSION, "1.0");
+    assert.deepEqual([...otc.SUPPORTED_FORMAT_MAJORS], [1]);
+    for (const v of ["1.0", "0.9", null, undefined]) assert.equal(readerReads(v), true, String(v));
+    for (const v of ["1.1", "1.99", "2.0", "1.10"]) assert.equal(readerReads(v), false, v);
+});
+
+test("reader_too_old is its own error class with the code reader_too_old", () => {
+    const e = new otc.ReaderTooOldError("x");
+    assert.equal(Object.getPrototypeOf(otc.ReaderTooOldError), otc.OpenTideConstantsError);
+    assert.equal(e.code, "reader_too_old");
+});

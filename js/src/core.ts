@@ -1,11 +1,12 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
-import { compareDatestamps, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
+import { compareDatestamps, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
     ChecksumError, InvalidReleaseError, NetworkError, OfflineError, ReleaseNotFoundError, UnsupportedFormatError,
 } from "./errors.js";
 import { isObject } from "./json.js";
 import {
-    headerFromMeta, indexJsonl, parseJson, parseSha256, releaseFromJson, releaseFromJsonl, type LineReader, type StreamIndex,
+    checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl,
+    type LineReader, type StreamIndex,
 } from "./loader.js";
 import type { CacheStore, HttpResponse, Platform } from "./platform.js";
 import { storedIndex, usableIndex, type Release } from "./release.js";
@@ -29,7 +30,10 @@ export interface Ctx {
 export interface PointerEntry {
     datestamp: string;
     format_version: string;
-    doi: string | null;
+    min_reader_version: string | null;
+    concept_doi: string | null;
+    zenodo_version_doi: string | null;
+    content_sha256: string | null;
     files: FileInfo[];
 }
 
@@ -40,6 +44,10 @@ export interface Verified {
     by: string;
     datestamp: string;
     format_version: string | null;
+    /** The release's min_reader_version (absent in a record another writer made). */
+    min_reader_version?: string | null;
+    /** The version DOI of the newest pointer or index entry read for this datestamp (spec 4.3). */
+    zenodo_version_doi?: string | null;
 }
 
 const enc = new TextEncoder();
@@ -111,7 +119,16 @@ function parseEntry(v: unknown, pointerUrl: string): PointerEntry {
         });
     }
     files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    return { datestamp: v["datestamp"], format_version: v["format_version"], doi: typeof v["doi"] === "string" ? v["doi"] : null, files };
+    const s = (k: string) => (typeof v[k] === "string" ? (v[k] as string) : null);
+    return {
+        datestamp: v["datestamp"], format_version: v["format_version"], min_reader_version: s("min_reader_version"),
+        concept_doi: s("concept_doi"), zenodo_version_doi: s("zenodo_version_doi"), content_sha256: s("content_sha256"), files,
+    };
+}
+
+/** True if this SDK reads the entry's release: a supported major and a readable min_reader_version (spec 7.4). */
+export function readable(e: { format_version: string | null; min_reader_version?: string | null }): boolean {
+    return (e.format_version === null || supportedFormat(e.format_version)) && readerReads(e.min_reader_version ?? null);
 }
 
 /** A GET of a changing file with If-None-Match and the stored ETag; 304 reads the stored copy. Null on 404. */
@@ -139,8 +156,8 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
     return { body: res.body, url };
 }
 
-function newestSupported(entries: PointerEntry[]): PointerEntry | null {
-    return entries.filter((e) => supportedFormat(e.format_version)).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp))[0] ?? null;
+function newestReadable(entries: PointerEntry[]): PointerEntry | null {
+    return entries.filter(readable).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp))[0] ?? null;
 }
 
 /** Every release in OTC_index.json, newest first. */
@@ -162,18 +179,61 @@ export async function cachedIndex(ctx: Ctx): Promise<PointerEntry[] | null> {
     return b ? parseIndex(b, new URL("OTC_index.json", ctx.baseUrl).href) : null;
 }
 
-/** The latest release with a supported format major (spec 5.2 steps 1-2, 7.4). */
-export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
+/** The result of reading the latest pointer: the entry to use, and whether OTC_latest.json was the pointer read. */
+export interface PointerRead {
+    entry: PointerEntry;
+    /** The parsed OTC_latest.json entry, when the per-major pointer was 404 and the SDK fell back to it. */
+    generic: PointerEntry | null;
+}
+
+/**
+ * The latest release this SDK reads (spec 5.2 steps 2 and 2a, 7.4): GET OTC_latest-f{MAJOR}.json, and only on a
+ * 404 OTC_latest.json. When the pointer's release has an unsupported major or a min_reader_version newer than
+ * this SDK reads, one GET of OTC_index.json picks the newest readable release. None: reader_too_old when a
+ * release of a supported major exists, otherwise unsupported_format.
+ */
+export async function readPointer(ctx: Ctx): Promise<PointerRead> {
     const major = Math.max(...SUPPORTED_FORMAT_MAJORS);
+    let generic = false;
     let r = await getConditional(ctx, `OTC_latest-f${major}.json`);
-    if (!r) r = await getConditional(ctx, "OTC_latest.json");
+    if (!r) {
+        generic = true;
+        r = await getConditional(ctx, "OTC_latest.json");
+    }
     if (!r) throw new ReleaseNotFoundError(`no latest pointer at ${ctx.baseUrl}`);
     const entry = parseEntry(parseJson(r.body, "the latest pointer"), r.url);
-    if (supportedFormat(entry.format_version)) return entry;
-    log(ctx, "warn", `a newer format (${entry.format_version}) exists; upgrade opentideconstants to read it`);
-    const best = newestSupported(await getIndex(ctx));
-    if (!best) throw new UnsupportedFormatError(`no release with a supported format major (${SUPPORTED_FORMAT_MAJORS.join(", ")}) at ${ctx.baseUrl}`);
-    return best;
+    const out = (e: PointerEntry): PointerRead => ({ entry: e, generic: generic ? entry : null });
+    if (readable(entry)) return out(entry);
+    if (!supportedFormat(entry.format_version)) {
+        log(ctx, "warn", `a newer format (${formatMajorOf(entry.format_version)}) exists; upgrade opentideconstants to read it`);
+    } else {
+        log(ctx, "warn", `release ${entry.datestamp} needs a reader for format ${entry.min_reader_version}; looking for the newest release this SDK reads`);
+    }
+    const index = await getIndex(ctx);
+    const best = newestReadable(index);
+    if (best) return out(best);
+    const tooNew = [entry, ...index].filter((e) => supportedFormat(e.format_version))
+        .sort((a, b) => compareDatestamps(b.datestamp, a.datestamp))[0];
+    if (tooNew) throw readerTooOld(tooNew.datestamp, String(tooNew.min_reader_version));
+    throw new UnsupportedFormatError(`no release with a supported format major (${SUPPORTED_FORMAT_MAJORS.join(", ")}) at ${ctx.baseUrl}`);
+}
+
+/** The latest release this SDK reads (see readPointer). */
+export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
+    return (await readPointer(ctx)).entry;
+}
+
+/** @internal The newest format major named by OTC_latest.json (one conditional GET), or null on a 404. */
+export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
+    const r = await getConditional(ctx, "OTC_latest.json");
+    if (!r) return null;
+    const major = formatMajorOf(parseEntry(parseJson(r.body, "OTC_latest.json"), r.url).format_version);
+    return Number.isNaN(major) ? null : major;
+}
+
+function formatMajorOf(v: string): number {
+    const m = /^([0-9]+)\.[0-9]+$/.exec(v);
+    return m ? Number(m[1]) : NaN;
 }
 
 export async function readVerified(store: CacheStore, d: string): Promise<Verified | null> {
@@ -199,12 +259,25 @@ export function usable(mode: Mode, d: string, present: Set<string>): boolean {
     return mode === "stream" ? stream : present.has(n.json) || stream;
 }
 
-/** Cached, verified datestamps with a supported format, newest first. */
-export async function cachedDatestamps(store: CacheStore): Promise<string[]> {
+/**
+ * Cached, verified datestamps that this SDK reads, newest first (spec 5.2 step 1): a supported format major and a
+ * readable min_reader_version, from `.verified` or, when it does not say, from the cached OTC_index.json.
+ */
+export async function cachedDatestamps(ctx: Ctx): Promise<string[]> {
+    const store = ctx.store;
+    if (!store) return [];
+    let index: Map<string, PointerEntry> | null = null;
     const out: string[] = [];
     for (const d of await store.list("releases")) {
         const v = await readVerified(store, d);
-        if (v && (v.format_version === null || v.format_version === undefined || supportedFormat(v.format_version))) out.push(d);
+        if (!v) continue;
+        if (!readable({ format_version: v.format_version ?? null, min_reader_version: v.min_reader_version ?? null })) continue;
+        if (v.format_version === null || v.format_version === undefined || v.min_reader_version === undefined) {
+            index ??= new Map(((await cachedIndex(ctx).catch(() => null)) ?? []).map((e) => [e.datestamp, e]));
+            const e = index.get(d);
+            if (e && !readable(e)) continue;
+        }
+        out.push(d);
     }
     return out.sort((a, b) => compareDatestamps(b, a));
 }
@@ -212,7 +285,7 @@ export async function cachedDatestamps(store: CacheStore): Promise<string[]> {
 /** The newest cached release usable in this mode, or null. */
 export async function newestCached(ctx: Ctx): Promise<string | null> {
     if (!ctx.store) return null;
-    for (const d of await cachedDatestamps(ctx.store)) {
+    for (const d of await cachedDatestamps(ctx)) {
         if (usable(ctx.mode, d, new Set(await ctx.store.list(relDir(d))))) return d;
     }
     return null;
@@ -268,14 +341,20 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     const dir = relDir(d);
     const present = new Set(await store.list(dir));
     let verified = await readVerified(store, d);
-    if (verified && usable(ctx.mode, d, present)) return "cache";
+    if (verified && usable(ctx.mode, d, present)) {
+        await syncZenodo(ctx, verified, entry);
+        return "cache";
+    }
     if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
     await store.mkdirs(dir);
     const unlock = await store.lock(dir);
     try {
         const now = new Set(await store.list(dir));
         verified = await readVerified(store, d);
-        if (verified && usable(ctx.mode, d, now)) return "cache";
+        if (verified && usable(ctx.mode, d, now)) {
+            await syncZenodo(ctx, verified, entry);
+            return "cache";
+        }
         const n = names(d);
         const { bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry);
         const writes: [string, Uint8Array][] = [];
@@ -298,7 +377,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         } else {
             for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
         }
-        const formatVersion = await formatOf(writes, n);
+        const format = formatOf(writes, n);
         log(ctx, "info", `verified release ${d}`);
         for (const [name, bytes] of writes) await store.write(`${dir}/${name}`, bytes);
         await store.write(`${dir}/${n.sha}`, shaBytes);
@@ -314,7 +393,9 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         }
         const v: Verified = {
             files, verified_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: SDK_ID, datestamp: d,
-            format_version: formatVersion ?? entry?.format_version ?? verified?.format_version ?? null,
+            format_version: format?.format_version ?? entry?.format_version ?? verified?.format_version ?? null,
+            min_reader_version: format ? format.min_reader_version : entry?.min_reader_version ?? verified?.min_reader_version ?? null,
+            zenodo_version_doi: entry ? entry.zenodo_version_doi : verified?.zenodo_version_doi ?? null,
         };
         await store.write(`${dir}/.verified`, enc.encode(JSON.stringify(v)));
         return "download";
@@ -323,14 +404,35 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     }
 }
 
-async function formatOf(writes: [string, Uint8Array][], n: ReturnType<typeof names>): Promise<string | null> {
+/**
+ * The format of the downloaded release, checked before it goes into the cache: unsupported_format or
+ * reader_too_old (spec 7.4).
+ */
+function formatOf(writes: [string, Uint8Array][], n: ReturnType<typeof names>): { format_version: string; min_reader_version: string | null } | null {
     const meta = writes.find((w) => w[0] === n.meta) ?? writes.find((w) => w[0] === n.json);
     if (!meta) return null;
     const doc = parseJson(meta[1], meta[0]);
     const fv = isObject(doc) ? doc["format_version"] : null;
     if (typeof fv !== "string") throw new InvalidReleaseError(`${meta[0]} has no format_version`);
-    if (!supportedFormat(fv)) throw new UnsupportedFormatError(`format ${fv} is not supported; upgrade opentideconstants`);
-    return fv;
+    checkFormat(doc);
+    const rel = isObject(doc) ? doc["release"] : null;
+    const min = isObject(rel) && typeof rel["min_reader_version"] === "string" ? rel["min_reader_version"] : null;
+    return { format_version: fv, min_reader_version: min };
+}
+
+/**
+ * Store the version DOI of an entry the SDK read for a cached release in its `.verified`, when it changed
+ * (spec 4.3: the newest pointer or index entry for that datestamp). A failed write is logged, not raised.
+ */
+export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null): Promise<void> {
+    const store = ctx.store;
+    if (!store || !entry || entry.datestamp !== verified.datestamp) return;
+    if ((verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+    try {
+        await store.write(`${relDir(entry.datestamp)}/.verified`, enc.encode(JSON.stringify({ ...verified, zenodo_version_doi: entry.zenodo_version_doi })));
+    } catch (e) {
+        log(ctx, "warn", `cannot update the .verified of ${entry.datestamp}: ${e instanceof Error ? e.message : String(e)}`);
+    }
 }
 
 /** A cached release directory, read synchronously (Node: the disk; browser: files read beforehand). */
@@ -344,6 +446,7 @@ export interface SyncDir {
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode): Release {
     const n = names(d);
+    const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
     const files: FileInfo[] = Object.entries(verified.files)
         .map(([name, f]) => ({ name, url: f.url ?? null, size: f.size ?? null, sha256: f.sha256 ?? null }))
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -357,8 +460,8 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         return b;
     };
     if (mode === "eager") {
-        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files);
-        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files });
+        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo);
+        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo });
     }
     const meta = sized(n.meta);
     const want = verified.files[n.jsonl]?.size;
@@ -389,9 +492,9 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         if (jsonlSha !== null) dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
     }
     const lr = dir.lineReader(n.jsonl);
-    if (lr) return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close });
+    if (lr) return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo });
     const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l) });
+    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo });
 }
 
 /** Read a cache directory into a SyncDir (the browser, where storage is async). */
