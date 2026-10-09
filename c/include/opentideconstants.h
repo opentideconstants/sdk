@@ -12,6 +12,10 @@
  *     len bytes, always NUL-terminates when len > 0, and stores the needed size
  *     (with the NUL) in *needed. A buffer that is too small gives
  *     OTC_E_BUFFER_TOO_SMALL. buf = NULL and len = 0 only report the size.
+ *     A string may hold a NUL (valid JSON, \u0000): the whole string is
+ *     copied, and *needed - 1 is its length, NULs inside included (CR2 DR33).
+ *     A string argument (an id to look up) ends at its first NUL, so it never
+ *     matches a value that holds one.
  *   - Lists out: the caller passes an array and its capacity, and gets the
  *     count back in *count (OTC_E_BUFFER_TOO_SMALL with the needed count).
  *     out = NULL and cap = 0 only report the count.
@@ -376,7 +380,8 @@ OTC_API void otc_filter_init(otc_filter *filter);
 
 typedef struct otc_hit {      /* otc_search; the strings are borrowed from the release */
     const char *id;
-    const char *name;
+    const char *name;         /* NUL-terminated after name_len bytes */
+    size_t      name_len;     /* the name's full length: a name may hold a NUL (CR2 DR33) */
 } otc_hit;
 
 typedef struct otc_nearby {   /* otc_near / otc_nearest; id is borrowed from the release */

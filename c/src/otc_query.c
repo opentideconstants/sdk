@@ -115,7 +115,7 @@ otc_status otc_station_by_alias(const otc_release *rel, const char *system, cons
         size_t mid = lo + (hi - lo) / 2;
         const otc__alias *a = &rel->alias[mid];
         int c = strcmp(a->system, system);
-        if (!c) c = strcmp(a->alias, alias_id);
+        if (!c) c = otc__bytes_cmp(a->alias, a->alias_len, alias_id, strlen(alias_id));   /* in full (CR2 DR33) */
         if (!c) return otc_station(rel, a->station, out);
         if (c < 0) lo = mid + 1;
         else hi = mid;
@@ -271,6 +271,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     for (i = 0; out && i < total && i < cap; i++) {
         out[i].id = r[i].e->id;
         out[i].name = r[i].e->name;
+        out[i].name_len = r[i].e->name_len;
     }
     free(r);
     *count = total;

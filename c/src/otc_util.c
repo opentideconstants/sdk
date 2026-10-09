@@ -230,6 +230,8 @@ otc_dropped_reason otc__parse_dropped_reason(const char *s)
 
 /* ------------------------------------------------------------- JSON parse */
 
+static void json_note_lengths(cJSON *v, const char *text, size_t len);
+
 #ifdef _WIN32
 static SRWLOCK g_parse_lock = SRWLOCK_INIT;
 cJSON *otc__json_parse(const char *text, size_t len)
@@ -238,6 +240,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
     AcquireSRWLockExclusive(&g_parse_lock);
     v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     ReleaseSRWLockExclusive(&g_parse_lock);
+    json_note_lengths(v, text, len);
     return v;
 }
 #else
@@ -248,6 +251,7 @@ cJSON *otc__json_parse(const char *text, size_t len)
     pthread_mutex_lock(&g_parse_lock);
     v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
     pthread_mutex_unlock(&g_parse_lock);
+    json_note_lengths(v, text, len);
     return v;
 }
 #endif
@@ -284,6 +288,12 @@ int otc__strcmp_null(const char *a, const char *b)
     return strcmp(a, b);
 }
 
+int otc__bytes_cmp(const char *a, size_t an, const char *b, size_t bn)
+{
+    int c = memcmp(a, b, an < bn ? an : bn);
+    return c ? c : (an > bn) - (an < bn);
+}
+
 int otc__ends_with(const char *s, const char *suffix)
 {
     size_t n = strlen(s), m = strlen(suffix);
@@ -292,13 +302,18 @@ int otc__ends_with(const char *s, const char *suffix)
 
 otc_status otc__copy_str(const char *src, char *buf, size_t len, size_t *needed)
 {
+    return otc__copy_strn(src, src ? strlen(src) : 0, buf, len, needed);
+}
+
+otc_status otc__copy_strn(const char *src, size_t sn, char *buf, size_t len, size_t *needed)
+{
     size_t n;
     if (!src) {
         if (buf && len) buf[0] = '\0';
         if (needed) *needed = 0;
         return OTC_E_NOT_FOUND;
     }
-    n = strlen(src) + 1;
+    n = sn + 1;   /* every byte, NULs inside included (CR2 DR33), and the final NUL */
     if (needed) *needed = n;
     if (!buf && len == 0) return OTC_OK;
     if (!buf) return OTC_E_INVALID_ARGUMENT;
@@ -312,8 +327,66 @@ otc_status otc__copy_str(const char *src, char *buf, size_t len, size_t *needed)
         }
         return OTC_E_BUFFER_TOO_SMALL;
     }
-    memcpy(buf, src, n);
+    memcpy(buf, src, sn);
+    buf[sn] = '\0';
     return OTC_OK;
+}
+
+otc_status otc__copy_jstr(const cJSON *s, char *buf, size_t len, size_t *needed)
+{
+    if (!cJSON_IsString(s)) return otc__copy_strn(NULL, 0, buf, len, needed);
+    return otc__copy_strn(s->valuestring, otc__jstr_len(s), buf, len, needed);
+}
+
+otc_status otc__copy_member(const cJSON *obj, const char *key, char *buf, size_t len, size_t *needed)
+{
+    return otc__copy_jstr(otc__jstr_item(obj, key), buf, len, needed);
+}
+
+/* 1 when a string in v holds a NUL. */
+static int json_has_nul_string(const cJSON *v)
+{
+    const cJSON *c;
+    if (cJSON_IsString(v) && otc__jstr_len(v) != strlen(v->valuestring)) return 1;
+    for (c = v ? v->child : NULL; c; c = c->next)
+        if (json_has_nul_string(c)) return 1;
+    return 0;
+}
+
+/* copy is cJSON_Duplicate(orig): cJSON copies a string up to its first NUL, so each
+ * string of orig with a NUL inside gets its full bytes back in copy (raw = 0), or
+ * becomes its raw JSON literal for printing (raw = 1). 0 when out of memory. */
+static int json_dup_strings(cJSON *copy, const cJSON *orig, int raw)
+{
+    const cJSON *o;
+    cJSON *c;
+    if (cJSON_IsString(orig) && otc__jstr_len(orig) != strlen(orig->valuestring)) {
+        size_t n = otc__jstr_len(orig);
+        char *lit = raw ? otc__json_escape_n(orig->valuestring, n) : NULL, *bytes;
+        size_t size = raw ? (lit ? strlen(lit) + 1 : 0) : n + 1;
+        if (raw && !lit) return 0;
+        bytes = (char *)cJSON_malloc(size);   /* cJSON_Delete frees it */
+        if (!bytes) { free(lit); return 0; }
+        memcpy(bytes, raw ? lit : orig->valuestring, size);
+        free(lit);
+        cJSON_free(copy->valuestring);
+        copy->valuestring = bytes;
+        if (raw) copy->type = cJSON_Raw;
+        return 1;
+    }
+    for (o = orig->child, c = copy->child; o && c; o = o->next, c = c->next)
+        if (!json_dup_strings(c, o, raw)) return 0;
+    return 1;
+}
+
+cJSON *otc__json_dup(const cJSON *v)
+{
+    cJSON *copy = v ? cJSON_Duplicate(v, 1) : NULL;
+    if (copy && !json_dup_strings(copy, v, 0)) {
+        cJSON_Delete(copy);
+        return NULL;
+    }
+    return copy;
 }
 
 otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed)
@@ -321,7 +394,15 @@ otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed)
     char *text;
     otc_status st;
     if (!v) return otc__copy_str(NULL, buf, len, needed);
-    text = cJSON_PrintUnformatted(v);
+    if (json_has_nul_string(v)) {
+        /* cJSON prints a string up to its first NUL: print a copy whose such strings are raw literals */
+        cJSON *copy = cJSON_Duplicate(v, 1);
+        if (!copy || !json_dup_strings(copy, v, 1)) { cJSON_Delete(copy); return OTC_E_NOMEM; }
+        text = cJSON_PrintUnformatted(copy);
+        cJSON_Delete(copy);
+    } else {
+        text = cJSON_PrintUnformatted(v);
+    }
     if (!text) return OTC_E_NOMEM;
     st = otc__copy_str(text, buf, len, needed);
     cJSON_free(text);
@@ -904,9 +985,11 @@ int64_t otc__http_date(const char *s)
 
 /* ------------------------------------------- strings with a NUL inside */
 
-/* cJSON ends a decoded string at its first NUL, so a JSON string with \u0000 in
- * it (valid JSON, and schema-valid for a station name) loses its tail. These
- * helpers read such a string from the JSON text itself, with its length. */
+/* cJSON ends a decoded string at its first NUL as far as strlen can tell, so a
+ * JSON string with \u0000 in it (valid JSON, and schema-valid for a station
+ * name, an alias id or a set_id) seems to lose its tail. otc__json_parse walks
+ * the text once more beside the tree and records the length of every such
+ * string (CR2 DR33). */
 
 static const char *js_ws(const char *p, const char *end)
 {
@@ -920,29 +1003,6 @@ static const char *js_skip_string(const char *p, const char *end)
     for (p++; p < end; p++) {
         if (*p == '\\') { p++; continue; }
         if (*p == '"') return p + 1;
-    }
-    return NULL;
-}
-
-/* p at a value: the position after it, or NULL. */
-static const char *js_skip_value(const char *p, const char *end)
-{
-    int depth = 0;
-    p = js_ws(p, end);
-    if (p >= end) return NULL;
-    if (*p == '"') return js_skip_string(p, end);
-    if (*p != '{' && *p != '[') {
-        while (p < end && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') p++;
-        return p;
-    }
-    while (p < end) {
-        if (*p == '"') {
-            if (!(p = js_skip_string(p, end))) return NULL;
-            continue;
-        }
-        if (*p == '{' || *p == '[') depth++;
-        else if ((*p == '}' || *p == ']') && --depth == 0) return p + 1;
-        p++;
     }
     return NULL;
 }
@@ -963,50 +1023,83 @@ static int js_hex4(const char *p, const char *end, uint32_t *v)
     return 1;
 }
 
-/* Decodes the JSON string at p (an opening quote) into out (at least the token's length). */
-static int js_decode(const char *p, const char *end, char *out, size_t *n)
+/* The decoded length (UTF-8 bytes) of the JSON string at p (an opening quote), or
+ * -1 when it is not one cJSON decodes (cJSON refuses an unpaired surrogate too). */
+static long long js_decoded_len(const char *p, const char *end)
 {
-    size_t o = 0;
+    long long o = 0;
     for (p++; p < end && *p != '"'; p++) {
         uint32_t cp;
-        if (*p != '\\') { out[o++] = *p; continue; }
-        if (++p >= end) return 0;
-        switch (*p) {
-        case '"': case '\\': case '/': out[o++] = *p; continue;
-        case 'b': out[o++] = '\b'; continue;
-        case 'f': out[o++] = '\f'; continue;
-        case 'n': out[o++] = '\n'; continue;
-        case 'r': out[o++] = '\r'; continue;
-        case 't': out[o++] = '\t'; continue;
-        case 'u': break;
-        default: return 0;
-        }
-        if (!js_hex4(p + 1, end, &cp)) return 0;
+        if (*p != '\\') { o++; continue; }
+        if (++p >= end) return -1;
+        if (*p != 'u') { o++; continue; }
+        if (!js_hex4(p + 1, end, &cp)) return -1;
         p += 4;
-        if (cp >= 0xD800 && cp <= 0xDBFF) {   /* a pair; an unpaired surrogate is not valid (cJSON refuses it too) */
+        if (cp >= 0xD800 && cp <= 0xDBFF) {
             uint32_t lo;
-            if (end - p < 7 || p[1] != '\\' || p[2] != 'u' || !js_hex4(p + 3, end, &lo) || lo < 0xDC00 || lo > 0xDFFF) return 0;
-            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+            if (end - p < 7 || p[1] != '\\' || p[2] != 'u' || !js_hex4(p + 3, end, &lo) || lo < 0xDC00 || lo > 0xDFFF)
+                return -1;
             p += 6;
+            o += 4;
         } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-            return 0;
-        }
-        if (cp < 0x80) out[o++] = (char)cp;
-        else if (cp < 0x800) { out[o++] = (char)(0xC0 | (cp >> 6)); out[o++] = (char)(0x80 | (cp & 0x3F)); }
-        else if (cp < 0x10000) {
-            out[o++] = (char)(0xE0 | (cp >> 12));
-            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-            out[o++] = (char)(0x80 | (cp & 0x3F));
+            return -1;
         } else {
-            out[o++] = (char)(0xF0 | (cp >> 18));
-            out[o++] = (char)(0x80 | ((cp >> 12) & 0x3F));
-            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-            out[o++] = (char)(0x80 | (cp & 0x3F));
+            o += cp < 0x80 ? 1 : cp < 0x800 ? 2 : 3;
         }
     }
-    if (p >= end) return 0;
-    *n = o;
-    return 1;
+    return p < end ? o : -1;
+}
+
+/* 1 when the JSON string token [p, q) has a \u0000 escape. */
+static int js_token_has_nul(const char *p, const char *q)
+{
+    return otc__json_has_nul(p, (size_t)(q - p));
+}
+
+/* Walks the value at p beside its parsed node v (cJSON keeps members and items
+ * in text order) and records the length of each string with a NUL. Returns the
+ * position after the value, or NULL if the two disagree (then nothing more is
+ * recorded: the strings keep their strlen length). */
+static const char *js_note(cJSON *v, const char *p, const char *end, int depth)
+{
+    p = js_ws(p, end);
+    if (!v || p >= end || depth > 1000) return NULL;
+    if (*p == '"') {
+        const char *q = js_skip_string(p, end);
+        if (!q || !cJSON_IsString(v)) return NULL;
+        if (js_token_has_nul(p, q)) {
+            long long n = js_decoded_len(p, q);
+            if (n < 0) return NULL;
+            v->valuedouble = (double)n;
+        }
+        return q;
+    }
+    if (*p == '{' || *p == '[') {
+        char close = *p == '{' ? '}' : ']';
+        cJSON *c = v->child;
+        p = js_ws(p + 1, end);
+        if (p < end && *p == close) return p + 1;
+        for (;;) {
+            if (close == '}') {   /* the key */
+                if (p >= end || *p != '"' || !(p = js_skip_string(p, end))) return NULL;
+                p = js_ws(p, end);
+                if (p >= end || *p != ':') return NULL;
+                p++;
+            }
+            if (!c || !(p = js_note(c, p, end, depth + 1))) return NULL;
+            c = c->next;
+            p = js_ws(p, end);
+            if (p < end && *p == ',') { p = js_ws(p + 1, end); continue; }
+            return p < end && *p == close ? p + 1 : NULL;
+        }
+    }
+    while (p < end && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') p++;
+    return p;
+}
+
+static void json_note_lengths(cJSON *v, const char *text, size_t len)
+{
+    if (v && otc__json_has_nul(text, len)) (void)js_note(v, text, text + len, 0);
 }
 
 int otc__json_has_nul(const char *text, size_t len)
@@ -1021,40 +1114,44 @@ int otc__json_has_nul(const char *text, size_t len)
     return 0;
 }
 
-int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len)
+size_t otc__jstr_len(const cJSON *s)
 {
-    const char *p = text, *end = text + len;
-    size_t kl = strlen(key);
-    *out = NULL;
-    *out_len = 0;
-    p = js_ws(p, end);
-    if (p >= end || *p != '{') return 0;
-    p++;
-    for (;;) {
-        const char *k, *kend, *v;
-        p = js_ws(p, end);
-        if (p >= end || *p != '"') return 0;
-        k = p;
-        if (!(p = js_skip_string(p, end))) return 0;
-        kend = p;
-        p = js_ws(p, end);
-        if (p >= end || *p != ':') return 0;
-        v = js_ws(p + 1, end);
-        if (!(p = js_skip_value(v, end))) return 0;
-        if ((size_t)(kend - k) == kl + 2 && !memcmp(k + 1, key, kl) && v < end && *v == '"') {
-            char *buf = (char *)malloc((size_t)(p - v) + 1);
-            size_t n;
-            if (!buf) return -1;
-            if (!js_decode(v, p, buf, &n)) { free(buf); return 0; }
-            buf[n] = '\0';
-            *out = buf;
-            *out_len = n;
-            return 1;
-        }
-        p = js_ws(p, end);
-        if (p < end && *p == ',') { p++; continue; }
-        return 0;
-    }
+    /* valuedouble: the length otc__json_parse recorded (0: none, the string has no NUL inside) */
+    return s->valuedouble > 0 ? (size_t)s->valuedouble : strlen(s->valuestring);
+}
+
+const cJSON *otc__jstr_item(const cJSON *obj, const char *key)
+{
+    const cJSON *v = otc__jget(obj, key);
+    return cJSON_IsString(v) ? v : NULL;
+}
+
+int otc__jstr_is(const cJSON *s, const char *str)
+{
+    size_t n;
+    if (!cJSON_IsString(s) || !str) return 0;
+    n = otc__jstr_len(s);
+    return strlen(str) == n && !memcmp(s->valuestring, str, n);
+}
+
+int otc__jstr_same(const cJSON *a, const cJSON *b)
+{
+    size_t n;
+    if (!cJSON_IsString(a) || !cJSON_IsString(b)) return 0;
+    n = otc__jstr_len(a);
+    return otc__jstr_len(b) == n && !memcmp(a->valuestring, b->valuestring, n);
+}
+
+cJSON *otc__json_str_out(const cJSON *s)
+{
+    char *lit;
+    cJSON *v;
+    if (!cJSON_IsString(s)) return NULL;
+    if (otc__jstr_len(s) == strlen(s->valuestring)) return cJSON_CreateString(s->valuestring);
+    lit = otc__json_escape_n(s->valuestring, otc__jstr_len(s));
+    v = lit ? cJSON_CreateRaw(lit) : NULL;
+    free(lit);
+    return v;
 }
 
 char *otc__json_escape_n(const char *s, size_t n)

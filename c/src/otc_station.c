@@ -62,8 +62,10 @@ static void fill_constituent(otc_constituent_t *c, const cJSON *j)
 static int set_ptr_cmp(const void *a, const void *b)
 {
     const otc_set *x = *(otc_set *const *)a, *y = *(otc_set *const *)b;
+    const cJSON *p = otc__jstr_item(x->json, "set_id"), *q = otc__jstr_item(y->json, "set_id");
     if (x->recommended != y->recommended) return x->recommended ? -1 : 1;
-    return otc__strcmp_null(otc__jstr(x->json, "set_id"), otc__jstr(y->json, "set_id"));
+    if (!p || !q) return p ? 1 : (q ? -1 : 0);
+    return otc__bytes_cmp(p->valuestring, otc__jstr_len(p), q->valuestring, otc__jstr_len(q));   /* in full (CR2 DR33) */
 }
 
 /* by window, stable (ties keep file order) */
@@ -106,18 +108,18 @@ void otc_station_free(otc_station_t *st)
     free(st);
 }
 
-static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const char *rec_id)
+static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const cJSON *rec_id, const cJSON *vals)
 {
     const otc_release *rel = st->rel;
     const cJSON *cons = otc__jget(j, "constituents"), *flags = otc__jget(j, "qc_flags");
     const cJSON *drops = otc__jget(j, "dropped_constituents"), *x;
-    const char *set_id = otc__jstr(j, "set_id");
+    const cJSON *set_id = otc__jstr_item(j, "set_id");
     size_t i;
     s->json = j;
     s->station = st;
     s->conv = otc__find_convention(rel, otc__jstr(j, "convention_id"));
     s->lic = otc__find_licence(rel, otc__jstr(j, "licence_id"));
-    s->recommended = rec_id && set_id && !strcmp(rec_id, set_id);
+    s->recommended = otc__jstr_same(rec_id, set_id);   /* in full: a NUL inside never matches less (CR2 DR33) */
     s->no_constants = otc__parse_qc_status(otc__jstr(j, "qc_status")) == OTC_QC_STATUS_NO_CONSTANTS;
     s->n_cons = cJSON_IsArray(cons) ? (size_t)cJSON_GetArraySize(cons) : 0;
     s->cons = (otc_constituent_t *)calloc(s->n_cons ? s->n_cons : 1, sizeof *s->cons);
@@ -153,8 +155,13 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     /* the station's validation rows for this set, by window */
     s->val = (const otc_validation_t **)calloc(st->n_val ? st->n_val : 1, sizeof *s->val);
     if (!s->val) return OTC_E_NOMEM;
-    for (i = 0; i < st->n_val; i++)
-        if (set_id && st->val[i].set_id && !strcmp(st->val[i].set_id, set_id)) s->val[s->n_val++] = &st->val[i];
+    i = 0;
+    if (cJSON_IsArray(vals)) {
+        cJSON_ArrayForEach(x, vals) {   /* st->val[i] is the i-th row */
+            if (otc__jstr_same(otc__jstr_item(x, "set_id"), set_id)) s->val[s->n_val++] = &st->val[i];
+            i++;
+        }
+    }
     sort_by_window(s->val, s->n_val);
     return OTC_OK;
 }
@@ -163,7 +170,7 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
 {
     otc_station_t *st = (otc_station_t *)calloc(1, sizeof *st);
     const cJSON *sets = otc__jget(root, "constant_sets"), *vals = otc__jget(root, "validation"), *x;
-    const char *rec_id = otc__jstr(root, "recommended_set_id");
+    const cJSON *rec_id = otc__jstr_item(root, "recommended_set_id");
     size_t i;
     otc_status rc = OTC_OK;
     *out = NULL;
@@ -183,7 +190,7 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
     i = 0;
     if (cJSON_IsArray(sets)) {
         cJSON_ArrayForEach(x, sets) {
-            if ((rc = build_set(st, &st->sets[i], x, rec_id)) != OTC_OK) break;
+            if ((rc = build_set(st, &st->sets[i], x, rec_id, vals)) != OTC_OK) break;
             if (st->sets[i].recommended) st->rec = &st->sets[i];
             st->order_all[i] = &st->sets[i];
             i++;
@@ -207,7 +214,7 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
 #define ST_STR(NAME, KEY)                                                                      \
     otc_status NAME(const otc_station_t *st, char *buf, size_t len, size_t *needed)            \
     {                                                                                          \
-        return st ? otc__copy_str(otc__jstr(st->root, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return st ? otc__copy_member(st->root, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 ST_STR(otc_station_station_id, "station_id")
 ST_STR(otc_station_name, "name")
@@ -267,10 +274,10 @@ otc_status otc_station_alias_at(const otc_station_t *st, const char *system, siz
                                 size_t *needed)
 {
     const cJSON *v = system ? otc__jget(aliases_of(st), system) : NULL;
-    if (cJSON_IsString(v) && i == 0) return otc__copy_str(v->valuestring, buf, len, needed);
+    if (cJSON_IsString(v) && i == 0) return otc__copy_jstr(v, buf, len, needed);
     if (cJSON_IsArray(v) && i < (size_t)cJSON_GetArraySize(v)) {
         const cJSON *x = cJSON_GetArrayItem(v, (int)i);
-        if (cJSON_IsString(x)) return otc__copy_str(x->valuestring, buf, len, needed);
+        if (cJSON_IsString(x)) return otc__copy_jstr(x, buf, len, needed);
     }
     return OTC_E_INVALID_ARGUMENT;
 }
@@ -306,8 +313,7 @@ otc_status otc_station_set(const otc_station_t *st, const char *set_id, const ot
     if (!st || !out || !set_id) return OTC_E_INVALID_ARGUMENT;
     *out = NULL;
     for (i = 0; i < st->n_sets; i++) {
-        const char *id = otc__jstr(st->sets[i].json, "set_id");
-        if (id && !strcmp(id, set_id)) { *out = &st->sets[i]; return OTC_OK; }
+        if (otc__jstr_is(otc__jstr_item(st->sets[i].json, "set_id"), set_id)) { *out = &st->sets[i]; return OTC_OK; }
     }
     return OTC_E_NOT_FOUND;
 }
@@ -348,7 +354,7 @@ otc_status otc_station_validation_at(const otc_station_t *st, size_t i, const ot
 #define TB_STR(NAME, KEY)                                                                      \
     otc_status NAME(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed)           \
     {                                                                                          \
-        return t ? otc__copy_str(otc__jstr(t->root, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return t ? otc__copy_member(t->root, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 TB_STR(otc_tombstone_station_id, "station_id")
 TB_STR(otc_tombstone_name, "name")
@@ -376,7 +382,7 @@ otc_status otc_tombstone_raw_json(const otc_tombstone_t *t, char *buf, size_t le
 #define SET_STR(NAME, KEY)                                                                     \
     otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
     {                                                                                          \
-        return s ? otc__copy_str(otc__jstr(s->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return s ? otc__copy_member(s->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 SET_STR(otc_set_set_id, "set_id")
 SET_STR(otc_set_source, "source")
@@ -410,11 +416,11 @@ otc_status otc_set_record_span(const otc_set *s, const otc_record_span **out)
 }
 otc_status otc_record_span_start(const otc_record_span *rs, char *buf, size_t len, size_t *needed)
 {
-    return rs ? otc__copy_str(otc__jstr(rs->json, "start"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return rs ? otc__copy_member(rs->json, "start", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 otc_status otc_record_span_end(const otc_record_span *rs, char *buf, size_t len, size_t *needed)
 {
-    return rs ? otc__copy_str(otc__jstr(rs->json, "end"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return rs ? otc__copy_member(rs->json, "end", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 int64_t otc_record_span_good_samples(const otc_record_span *rs) { return rs ? otc__jint(rs->json, "good_samples") : -1; }
 
@@ -453,7 +459,7 @@ otc_qc_flag_kind otc_qc_flag_flag(const otc_qc_flag *f)
 }
 otc_status otc_qc_flag_reason(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
 {
-    return f ? otc__copy_str(otc__jstr(f->json, "reason"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return f ? otc__copy_member(f->json, "reason", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 otc_status otc_qc_flag_values_json(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
 {
@@ -469,7 +475,7 @@ otc_status otc_set_dropped_at(const otc_set *s, size_t i, const otc_dropped **ou
 }
 otc_status otc_dropped_name(const otc_dropped *d, char *buf, size_t len, size_t *needed)
 {
-    return d ? otc__copy_str(otc__jstr(d->json, "name"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return d ? otc__copy_member(d->json, "name", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 otc_dropped_reason otc_dropped_dropped_reason(const otc_dropped *d)
 {
@@ -477,7 +483,7 @@ otc_dropped_reason otc_dropped_dropped_reason(const otc_dropped *d)
 }
 otc_status otc_dropped_detail(const otc_dropped *d, char *buf, size_t len, size_t *needed)
 {
-    return d ? otc__copy_str(otc__jstr(d->json, "detail"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return d ? otc__copy_member(d->json, "detail", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 
 otc_status otc_set_convention(const otc_set *s, const otc_convention **out)
@@ -504,7 +510,7 @@ otc_status otc_set_provenance_field(const otc_set *s, const char *field, char *b
     const cJSON *v;
     if (!s || !field) return OTC_E_INVALID_ARGUMENT;
     v = otc__jget(prov_of(s), field);
-    if (cJSON_IsString(v)) return otc__copy_str(v->valuestring, buf, len, needed);
+    if (cJSON_IsString(v)) return otc__copy_jstr(v, buf, len, needed);
     return otc__copy_json(v, buf, len, needed);
 }
 
@@ -519,7 +525,7 @@ otc_status otc_set_provenance_json(const otc_set *s, char *buf, size_t len, size
 #define PROV_STR(NAME, KEY)                                                                    \
     otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
     {                                                                                          \
-        return s ? otc__copy_str(otc__jstr(prov_of(s), KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return s ? otc__copy_member(prov_of(s), KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 #define PROV_JSON(NAME, KEY)                                                                   \
     otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
@@ -542,7 +548,7 @@ otc_status otc_set_provenance_build(const otc_set *s, const otc_provenance_build
 #define BUILD_STR(NAME, KEY)                                                                   \
     otc_status NAME(const otc_provenance_build *b, char *buf, size_t len, size_t *needed)      \
     {                                                                                          \
-        return b ? otc__copy_str(otc__jstr(b->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return b ? otc__copy_member(b->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 BUILD_STR(otc_provenance_build_build_commit, "build_commit")
 BUILD_STR(otc_provenance_build_built_at, "built_at")
@@ -579,7 +585,7 @@ otc_time_base_code_t otc_time_base_code(const otc_time_base_t *tb)
 #define TIMEBASE_STR(NAME, OBJ, KEY)                                                           \
     otc_status NAME(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed)          \
     {                                                                                          \
-        return tb ? otc__copy_str(otc__jstr(OBJ, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return tb ? otc__copy_member(OBJ, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 TIMEBASE_STR(otc_time_base_reason, tb->json, "reason")
 TIMEBASE_STR(otc_time_base_declared, tb->json, "declared")
@@ -611,7 +617,7 @@ otc_status otc_time_base_months_dropped_at(const otc_time_base_t *tb, size_t i, 
     const cJSON *x;
     if (!tb || i >= otc_time_base_months_dropped_count(tb)) return OTC_E_INVALID_ARGUMENT;
     x = cJSON_GetArrayItem(months_of(tb), (int)i);
-    return cJSON_IsString(x) ? otc__copy_str(x->valuestring, buf, len, needed) : otc__copy_json(x, buf, len, needed);
+    return cJSON_IsString(x) ? otc__copy_jstr(x, buf, len, needed) : otc__copy_json(x, buf, len, needed);
 }
 
 size_t otc_time_base_evidence_count(const otc_time_base_t *tb) { return tb ? tb->n_ev : 0; }
@@ -626,7 +632,7 @@ otc_status otc_time_base_evidence_at(const otc_time_base_t *tb, size_t i, const 
 #define EVIDENCE_STR(NAME, KEY)                                                                \
     otc_status NAME(const otc_time_base_evidence *ev, char *buf, size_t len, size_t *needed)   \
     {                                                                                          \
-        return ev ? otc__copy_str(otc__jstr(ev->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return ev ? otc__copy_member(ev->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 EVIDENCE_STR(otc_time_base_evidence_comparator_kind, "comparator_kind")
 EVIDENCE_STR(otc_time_base_evidence_comparator_id, "comparator_id")
