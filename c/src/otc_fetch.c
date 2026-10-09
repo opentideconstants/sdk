@@ -1282,6 +1282,12 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
             otc_release_info_free(ri);
             return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a file entry without a name", doc_url);
         }
+        if (!sha || otc__jint(f, "size") < 0) {   /* as the schema requires (CR2 DR12) */
+            ri->n_files = n;
+            otc_release_info_free(ri);
+            return fail(c, OTC_E_INVALID_RELEASE, doc_url,
+                        "%s: the entry for %s of %s needs a string sha256 and an integer size of 0 or more", doc_url, name, ds);
+        }
         fi->name = otc__strdup(name);
         fi->url = url_resolve(doc_url, u ? u : name);
         fi->sha256 = sha ? otc__strdup(sha) : NULL;

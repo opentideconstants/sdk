@@ -134,12 +134,12 @@ function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry
         } catch (e) {
             throw new InvalidReleaseError(`${what} ${url}: the url of ${f["name"]} is not a URL`, { cause: e });
         }
-        files.push({
-            name: f["name"],
-            url: href,
-            size: typeof f["size"] === "number" ? f["size"] : null,
-            sha256: typeof f["sha256"] === "string" ? f["sha256"].toLowerCase() : null,
-        });
+        const size = f["size"], sha = f["sha256"];
+        if (typeof sha !== "string" || typeof size !== "number" || !Number.isInteger(size) || size < 0) {
+            // as the schema requires (CR2 DR12): never a null that a later merge copies over the measured values
+            throw new InvalidReleaseError(`${what} ${url}: the entry for ${f["name"]} of ${d} needs a string sha256 and an integer size of 0 or more`);
+        }
+        files.push({ name: f["name"], url: href, size, sha256: sha.toLowerCase() });
     }
     files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     const s = (k: string) => (typeof v[k] === "string" ? (v[k] as string) : null);

@@ -43,12 +43,17 @@ test("reader_too_old is its own error class with the code reader_too_old", () =>
 const enc = (v) => new TextEncoder().encode(JSON.stringify(v));
 const isCode = (code) => (e) => e instanceof otc.OpenTideConstantsError && e.code === code;
 
-test("T36: an index with no releases list, or a file entry with no name, is invalid_release", async () => {
+test("T36: an index with no releases list, or a file entry with no name, sha256 or size, is invalid_release", async () => {
     const { parseIndex } = await import("../dist/core.js");
     const url = "https://example.invalid/OTC_index.json";
     assert.throws(() => parseIndex(enc({}), url), isCode("invalid_release"));
     assert.throws(() => parseIndex(enc({ releases: {} }), url), isCode("invalid_release"));
-    const entry = { datestamp: "20991231", format_version: "1.0", files: [{ name: "OTC_20991231.json" }, 5] };
+    const file = { name: "OTC_20991231.json", sha256: "a".repeat(64), size: 1 };
+    const entry = { datestamp: "20991231", format_version: "1.0", files: [file, 5] };
+    // CR2 DR12: a string sha256 and an integer size of 0 or more
+    for (const bad of [{ sha256: null }, { sha256: 5 }, { size: null }, { size: "1" }, { size: -1 }, { size: 1.5 }]) {
+        assert.throws(() => parseIndex(enc({ releases: [{ ...entry, files: [{ ...file, ...bad }] }] }), url), isCode("invalid_release"));
+    }
     assert.throws(() => parseIndex(enc({ releases: [entry] }), url), (e) => isCode("invalid_release")(e) && /OTC_index\.json/.test(e.message));
     assert.throws(() => parseIndex(enc({ releases: [{ ...entry, files: "x" }] }), url), isCode("invalid_release"));
     assert.equal(parseIndex(enc({ releases: [{ ...entry, files: [entry.files[0]] }] }), url)[0].files.length, 1);

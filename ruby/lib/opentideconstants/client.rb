@@ -379,8 +379,8 @@ class OpenTideConstants
 
     # Checks a pointer or index entry from the server (spec §4.2, §5.2): an
     # object with a valid datestamp, and files (if any) whose elements are
-    # objects with a String name and, if given, a String url and sha256 and
-    # an Integer size. Returns the entry.
+    # objects with a String name, a String sha256, an Integer size of 0 or
+    # more (CR2 DR12) and, if given, a String url. Returns the entry.
     def check_entry!(entry, source)
         raise InvalidReleaseError, "#{source}: an entry is not an object" unless entry.is_a?(Hash)
         d = entry["datestamp"]
@@ -389,8 +389,8 @@ class OpenTideConstants
         return entry if files.nil?
         raise InvalidReleaseError, "#{source}: files of #{d} is not a list" unless files.is_a?(Array)
         files.each do |f|
-            next if f.is_a?(Hash) && f["name"].is_a?(String) && [f["url"], f["sha256"]].all? { |v| v.nil? || v.is_a?(String) } &&
-                    (f["size"].nil? || f["size"].is_a?(Integer))
+            next if f.is_a?(Hash) && f["name"].is_a?(String) && (f["url"].nil? || f["url"].is_a?(String)) &&
+                    f["sha256"].is_a?(String) && f["size"].is_a?(Integer) && f["size"] >= 0
             raise InvalidReleaseError, "#{source}: a files entry of #{d} is malformed: #{f.inspect[0, 120]}"
         end
         entry

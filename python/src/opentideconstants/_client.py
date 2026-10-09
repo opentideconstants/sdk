@@ -428,9 +428,16 @@ class OpenTideConstants:
             # never guess a version (spec §7.4, CR D9)
             raise InvalidReleaseError(f"{what}: {ds}: format_version {fv!r} or min_reader_version {mrv!r} "
                                       f"is not MAJOR.MINOR")
+        for f in entry.get("files") or ():
+            # every file entry has a string sha256 and an integer size >= 0, as the schema requires (CR2 DR12)
+            size = f.get("size") if isinstance(f, dict) else None
+            if isinstance(f, dict) and (not isinstance(f.get("sha256"), str) or not isinstance(size, int)
+                                        or isinstance(size, bool) or size < 0):
+                raise InvalidReleaseError(f"{what}: {ds}: the entry for {f.get('name')!r} needs a string sha256 "
+                                          f"and an integer size of 0 or more")
         try:
-            files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
-                                           f["sha256"].lower() if isinstance(f.get("sha256"), str) else None)
+            files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f["size"],
+                                           f["sha256"].lower())
                                   for f in entry.get("files") or ()),
                                  key=lambda f: f.name))
             return ReleaseInfo(entry["datestamp"], entry.get("format_version"), entry.get("concept_doi"),
