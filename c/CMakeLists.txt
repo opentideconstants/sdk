@@ -140,5 +140,23 @@ install(TARGETS opentideconstants
 install(FILES include/opentideconstants.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # Spec 7.4: supported-formats.json ships with every C release artifact.
 install(FILES supported-formats.json DESTINATION ${CMAKE_INSTALL_DATADIR}/opentideconstants)
+# opentideconstants.pc. The default build is a static archive: then its
+# dependencies are part of Libs/Requires, so a plain `pkg-config --libs` links
+# (C71); a shared library keeps them private.
+if(WIN32)
+    set(OTC_PC_SYSLIBS "")
+else()
+    set(OTC_PC_SYSLIBS "-lm -pthread")
+endif()
+if(BUILD_SHARED_LIBS)
+    set(OTC_PC_REQUIRES "")
+    set(OTC_PC_LIBS "")
+    set(OTC_PC_LIBS_PRIVATE "${OTC_PC_SYSLIBS}")
+else()
+    set(OTC_PC_REQUIRES "${OTC_PC_REQUIRES_PRIVATE}")
+    set(OTC_PC_REQUIRES_PRIVATE "")
+    set(OTC_PC_LIBS "${OTC_PC_SYSLIBS}")
+    set(OTC_PC_LIBS_PRIVATE "")
+endif()
 configure_file(opentideconstants.pc.in opentideconstants.pc @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
