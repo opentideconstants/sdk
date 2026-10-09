@@ -2452,19 +2452,21 @@ otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char 
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; info and found must not be NULL");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = latest_info(&c, &ri, &read_main);
-    if (st == OTC_OK && !read_main) {
+    /* spec 7.4 (CR D10): the OTC_latest.json check is made also when the call fails
+     * because no release it reads exists, so newer_format_major is set before it fails */
+    if ((st == OTC_OK || st == OTC_E_UNSUPPORTED_FORMAT || st == OTC_E_READER_TOO_OLD) && !read_main) {
+        otc_error kept = *c.err;
         /* spec 7.4: a conditional GET of OTC_latest.json tells whether a newer
          * format major exists (otc_fetch_newer_format_major reads it back) */
         cJSON *doc = NULL;
         char *url = NULL;
-        if (get_changing(&c, "OTC_latest.json", &doc, &url) != OTC_OK) {
+        if (get_changing(&c, "OTC_latest.json", &doc, &url) != OTC_OK)
             logf_(&c, 2, "cannot read OTC_latest.json: %s", c.err->message);
-            otc_error_init(c.err);
-        }
+        *c.err = kept;   /* the call's own result stays the one reported */
         cJSON_Delete(doc);
         free(url);
     }
-    if (st == OTC_OK) {
+    if (st == OTC_OK || st == OTC_E_UNSUPPORTED_FORMAT || st == OTC_E_READER_TOO_OLD) {
         int major = -1;
         char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
         cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
