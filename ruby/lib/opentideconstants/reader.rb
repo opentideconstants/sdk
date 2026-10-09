@@ -263,6 +263,7 @@ class OpenTideConstants
         end
 
         def parse_json(text)
+            raise InvalidReleaseError, "not valid UTF-8" unless text.valid_encoding?
             JSON.parse(text)
         rescue JSON::ParserError, EncodingError => e
             raise InvalidReleaseError, "not valid JSON: #{e.message[0, 200]}"

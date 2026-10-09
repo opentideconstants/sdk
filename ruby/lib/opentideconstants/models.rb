@@ -24,9 +24,18 @@ class OpenTideConstants
 
         def time(value)
             return nil if value.nil?
+            raise InvalidReleaseError, "bad time: #{value.inspect}" unless value.is_a?(String)
             Time.iso8601(value).utc.freeze
         rescue ArgumentError
             raise InvalidReleaseError, "bad time: #{value.inspect}"
+        end
+
+        # A build-only time (provenance.build): a malformed one is nil, not a
+        # failed station (spec §4.6, §7.3).
+        def time_or_nil(value)
+            time(value)
+        rescue InvalidReleaseError
+            nil
         end
     end
 
@@ -136,8 +145,8 @@ class OpenTideConstants
         def initialize(raw)
             Util.deep_freeze(raw)
             @build_commit = raw["build_commit"]
-            @built_at = Util.time(raw["built_at"])
-            @fetched_at = Util.time(raw["fetched_at"])
+            @built_at = Util.time_or_nil(raw["built_at"])
+            @fetched_at = Util.time_or_nil(raw["fetched_at"])
             @run_id = raw["run_id"]
             @tool_versions = raw["tool_versions"].is_a?(Hash) ? raw["tool_versions"] : nil
             freeze
@@ -150,7 +159,7 @@ class OpenTideConstants
         attr_reader :build, :adapter_version, :input_sha256, :carried_from_release, :selection_reason, :decision, :raw
 
         def initialize(raw)
-            raw = {} unless raw.is_a?(Hash)
+            raw = {} if raw.nil? # a set with no provenance (a non-object fails the load: Release.check_station!)
             @raw = Util.deep_freeze(raw)
             # A missing build happens only in malformed input: nil, and the load goes on (spec §4.6).
             @build = raw["build"].is_a?(Hash) ? ProvenanceBuild.new(raw["build"]) : nil

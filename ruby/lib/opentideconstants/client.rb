@@ -38,6 +38,12 @@ class OpenTideConstants
     def initialize(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil,
                    timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache,
                    auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false)
+        # A file client reads no pointer, so these options would be silently
+        # ignored (CR D31). offline: true is still allowed with file: it is
+        # what download uses on a file client (case download/offline-not-cached).
+        if file && (release != :latest || on_network_error != :use_cache)
+            raise InvalidArgumentError, "file cannot be combined with release or on_network_error"
+        end
         @requested = check_release_arg(release)
         @mode = check_enum(mode, MODES, "mode").to_sym
         @on_network_error = check_enum(on_network_error, ON_NETWORK_ERROR, "on_network_error").to_sym
@@ -54,9 +60,9 @@ class OpenTideConstants
         %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
             raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
         end
+        raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
         base_url ||= ENV["OPENTIDECONSTANTS_BASE_URL"]
         base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
-        raise InvalidArgumentError, "base_url must be a String" unless base_url.is_a?(String)
         @base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
         raise InvalidArgumentError, "cache_dir must be a String" unless cache_dir.nil? || cache_dir.is_a?(String)
         @cache_dir = cache_dir
