@@ -473,7 +473,11 @@ otc_status otc__file_open(const char *path, otc__file **out)
     otc__file *f;
     struct stat sb;
     *out = NULL;
-    do { fd = open(path, O_RDONLY); } while (fd < 0 && errno == EINTR);
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+    /* close-on-exec: the handle a release keeps does not leak into the app's child processes */
+    do { fd = open(path, O_RDONLY | O_CLOEXEC); } while (fd < 0 && errno == EINTR);
     if (fd < 0) return OTC_E_IO;
     if (fstat(fd, &sb) != 0 || !S_ISREG(sb.st_mode)) { close(fd); return OTC_E_IO; }
     f = (otc__file *)malloc(sizeof *f);
