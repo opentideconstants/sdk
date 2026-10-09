@@ -96,6 +96,9 @@ def fold_table():
 # vendor symbols. Far fewer means nm read the wrong file or printed nothing
 # usable, and an empty list must not pass (R2-240).
 MIN_OTC_SYMBOLS = 100
+# A sanitizer build adds the compiler's own globals (___asan_globals_registered,
+# __odr_asan_gen_<name>); they are instrumentation, not a name of this library.
+SANITIZER_SYMBOL = re.compile(r"_{2,3}(odr_asan|asan|ubsan|tsan|msan|sancov|sanitizer)_")
 
 
 def check_symbols(lib):
@@ -116,7 +119,7 @@ def check_symbols(lib):
             name = name[1:]
         if name.startswith("otc_"):
             good += 1
-        else:
+        elif not SANITIZER_SYMBOL.match(name):
             bad.append(name)
     for name in sorted(set(bad)):
         print(f"{lib}: global symbol without the otc_ prefix: {name}")
