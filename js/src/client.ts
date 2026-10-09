@@ -202,8 +202,25 @@ export class OpenTideConstants {
                 extra.lastError = e as NetworkError;
             }
         }
-        const rel = await OpenTideConstants.#loadStored(ctx, node, d);
-        if (verifyOnOpen) await verifyCached(ctx, d);
+        let rel = await OpenTideConstants.#loadStored(ctx, node, d);
+        if (verifyOnOpen) {
+            try {
+                await verifyCached(ctx, d);
+            } catch (e) {
+                // the bad file was deleted from the cache; online, download it again and check once more (spec 5.3)
+                rel._close();
+                if (!(e instanceof ChecksumError) || offline) throw e;
+                log(ctx, "warn", `${e.message}; downloading release ${d} again`);
+                from = await ensureRelease(ctx, d, null);
+                rel = await OpenTideConstants.#loadStored(ctx, node, d);
+                try {
+                    await verifyCached(ctx, d);
+                } catch (again) {
+                    rel._close();
+                    throw again;
+                }
+            }
+        }
         return new OpenTideConstants(ctx, node, rel, from, extra);
     }
 

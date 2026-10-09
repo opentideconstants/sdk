@@ -1110,8 +1110,7 @@
    "case": "rules/pk11/bad-sha256-file-differs-latest",
    "runners": [
     "c-fetch",
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK11",
    "reason": "step 0 open: expected error 'checksum_mismatch', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -1121,8 +1120,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK11",
    "reason": "step 0 open: expected error 'checksum_mismatch', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -1132,8 +1130,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK11",
    "reason": "step 3 open: expected a result, got error 'checksum_mismatch' (SHA-256 of OTC_20991231.2.jsonl does not match its .sha256 row)"
@@ -1166,8 +1163,7 @@
   {
    "case": "rules/pk11/verify-missing-data-file",
    "runners": [
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK11",
    "reason": "step 2 verify: expected error {'$any_of': ['checksum_mismatch', 'io']}, got a result {\"verified\": true}"

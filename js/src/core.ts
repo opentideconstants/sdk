@@ -399,14 +399,25 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
     const res = await httpGet(ctx, url);
     if (res.status === 404) throw new ReleaseNotFoundError(`release ${d} not found at ${ctx.baseUrl}`);
     if (res.status !== 200) throw new NetworkError(`HTTP ${res.status}: ${url}`, { url, status: res.status });
+    if (entry) {
+        // OTC_{D}.sha256 is itself listed in the pointer: check it first (spec 5.2 step 4.1, PK11 T78)
+        const own = entry.files.find((f) => f.name === n.sha);
+        if (own) checkBytes(n.sha, await ctx.platform.sha256(res.body), res.body.length, own.sha256, own.size);
+    }
     const rows = parseSha256(dec.decode(res.body));
     if (rows.size === 0) throw new InvalidReleaseError(`${n.sha} lists no files`);
     if (entry) {
+        // the pointer and OTC_{D}.sha256 list the same files with the same digests (spec 5.2 step 4.1)
         for (const f of entry.files) {
+            if (f.name === n.sha) continue;
             const listed = rows.get(f.name);
             if (f.sha256 && listed && f.sha256 !== listed) {
                 throw new ChecksumError(`the pointer and ${n.sha} disagree on ${f.name}`, { file: f.name, expected: f.sha256, actual: listed });
             }
+        }
+        const named = new Set(entry.files.map((f) => f.name));
+        for (const [name, sha] of rows) {
+            if (!named.has(name)) throw new ChecksumError(`${n.sha} lists ${name}, which the pointer does not`, { file: name, expected: null, actual: sha });
         }
     }
     return { bytes: res.body, rows };
@@ -654,22 +665,39 @@ export async function prefetchDir(store: CacheStore, d: string, warn: (message: 
     };
 }
 
-/** Re-hash the cached files of release D against .verified (spec 4.3 verify). */
+/**
+ * Hash the cached files of release D again, in full, and compare them with the cached OTC_{D}.sha256 (spec 4.3
+ * verify). The files this mode loads must be there; every listed data file that is there is hashed. A file that
+ * does not match is deleted from the cache (spec 4.8 checksum_mismatch), so the next open downloads it again.
+ */
 export async function verifyCached(ctx: Ctx, d: string): Promise<true> {
     const store = ctx.store;
     if (!store) throw new OfflineError("no cache");
-    const v = await readVerified(store, d);
-    if (!v) throw new ChecksumError(`release ${d} has no .verified`, { file: `${relDir(d)}/.verified`, expected: null, actual: null });
-    const present = new Set(await store.list(relDir(d)));
-    for (const [name, f] of Object.entries(v.files)) {
-        if (!present.has(name) || name.endsWith(".sha256")) continue;
-        const b = await store.read(`${relDir(d)}/${name}`);
-        if (!b) continue;
-        const actual = await ctx.platform.sha256(b);
-        if (f.sha256 && actual !== f.sha256) {
-            throw new ChecksumError(`${name}: SHA-256 ${actual}, expected ${f.sha256}`, { file: store.describe(`${relDir(d)}/${name}`), expected: f.sha256, actual });
+    const dir = relDir(d);
+    const n = names(d);
+    const shaBytes = await store.read(`${dir}/${n.sha}`);
+    if (!shaBytes) throw new ChecksumError(`${n.sha} is missing from the cache`, { file: store.describe(`${dir}/${n.sha}`), expected: null, actual: null });
+    const rows = parseSha256(dec.decode(shaBytes));
+    const present = new Set(await store.list(dir));
+    const needed = ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json];
+    let checked = 0;
+    for (const name of [...new Set([...needed, ...rows.keys()])]) {
+        if (name === n.sha) continue;
+        const file = store.describe(`${dir}/${name}`);
+        const expected = rows.get(name) ?? null;
+        const b = present.has(name) ? await store.read(`${dir}/${name}`) : null;
+        if (!b) {
+            if (needed.includes(name)) throw new ChecksumError(`${name} is missing from the cache`, { file, expected, actual: null });
+            continue;
         }
+        const actual = await ctx.platform.sha256(b);
+        if (actual !== expected) {
+            await store.remove(`${dir}/${name}`).catch((e: unknown) => log(ctx, "warn", `cannot delete ${file}: ${String(e)}`));
+            throw new ChecksumError(`${name}: SHA-256 ${actual}, expected ${expected ?? "(not listed)"}`, { file, expected, actual });
+        }
+        checked++;
     }
+    if (checked === 0) throw new ChecksumError(`no file of release ${d} was checked`, { file: store.describe(dir), expected: null, actual: null });
     return true;
 }
 
