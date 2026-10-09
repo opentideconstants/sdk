@@ -31,7 +31,15 @@ const runner = makeRunner(sdk);
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
     if (!line.trim()) continue;
-    const msg = JSON.parse(line); // a malformed request is a driver bug; let it raise
+    let msg;
+    try {
+        msg = JSON.parse(line);
+        if (msg === null || typeof msg !== "object" || Array.isArray(msg)) throw new TypeError("a request must be a JSON object");
+    } catch (e) { // a request the runner cannot read: an error reply, and the runner goes on
+        process.stderr.write(`bad request line: ${e}\n`);
+        out({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `bad request line: ${e.message}` } });
+        continue;
+    }
     out(await runner.handle(msg));
 }
 await runner.shutdown();

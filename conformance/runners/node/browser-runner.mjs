@@ -75,7 +75,15 @@ out({ hello: { runner: "typescript-browser", version, origin, features: ["fetch"
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
     if (!line.trim()) continue;
-    const msg = JSON.parse(line);
+    let msg;
+    try {
+        msg = JSON.parse(line);
+        if (msg === null || typeof msg !== "object" || Array.isArray(msg)) throw new TypeError("a request must be a JSON object");
+    } catch (e) { // a request the runner cannot read: an error reply, and the runner goes on
+        process.stderr.write(`bad request line: ${e}\n`);
+        out({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `bad request line: ${e.message}` } });
+        continue;
+    }
     out(await page.evaluate((m) => window.__otc.runner.handle(m), msg));
 }
 await page.evaluate(() => window.__otc.runner.shutdown()).catch(() => undefined);

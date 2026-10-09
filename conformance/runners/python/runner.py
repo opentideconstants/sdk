@@ -361,7 +361,15 @@ def main():
     for line in sys.stdin:
         if not line.strip():
             continue
-        req = json.loads(line)
+        try:
+            req = json.loads(line)
+            if not isinstance(req, dict):
+                raise ValueError(f"a request must be a JSON object, got {line.strip()[:80]!r}")
+        except ValueError as e:  # a request the runner cannot read: an error reply, and the runner goes on
+            print(f"bad request line: {e}", file=sys.stderr)
+            out.write(json.dumps({"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": f"bad request line: {e}"}}) + "\n")
+            out.flush()
+            continue
         try:
             reply = {"ok": True, "result": runner.handle(req)}
         except Exception as e:  # noqa: BLE001 - the protocol reports every exception

@@ -369,7 +369,20 @@ runner = Runner.new
 $stdout.write(JSON.generate(runner.hello) + "\n")
 $stdin.each_line do |line|
     next if line.strip.empty?
-    reply = runner.handle(JSON.parse(line))
+    req = begin
+        JSON.parse(line)
+    rescue JSON::ParserError => e
+        e
+    end
+    reply = if req.is_a?(Hash)
+        runner.handle(req)
+    else
+        # a request the runner cannot read: an error reply, and the runner goes on
+        msg = req.is_a?(Exception) ? req.message : "a request must be a JSON object"
+        $stderr.puts("bad request line: #{msg}")
+        { "ok" => false, "error" => { "code" => "uncaught:#{req.is_a?(Exception) ? req.class : 'BadRequest'}",
+                                      "message" => "bad request line: #{msg}" } }
+    end
     $stdout.write(JSON.generate(reply) + "\n")
 end
 runner.close
