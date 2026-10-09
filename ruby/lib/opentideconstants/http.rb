@@ -85,12 +85,18 @@ class OpenTideConstants
                         digest << chunk
                         size += chunk.bytesize
                     end
+                    # the close is a local file operation too: a failure there is not network (R2-102)
                     sink(path) do
                         f.flush
                         f.fsync
+                        f.close
                     end
                 ensure
-                    f.close unless f.closed?
+                    begin
+                        f.close unless f.closed?
+                    rescue SystemCallError, IOError
+                        nil # the read or write already failed; that error is the one to report
+                    end
                 end
                 Response.new(status: 200, etag: res["etag"], size: size, sha256: digest.hexdigest)
             end
