@@ -2806,7 +2806,7 @@
        "removed_in": "20991231.2",
        "removed_reason": "merged",
        "merged_into": "OTC-T-0022",
-       "detail": "Merged into OTC-T-0022 (test tombstone)."
+       "detail": null
       }
      }
     },

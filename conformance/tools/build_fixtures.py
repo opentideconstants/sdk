@@ -199,9 +199,12 @@ def model_station(station_id, name, country, lat, lon, timezone, scale):
                         simple_constituents(scale, phase_shift=lon))])
 
 
-def tombstone(station_id, name, removed_in, reason, into, detail):
-    return {"station_id": station_id, "status": "removed", "name": name, "removed_in": removed_in,
-            "removed_reason": reason, "merged_into": into, "detail": detail}
+def tombstone(station_id, name, removed_in, reason, into, detail=None):
+    t = {"station_id": station_id, "status": "removed", "name": name, "removed_in": removed_in,
+         "removed_reason": reason, "merged_into": into}
+    if detail is not None:
+        t["detail"] = detail
+    return t
 
 
 def release_doc(datestamp):
@@ -318,7 +321,8 @@ def release_doc(datestamp):
                                     "height_offset_high": 1.05, "height_offset_low": 0.98,
                                     "height_adjusted_type": "R", "licence_id": "kartverket"}),
         active("OTC-T-0004", "Oakland Pier", "USA", 37.795, -122.33, "America/Los_Angeles",
-               [cset("OTC-T-0004", "noaa", "noaa", "official", "noaa-greenwich-v1", "noaa", simple_constituents(1.02))],
+               # its own set's licence (eot20) is not its reference station's (noaa): the attribution needs both
+               [cset("OTC-T-0004", "noaa", "noaa", "official", "noaa-greenwich-v1", "eot20", simple_constituents(1.02))],
                type_="subordinate", recommended="OTC-T-0004/noaa", aliases={"noaa": "9900004"},
                subordinate_offsets={"reference_station_id": s1, "time_offset_high_min": -5, "time_offset_low_min": 4,
                                     "height_offset_high": 0.12, "height_offset_low": -0.05,
@@ -372,8 +376,8 @@ def release_doc(datestamp):
         rel["concept_doi"] = "10.5072/zenodo.1"
         del rel["build_commit"]
         del rel["changelog_url"]
-        doc["stations"].append(tombstone("OTC-T-0021", "Closing Pier", SECOND, "merged", "OTC-T-0022",
-                                         "Merged into OTC-T-0022 (test tombstone)."))
+        # no detail: Tombstone.detail is null
+        doc["stations"].append(tombstone("OTC-T-0021", "Closing Pier", SECOND, "merged", "OTC-T-0022"))
         doc["stations"].append(gauge_station("OTC-T-0022", "New Pier", "GBR", 52.1, 1.75, "Europe/London", 1.25))
     doc["stations"].sort(key=lambda s: s["station_id"])
     return doc

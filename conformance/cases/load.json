@@ -28,20 +28,20 @@
        {
         "name": "OTC_20991231.2.json",
         "url": null,
-        "size": 28703,
-        "sha256": "812d82c22e70c4006b2b9a7de98f34a59f69d8d282c575966c7d9fd753fd669c"
+        "size": 28652,
+        "sha256": "8e1b22a5499fdbe7ec5306f5ef8df167fca024fb44b98ae38e44175e8d8969b8"
        },
        {
         "name": "OTC_20991231.2.json.gz",
         "url": null,
-        "size": 4214,
-        "sha256": "156acfc522f7eedffdc9b4a640d10ee005aa66386cfec15f13c88546b1f0224f"
+        "size": 4202,
+        "sha256": "612e2a5ee9029e16446a2369927318a480a81b45a6e654983cb8b09d5cb33a10"
        },
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25878,
-        "sha256": "27f7f031c0dbb79120b6729b9f22b2fca591fec0a9a494493adf65ac05ae074a"
+        "size": 25827,
+        "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
        },
        {
         "name": "OTC_20991231.2.meta.json",
@@ -89,19 +89,19 @@
         "name": "OTC_20991231.2.json",
         "url": null,
         "size": null,
-        "sha256": "812d82c22e70c4006b2b9a7de98f34a59f69d8d282c575966c7d9fd753fd669c"
+        "sha256": "8e1b22a5499fdbe7ec5306f5ef8df167fca024fb44b98ae38e44175e8d8969b8"
        },
        {
         "name": "OTC_20991231.2.json.gz",
         "url": null,
         "size": null,
-        "sha256": "156acfc522f7eedffdc9b4a640d10ee005aa66386cfec15f13c88546b1f0224f"
+        "sha256": "612e2a5ee9029e16446a2369927318a480a81b45a6e654983cb8b09d5cb33a10"
        },
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25878,
-        "sha256": "27f7f031c0dbb79120b6729b9f22b2fca591fec0a9a494493adf65ac05ae074a"
+        "size": 25827,
+        "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
        },
        {
         "name": "OTC_20991231.2.meta.json",
@@ -147,7 +147,7 @@
        {
         "name": "OTC_20991231.2.json",
         "url": null,
-        "size": 28703,
+        "size": 28652,
         "sha256": null
        }
       ]
@@ -188,7 +188,7 @@
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25878,
+        "size": 25827,
         "sha256": null
        },
        {
@@ -590,7 +590,7 @@
        "file": {
         "$contains": "OTC_20991231.2.jsonl"
        },
-       "expected": "27f7f031c0dbb79120b6729b9f22b2fca591fec0a9a494493adf65ac05ae074a",
+       "expected": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1",
        "actual": {
         "$regex": "^[0-9a-f]{64}$"
        }

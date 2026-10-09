@@ -858,7 +858,7 @@
        "time_base": null,
        "is_recommended": true,
        "convention_id": "noaa-greenwich-v1",
-       "licence_id": "noaa",
+       "licence_id": "eot20",
        "constituent_count": 2
       }
      }
