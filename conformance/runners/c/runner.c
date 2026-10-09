@@ -1430,8 +1430,9 @@ static otc_status swap_to(const char *ds, otc_error *err)
     return OTC_OK;
 }
 
-/* otc_fetch_update, then the new release replaces the current one (spec 4.3 "update"). */
-static otc_status do_update(const char *from, int *updated, char *to, size_t to_len, otc_error *err)
+/* otc_fetch_update, then the new release replaces the current one (spec 4.3 "update"). *nomove is set when the
+ * library says it updated but the runner cannot find a new datestamp in the path it got (never "updated" then). */
+static otc_status do_update(const char *from, int *updated, char *to, size_t to_len, otc_error *err, int *nomove)
 {
     otc_fetch_options fo;
     char path[4096];
@@ -1439,6 +1440,7 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
     otc_status rc;
     fetch_options(&fo, err);
     *updated = 0;
+    *nomove = 0;
     snprintf(to, to_len, "%s", from);
     rc = otc_fetch_update(&fo, from, path, sizeof path, &up);
     if (rc != OTC_OK || !up) return rc;
@@ -1446,7 +1448,12 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
     {   /* the datestamp of the new file: OTC_{D}.jsonl */
         const char *b = base_of(path);
         size_t n = strlen(b);
-        if (n > 10 && !strncmp(b, "OTC_", 4)) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
+        if (n > 10 && !strncmp(b, "OTC_", 4) && !strcmp(b + n - 6, ".jsonl")) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
+    }
+    if (!strcmp(to, from)) {
+        snprintf(err->message, sizeof err->message, "otc_fetch_update reported an update to %s, which names no newer release", path);
+        *nomove = 1;
+        return OTC_OK;
     }
     rc = swap_to(to, err);
     if (rc == OTC_OK) *updated = 1;
@@ -1498,7 +1505,9 @@ static void op_fetch(request *q, reply *r)
             set_error(r, "pinned_release", "update: the client was opened on a pinned release or a file");
             return;
         }
-        rc = do_update(ds, &updated, to, sizeof to, &err);
+        int nomove = 0;
+        rc = do_update(ds, &updated, to, sizeof to, &err, &nomove);
+        if (nomove) { set_error(r, "uncaught:UpdateNoMove", err.message); return; }
         cJSON_AddBoolToObject(r->result, "updated", updated);
         cJSON_AddStringToObject(r->result, "from", ds);
         cJSON_AddStringToObject(r->result, "to", to);
@@ -1546,7 +1555,7 @@ static void maybe_auto_update(void)
 {
     char ds[64], to[64];
     size_t need;
-    int updated;
+    int updated, nomove = 0;
     otc_error err;
     double now;
     if (!g_client.auto_update || g_client.pinned || !g_current) return;
@@ -1554,7 +1563,7 @@ static void maybe_auto_update(void)
     if (now - g_client.last_check < g_client.update_interval) return;
     g_client.last_check = now;
     if (otc_release_datestamp(g_current, ds, sizeof ds, &need) != OTC_OK) return;
-    if (do_update(ds, &updated, to, sizeof to, &err) != OTC_OK)
+    if (do_update(ds, &updated, to, sizeof to, &err, &nomove) != OTC_OK || nomove)
         fprintf(stderr, "automatic update failed: %s\n", err.message);
 }
 
