@@ -14,6 +14,9 @@
 #if !defined(_WIN32) && !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE 700
 #endif
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S   /* rand_s, for the lock token */
+#endif
 #include "otc_internal.h"
 #include "otc_sha256_rename.h"
 #include "sha-256.h"
@@ -43,8 +46,17 @@
 #define READ_TIMEOUT_S 60.0
 #define ATTEMPTS 3
 #define RETRY_AFTER_MAX_S 60.0
+/* spec 5.4 Locks; the tests (c/tests/test_fetch_lock.c) build a copy with short timers */
+#ifdef OTC_LOCK_POLL_MS
+#define LOCK_POLL_MS OTC_LOCK_POLL_MS
+#else
 #define LOCK_POLL_MS 500
+#endif
+#ifdef OTC_LOCK_STALE_MS
+#define LOCK_STALE_MS OTC_LOCK_STALE_MS
+#else
 #define LOCK_STALE_MS 120000
+#endif
 
 /* ------------------------------------------------------------- one-time init */
 
@@ -896,11 +908,47 @@ static otc_status copy_to_tmp(fctx *c, const char *src, const char *dir, char **
 
 typedef int (*done_fn)(fctx *c, const char *ds);
 
-/* Takes <dir>/.lock (spec 5.4). *held = 0 when done() became true while waiting. */
-static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn done, int *held)
+/* A random token of 128 bits as 32 hex digits (spec 5.4, CR D3). */
+static void lock_token(char out[33])
+{
+    static const char digits[] = "0123456789abcdef";
+    unsigned char b[16];
+    size_t i;
+    int ok = 0;
+#ifdef _WIN32
+    for (i = 0; i < 16; i += 4) {
+        unsigned int r;
+        if (rand_s(&r) != 0) break;
+        memcpy(b + i, &r, 4);
+    }
+    ok = i >= 16;
+#else
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f) {
+        ok = fread(b, 1, sizeof b, f) == sizeof b;
+        fclose(f);
+    }
+#endif
+    if (!ok) {   /* no OS randomness: the tmp-name mixer (unique per process and call) */
+        char *t = tmp_path("x");
+        size_t n = t ? strlen(t) : 0;
+        for (i = 0; i < 16; i++) b[i] = (unsigned char)(n > i ? t[n - 1 - i] : (unsigned char)(i * 37 + get_pid()));
+        free(t);
+    }
+    for (i = 0; i < 16; i++) {
+        out[2 * i] = digits[b[i] >> 4];
+        out[2 * i + 1] = digits[b[i] & 15];
+    }
+    out[32] = '\0';
+}
+
+/* Takes <dir>/.lock (spec 5.4). *held = 0 when done() became true while waiting.
+ * token gets the random token written to owner.json; lock_release needs it. */
+static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn done, int *held, char token[33])
 {
     char *lock = path2(dir, ".lock");
     long waited = 0;
+    int failed_removals = 0;
     *held = 0;
     if (!lock) return fail(c, OTC_E_NOMEM, dir, "out of memory");
     for (;;) {
@@ -913,16 +961,21 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
         }
         if (done && done(c, ds)) break;
         if (waited >= LOCK_STALE_MS) {
+            /* spec 5.4 (CR D3): a stale lock that cannot be removed 3 times is a cache error */
             logf_(c, 2, "removing the stale lock %s", lock);
-            fs_rm_rf(lock);
-            waited = 0;
-            continue;
+            if (fs_rm_rf(lock) == 0) continue;
+            if (++failed_removals >= 3) {
+                otc_status st = fail(c, OTC_E_CACHE, lock, "cannot remove the stale lock %s", lock);
+                free(lock);
+                return st;
+            }
         }
         sleep_ms(LOCK_POLL_MS);
         waited += LOCK_POLL_MS;
     }
     if (*held) {
         char *owner = path2(lock, "owner.json");
+        lock_token(token);
         FILE *f = owner ? fs_fopen(owner, "wb") : NULL;
         if (f) {
             char host[256] = "";
@@ -946,6 +999,7 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
                 cJSON_AddStringToObject(o, "host", host);
                 cJSON_AddStringToObject(o, "sdk", SDK_ID);
                 cJSON_AddStringToObject(o, "started_at", when);
+                cJSON_AddStringToObject(o, "token", token);
                 txt = cJSON_PrintUnformatted(o);
                 if (txt) fputs(txt, f);
                 cJSON_free(txt);
@@ -959,11 +1013,22 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
     return OTC_OK;
 }
 
-static void lock_release(const char *dir)
+static char *slurp(const char *path);
+
+/* Releases <dir>/.lock only when its owner.json carries this process's token:
+ * a lock that another process took over as stale is left alone (spec 5.4, CR D3). */
+static void lock_release(fctx *c, const char *dir, const char *token)
 {
-    char *lock = path2(dir, ".lock"), *owner = lock ? path2(lock, "owner.json") : NULL;
-    if (owner) fs_unlink(owner);
-    if (lock) fs_rmdir(lock);
+    char *lock = path2(dir, ".lock"), *owner = lock ? path2(lock, "owner.json") : NULL, *t = owner ? slurp(owner) : NULL;
+    cJSON *o = t ? otc__json_parse(t, strlen(t)) : NULL;
+    if (owner && !otc__strcmp_null(otc__jstr(o, "token"), token)) {
+        fs_unlink(owner);
+        fs_rmdir(lock);
+    } else {
+        logf_(c, 1, "the lock %s now belongs to another process; it is left alone", lock ? lock : dir);
+    }
+    cJSON_Delete(o);
+    free(t);
     free(owner);
     free(lock);
 }
@@ -1630,6 +1695,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     pending pend[4];
     cJSON *old = NULL, *ver = NULL, *files;
     int held = 0, res;
+    char token[33] = "";
     http_resp r;
     otc_status st = OTC_OK;
     otc_release *rel = NULL;
@@ -1640,7 +1706,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     memset(pend, 0, sizeof pend);
     if (!dir) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto out; }
-    if ((st = lock_take(c, dir, ds, usable_strict, &held)) != OTC_OK) goto out;
+    if ((st = lock_take(c, dir, ds, usable_strict, &held, token)) != OTC_OK) goto out;
     if (!held || usable_strict(c, ds)) goto out;   /* another process finished it */
 
     /* 1. the .sha256 list */
@@ -1778,7 +1844,7 @@ out:
     }
     pending_free(pend, n_pend, 1);
     if (sha_tmp) fs_unlink(sha_tmp);
-    if (held) lock_release(dir);
+    if (held) lock_release(c, dir, token);
     otc__free_rows(names, digests, n_rows);
     cJSON_Delete(old);
     cJSON_Delete(ver);
