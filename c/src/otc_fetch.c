@@ -1698,19 +1698,42 @@ static char *rel_file(fctx *c, const char *ds, const char *suffix)
     return p;
 }
 
+/* A files row of .verified: an object whose sha256 and url are strings or null
+ * and whose size is a non-negative integer or null (CR2 R2-088). */
+static int verified_row_ok(const cJSON *row)
+{
+    const cJSON *sha, *url, *size;
+    if (!cJSON_IsObject(row)) return 0;
+    sha = otc__jget(row, "sha256");
+    url = otc__jget(row, "url");
+    size = otc__jget(row, "size");
+    if (sha && !cJSON_IsString(sha) && !cJSON_IsNull(sha)) return 0;
+    if (url && !cJSON_IsString(url) && !cJSON_IsNull(url)) return 0;
+    return !size || cJSON_IsNull(size) ||
+           (cJSON_IsNumber(size) && size->valuedouble >= 0 && size->valuedouble < 9007199254740992.0 &&
+            size->valuedouble == (double)(int64_t)size->valuedouble);
+}
+
 /* A release's .verified record: OTC_OK with *out NULL when it is missing or not a
- * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. */
+ * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. A record
+ * with a files row that is not a valid row is not a record. */
 static otc_status read_verified_st(fctx *c, const char *ds, cJSON **out)
 {
     char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = NULL;
     otc_status st = p ? slurp_st(p, &t) : OTC_E_NOMEM;
     cJSON *doc = NULL;
+    const cJSON *row;
     /* a parse that ran out of memory is out of memory, never "not verified" */
     if (t && otc__json_parse_st(t, strlen(t), &doc) == OTC_E_NOMEM) st = OTC_E_NOMEM;
     free(d);
     free(p);
     free(t);
     if (doc && !cJSON_IsObject(otc__jget(doc, "files"))) { cJSON_Delete(doc); doc = NULL; }
+    if (doc) {
+        cJSON_ArrayForEach(row, otc__jget(doc, "files")) {
+            if (!verified_row_ok(row)) { cJSON_Delete(doc); doc = NULL; break; }
+        }
+    }
     *out = doc;
     return st;
 }
@@ -2326,6 +2349,75 @@ static otc_status open_cached(fctx *c, const char *ds, otc_release **out)
     return st;
 }
 
+/* A cached release that failed its size or SHA-256 check or does not parse
+ * (spec 5.2 step 6); a format this library cannot read is not corrupt. */
+static int corrupt_status(otc_status st) { return st == OTC_E_CHECKSUM || st == OTC_E_INVALID_RELEASE; }
+
+/*
+ * Removes a corrupt cached release (spec 5.2 step 6): .verified first, so it is
+ * no longer trusted, then its data files. A failure to delete is logged; it
+ * never hides the error that found the release corrupt.
+ */
+static void heal(fctx *c, const char *ds, const char *why)
+{
+    char *d = rel_dir(c, ds), *p[3];
+    size_t i;
+    p[0] = d ? path2(d, ".verified") : NULL;
+    p[1] = rel_file(c, ds, ".jsonl");
+    p[2] = rel_file(c, ds, ".meta.json");
+    logf_(c, 2, "the cached release %s is corrupt (%s); removing it from the cache", ds, why);
+    for (i = 0; i < 3; i++) {
+        if (!p[i]) logf_(c, 2, "cannot remove a file of the cached release %s: out of memory", ds);
+        else if (fs_unlink(p[i]) != 0 && fs_kind(p[i]) != 0) logf_(c, 2, "cannot remove %s", p[i]);
+        free(p[i]);
+    }
+    free(d);
+}
+
+/*
+ * Opens the newest cached release that C reads (spec 5.2 steps 1, 5 and 6). A
+ * candidate that fails its check or does not parse is healed and the next
+ * older one is tried; one whose format C cannot read is skipped. OTC_OK with
+ * *rel NULL when none loads (the caller reports its own error); OTC_E_CACHE or
+ * OTC_E_NOMEM when the cache cannot be read.
+ */
+static otc_status open_newest_cached(fctx *c, char **ds_out, otc_release **rel)
+{
+    char **list = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
+    char *it = ip ? slurp(ip) : NULL;
+    cJSON *index = it ? otc__json_parse(it, strlen(it)) : NULL;
+    size_t n = 0, i;
+    otc_status st = (dir && ip) ? cached_list(c, &list, &n) : fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    *ds_out = NULL;
+    *rel = NULL;
+    free(dir);
+    free(ip);
+    free(it);
+    for (i = 0; st == OTC_OK && i < n && !*rel; i++) {
+        otc_status ost;
+        if (!usable_loose(c, list[i]) || !cached_readable(c, list[i], index)) continue;
+        ost = open_cached(c, list[i], rel);
+        if (ost == OTC_OK) {
+            if (!(*ds_out = otc__strdup(list[i]))) {
+                otc_close(*rel);
+                *rel = NULL;
+                st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+            }
+        } else if (corrupt_status(ost)) {
+            heal(c, list[i], c->err->message);
+            otc_error_init(c->err);
+        } else if (ost == OTC_E_UNSUPPORTED_FORMAT || ost == OTC_E_READER_TOO_OLD) {
+            logf_(c, 1, "the cached release %s is not readable: %s", list[i], c->err->message);
+            otc_error_init(c->err);
+        } else {
+            st = ost;
+        }
+    }
+    free_list(list, n);
+    cJSON_Delete(index);
+    return st;
+}
+
 /* Puts a release into the cache if needed and opens it. */
 static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info *info, otc_release **rel,
                                 otc_loaded_from *lf)
@@ -2336,16 +2428,19 @@ static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info 
     if (u) {
         *lf = OTC_LOADED_FROM_CACHE;
         st = open_cached(c, ds, rel);
-        if (st != OTC_E_CHECKSUM) return st;
-        /* spec 4.8, 5.3: a cached file that fails its check is not used again. Online, the
-         * release is downloaded again: its .verified goes first, so every file is fetched */
+        if (!corrupt_status(st)) return st;
+        /* spec 4.8, 5.2 step 6, 5.3: a cached release that fails its check or does not
+         * parse is healed and, online, downloaded again: its .verified goes first, so
+         * every file is fetched */
         {
             char *d = rel_dir(c, ds), *v = d ? path2(d, ".verified") : NULL;
-            int gone = v && (fs_unlink(v) == 0 || fs_kind(v) == 0);
-            logf_(c, 2, "the cached release %s failed its check (%s); downloading it again", ds, c->err->message);
+            int gone;
+            heal(c, ds, c->err->message);
+            gone = v && fs_kind(v) == 0;
             free(v);
             free(d);
             if (!gone) return st;
+            logf_(c, 2, "downloading the release %s again", ds);
             otc_error_init(c->err);
         }
     }
@@ -2383,16 +2478,22 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
             if (!u)
                 return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
             *lf = OTC_LOADED_FROM_CACHE;
-            return open_cached(c, release, rel);
+            st = open_cached(c, release, rel);
+            if (corrupt_status(st)) {   /* spec 5.2 step 6: healed; the error stays the check's */
+                otc_error keep = *c->err;
+                heal(c, release, keep.message);
+                *c->err = keep;
+            }
+            return st;
         }
         return ensure_cached(c, release, NULL, rel, lf);
     }
     if ((st = ensure_root(c)) != OTC_OK) return st;
     if (c->offline) {
-        if ((st = newest_cached(c, ds_out)) != OTC_OK) return st;
-        if (!*ds_out) return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache");
+        if ((st = open_newest_cached(c, ds_out, rel)) != OTC_OK) return st;
+        if (!*rel) return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache");
         *lf = OTC_LOADED_FROM_CACHE;
-        return open_cached(c, *ds_out, rel);
+        return OTC_OK;
     }
     st = latest_info(c, &info, NULL);
     if (st == OTC_OK) {
@@ -2402,29 +2503,26 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
     }
     if (st == OTC_E_NETWORK && !c->raise) {
         char *ds = NULL;
+        otc_release *crel = NULL;
         otc_error net = *c->err;
-        if (newest_cached(c, &ds) != OTC_OK) *c->err = net;   /* the network error stays the one reported */
-        if (ds) {
-            otc_status cst;
-            snprintf(last_msg, last_len, "%s", net.message);
-            logf_(c, 2, "network error (%s); using the cached release %s", last_msg, ds);
-            free(*ds_out);
-            *ds_out = ds;
-            *last_status = OTC_E_NETWORK;
-            *lf = OTC_LOADED_FROM_CACHE_AFTER_ERROR;
-            otc_error_init(c->err);
-            cst = open_cached(c, ds, rel);
-            if (cst != OTC_OK) {
-                /* the cache cannot stand in: the error is the network's, with what the cache said */
-                char cmsg[512];
-                snprintf(cmsg, sizeof cmsg, "%s", c->err->message);
-                *c->err = net;
-                logf_(c, 2, "the cached release %s cannot be used either: %s", ds, cmsg);
-                *last_status = OTC_OK;
-                return OTC_E_NETWORK;
-            }
-            return OTC_OK;
+        otc_status cst;
+        otc_error_init(c->err);
+        cst = open_newest_cached(c, &ds, &crel);
+        if (cst != OTC_OK || !crel) {
+            /* no cached release stands in: the error is the network's (spec 5.2 step 6) */
+            if (cst != OTC_OK) logf_(c, 2, "the cache cannot stand in: %s", c->err->message);
+            *c->err = net;
+            free(ds);
+            return OTC_E_NETWORK;
         }
+        snprintf(last_msg, last_len, "%s", net.message);
+        logf_(c, 2, "network error (%s); using the cached release %s", last_msg, ds);
+        free(*ds_out);
+        *ds_out = ds;
+        *rel = crel;
+        *last_status = OTC_E_NETWORK;
+        *lf = OTC_LOADED_FROM_CACHE_AFTER_ERROR;
+        return OTC_OK;
     }
     return st;
 }

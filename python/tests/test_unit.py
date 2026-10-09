@@ -712,11 +712,52 @@ class ErrorClassTest(unittest.TestCase):
         with self.assertRaises(otc.OfflineError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
 
-    def test_unreadable_verified_is_an_io_error_not_absent(self):
+    def test_unreadable_verified_is_a_cache_error_not_absent(self):
+        # spec §5.2 step 6 (CR2 DR16): a cached file that cannot be read is cache
         d = self.cached()
         (d / ".verified").chmod(0)
-        with self.assertRaises(otc.FileError):
+        with self.assertRaises(otc.CacheError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
+
+    def test_a_failed_verified_write_closes_the_loaded_release(self):
+        # R2-089: the release loaded from the download kept its .jsonl handle open when .verified could not be written
+        from unittest import mock
+        import opentideconstants._client as cl
+        loaded, real_load, real_write = [], cl.load_document, cl.atomic_write
+
+        def load(*a, **kw):
+            loaded.append(real_load(*a, **kw))
+            return loaded[-1]
+
+        def write(path, data):
+            if Path(path).name == ".verified":
+                raise OSError(28, "No space left on device")
+            return real_write(path, data)
+        srv = _Server()
+        try:
+            with mock.patch.object(cl, "load_document", load), mock.patch.object(cl, "atomic_write", write):
+                with self.assertRaises(otc.CacheError):
+                    otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream")
+        finally:
+            srv.close()
+        self.assertEqual(len(loaded), 1)
+        self.assertIsNone(loaded[0]._fh, "the loaded release's file handle leaks")
+
+    def test_unreadable_cached_index_is_a_cache_error_not_absent(self):
+        # R2-090: an unreadable cached OTC_index.json was "absent", so releases() offline said offline_unavailable
+        d = self.cached()
+        with otc.OpenTideConstants(cache_dir=str(self.cache), offline=True) as c:
+            idx = self.cache / "v1" / "pointer" / "OTC_index.json"
+            idx.parent.mkdir(parents=True, exist_ok=True)
+            idx.write_bytes((FIXTURES / "good" / "OTC_index.json").read_bytes())
+            self.assertTrue(c.releases())
+            idx.chmod(0)
+            try:
+                with self.assertRaises(otc.CacheError):
+                    c.releases()
+            finally:
+                idx.chmod(0o600)
+        self.assertTrue(d.is_dir())
 
     def test_download_with_a_cached_sha256_that_is_not_text(self):
         d = self.cached()
@@ -777,11 +818,27 @@ class ChecksumTest(unittest.TestCase):
             srv.close()
         p = self.dir / "OTC_20991231.2.jsonl"
         p.write_bytes(p.read_bytes()[:-10])
-        with self.assertRaises(otc.ChecksumError) as cm:
-            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+        with self.assertRaises(otc.ChecksumError) as cm:  # pinned: the release asked for is corrupt
+            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream", release="20991231.2")
         self.assertIsNotNone(cm.exception.expected)
         self.assertIsNotNone(cm.exception.actual)
         self.assertFalse(p.exists())
+        self.assertFalse((self.dir / ".verified").exists())
+
+    def test_offline_latest_heals_a_corrupt_release_and_raises_offline_when_none_loads(self):
+        # spec §5.2 step 6 (CR2 DR16): the corrupt release is healed; with no other one, the original error
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream").close()
+        finally:
+            srv.close()
+        p = self.dir / "OTC_20991231.2.jsonl"
+        p.write_bytes(p.read_bytes()[:-10])
+        with self.assertLogs("opentideconstants", "WARNING"):
+            with self.assertRaises(otc.OfflineError):
+                otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+        self.assertFalse(p.exists())
+        self.assertFalse((self.dir / ".verified").exists())
 
 
 class HttpTest(unittest.TestCase):

@@ -153,14 +153,29 @@ class ErrorClassTest < Minitest::Test
         end
     end
 
-    # R32: a cache file that exists but cannot be read is an io error, not "not cached".
-    def test_unreadable_verified_is_io
+    # R32, CR2 DR16: a cache file that exists but cannot be read is a cache
+    # error, not "not cached".
+    def test_unreadable_verified_is_cache
         posix_only
         srv = serve
         cache = tmpdir
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache).close
         FileUtils.chmod(0o000, File.join(cache, "v1", "releases", D, ".verified"))
-        assert_raises(OTC::FileError) { OTC.new(release: D, cache_dir: cache, offline: true) }
+        assert_raises(OTC::CacheError) { OTC.new(release: D, cache_dir: cache, offline: true) }
+    end
+
+    # R2-091: a releases directory that cannot be listed is a cache error,
+    # not an empty cache (offline_unavailable).
+    def test_unlistable_releases_dir_is_cache
+        posix_only
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache).close
+        rels = File.join(cache, "v1", "releases")
+        FileUtils.chmod(0o000, rels)
+        assert_raises(OTC::CacheError) { OTC.new(cache_dir: cache, offline: true) }
+    ensure
+        FileUtils.chmod(0o755, rels) if rels
     end
 
     # R29: a release whose .verified goes away between the check and the

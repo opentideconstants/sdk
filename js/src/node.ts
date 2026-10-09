@@ -215,7 +215,14 @@ class NodeCache implements CacheStore {
     }
 
     async read(rel: string): Promise<Uint8Array | null> {
-        return readIfExists(this.describe(rel));
+        // a cache file that is there but cannot be read is cache, never absent and not io (spec 5.2 step 6, R2-092)
+        const p = this.describe(rel);
+        try {
+            return fs.readFileSync(p);
+        } catch (e) {
+            if (isErrno(e, "ENOENT") || isErrno(e, "ENOTDIR")) return null;
+            throw new CacheError(`cannot read ${p}`, { path: p, cause: e });
+        }
     }
 
     async write(rel: string, bytes: Uint8Array): Promise<void> {

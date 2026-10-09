@@ -74,6 +74,28 @@ class ChecksumTest < Minitest::Test
         c&.close
     end
 
+    # R2-084: a cached file that fails its check and cannot be deleted (a
+    # read-only directory) is still checksum_mismatch; the failed delete is
+    # logged, not raised in its place (spec §5.2 step 6, CR2 DR16).
+    def test_undeletable_corrupt_file_keeps_the_checksum_error
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        dir = File.join(cache, "v1", "releases", D)
+        cached = File.join(dir, "OTC_#{D}.jsonl")
+        bytes = File.binread(cached)
+        bytes[100] = bytes[100] == "x" ? "y" : "x"
+        File.binwrite(cached, bytes)
+        File.chmod(0o555, dir)
+        log = StringIO.new
+        assert_raises(OTC::ChecksumError) do
+            OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true, verify_on_open: true, logger: Logger.new(log))
+        end
+        assert_includes log.string, "cannot remove"
+    ensure
+        File.chmod(0o755, dir) if dir && File.directory?(dir)
+    end
+
     # R86: verify on a file_unverified client is checksum_mismatch (CR D20).
     def test_verify_without_sha256_is_checksum_mismatch
         dir = tmpdir

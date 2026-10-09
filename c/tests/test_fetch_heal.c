@@ -1,8 +1,8 @@
 /* PK11 / C22: a cached file that fails its check.
- *  - after a network error with use_cache: the cache is tried (and fails its
- *    check), and the error is the network's, not the corrupt cache's
- *    checksum_mismatch;
- *  - online: the release is downloaded again because its check failed (and
+ *  - after a network error with use_cache: the cache is tried (it fails its
+ *    check and is healed, CR2 DR16), and the error is the network's, not the
+ *    corrupt cache's checksum_mismatch;
+ *  - online: a cached release that fails its check is downloaded again (and
  *    the good file is back).
  * The library's own log lines show which path ran. */
 #include "otc_test.h"
@@ -12,8 +12,8 @@ static int g_fallback_failed, g_redownload;
 static void log_fn(void *u, int level, const char *msg)
 {
     (void)u;
-    if (level == 2 && strstr(msg, "cannot be used either")) g_fallback_failed++;
-    if (level == 2 && strstr(msg, "failed its check (") && strstr(msg, "downloading it again")) g_redownload++;
+    if (level == 2 && strstr(msg, "is corrupt (") && strstr(msg, "removing it from the cache")) g_fallback_failed++;
+    if (level == 2 && strstr(msg, "downloading the release ") && strstr(msg, " again")) g_redownload++;
 }
 
 static void corrupt(const char *path)
@@ -57,8 +57,12 @@ int main(void)
     if (err.status != OTC_E_NETWORK || strstr(err.message, "SHA-256")) fprintf(stderr, "error: %s\n", err.message);
     otc_close(rel);
     rel = NULL;
-    /* online again: downloaded again because the check failed, and healed */
+    /* online again: the healed release is downloaded, then made corrupt once more */
     fo.base_url = base;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_OK);
+    corrupt(path);
+    CHECK(otc_verify_file(path, NULL, &err) == OTC_E_CHECKSUM);   /* the premise */
+    /* downloaded again because the check failed, and healed */
     g_fallback_failed = g_redownload = 0;
     CHECK_STATUS(otc_fetch_open(&fo, NULL, NULL, &rel), OTC_OK);
     if (rel) CHECK(otc_release_loaded_from(rel) == OTC_LOADED_FROM_DOWNLOAD);

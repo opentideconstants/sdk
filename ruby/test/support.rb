@@ -11,6 +11,8 @@ require "fileutils"
 require "json"
 require "digest"
 require "openssl"
+require "logger"
+require "stringio"
 require "time"
 
 module TestSupport
