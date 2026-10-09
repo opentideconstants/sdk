@@ -51,8 +51,18 @@ extern "C" {
  * OTC_E_READER_TOO_OLD. Equals supported_format_version in c/supported-formats.json. */
 #define OTC_FORMAT_VERSION "1.0"
 
+/* OTC_API marks the public functions. A build of the library defines
+ * OTC_BUILDING (and OTC_SHARED for a shared library): then only these
+ * functions are exported (the build hides every other symbol, B4-5). An
+ * application needs to define nothing. */
 #ifndef OTC_API
+#if defined(OTC_BUILDING) && defined(OTC_SHARED) && defined(_WIN32)
+#define OTC_API __declspec(dllexport)
+#elif defined(OTC_BUILDING) && defined(OTC_SHARED) && (defined(__GNUC__) || defined(__clang__))
+#define OTC_API __attribute__((visibility("default")))
+#else
 #define OTC_API
+#endif
 #endif
 
 /* ------------------------------------------------------------------ status */
