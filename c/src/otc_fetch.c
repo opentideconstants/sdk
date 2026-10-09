@@ -438,24 +438,85 @@ static void cache_open_options(const fctx *c, otc_open_options *oo)
     oo->error = c->err;
 }
 
+/* Copy src to dst (n bytes, always NUL-terminated) with the userinfo of every
+ * URL replaced by "***": after the "://", "user:password@host" becomes
+ * "***@host" (spec 5.7, CR2 DR21). The authority ends at "/", "?",
+ * "#", white space, a quote, "<" or ">"; its last "@" ends the userinfo. When
+ * src was cut short (truncated) and its last authority runs to the end with no
+ * "@", that authority may be a cut userinfo, so it is replaced by "***" too. */
+static void redact_userinfo(char *dst, size_t n, const char *src, int truncated)
+{
+    size_t o = 0;
+    const char *p = src;
+#define REDACT_PUT(s, len) do { size_t k_ = (len); if (k_ > n - 1 - o) k_ = n - 1 - o; \
+                                memcpy(dst + o, (s), k_); o += k_; } while (0)
+    if (n == 0) return;
+    while (*p) {
+        const char *sep = strstr(p, "://"), *auth, *end, *at = NULL;
+        if (!sep) { REDACT_PUT(p, strlen(p)); break; }
+        auth = sep + 3;
+        for (end = auth; *end && !strchr("/?#'\"<> \t\r\n\v\f", *end); end++)
+            if (*end == '@') at = end;
+        if (at) {
+            REDACT_PUT(p, (size_t)(auth - p));
+            REDACT_PUT("***", 3);
+            p = at;
+        } else if (!*end && truncated && end > auth) {
+            REDACT_PUT(p, (size_t)(auth - p));
+            REDACT_PUT("***", 3);
+            p = end;
+        } else {
+            REDACT_PUT(p, (size_t)(end - p));
+            p = end;
+        }
+    }
+#undef REDACT_PUT
+    dst[o] = '\0';
+}
+
+/* A URL with no "://" whose text before its last "@" has no "/": "user:password@host:3128". fail()
+ * cannot see its userinfo, so a message shows "***" and the text from that "@" (CR2 DR21). */
+static int no_scheme_userinfo(const char *url)
+{
+    const char *at = strrchr(url, '@');
+    return !strstr(url, "://") && at && !memchr(url, '/', (size_t)(at - url));
+}
+
+/* snprintf into dst (n bytes, at most 1024 are used) with the userinfo of every URL redacted (CR2 DR21). */
+static void fmt_redacted(char *dst, size_t n, const char *fmt, ...)
+{
+    char raw[1024];
+    va_list ap;
+    int len;
+    if (n > sizeof raw) n = sizeof raw;
+    va_start(ap, fmt);
+    len = vsnprintf(raw, n, fmt, ap);
+    va_end(ap);
+    redact_userinfo(dst, n, raw, len < 0 || (size_t)len >= n);
+}
+
 static void logf_(const fctx *c, int level, const char *fmt, ...)
 {
-    char msg[1024];
+    char raw[1024], msg[1024];
     va_list ap;
+    int len;
     if (!c->o || !c->o->log_fn) return;
     va_start(ap, fmt);
-    vsnprintf(msg, sizeof msg, fmt, ap);
+    len = vsnprintf(raw, sizeof raw, fmt, ap);
     va_end(ap);
+    redact_userinfo(msg, sizeof msg, raw, len < 0 || (size_t)len >= sizeof raw);  /* CR2 DR21 */
     c->o->log_fn(c->o->log_user_data, level, msg);
 }
 
 static otc_status fail(fctx *c, otc_status st, const char *file, const char *fmt, ...)
 {
-    char msg[512];
+    char raw[512], msg[512];
     va_list ap;
+    int len;
     va_start(ap, fmt);
-    vsnprintf(msg, sizeof msg, fmt, ap);
+    len = vsnprintf(raw, sizeof raw, fmt, ap);
     va_end(ap);
+    redact_userinfo(msg, sizeof msg, raw, len < 0 || (size_t)len >= sizeof raw);  /* CR2 DR21 */
     otc__err_set(c->err, st, file, "%s", msg);
     return st;
 }
@@ -573,9 +634,11 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     /* spec 4.2, 5.7 (CR D19): checked here, before any network access; never retried, never a
      * reason to fall back to the cache */
     if (!http_url(c->base_url))
-        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "base_url must be an absolute http or https URL: %s", c->base_url);
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "base_url must be an absolute http or https URL: %s%s",
+                    no_scheme_userinfo(c->base_url) ? "***" : "", no_scheme_userinfo(c->base_url) ? strrchr(c->base_url, '@') : c->base_url);
     if (o && o->proxy && o->proxy[0] && !http_url(o->proxy))
-        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "proxy must be an absolute http or https URL: %s", o->proxy);
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "proxy must be an absolute http or https URL: %s%s",
+                    no_scheme_userinfo(o->proxy) ? "***" : "", no_scheme_userinfo(o->proxy) ? strrchr(o->proxy, '@') : o->proxy);
     if (o && o->ca_file) {
         FILE *f = fs_kind(o->ca_file) == 2 ? fs_fopen(o->ca_file, "rb") : NULL;
         if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
@@ -935,8 +998,8 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         if (r->write_error == 1) return fail(c, OTC_E_CACHE, sink_path, "cannot write %s", sink_path);
         if (r->write_error == 2) return fail(c, OTC_E_NOMEM, url, "out of memory");
         if (rc != CURLE_OK) {
-            snprintf(last_msg, sizeof last_msg, "%s for %s: %s", curl_easy_strerror(rc), url,
-                     errbuf[0] ? errbuf : curl_easy_strerror(rc));
+            fmt_redacted(last_msg, sizeof last_msg, "%s for %s: %s", curl_easy_strerror(rc), url,
+                         errbuf[0] ? errbuf : curl_easy_strerror(rc));
             last_status = 0;
             if (!transient(rc)) {   /* spec 5.7: only connection errors are retried */
                 fail(c, OTC_E_NETWORK, url, "%s", last_msg);
@@ -955,7 +1018,7 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             *result = GET_NOT_FOUND;
             return OTC_OK;
         } else if (r->status == 429 || r->status >= 500) {
-            snprintf(last_msg, sizeof last_msg, "HTTP %ld for %s", r->status, url);
+            fmt_redacted(last_msg, sizeof last_msg, "HTTP %ld for %s", r->status, url);
             last_status = r->status;
             retry = 1;
         } else {
