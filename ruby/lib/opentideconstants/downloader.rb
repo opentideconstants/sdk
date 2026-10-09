@@ -160,28 +160,40 @@ class OpenTideConstants
             end
 
             pointer_files = entry ? Array(entry["files"]).to_h { |f| [f["name"], f] } : {}
-            written = []
-            todo.each do |n|
-                path = File.join(@to, n)
-                fetch = lambda do
-                    raise OfflineError, "offline and #{n} is not cached" if @client.send(:offline)
-                    pf = pointer_files[n]
-                    url = pf && pf["url"] ? @client.send(:resolve, pointer_url, pf["url"]) : @client.send(:base_url) + n
-                    Downloader.fetch_checked(@client, url, @to, path, n, rows[n], pf && pf["size"], error_class: FileError)
+            # Every file is made and checked as a temporary file in to first;
+            # only when all of them are there are they renamed into place, so a
+            # failure (offline, a network error, a bad checksum) writes nothing.
+            staged = [] # [temporary file, final path], in the order of todo
+            begin
+                todo.each do |n|
+                    tmp = Cache.tmp_path(@to)
+                    staged << [tmp, File.join(@to, n)]
+                    fetch = lambda do
+                        raise OfflineError, "offline and #{n} is not cached" if @client.send(:offline)
+                        pf = pointer_files[n]
+                        url = pf && pf["url"] ? @client.send(:resolve, pointer_url, pf["url"]) : @client.send(:base_url) + n
+                        Downloader.fetch_checked(@client, url, @to, tmp, n, rows[n], pf && pf["size"], error_class: FileError)
+                    end
+                    if n == sha_name
+                        write_bytes(tmp, sha_bytes)
+                    elsif ver && cache.file_ok?(d, n, ver) && cached_sha_ok?(cache, d, n, rows[n])
+                        from_cache(cache, File.join(cache.release_dir(d), n), fetch) { |src| copy_checked(src, tmp, n, rows[n]) }
+                    elsif n.end_with?(".json") && !n.end_with?(".meta.json") && ver && cache.file_ok?(d, "#{n}.gz", ver)
+                        from_cache(cache, File.join(cache.release_dir(d), "#{n}.gz"), fetch) { |src| gunzip_into(src, tmp, n, rows[n]) }
+                    else
+                        fetch.call
+                    end
                 end
-                if n == sha_name
-                    write_bytes(path, sha_bytes)
-                elsif ver && cache.file_ok?(d, n, ver) && cached_sha_ok?(cache, d, n, rows[n])
-                    from_cache(cache, File.join(cache.release_dir(d), n), fetch) { |src| copy_checked(src, path, n, rows[n]) }
-                elsif n.end_with?(".json") && !n.end_with?(".meta.json") && ver && cache.file_ok?(d, "#{n}.gz", ver)
-                    from_cache(cache, File.join(cache.release_dir(d), "#{n}.gz"), fetch) { |src| gunzip_into(src, path, n, rows[n]) }
-                else
-                    fetch.call
+                # OTC_{D}.sha256 is last in todo, so it goes into place last.
+                staged.each do |tmp, final|
+                    File.rename(tmp, final)
+                rescue SystemCallError => e
+                    raise FileError.new("cannot rename into #{final}: #{e.message}", path: final)
                 end
-                written << path
+            ensure
+                staged.each { |tmp, _| FileUtils.rm_f(tmp) }
             end
-            # OTC_{D}.sha256 goes into place last.
-            written.sort_by { |p| File.basename(p) == sha_name ? 1 : 0 }
+            staged.map(&:last)
         end
 
         private
