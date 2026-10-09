@@ -1740,25 +1740,30 @@ static char *run_threaded(request *q, int n)
 
 /* ------------------------------------------------------------------ main */
 
-static char *read_line(FILE *f)
+/* One request line into *out (malloc'd). Returns 1 for a line, 0 at the end of input, and -1 when there is no memory
+ * for the line: the rest of the line is read and dropped, so the caller can still answer it (never a clean EOF). */
+static int read_line(FILE *f, char **out)
 {
     size_t cap = 4096, n = 0;
     char *buf = (char *)malloc(cap);
-    int c;
-    if (!buf) return NULL;
+    int c = 0, nomem = !buf;
+    *out = NULL;
     while ((c = fgetc(f)) != EOF) {
         if (c == '\n') break;
+        if (nomem) continue;
         if (n + 1 >= cap) {
             char *nb = (char *)realloc(buf, cap * 2);
-            if (!nb) { free(buf); return NULL; }
+            if (!nb) { free(buf); buf = NULL; nomem = 1; continue; }
             buf = nb;
             cap *= 2;
         }
         buf[n++] = (char)c;
     }
-    if (c == EOF && n == 0) { free(buf); return NULL; }
+    if (nomem) return -1;
+    if (c == EOF && n == 0) { free(buf); return 0; }
     buf[n] = '\0';
-    return buf;
+    *out = buf;
+    return 1;
 }
 
 static char *handle(const char *line, int threads)
@@ -1823,6 +1828,7 @@ static char *handle(const char *line, int threads)
 int main(void)
 {
     char *line;
+    int got;
     const char *t = getenv("OTC_RUNNER_THREADS");
     int threads = t ? atoi(t) : 1;
     size_t i;
@@ -1831,8 +1837,14 @@ int main(void)
            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
            OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\"" : "\"fs\", \"stream\"");
     fflush(stdout);
-    while ((line = read_line(stdin)) != NULL) {
+    while ((got = read_line(stdin, &line)) != 0) {
         char *out;
+        if (got < 0) {   /* no memory for the line: it still gets a reply, and the runner goes on */
+            fputs("{\"ok\": false, \"error\": {\"code\": \"uncaught:NoMemory\", \"message\": \"no memory for the request line\"}}\n",
+                  stdout);
+            fflush(stdout);
+            continue;
+        }
         if (!line[0]) { free(line); continue; }
         out = handle(line, threads);
         free(line);
