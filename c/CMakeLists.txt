@@ -87,8 +87,11 @@ else()
 endif()
 
 add_library(opentideconstants ${OTC_SOURCES})
+# The same name as find_package(opentideconstants) gives, for add_subdirectory(c)
+add_library(opentideconstants::opentideconstants ALIAS opentideconstants)
+# The installed include folder comes from install(TARGETS ... INCLUDES) below.
 target_include_directories(opentideconstants
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE src vendor/cjson vendor/sha256)
 target_compile_definitions(opentideconstants PRIVATE CJSON_HIDE_SYMBOLS OTC_BUILDING)
 if(BUILD_SHARED_LIBS)
@@ -232,10 +235,33 @@ if(OTC_BUILD_TESTS)
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS opentideconstants
+install(TARGETS opentideconstants EXPORT opentideconstantsTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# find_package(opentideconstants) gives opentideconstants::opentideconstants
+# (R2-321). Before 1.0 a new minor version may change the API, so a request
+# for 0.1 accepts only 0.1.x; from 1.0 the major version decides.
+include(CMakePackageConfigHelpers)
+set(OTC_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/opentideconstants)
+if(BUILD_SHARED_LIBS)
+    set(OTC_CONFIG_SHARED TRUE)
+else()
+    set(OTC_CONFIG_SHARED FALSE)
+endif()
+if(PROJECT_VERSION_MAJOR EQUAL 0)
+    set(OTC_CONFIG_COMPAT SameMinorVersion)
+else()
+    set(OTC_CONFIG_COMPAT SameMajorVersion)
+endif()
+install(EXPORT opentideconstantsTargets NAMESPACE opentideconstants:: DESTINATION ${OTC_CMAKE_DIR})
+configure_package_config_file(opentideconstantsConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/opentideconstantsConfig.cmake INSTALL_DESTINATION ${OTC_CMAKE_DIR})
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/opentideconstantsConfigVersion.cmake
+    COMPATIBILITY ${OTC_CONFIG_COMPAT})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/opentideconstantsConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/opentideconstantsConfigVersion.cmake DESTINATION ${OTC_CMAKE_DIR})
 install(FILES include/opentideconstants.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # Spec 7.4: supported-formats.json ships with every C release artifact.
 install(FILES supported-formats.json DESTINATION ${CMAKE_INSTALL_DATADIR}/opentideconstants)
