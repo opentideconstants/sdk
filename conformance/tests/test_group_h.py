@@ -27,6 +27,11 @@ def runner_cmd(lang):
         if not shutil.which("node"):
             pytest.skip("no node")
         return ["node", str(RUNNERS / "node" / "runner.mjs"), "--sdk", str(FAKE / "node" / "index.js")], {}
+    if lang in ("c", "c-fetch"):
+        exe = CONF.parent / "c" / ("build" if lang == "c" else "build-fetch") / "otc_runner"
+        if not exe.exists():
+            pytest.skip(f"no {exe} (build the C runner first)")
+        return [str(exe)], {}
     raise ValueError(lang)
 
 
@@ -105,3 +110,19 @@ def test_ruby_error_encoding_failure_is_an_error_reply():
     assert len(out) == 3, (rc, out, err[-500:])
     reply = strict(out[1])
     assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+# --- an op with no open client is an error reply (no crash, no empty success)
+
+NO_CLIENT_OPS = [{"op": "station_count"}, {"op": "hold_release", "args": {"name": "x"}}, {"op": "loaded_from"},
+                 {"op": "last_error"}, {"op": "verify"}, {"op": "cached_releases"}, {"op": "update"},
+                 {"op": "station", "args": {"station_id": "OTC-T-0001"}}, {"op": "release_files"}]
+
+
+@pytest.mark.parametrize("lang", LANGS + ["c", "c-fetch"])
+def test_ops_with_no_client_are_error_replies(lang):
+    rc, hello, out, err = talk(lang, NO_CLIENT_OPS)
+    assert len(out) == len(NO_CLIENT_OPS), (rc, out, err[-500:])
+    for req, line in zip(NO_CLIENT_OPS, out):
+        reply = strict(line)
+        assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), (req, reply)

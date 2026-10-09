@@ -1613,7 +1613,10 @@ static char *handle(const char *line, int threads)
         out = render(&r);
     } else if (!strcmp(q.op, "hold_release")) {
         const char *name = arg_str(&q.a, "name");
-        if (!name || !g_current || g_n_held >= MAX_HELD) set_error(&r, "invalid_argument", "hold_release");
+        /* runner failures, not SDK error codes: a case must not pass on them */
+        if (!g_current) set_error(&r, "uncaught:NoRelease", "hold_release: no release is open");
+        else if (!name) set_error(&r, "uncaught:BadRequest", "hold_release needs a name");
+        else if (g_n_held >= MAX_HELD) set_error(&r, "uncaught:TooManyHeld", "hold_release: too many held releases");
         else {
             g_held[g_n_held].name = xstrdup(name);
             g_held[g_n_held].rel = g_current;
