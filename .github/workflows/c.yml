@@ -44,13 +44,14 @@ jobs:
       - name: Build
         run: cmake --build c/build --config Debug --parallel
       - name: Conformance suite (profile c, no otc_fetch)
-        run: python conformance/driver.py --runner ${{ matrix.runner }}
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c
       - name: Conformance suite, every query in 8 threads
         env: { OTC_RUNNER_THREADS: "8" }
-        run: python conformance/driver.py --runner ${{ matrix.runner }}
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c
 
   # The otc_fetch module (libcurl): the runner says hello as c-fetch, so every
-  # download, network, cache and update case runs (profile c-fetch).
+  # download, network, cache and update case runs. --profile c-fetch makes the
+  # driver fail if the runner does not claim fetch, instead of skipping those cases.
   conformance-fetch:
     name: fetch ${{ matrix.os }} ${{ matrix.cc }}
     runs-on: ${{ matrix.os }}
@@ -83,10 +84,10 @@ jobs:
       - name: Build
         run: cmake --build c/build --config Debug --parallel
       - name: Conformance suite (profile c-fetch)
-        run: python conformance/driver.py --runner ${{ matrix.runner }}
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c-fetch
       - name: Conformance suite, every query in 8 threads
         env: { OTC_RUNNER_THREADS: "8" }
-        run: python conformance/driver.py --runner ${{ matrix.runner }}
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c-fetch
 
   sanitizers:
     name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }} fetch=${{ matrix.fetch }}
@@ -119,8 +120,8 @@ jobs:
       # TSan on recent Ubuntu kernels needs fewer ASLR bits.
       - run: sudo sysctl vm.mmap_rnd_bits=28
       - run: mkdir -p san
-      - run: python conformance/driver.py --runner c/build/otc_runner
-      - run: python conformance/driver.py --runner c/build/otc_runner
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
         env: { OTC_RUNNER_THREADS: "8" }
       - name: No sanitizer reports
         run: |
@@ -146,12 +147,12 @@ jobs:
       - name: Conformance suite under Valgrind
         env:
           OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/%p.log
-        run: python conformance/driver.py --runner conformance/runners/c/run.sh
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
       - name: Conformance suite under Valgrind, 4 threads
         env:
           OTC_RUNNER_THREADS: "4"
           OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
-        run: python conformance/driver.py --runner conformance/runners/c/run.sh
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
       - name: No Valgrind reports
         run: |
           echo "valgrind log files: $(ls vg | wc -l)"
@@ -178,7 +179,7 @@ jobs:
       - name: The runner on the amalgamation passes the suite
         run: |
           cc -std=c99 -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
-          python conformance/driver.py --runner dist/otc_runner
+          python conformance/driver.py --runner dist/otc_runner --profile c
       - name: Vendored files match their recorded SHA-256
         run: |
           cd c && sha256sum -c <<'SUMS'
