@@ -557,7 +557,7 @@
        "qc_flags": [
         {
          "flag": "time_base",
-         "verdict": null,
+         "reason": "the time base is unverified",
          "values": null
         }
        ],
@@ -854,7 +854,7 @@
        "qc_flags": [
         {
          "flag": "short_record",
-         "verdict": null,
+         "reason": "200 hours of good data, below 360",
          "values": null
         }
        ],
@@ -1025,7 +1025,7 @@
        "qc_flags": [
         {
          "flag": "broken_record",
-         "verdict": null,
+         "reason": "no segment gives a usable fit",
          "values": null
         }
        ],
@@ -1194,7 +1194,7 @@
        "qc_flags": [
         {
          "flag": "carried_over",
-         "verdict": null,
+         "reason": "the source failed the coverage check in this build",
          "values": null
         }
        ],
@@ -1276,6 +1276,188 @@
         "reason": "source check failed",
         "tier": "fallback"
        }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "v1/stations/OTC-T-0106",
+   "title": "station OTC-T-0106 (Six Jma Port): fields, recommended set, constant_sets with and without include_no_constants",
+   "spec": "4.5, 7.4",
+   "matrix": {
+    "root": "v1",
+    "release": "20991231.3"
+   },
+   "steps": [
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0106"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0106",
+       "name": "Six Jma Port",
+       "country": "JPN",
+       "lat": 35.6,
+       "lon": 139.8,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Asia/Tokyo",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0106/jma"
+      }
+     }
+    },
+    {
+     "op": "recommended_set",
+     "args": {
+      "station_id": "OTC-T-0106"
+     },
+     "expect": {
+      "set_id": "OTC-T-0106/jma"
+     }
+    },
+    {
+     "op": "constant_sets",
+     "args": {
+      "station_id": "OTC-T-0106"
+     },
+     "expect": {
+      "set_ids": [
+       "OTC-T-0106/jma"
+      ]
+     }
+    },
+    {
+     "op": "constant_sets",
+     "args": {
+      "station_id": "OTC-T-0106",
+      "include_no_constants": true
+     },
+     "expect": {
+      "set_ids": [
+       "OTC-T-0106/jma"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "v1/sets/OTC-T-0106/jma",
+   "title": "set OTC-T-0106/jma (qc_status ok): fields, time_base, provenance with build and carried_from_release",
+   "spec": "4.5, 4.6, 7.4",
+   "matrix": {
+    "root": "v1",
+    "release": "20991231.3"
+   },
+   "steps": [
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0106",
+      "set_id": "OTC-T-0106/jma"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0106/jma",
+       "source": "jma",
+       "source_type": "official",
+       "quantity": "water_level",
+       "source_record_id": "jma:T-0106",
+       "source_version": "20991231",
+       "record_span": null,
+       "datum": null,
+       "qc_status": "ok",
+       "qc_flags": [],
+       "dropped_constituents": [],
+       "time_base": null,
+       "is_recommended": true,
+       "convention_id": "otc-greenwich-v1",
+       "licence_id": "jma",
+       "constituent_count": 2
+      }
+     }
+    },
+    {
+     "op": "constituents",
+     "args": {
+      "station_id": "OTC-T-0106",
+      "set_id": "OTC-T-0106/jma"
+     },
+     "expect": {
+      "constituents": [
+       {
+        "name": "M2",
+        "source_name": null,
+        "doodson": null,
+        "speed_deg_per_hour": 28.9841042,
+        "amplitude_m": 0.36,
+        "phase_deg": 90.0,
+        "amp_uncertainty_m": null,
+        "phase_uncertainty_deg": null,
+        "kept_reason": null
+       },
+       {
+        "name": "K1",
+        "source_name": null,
+        "doodson": null,
+        "speed_deg_per_hour": 15.0410686,
+        "amplitude_m": 0.09,
+        "phase_deg": 180.0,
+        "amp_uncertainty_m": null,
+        "phase_uncertainty_deg": null,
+        "kept_reason": null
+       }
+      ]
+     }
+    },
+    {
+     "op": "provenance",
+     "args": {
+      "station_id": "OTC-T-0106",
+      "set_id": "OTC-T-0106/jma"
+     },
+     "expect": {
+      "provenance": {
+       "adapter_version": "0.0.0-test",
+       "input_sha256": null,
+       "selection_reason": null,
+       "decision": null,
+       "carried_from_release": null,
+       "build": {
+        "build_commit": "0123456",
+        "built_at": null,
+        "fetched_at": null,
+        "run_id": null,
+        "tool_versions": null
+       }
+      },
+      "raw": {
+       "adapter_version": "0.0.0-test",
+       "analysis_years": {
+        "long_period": "2000-2018",
+        "short_period": null
+       },
+       "build": {
+        "build_commit": "0123456"
+       },
+       "jma_station_code": "TK",
+       "owner": "jma",
+       "phase_reference_longitude_deg": 135.0,
+       "redistribution": "redistribute",
+       "source_constituents_not_published": [
+        {
+         "reason": "no OTC name (test)",
+         "source_name": "MSF"
+        }
+       ]
       }
      }
     }
@@ -1372,7 +1554,8 @@
        "OTC-T-0101",
        "OTC-T-0102",
        "OTC-T-0103",
-       "OTC-T-0105"
+       "OTC-T-0105",
+       "OTC-T-0106"
       ]
      }
     },
@@ -1386,7 +1569,8 @@
        "OTC-T-0101",
        "OTC-T-0102",
        "OTC-T-0103",
-       "OTC-T-0105"
+       "OTC-T-0105",
+       "OTC-T-0106"
       ]
      }
     }
@@ -1442,7 +1626,8 @@
        "OTC-T-0102",
        "OTC-T-0103",
        "OTC-T-0104",
-       "OTC-T-0105"
+       "OTC-T-0105",
+       "OTC-T-0106"
       ]
      }
     },
@@ -1454,7 +1639,8 @@
        "OTC-T-0102",
        "OTC-T-0103",
        "OTC-T-0104",
-       "OTC-T-0105"
+       "OTC-T-0105",
+       "OTC-T-0106"
       ]
      }
     }
@@ -1474,22 +1660,24 @@
      "expect": {
       "stats": {
        "type": {
-        "reference": 5
+        "reference": 6
        },
        "kind": {
-        "tide": 4
+        "tide": 5
        },
        "country": {
-        "GBR": 5
+        "GBR": 5,
+        "JPN": 1
        },
        "source": {
         "gesla-fit": 3,
+        "jma": 1,
         "noaa": 3
        },
        "qc_status": {
         "flagged": 2,
         "no_constants": 2,
-        "ok": 4
+        "ok": 5
        }
       }
      }
@@ -1497,7 +1685,7 @@
     {
      "op": "station_count",
      "expect": {
-      "station_count": 5
+      "station_count": 6
      }
     },
     {
@@ -1528,7 +1716,9 @@
        "name": "Six Merged Steps",
        "status": "removed",
        "removed_in": "20991231.3",
-       "removed_reason": "merged"
+       "removed_reason": "merged",
+       "merged_into": "OTC-T-0101",
+       "detail": "Same gauge as OTC-T-0101 (test tombstone)."
       }
      }
     },
@@ -1564,7 +1754,7 @@
     {
      "op": "attribution",
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Meteorological Agency: Synthetic test data in the style of JMA.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     },
     {

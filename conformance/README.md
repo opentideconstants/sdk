@@ -91,7 +91,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 - An argument that is absent from `args` is not passed (the SDK's default applies). An argument given as JSON `null` is passed as nil / None / null.
 - Values are passed through with their JSON type, so a case can pass a wrong type (for example `country: 5`) to test `invalid_argument`. C, where the type cannot be wrong, reports `invalid_argument` for such a step without calling the SDK.
 - Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with the result for "nothing" (`null` or `[]`) as the op's encoding gives it.
-- Times in arguments do not occur in suite 0.1.
+- Times in arguments do not occur in suite 1.0.
 
 ## Operations
 
@@ -151,8 +151,8 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | Object | Keys |
 |---|---|
 | Station | `station_id`, `name`, `country`, `lat`, `lon`, `type`, `kind`, `timezone`, `aliases` (`{system: [ids]}`, `{}` if none), `status`, `is_reference`, `is_subordinate`, `is_tide`, `is_current`, `recommended_set_id` (the `set_id` of `recommended_set`, or null) |
-| Tombstone | `station_id`, `name`, `status`, `removed_in`, `removed_reason` |
-| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, verdict, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `time_base` (TimeBase or null), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
+| Tombstone | `station_id`, `name`, `status`, `removed_in`, `removed_reason` (`merged` or `duplicate`), `merged_into`, `detail` |
+| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, reason, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `time_base` (TimeBase or null), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
 | Constituent | `name`, `source_name`, `doodson`, `speed_deg_per_hour`, `amplitude_m`, `phase_deg`, `amp_uncertainty_m`, `phase_uncertainty_deg`, `kept_reason` |
 | Convention | `convention_id`, `phase_reference`, `utc_offset_hours`, `v0_model`, `nodal_handling`, `nodal_formula_ids` (object), `constituent_table_version`, `tables_sha256`, `canary` (object) |
 | Licence | `licence_id`, `spdx`, `provider`, `citation`, `attribution`, `url` |
@@ -244,9 +244,11 @@ These are written into the cases. Change them here and in `tools/build_cases.py`
 - `zenodo_version_doi` is null for a file and for a pinned download (which reads no pointer), and after a download of `latest` it is the value of the entry the SDK used: the pointer's, or the index entry that step 2a chose. A cached release keeps it (`.verified`).
 - `no_constants` sets: `constant_sets()` leaves them out by default and `include_no_constants: true` lists them; the `source` filter and `stats.source` do not count them; `stats.qc_status` counts every set.
 - `provenance.build` is required in format 1.0, so every fixture set has it; the suite has no case for a missing one.
-- `ConstantSet.time_base` is the set's annotation, or null (the model and official sets of the fixtures have none). `correction` is `{from, to}`; each `evidence` entry has its five keys, null when absent.
+- `ConstantSet.time_base` is the set's annotation, or null (the model and official sets of the fixtures have none). `correction` is `{from, to}`; each `evidence` entry has its five keys, null when absent. The runners encode `correction` and `evidence` as the SDK returns them, so a missing key fails the exact-key check.
+- A `qc_status` that format 1.0 does not have (`excluded` in `bad/format-minor`) is `other` (§7.3): `constant_sets()` lists it, `stats.qc_status` counts it under `other`, and `stats.source` does not count it (only `ok` and `flagged`).
+- `bad/no-build` has a set with no `provenance.build` (malformed 1.0): it loads, and `build` is null.
 - `reader_too_old`: the message must contain `1.99` (the fixtures' `min_reader_version`) and one other `1.x` version (the SDK's own `SUPPORTED_FORMAT_VERSION`).
-- QcFlag is `{flag, verdict, values}` as the spec lists it; format 1.0 has no `verdict` (it is always null) and its `reason` is read through `raw`. Tombstone keeps its five keys; `merged_into` and `detail` are in `raw`.
+- `stations/removed-error-tombstone` checks that `station_removed` carries the tombstone in `fields.tombstone`. Only Ruby, Python and TypeScript attach it (C has no error object), so the case requires `eager`, which C does not have.
 - `user_agent` is added after one space: `opentideconstants-{lang}/{version} (+https://opentideconstants.org) {suffix}`.
 - A body shorter than its `Content-Length` is a `network` error. A consistent but short response is `checksum_mismatch`.
 - A reference that does not resolve is `invalid_release` at open time in stream mode too.

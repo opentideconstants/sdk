@@ -283,7 +283,7 @@
        "qc_flags": [
         {
          "flag": "time_base",
-         "verdict": null,
+         "reason": "the time base is unverified",
          "values": null
         }
        ],
@@ -552,7 +552,7 @@
        "qc_flags": [
         {
          "flag": "carried_over",
-         "verdict": null,
+         "reason": "the source failed a check in this build",
          "values": null
         }
        ],
@@ -743,7 +743,7 @@
        "qc_flags": [
         {
          "flag": "broken_record",
-         "verdict": null,
+         "reason": "no segment gives a usable fit",
          "values": {
           "step_m": 0.4
          }
@@ -1723,7 +1723,7 @@
        "qc_flags": [
         {
          "flag": "time_base",
-         "verdict": null,
+         "reason": "the time base is disputed",
          "values": null
         }
        ],

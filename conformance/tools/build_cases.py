@@ -126,7 +126,8 @@ def enc_station(rel, s):
 
 def enc_tombstone(t):
     return {"station_id": t["station_id"], "name": t.get("name"), "status": t["status"],
-            "removed_in": t.get("removed_in"), "removed_reason": t.get("removed_reason")}
+            "removed_in": t.get("removed_in"), "removed_reason": t.get("removed_reason"),
+            "merged_into": t.get("merged_into"), "detail": t.get("detail")}
 
 
 def enc_set(rel, s, cs):
@@ -137,8 +138,8 @@ def enc_set(rel, s, cs):
         "source_record_id": cs.get("source_record_id"), "source_version": cs.get("source_version"),
         "record_span": None if span is None else {"start": span.get("start"), "end": span.get("end"), "good_samples": span.get("good_samples")},
         "datum": None if datum is None else {"msl_offset_m": datum.get("msl_offset_m"), "named": dict(datum.get("named") or {})},
-        "qc_status": cs["qc_status"],
-        "qc_flags": [{"flag": f["flag"], "verdict": f.get("verdict"), "values": f.get("values")} for f in cs.get("qc_flags") or []],
+        "qc_status": read_qc(cs),
+        "qc_flags": [{"flag": f["flag"], "reason": f["reason"], "values": f.get("values")} for f in cs.get("qc_flags") or []],
         "dropped_constituents": [{"name": d["name"], "dropped_reason": d["dropped_reason"], "detail": d.get("detail")} for d in cs.get("dropped_constituents") or []],
         "time_base": enc_time_base(cs.get("time_base")),
         "is_recommended": cs["set_id"] == s.get("recommended_set_id"),
@@ -245,6 +246,13 @@ def fold(name):
 # Sets with no fitted constants (qc_status no_constants): constant_sets() leaves them out by default and
 # include_no_constants: true lists them; the source filter and stats.source do not count them (spec 4.3, 4.4, 4.5).
 NOT_USABLE = ("no_constants",)
+WITH_CONSTANTS = ("ok", "flagged")
+QC_STATUS = ("ok", "flagged", "no_constants")
+
+
+def read_qc(cs):
+    """A qc_status value format 1.0 does not have is an unknown enum value: "other" (spec 7.3, 7.4)."""
+    return cs["qc_status"] if cs["qc_status"] in QC_STATUS else "other"
 
 
 def usable_sources(s):
@@ -376,8 +384,8 @@ def stats(rel):
     sets = [cs for s in rel.active for cs in s.get("constant_sets", [])]
     return {"type": count(s["type"] for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
             "country": count(s["country"] for s in rel.active),
-            "source": count(cs["source"] for cs in sets if cs["qc_status"] not in NOT_USABLE),
-            "qc_status": count(cs["qc_status"] for cs in sets)}
+            "source": count(cs["source"] for cs in sets if cs["qc_status"] in WITH_CONSTANTS),
+            "qc_status": count(read_qc(cs) for cs in sets)}
 
 
 def sets_in_order(s, include_no_constants=False):
@@ -523,6 +531,9 @@ def group_stations(R2, R1):
     out.append(mcase("stations/require-errors", "require_station: station_not_found and station_removed", "4.4, 4.8",
                      [step("require_station", err("station_not_found"), station_id="OTC-T-9999"),
                       step("require_station", err("station_removed"), station_id="OTC-T-0005")]))
+    out.append(mcase("stations/removed-error-tombstone", "station_removed carries the tombstone (Ruby, Python, TypeScript; C has no error object, so the case needs eager)", "4.4, 4.8",
+                     [step("require_station", err("station_removed", tombstone=enc_tombstone(rel.tomb_by_id["OTC-T-0005"])), station_id="OTC-T-0005")],
+                     requires=["eager"]))
     out.append(mcase("stations/active-then-removed", "OTC-T-0021 is active in 20991231 and a tombstone in 20991231.2", "4.4",
                      [step("station", {"station": enc_station(R1, R1.by_id["OTC-T-0021"])}, station_id="OTC-T-0021"),
                       step("tombstone", {"tombstone": None}, station_id="OTC-T-0021")], release="20991231"))
@@ -656,6 +667,20 @@ def group_tolerant():
              step("constant_set", {"set": enc_set(rel, s, cs)}, station_id="OTC-T-0001", set_id=cs["set_id"])]
     out = [mcase("tolerant/format-minor", "a higher format minor loads; unknown fields stay in raw; an unknown alias system works", "7.3",
                  steps, root="bad/format-minor", release="20991231", open_expect={"format_version": "1.1"})]
+    eq = rel.by_id["OTC-T-0010"]
+    legacy = next(c for c in eq["constant_sets"] if c["qc_status"] not in QC_STATUS)
+    out.append(mcase("tolerant/unknown-qc-status", "a qc_status 1.0 does not have (excluded, a 0.x leftover) is \"other\": listed by default, counted under other, and not counted as a source", "4.3, 4.5, 7.3",
+                     [step("constant_set", {"set": enc_set(rel, eq, legacy)}, station_id="OTC-T-0010", set_id=legacy["set_id"]),
+                      step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(eq)]}, station_id="OTC-T-0010"),
+                      step("stats", {"stats": stats(rel)})],
+                     root="bad/format-minor", release="20991231", open_expect={"format_version": "1.1"}))
+    nb = Rel("bad/no-build", "20991231")
+    nbs = nb.by_id["OTC-T-0004"]
+    out.append(mcase("tolerant/missing-provenance-build", "a set with no provenance.build (malformed 1.0): the release loads and provenance.build is null", "4.6, 7.3",
+                     [step("provenance", {"provenance": enc_provenance(nbs["constant_sets"][0]["provenance"]), "raw": nbs["constant_sets"][0]["provenance"]},
+                           station_id="OTC-T-0004", set_id=nbs["constant_sets"][0]["set_id"]),
+                      step("station_count", {"station_count": len(nb.active)})],
+                     root="bad/no-build", release="20991231"))
     good = Rel("good", "20991231.2")
     gs = good.by_id["OTC-T-0020"]
     out.append(mcase("tolerant/raw-good", "raw is the object as the file gives it", "3",
@@ -784,13 +809,27 @@ def group_format():
                      net(step("newer_format_major", {"newer_format_major": 2})),
                      drv("assert_requests", match=r"OTC_20991231\.3\.", count=0)],
                     requires=["fs"]))
+    out.append(case("format/check-for-update-newer-major-with-update", "check_for_update on an older 1.0 release: it returns the newest 1.x release and also sets newer_format_major 2", "7.4",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=MJ, cache_dir="${cache}")),
+                     net(step("check_for_update", {"release": enc_release_info("major", M_OK, MJ)})),
+                     net(step("newer_format_major", {"newer_format_major": 2}))],
+                    requires=["fs"]))
     out.append(case("format/check-for-update-no-newer-major", "check_for_update when every release has a supported major: newer_format_major null", "7.4",
                     [latest({"loaded_from": "download", "datestamp": R_OK}),
                      net(step("check_for_update", {"release": None})),
                      net(step("newer_format_major", {"newer_format_major": None}))],
                     requires=["fs"]))
-    out.append(case("format/latest-offline-cached-index", "offline latest with a cached index that lists a release too new: the newest cached readable release, no request", "5.2, 5.5, 7.4",
-                    [latest({"loaded_from": "download", "datestamp": R_OK}),
+    new_dir = f"${{cache}}/v1/releases/{R_NEW}"
+    new_entry = pointer_entry("reader", R_NEW)
+    planted = [n for n in (f"OTC_{R_NEW}.json", f"OTC_{R_NEW}.jsonl", f"OTC_{R_NEW}.meta.json", f"OTC_{R_NEW}.sha256")]
+    verified = {"files": {f["name"]: {"sha256": f["sha256"], "size": f["size"], "url": RD + f["url"]}
+                          for f in new_entry["files"] if f["name"] in planted},
+                "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+    out.append(case("format/latest-offline-cached-index", "offline latest when the cache holds a verified release too new for the SDK and the cached index says so: the newest cached readable release, no request", "5.2, 5.5, 7.4",
+                    [net(step("open", {"loaded_from": "download", "datestamp": R_OK}, release=R_OK, base_url=RD, cache_dir="${cache}")),
+                     net(step("releases", {"releases": {"$len_min": 3}})),
+                     drv("copy", files=[f"{RF}/{n}" for n in planted], to=new_dir),
+                     drv("write", path=f"{new_dir}/.verified", text=json.dumps(verified, sort_keys=True)),
                      drv("restart_runner"), drv("server_stop"), drv("clear_log"),
                      latest({"loaded_from": "cache", "datestamp": R_OK}, offline=True),
                      drv("assert_requests", source="any", count=0)],
@@ -812,7 +851,9 @@ def group_format():
                      drv("assert_requests", match=r"OTC_index\.json$", count=0),
                      drv("server_rules", rules=[]), drv("clear_log"),
                      net(step("check_for_update", {"release": ok_info})),
+                     index_once, drv("clear_log"),
                      net(step("update", {"updated": True, "from": R_OLD, "to": R_OK})),
+                     index_once,
                      step("release_metadata", {"datestamp": R_OK}),
                      no_new,
                      net(step("check_for_update", {"release": None})),
@@ -869,7 +910,7 @@ def group_load():
         for ext, req in exts:
             out.append(case(f"load/bad-{root}{ext.replace('.', '-')}", f"bad/{root} opened as {ext}: {code}", "4.8, 5.3, 7.4",
                             [step("open", err(code), file=f"{FIX}/bad/{root}/OTC_20991231{ext}")], requires=["fs"] + req))
-    out.append(case("load/format-minor-loads", "bad/format-minor (format 0.3) loads from a file", "7.3",
+    out.append(case("load/format-minor-loads", "bad/format-minor (format 1.1) loads from a file", "7.3",
                     [step("open", {"loaded_from": "file", "datestamp": "20991231", "format_version": "1.1"}, file=f"{FIX}/bad/format-minor/OTC_20991231.jsonl"),
                      step("station_count", {"station_count": len(Rel("bad/format-minor", "20991231").active)})], requires=["fs"]))
     out.append(case("load/verify-file", "verify passes on an intact file and fails with checksum_mismatch after one byte changes", "4.3, 5.3",
@@ -904,6 +945,7 @@ def group_network():
     out.append(case("net/latest-download", "open latest: pointer, .sha256, data file; loaded_from download; files from the pointer", "4.2, 4.3.1, 5.2",
                     [open_latest(),
                      drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", min=1),
+                     drv("assert_requests", match=r"/good/OTC_latest\.json$", count=0),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.sha256$", count=1),
                      drv("assert_requests", has_query=True, count=0),
                      drv("assert_requests", header={"user-agent": UA}, min=1, all=True),
@@ -912,6 +954,11 @@ def group_network():
                      drv("assert_files", dir="${cache}/v1/releases/20991231.2", present=[".verified", "OTC_20991231.2.sha256"], absent=[".lock"], no_tmp=True),
                      drv("assert_files", dir="${cache}/v1/pointer", present=["OTC_latest-f1.json", "OTC_latest-f1.json.etag"], no_tmp=True)],
                     requires=["fs"]))
+    out.append(case("net/pointer-500-no-fallback", "the per-major pointer answers 500 and the cache is empty: network error, and no fallback to OTC_latest.json (only a 404 falls back)", "5.2",
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest-f1\.json$", "action": "status", "status": 500}]),
+                     open_latest(err("network", status=500)),
+                     drv("assert_requests", match=r"/good/OTC_latest\.json$", count=0)],
+                    requires=["fs"], timeout_s=90))
     out.append(case("net/latest-stream", "stream mode downloads .jsonl and .meta.json with Accept-Encoding gzip and builds index-v1.json", "5.2, 5.7, 6.2",
                     [open_latest(mode="stream"),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.jsonl$", min=1, header={"accept-encoding": "gzip"}),
@@ -1049,7 +1096,7 @@ def group_network():
                                           expected={"$regex": "^[0-9a-f]{64}$"}, actual={"$regex": "^[0-9a-f]{64}$"}),
                               release=d1, base_url=f"{SRV}/bad/wrong-sha256/", cache_dir="${cache}"))],
                     requires=["fs"]))
-    out.append(case("net/format-minor-latest", "latest from bad/format-minor (0.3) loads", "7.3",
+    out.append(case("net/format-minor-latest", "latest from bad/format-minor (1.1) loads", "7.3",
                     [net(step("open", {"loaded_from": "download", "datestamp": d1, "format_version": "1.1"}, base_url=f"{SRV}/bad/format-minor/", cache_dir="${cache}"))],
                     requires=["fs"]))
     out.append(case("net/short-body", "a body shorter than its Content-Length (connection closed): network error", "5.7",
