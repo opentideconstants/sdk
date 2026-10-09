@@ -513,6 +513,24 @@ class ValueParityTest(RepeatedIdsTest):
             self.assertNotIn("lighthouse", c.release.stats.type)
 
 
+class OfflineTest(unittest.TestCase):
+    """Offline means no network check at all (spec §5.5, §5.6, CR D6; review PK09)."""
+
+    def test_auto_update_does_not_run_offline(self):
+        import tempfile
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            srv = _Server()
+            try:
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=tmp).close()
+            finally:
+                srv.close()
+            with otc.OpenTideConstants(cache_dir=tmp, offline=True, auto_update=True, update_interval=0.001) as c:
+                time.sleep(0.01)
+                with self.assertNoLogs("opentideconstants", level="WARNING"):
+                    c.station("OTC-T-0001")
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

@@ -670,8 +670,9 @@ class OpenTideConstants:
         return UpdateResult(True, cur, info.datestamp)
 
     def _maybe_auto_update(self) -> None:
-        if not self._auto_update or self._pinned is not None or self._file is not None or self._release is None:
-            return
+        if not self._auto_update or self._offline or self._pinned is not None or self._file is not None \
+                or self._release is None:
+            return  # offline, the automatic update does not check at all (spec §5.6, CR D6)
         now = time.monotonic()
         if now - self._last_check < self._update_interval:
             return
