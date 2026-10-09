@@ -797,3 +797,20 @@ test("a release whose created or record_span time is impossible is invalid_relea
         await assert.rejects(otc.OpenTideConstants.open({ file }), (e) => e.code === "invalid_release", root);
     }
 });
+
+test("PK-R2-05: Object.prototype names are data: an alias system __proto__ and a source constructor", async () => {
+    const dir = new URL("../../conformance/fixtures/bad/proto-keys/", import.meta.url).pathname;
+    for (const name of ["OTC_20991231.json", "OTC_20991231.jsonl"]) {
+        const c = await otc.OpenTideConstants.open({ file: path.join(dir, name), cacheDir: tmpdir() });
+        const rel = c.release;
+        const s1 = rel.station("OTC-T-0001");
+        assert.ok(Object.prototype.hasOwnProperty.call(s1.aliases, "__proto__"), name);
+        assert.deepEqual(s1.aliases["__proto__"], ["PX-0001"]);
+        assert.equal(Object.getPrototypeOf(s1.aliases), Object.prototype);
+        assert.equal(rel.stationByAlias("__proto__", "PX-0001")?.station_id, "OTC-T-0001");
+        assert.deepEqual(rel.station("OTC-T-0002").aliases["constructor"], ["CX-0002"]);
+        assert.equal(rel.stats.source["constructor"], 2);
+        assert.ok(Object.values(rel.stats.source).every((n) => typeof n === "number"));
+        await c.close();
+    }
+});

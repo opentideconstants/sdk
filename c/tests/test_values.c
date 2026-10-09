@@ -1,6 +1,7 @@
 /* PK07 value checks on the real library.
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
- *      not cut to an integer: it reads as missing (-1).
+ *      never cut to an integer: the open fails with OTC_E_INVALID_RELEASE, as
+ *      in every SDK (CR2 PK-R2-05: a known field of the wrong JSON type).
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
  *      text after a line's object is invalid_release, not ignored; white
  *      space after it (CRLF, spaces, tabs) is not text.
@@ -12,6 +13,9 @@
  *      UTF-8 character, never inside one.
  * C43: a set without provenance: otc_set_provenance_json is OTC_E_NOT_FOUND,
  *      as every other accessor of an absent value (CR D34), not "{}".
+ * PK-R2-05: a line that is not well-formed UTF-8 fails the open with
+ *      OTC_E_INVALID_RELEASE (overlong forms, encoded surrogates, above
+ *      U+10FFFF, a cut sequence); a 4-byte character opens.
  * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
  *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
 #include "otc_test.h"
@@ -39,21 +43,33 @@ int main(void)
     otc_release *rel;
     otc_station_t *st = NULL;
     /* C48 */
+    {
+        char *d2 = test_tmpdir(), *path;
+        otc_release *r2 = NULL;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(d2, "OTC_20990101.jsonl", "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,"
+                   "\"lon\":1,\"type\":\"reference\",\"constant_sets\":[],"
+                   "\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n");
+        path = test_join(d2, "OTC_20990101.jsonl");
+        CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_E_INVALID_RELEASE);
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
-                     "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n", &dir);
+                     "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"extra_events\":2.0}]}\n", &dir);
     CHECK(rel != NULL);
     if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
     if (st) {
         const otc_validation_t *v = NULL;
         CHECK_STATUS(otc_station_validation_at(st, 0, &v), OTC_OK);
         if (v) {
-            CHECK(v->missed_events == -1);
-            CHECK(v->extra_events == 2);
+            CHECK(v->missed_events == -1);   /* absent */
+            CHECK(v->extra_events == 2);     /* 2.0: an integral value */
             /* C35 */
             CHECK(!v->has_previous_release);
             CHECK(isnan(v->previous_release.time_mae_min) && isnan(v->previous_release.range_error_m));
             CHECK(v->previous_release.missed_events == -1 && v->previous_release.extra_events == -1);
-            if (v->missed_events != -1) fprintf(stderr, "missed_events 1.5 read as %lld\n", (long long)v->missed_events);
         }
     }
     otc_station_free(st);
@@ -148,5 +164,33 @@ int main(void)
     otc_station_free(st);
     otc_close(rel);
     free(dir);
+    /* PK-R2-05: a line that is not well-formed UTF-8 is invalid_release; a 4-byte character is not */
+    {
+        static const char *const bad[] = {
+            "\xff",                 /* never in UTF-8 */
+            "\xc0\xaf",             /* an overlong '/' */
+            "\xe0\x80\xaf",         /* an overlong '/', 3 bytes */
+            "\xed\xa0\x80",         /* an encoded surrogate U+D800 */
+            "\xf4\x90\x80\x80",     /* above U+10FFFF */
+            "\xc3",                 /* a lead byte with no continuation */
+        };
+        char *d2 = test_tmpdir(), *path = test_join(d2, "OTC_20990101.jsonl");
+        char line[512];
+        size_t i;
+        otc_release *r2 = NULL;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        for (i = 0; i < sizeof bad / sizeof *bad; i++) {
+            snprintf(line, sizeof line, TEST_STATION("OTC-X-1", "A%sB") "\n", bad[i]);
+            test_write(d2, "OTC_20990101.jsonl", line);
+            CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_E_INVALID_RELEASE);
+            otc_close(r2);
+            r2 = NULL;
+        }
+        test_write(d2, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "A\xf0\x9f\x8c\x8a\xf4\x8f\xbf\xbf" "B") "\n");
+        CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_OK);
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
     return test_done("test_values");
 }

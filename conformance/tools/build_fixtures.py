@@ -36,6 +36,7 @@ import datetime
 import gzip
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -713,7 +714,9 @@ def index_content_digest_bad(files, sums, entry, reuse):
 
 def changed_doc(change):
     def make():
-        doc = release_doc(BASE)
+        # a JSON round trip: release_doc shares objects such as VERIFIED between stations (and calls), and a change
+        # must reach one place only
+        doc = json.loads(json.dumps(release_doc(BASE)))
         change(doc)
         doc["stations"].sort(key=lambda s: str(s["station_id"]))
         return [doc]
@@ -764,6 +767,114 @@ def _too_new_broken():
     doc = small_doc(BASE)
     doc["stations"][0]["constant_sets"][0]["licence_id"] = "no-such-licence"
     return [versioned(doc, TOO_NEW)]
+
+
+# Review round 2 (PK-R2-05): malformed content that json.dumps cannot write (an overflow literal, invalid UTF-8, a
+# lone surrogate escape) is made by changing the bytes of the .json and the .jsonl after they are written. The
+# .json.gz is made again from the changed .json and every digest is honest, so the content is the only defect.
+SENTINEL_LAT, SENTINEL_LON, SENTINEL_AMP = 1.2345678, 2.3456789, 0.9876543
+
+
+def raw_bytes(old, new):
+    def t(files, sums, entry, reuse):
+        files = dict(files)
+        for name in list(files):
+            if name.endswith(".jsonl") or (name.endswith(".json") and not name.endswith(".meta.json")):
+                assert files[name].count(old) == 1, f"{old!r} is not in {name} exactly once"
+                files[name] = files[name].replace(old, new)
+        for name in list(files):
+            if name.endswith(".json.gz"):
+                files[name] = gz(files[name[:-3]], reuse / name if reuse else None)
+        return rehash(files, sums, entry)
+    return t
+
+
+def _set_of(doc, sid, i=0):
+    return _station(doc, sid)["constant_sets"][i]
+
+
+def _constituent_twice(doc):
+    cs = _set_of(doc, "OTC-T-0010")
+    cs["constituents"].append(dict(cs["constituents"][0], amplitude_m=0.01))
+
+
+def _proto_keys(doc):
+    """Keys that are Object.prototype members in JavaScript: an alias system __proto__ and constructor (unknown
+    systems in 1.0, so the release is format 1.1, read tolerantly), and a set source constructor (a valid source)."""
+    doc["format_version"] = "1.1"
+    _station(doc, "OTC-T-0001")["aliases"]["__proto__"] = "PX-0001"
+    _station(doc, "OTC-T-0002")["aliases"]["constructor"] = "CX-0002"
+    _set_of(doc, "OTC-T-0010")["source"] = "constructor"
+    _set_of(doc, "OTC-T-0013")["source"] = "constructor"
+
+
+BAD_R2_05 = [
+    # wrong JSON types in known fields (spec 7.3: tolerant is not lax)
+    ("recommended-set-id-number", "OTC-T-0010's recommended_set_id is the number 5 (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(recommended_set_id=5)), None),
+    ("station-name-number", "OTC-T-0010's name is the number 7 (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(name=7)), None),
+    ("station-timezone-number", "OTC-T-0010's timezone is the number 1 (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(timezone=1)), None),
+    ("offsets-number-string", "OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(time_offset_high_min="12")), None),
+    ("validation-number-string", "OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0001")["validation"][0].update(time_mae_min="fast")), None),
+    ("validation-count-fraction", "OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0001")["validation"][0].update(missed_events=1.5)), None),
+    ("constituent-amplitude-string", "OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0010")["constituents"][0].update(amplitude_m="0.28")), None),
+    ("datum-msl-string", "OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0001")["datum"].update(msl_offset_m="0.0")), None),
+    ("good-samples-string", "OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0001")["record_span"].update(good_samples="166000")), None),
+    ("set-source-version-number", "OTC-T-0010's set has source_version the number 4 (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0010").update(source_version=4)), None),
+    ("time-base-correction-string", "OTC-T-0011's time_base.correction is a string (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0011")["time_base"].update(correction="utc_mean_start60")), None),
+    ("qc-flag-values-not-object", "OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0002", 1)["qc_flags"][0].update(values=[0.4])), None),
+    ("qc-flag-value-string", "OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0002", 1)["qc_flags"][0].update(values={"step_m": "0.4"})), None),
+    ("evidence-not-objects", "OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0010")["time_base"].update(evidence=[1, "x"])), None),
+    ("evidence-number-string", "OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0011")["time_base"]["evidence"][0].update(lag_min="-30")), None),
+    ("source-version-number", "release.source_versions.gesla is the number 4.1 (malformed)",
+     changed_doc(lambda d: d["release"]["source_versions"].update(gesla=4.1)), None),
+    ("source-version-null", "release.source_versions.gesla is null (malformed: each value is a string)",
+     changed_doc(lambda d: d["release"]["source_versions"].update(gesla=None)), None),
+    ("constant-sets-object", "OTC-T-0010's constant_sets is an object (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(constant_sets={}, recommended_set_id=None)), None),
+    ("constant-sets-not-objects", "OTC-T-0010's constant_sets is [5] (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(constant_sets=[5], recommended_set_id=None)), None),
+    ("constant-sets-null-item", "OTC-T-0010's constant_sets is [null] (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(constant_sets=[None], recommended_set_id=None)), None),
+    # numbers that are not finite as a double
+    ("lat-overflow-literal", "OTC-T-0010's lat is the literal 1e400 (infinite as a double)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat=SENTINEL_LAT)), raw_bytes(b"%r" % SENTINEL_LAT, b"1e400")),
+    ("lon-overflow-literal", "OTC-T-0010's lon is the literal -1e400 (infinite as a double)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lon=SENTINEL_LON)), raw_bytes(b"%r" % SENTINEL_LON, b"-1e400")),
+    ("lat-huge-int", "OTC-T-0010's lat is an integer of 401 digits (infinite as a double)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat=10 ** 400)), None),
+    ("constituent-amplitude-inf", "OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double)",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0010")["constituents"][0].update(amplitude_m=SENTINEL_AMP)),
+     raw_bytes(b"%r" % SENTINEL_AMP, b"1e400")),
+    ("constituent-amplitude-huge-int", "OTC-T-0010's first constituent has amplitude_m an integer of 401 digits",
+     changed_doc(lambda d: _set_of(d, "OTC-T-0010")["constituents"][0].update(amplitude_m=10 ** 400)), None),
+    # text that is not valid Unicode (CR D17)
+    ("invalid-utf8", "OTC-T-0010's name has the byte 0xFF (not UTF-8)",
+     lambda: [release_doc(BASE)], raw_bytes(b'"Equator Station"', b'"Equator \xffStation"')),
+    ("lone-surrogate", "OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17)",
+     lambda: [release_doc(BASE)], raw_bytes(b'"Equator Station"', b'"Equator \\ud800Station"')),
+    # repeated ids (CR D5, CR2 DR22)
+    ("constituent-name-twice", "OTC-T-0010's set lists the constituent M2 twice (CR2 DR22)",
+     changed_doc(_constituent_twice), None),
+    ("duplicate-licence-id", "two licences with the licence_id eot20 (D5)",
+     changed_doc(lambda d: d["licences"].append(copy.deepcopy(next(x for x in d["licences"] if x["licence_id"] == "eot20")))), None),
+    ("tombstone-twice", "the tombstone OTC-T-0005 appears twice (D5)",
+     changed_doc(lambda d: d["stations"].append(copy.deepcopy(_station(d, "OTC-T-0005")))), None),
+]
 
 
 BAD = [
@@ -879,7 +990,9 @@ BAD = [
      changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(end="2097-02-29T12:00:00Z")), None),
     ("record-span-hour-24", "invalid_release", "OTC-T-0010's record_span.end is 2098-12-31T24:00:00Z (hour 24; DR6)",
      changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(end="2098-12-31T24:00:00Z")), None),
-]
+    ("proto-keys", "load", "format 1.1: an alias system __proto__ and constructor, and a source constructor (JavaScript Object.prototype keys); it must load and keep them",
+     changed_doc(_proto_keys), None),
+] + [(name, "invalid_release", defect, docs, tamper) for name, defect, docs, tamper in BAD_R2_05]
 
 
 def no_build_doc():
@@ -892,7 +1005,7 @@ def no_build_doc():
 def restore_station_build(st):
     """One station (a .jsonl line) with every missing provenance.build put back."""
     st = copy.deepcopy(st)
-    for cs in st.get("constant_sets", []):
+    for cs in sets_of(st):
         if isinstance(cs.get("provenance"), dict):   # the same sets the detection picks
             cs["provenance"].setdefault("build", dict(BUILD))
     return st
@@ -1201,9 +1314,44 @@ def _not_json(token):
     raise ValueError(f"{token} is not JSON")
 
 
+def _finite_float(token):
+    v = float(token)
+    if not math.isfinite(v):
+        raise ValueError(f"{token[:40]} is not a finite number")
+    return v
+
+
+def _finite_int(token):
+    v = int(token)
+    try:
+        float(v)
+    except OverflowError:
+        raise ValueError(f"{token[:40]}... is not a finite number") from None
+    return v
+
+
+def _no_lone_surrogate(v):
+    """A string with an unpaired surrogate (a \\ud800 escape alone) is not valid Unicode (CR D17)."""
+    stack = [v]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, str):
+            try:
+                x.encode("utf-8")
+            except UnicodeEncodeError:
+                raise ValueError("a string with an unpaired surrogate") from None
+        elif isinstance(x, dict):
+            stack.extend(x.keys())
+            stack.extend(x.values())
+        elif isinstance(x, list):
+            stack.extend(x)
+    return v
+
+
 def strict_json(text):
-    """json.loads that refuses NaN and Infinity (they are not JSON, RFC 8259; Python accepts them)."""
-    return json.loads(text, parse_constant=_not_json)
+    """json.loads that refuses NaN and Infinity (they are not JSON, RFC 8259; Python accepts them), a number that
+    is not finite as a double (1e400, an integer of 400 digits), and an unpaired surrogate (CR D17)."""
+    return _no_lone_surrogate(json.loads(text, parse_constant=_not_json, parse_float=_finite_float, parse_int=_finite_int))
 
 
 def checked_version(v, what):
@@ -1326,6 +1474,9 @@ def cross_ref_errors(doc):
                 errs.append(f"{cs['set_id']}: convention_id {cs['convention_id']} does not resolve")
             if cs["licence_id"] not in lic:
                 errs.append(f"{cs['set_id']}: licence_id {cs['licence_id']} does not resolve")
+            names = [c["name"] for c in cs["constituents"]]
+            if len(names) != len(set(names)):
+                errs.append(f"{cs['set_id']}: a constituent name appears twice (CR2 DR22)")
             tv = conv_table.get(cs["convention_id"])
             current = [c for b in cs.get("current_bins", []) for c in b.get("constituents", [])]
             for c in cs["constituents"] + cs.get("dropped_constituents", []) + current:
@@ -1463,6 +1614,12 @@ def _restore_provider(doc):
     return doc
 
 
+def sets_of(st):
+    """The constant sets of a station that are objects (the schema reports the rest)."""
+    sets = st.get("constant_sets") if isinstance(st, dict) else None
+    return [cs for cs in sets if isinstance(cs, dict)] if isinstance(sets, list) else []
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1475,7 +1632,7 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     tolerated = []
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
     # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
-    missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", [])
+    missing = [cs["set_id"] for st in doc["stations"] for cs in sets_of(st)
                if isinstance(cs.get("provenance"), dict) and "build" not in cs["provenance"]]
     if missing and allow_missing_build:
         tolerated = [f"no provenance.build in {m}" for m in missing]

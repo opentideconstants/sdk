@@ -298,6 +298,159 @@ static otc_status add_alias(builder *b, const char *system, const char *alias, c
     return OTC_OK;
 }
 
+/* The JSON type of each known field that the SDK reads (spec 7.3: tolerant is
+ * not lax; CR2 PK-R2-05). Absent or null is always allowed here; required
+ * fields are checked where they are used. T a string, N a finite number, I a
+ * finite number with an integral value, O an object, L a list of objects, S a
+ * list of strings, A a list. The same table is in the Python, Ruby and
+ * TypeScript SDKs. */
+typedef struct {
+    const char *key;
+    char        type;
+} field_type;
+
+static const field_type STATION_TYPES[] = {
+    {"name", 'T'}, {"country", 'T'}, {"timezone", 'T'}, {"type", 'T'}, {"recommended_set_id", 'T'}, {"status", 'T'},
+    {"constant_sets", 'L'}, {"validation", 'L'}, {"subordinate_offsets", 'O'}, {"current_offsets", 'A'}, {NULL, 0}};
+static const field_type OFFSET_TYPES[] = {
+    {"reference_station_id", 'T'}, {"licence_id", 'T'}, {"height_adjusted_type", 'T'}, {"time_offset_high_min", 'N'},
+    {"time_offset_low_min", 'N'}, {"height_offset_high", 'N'}, {"height_offset_low", 'N'}, {NULL, 0}};
+static const field_type VALIDATION_TYPES[] = {
+    {"set_id", 'T'}, {"reference_source", 'T'}, {"reference_station", 'T'}, {"window", 'T'},
+    {"reference_distance_km", 'N'}, {"time_mae_min", 'N'}, {"time_p95_min", 'N'}, {"time_bias_min", 'N'},
+    {"height_mae_m", 'N'}, {"range_error_m", 'N'}, {"missed_events", 'I'}, {"extra_events", 'I'},
+    {"previous_release", 'O'}, {NULL, 0}};
+static const field_type SET_TYPES[] = {
+    {"set_id", 'T'}, {"source", 'T'}, {"source_type", 'T'}, {"quantity", 'T'}, {"source_record_id", 'T'},
+    {"source_version", 'T'}, {"convention_id", 'T'}, {"licence_id", 'T'}, {"qc_status", 'T'}, {"constituents", 'L'},
+    {"dropped_constituents", 'L'}, {"qc_flags", 'L'}, {"record_span", 'O'}, {"datum", 'O'}, {"time_base", 'O'},
+    {"provenance", 'O'}, {"current_bins", 'A'}, {NULL, 0}};
+static const field_type SPAN_TYPES[] = {{"good_samples", 'I'}, {NULL, 0}};
+static const field_type DATUM_TYPES[] = {{"msl_offset_m", 'N'}, {"named", 'O'}, {NULL, 0}};
+static const field_type CONSTITUENT_TYPES[] = {
+    {"name", 'T'}, {"source_name", 'T'}, {"doodson", 'T'}, {"kept_reason", 'T'}, {"speed_deg_per_hour", 'N'},
+    {"amplitude_m", 'N'}, {"phase_deg", 'N'}, {"amp_uncertainty_m", 'N'}, {"phase_uncertainty_deg", 'N'}, {NULL, 0}};
+static const field_type QC_FLAG_TYPES[] = {{"flag", 'T'}, {"reason", 'T'}, {"values", 'O'}, {NULL, 0}};
+static const field_type DROPPED_TYPES[] = {{"name", 'T'}, {"dropped_reason", 'T'}, {"detail", 'T'}, {NULL, 0}};
+static const field_type TIME_BASE_TYPES[] = {
+    {"code", 'T'}, {"reason", 'T'}, {"declared", 'T'}, {"published", 'T'}, {"decided_in", 'T'},
+    {"decided_build_commit", 'T'}, {"correction", 'O'}, {"months_dropped", 'S'}, {"evidence", 'L'}, {NULL, 0}};
+static const field_type CORRECTION_TYPES[] = {{"from", 'T'}, {"to", 'T'}, {NULL, 0}};
+static const field_type EVIDENCE_TYPES[] = {
+    {"comparator_kind", 'T'}, {"comparator_id", 'T'}, {"detail", 'T'}, {"distance_km", 'N'}, {"lag_min", 'N'},
+    {NULL, 0}};
+static const field_type PROVENANCE_TYPES[] = {
+    {"adapter_version", 'T'}, {"carried_from_release", 'T'}, {"selection_reason", 'T'}, {"input_sha256", 'S'},
+    {"decision", 'O'}, {NULL, 0}};
+
+static int finite_number(const cJSON *v) { return cJSON_IsNumber(v) && isfinite(v->valuedouble); }
+
+static int field_type_ok(const cJSON *v, char type)
+{
+    const cJSON *x;
+    if (!v || cJSON_IsNull(v)) return 1;
+    switch (type) {
+    case 'T': return cJSON_IsString(v);
+    case 'N': return finite_number(v);
+    case 'I': return finite_number(v) && v->valuedouble == floor(v->valuedouble);
+    case 'O': return cJSON_IsObject(v);
+    case 'L':
+    case 'S':
+        if (!cJSON_IsArray(v)) return 0;
+        cJSON_ArrayForEach(x, v) {
+            if (type == 'L' ? !cJSON_IsObject(x) : !cJSON_IsString(x)) return 0;
+        }
+        return 1;
+    default: return cJSON_IsArray(v);
+    }
+}
+
+/* The first field of o (an object, or NULL/null for none) with the wrong type, or NULL. */
+static const char *wrong_field(const cJSON *o, const field_type *table)
+{
+    for (; o && cJSON_IsObject(o) && table->key; table++)
+        if (!field_type_ok(otc__jget(o, table->key), table->type)) return table->key;
+    return NULL;
+}
+
+/* 1 when every member of o (an object, or NULL/null) is a finite number, or also null when null_ok. */
+static int numbers_only(const cJSON *o, int null_ok)
+{
+    const cJSON *x;
+    if (!cJSON_IsObject(o)) return 1;
+    cJSON_ArrayForEach(x, o) {
+        if (!finite_number(x) && !(null_ok && cJSON_IsNull(x))) return 0;
+    }
+    return 1;
+}
+
+static otc_status wrong_type(builder *b, const char *where, const char *key)
+{
+    char what[160];
+    snprintf(what, sizeof what, "%s%s has the wrong type", where, key);
+    return bad_line(b, what);
+}
+
+/* Every known field of an active station line has its JSON type (spec 6.1, 7.3), so a malformed line fails the
+ * open with OTC_E_INVALID_RELEASE, never a value read as missing. */
+static otc_status check_station_types(builder *b, const cJSON *root)
+{
+    const cJSON *x, *s, *f, *e, *tb;
+    const char *k;
+    if ((k = wrong_field(root, STATION_TYPES))) return wrong_type(b, "", k);
+    if ((k = wrong_field(otc__jget(root, "subordinate_offsets"), OFFSET_TYPES)))
+        return wrong_type(b, "subordinate_offsets.", k);
+    cJSON_ArrayForEach(x, otc__jget(root, "validation")) {
+        if ((k = wrong_field(x, VALIDATION_TYPES))) return wrong_type(b, "validation.", k);
+    }
+    cJSON_ArrayForEach(s, otc__jget(root, "constant_sets")) {
+        if ((k = wrong_field(s, SET_TYPES))) return wrong_type(b, "constant set ", k);
+        if ((k = wrong_field(otc__jget(s, "record_span"), SPAN_TYPES))) return wrong_type(b, "record_span.", k);
+        if ((k = wrong_field(otc__jget(s, "datum"), DATUM_TYPES))) return wrong_type(b, "datum.", k);
+        if ((k = wrong_field(otc__jget(s, "provenance"), PROVENANCE_TYPES))) return wrong_type(b, "provenance.", k);
+        tb = otc__jget(s, "time_base");
+        if ((k = wrong_field(tb, TIME_BASE_TYPES))) return wrong_type(b, "time_base.", k);
+        if ((k = wrong_field(otc__jget(tb, "correction"), CORRECTION_TYPES)))
+            return wrong_type(b, "time_base.correction.", k);
+        cJSON_ArrayForEach(e, otc__jget(tb, "evidence")) {
+            if ((k = wrong_field(e, EVIDENCE_TYPES))) return wrong_type(b, "time_base.evidence.", k);
+        }
+        if (!numbers_only(otc__jget(otc__jget(s, "datum"), "named"), 0))
+            return bad_line(b, "datum.named has a value that is not a number");
+        cJSON_ArrayForEach(x, otc__jget(s, "constituents")) {
+            if ((k = wrong_field(x, CONSTITUENT_TYPES))) return wrong_type(b, "constituent ", k);
+        }
+        cJSON_ArrayForEach(x, otc__jget(s, "dropped_constituents")) {
+            if ((k = wrong_field(x, DROPPED_TYPES))) return wrong_type(b, "dropped constituent ", k);
+        }
+        cJSON_ArrayForEach(f, otc__jget(s, "qc_flags")) {
+            if ((k = wrong_field(f, QC_FLAG_TYPES))) return wrong_type(b, "qc_flags.", k);
+            if (!numbers_only(otc__jget(f, "values"), 1)) return bad_line(b, "a qc_flags value is not a number or null");
+        }
+    }
+    return OTC_OK;
+}
+
+static int str_ptr_cmp(const void *a, const void *b);
+
+/* spec 6.1 (CR2 DR22): a constituent name appears once in a set. Sorted, so a
+ * set of n constituents costs n log n, not n * n. */
+static otc_status names_once(builder *b, const cJSON *cons)
+{
+    const cJSON *c;
+    const char **names;
+    size_t n = 0, i;
+    int twice = 0;
+    if (!cons || cJSON_GetArraySize(cons) < 2) return OTC_OK;
+    names = (const char **)malloc((size_t)cJSON_GetArraySize(cons) * sizeof *names);
+    if (!names) return OTC_E_NOMEM;
+    cJSON_ArrayForEach(c, cons) names[n++] = otc__jstr(c, "name");
+    qsort(names, n, sizeof *names, str_ptr_cmp);
+    for (i = 1; i < n && !twice; i++) twice = !strcmp(names[i - 1], names[i]);
+    free(names);
+    return twice ? bad_line(b, "a constituent name appears twice in a set") : OTC_OK;
+}
+
 /* Checks one constant set and adds what the index needs from it. */
 static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const char *rec_id)
 {
@@ -330,6 +483,7 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
         if (!name) return bad_line(b, "a constituent has no name");
         if ((st = add_cname(b, name)) != OTC_OK) return st;
     }
+    if ((st = names_once(b, cons)) != OTC_OK) return st;
     /* spec 4.3: qc_status counts every set (a value format 1.0 does not have is
      * "other", 7.3); source counts, and the source filter sees, only sets with
      * constants (ok or flagged) */
@@ -385,6 +539,9 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         const cJSON *lat = otc__jget(root, "lat"), *lon = otc__jget(root, "lon");
         if (!name || !cJSON_IsNumber(lat) || !cJSON_IsNumber(lon) || !otc__jstr(root, "type"))
             return bad_line(b, "an active station lacks name, lat, lon or type");
+        if (!finite_number(lat) || !finite_number(lon) || fabs(lat->valuedouble) > 90 || fabs(lon->valuedouble) > 180)
+            return bad_line(b, "lat or lon is not a number in range");
+        if ((st = check_station_types(b, root)) != OTC_OK) return st;
         if ((sets && !cJSON_IsArray(sets)) || (aliases && !cJSON_IsObject(aliases)))
             return bad_line(b, "constant_sets is not an array or aliases is not an object");
         if (r->n_st == b->cap_st) {
@@ -910,7 +1067,14 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
     if (!otc__utc_time(otc__jstr(r->release_obj, "created"), r->created)) r->created[0] = '\0';
     {   /* spec 4.8, 7.3: a field of the wrong type is invalid_release at open, in every SDK */
         const cJSON *created = otc__jget(r->release_obj, "created"), *sv = otc__jget(r->release_obj, "source_versions");
-        if ((created && !cJSON_IsString(created)) || (sv && !cJSON_IsObject(sv))) {
+        const cJSON *v;
+        int sv_ok = !sv || cJSON_IsObject(sv);
+        if (sv && sv_ok) {
+            cJSON_ArrayForEach(v, sv) {   /* each value is a string (CR2 PK-R2-05) */
+                if (!cJSON_IsString(v)) sv_ok = 0;
+            }
+        }
+        if ((created && !cJSON_IsString(created)) || !sv_ok) {
             otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s: release.%s has the wrong type", meta_path,
                          created && !cJSON_IsString(created) ? "created" : "source_versions");
             return OTC_E_INVALID_RELEASE;
@@ -1257,8 +1421,7 @@ otc_status otc_release_source_version_at(const otc_release *rel, size_t i, char 
     if (!rel || i >= otc_release_source_version_count(rel)) return OTC_E_INVALID_ARGUMENT;
     item = cJSON_GetArrayItem(otc__jget(rel->release_obj, "source_versions"), (int)i);
     a = otc__copy_str(item->string, source, source_len, source_needed);
-    b = cJSON_IsString(item) ? otc__copy_str(item->valuestring, version, version_len, version_needed)
-                             : otc__copy_json(item, version, version_len, version_needed);
+    b = otc__copy_str(item->valuestring, version, version_len, version_needed);   /* a string: checked at open */
     return a != OTC_OK ? a : b;
 }
 

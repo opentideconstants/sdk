@@ -2044,6 +2044,7 @@ def group_rules():
                             [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
                             requires=["fs"] + req))
     out += r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned)
+    out += rules_r2_pk05()
     return out
 
 
@@ -2157,6 +2158,45 @@ def r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinne
     out.append(case(f"{P}/sha256-no-json-row-stream", "stream latest from bad/sha256-no-json-row: it loads (DR15 is for eager mode only)", "5.3",
                     [latest({"datestamp": "20991231", "loaded_from": "download"}, base=NJ, on_network_error="raise", mode="stream")],
                     requires=["fs", "stream"]))
+    return out
+
+
+# Review round 2, PK-R2-05: malformed release content is invalid_release in every SDK and every load path (spec 7.3
+# "tolerant is not lax", 4.8, 6.1; CR D5, D17; CR2 DR22). One bad fixture per shape (build_fixtures.py BAD_R2_05).
+R2_PK05_BAD = ["recommended-set-id-number", "station-name-number", "station-timezone-number", "offsets-number-string",
+               "validation-number-string", "validation-count-fraction", "constituent-amplitude-string", "datum-msl-string",
+               "good-samples-string", "set-source-version-number", "time-base-correction-string",
+               "qc-flag-values-not-object", "qc-flag-value-string", "evidence-not-objects", "evidence-number-string",
+               "source-version-number", "source-version-null", "constant-sets-object", "constant-sets-not-objects",
+               "constant-sets-null-item", "lat-overflow-literal", "lon-overflow-literal", "lat-huge-int",
+               "constituent-amplitude-inf", "constituent-amplitude-huge-int", "invalid-utf8", "lone-surrogate",
+               "constituent-name-twice", "duplicate-licence-id", "tombstone-twice"]
+
+
+def rules_r2_pk05():
+    out = []
+    fixtures = {f["root"]: f for f in json.loads((FIXTURES / "fixtures.json").read_bytes())["fixtures"]}
+    for root in R2_PK05_BAD:
+        fx = fixtures[f"bad/{root}"]
+        if fx["expect"] != {"error": "invalid_release"}:
+            raise SystemExit(f"bad/{root}: fixtures.json expects {fx['expect']}, not invalid_release")
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"rules/r2-pk05/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open ({fx['defect']})",
+                            "4.8, 6.1, 7.3",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
+    # Station.aliases with a __proto__ system is not compared here: the Node runner's reply encoder rebuilds objects
+    # by assignment and drops that key (a harness defect, reported for PK-R2-16); js/test covers the SDK value.
+    P = Rel("bad/proto-keys", "20991231")
+    out.append(mcase("rules/r2-pk05/proto-keys", "JavaScript Object.prototype names as data (an alias system __proto__ and constructor, a source constructor): they load, are looked up and are counted like any other name", "4.4, 4.5, 7.3",
+                     [step("station_by_alias", {"station_id": "OTC-T-0001"}, system="__proto__", alias_id="PX-0001"),
+                      step("station_by_alias", {"station_id": "OTC-T-0002"}, system="constructor", alias_id="CX-0002"),
+                      step("stats", {"stats": stats(P)}),
+                      step("stations", {"station_ids": [x["station_id"] for x in apply_filters(P, P.active, {"source": "constructor"})]}, source="constructor"),
+                      step("stations", {"station_ids": []}, source="toString")],
+                     root="bad/proto-keys", release="20991231", open_expect={"format_version": "1.1"}))
     return out
 
 

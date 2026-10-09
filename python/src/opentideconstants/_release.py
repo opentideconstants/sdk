@@ -20,8 +20,8 @@ from . import _enums as E
 from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError, StationNotFoundError,
                       StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
-from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, build_station, freeze,
-                      parse_time)
+from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, _is_finite, build_station,
+                      freeze, parse_time)
 
 SUPPORTED_FORMAT_MAJORS = (1,)
 SUPPORTED_FORMAT_VERSION = "1.0"
@@ -181,7 +181,7 @@ def _entry(d, offset=None, length=None):
     if d.get("status") == "active":
         for k, bound in (("lat", 90), ("lon", 180)):
             v = d.get(k)
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or abs(v) > bound:
+            if not _is_finite(v) or abs(v) > bound:
                 raise InvalidReleaseError(f"station {d['station_id']}: {k} is not a number in range: {v!r}")
     off = d.get("subordinate_offsets")
     off = off if isinstance(off, dict) else {}
@@ -238,8 +238,7 @@ def _usable_index(idx, name, sha256, size, conv, lic):
         if e["length"] <= 0 or e["offset"] < end or e["offset"] + e["length"] > size:
             return None
         end = e["offset"] + e["length"]
-        if e["status"] == "active" and (not isinstance(e["lat"], (int, float)) or not isinstance(e["lon"], (int, float))
-                                        or not math.isfinite(e["lat"]) or not math.isfinite(e["lon"])
+        if e["status"] == "active" and (not _is_finite(e["lat"]) or not _is_finite(e["lon"])
                                         or abs(e["lat"]) > 90 or abs(e["lon"]) > 180):
             return None
         for cs in e["sets"]:
@@ -314,8 +313,9 @@ class Release:
         rel = meta.get("release")
         if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
             raise InvalidReleaseError("release.datestamp is missing")
-        if rel.get("source_versions") is not None and not isinstance(rel.get("source_versions"), dict):
-            raise InvalidReleaseError("release.source_versions is not an object")
+        sv = rel.get("source_versions")
+        if sv is not None and (not isinstance(sv, dict) or not all(isinstance(v, str) for v in sv.values())):
+            raise InvalidReleaseError("release.source_versions is not an object of strings")
         self._release = rel
         self._files = tuple(files)
         try:

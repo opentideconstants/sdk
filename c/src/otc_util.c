@@ -230,6 +230,42 @@ otc_dropped_reason otc__parse_dropped_reason(const char *s)
 
 /* ------------------------------------------------------------- JSON parse */
 
+/* 1 when s[0..len) is well-formed UTF-8 (Unicode 15, table 3-7): no stray or
+ * missing continuation byte, no overlong form, no encoded surrogate, nothing
+ * above U+10FFFF. JSON text that is not UTF-8 is invalid_release, as in the
+ * other SDKs (CR2 PK-R2-05); cJSON alone passes such bytes through. */
+static int utf8_valid(const unsigned char *s, size_t len)
+{
+    size_t i = 0;
+    while (i < len) {
+        unsigned char c = s[i];
+        size_t n, k;
+        unsigned char lo = 0x80, hi = 0xBF;
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        if (c >= 0xC2 && c <= 0xDF) n = 1;
+        else if (c >= 0xE0 && c <= 0xEF) {
+            n = 2;
+            if (c == 0xE0) lo = 0xA0;   /* no overlong form */
+            if (c == 0xED) hi = 0x9F;   /* no surrogate */
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            n = 3;
+            if (c == 0xF0) lo = 0x90;   /* no overlong form */
+            if (c == 0xF4) hi = 0x8F;   /* nothing above U+10FFFF */
+        } else {
+            return 0;
+        }
+        if (len - i <= n) return 0;
+        if (s[i + 1] < lo || s[i + 1] > hi) return 0;
+        for (k = 2; k <= n; k++)
+            if (s[i + k] < 0x80 || s[i + k] > 0xBF) return 0;
+        i += n + 1;
+    }
+    return 1;
+}
+
 /* cJSON reports every failure as NULL: a failed allocation in it (malloc sets
  * errno to ENOMEM) is told apart from text that is not JSON by errno. */
 #ifdef _WIN32
@@ -246,6 +282,8 @@ otc_status otc__json_parse_st(const char *text, size_t len, cJSON **out)
 {
     cJSON *v;
     int e;
+    *out = NULL;
+    if (!utf8_valid((const unsigned char *)text, len)) return OTC_E_INVALID_RELEASE;
     PARSE_LOCK();
     errno = 0;
     v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
@@ -660,30 +698,6 @@ void otc__free_rows(char **names, char **digests, size_t n)
     }
     free(names);
     free(digests);
-}
-
-/* 1 if s[0..n) is well-formed UTF-8 (no overlong form, no surrogate, nothing above U+10FFFF). */
-static int utf8_valid(const unsigned char *s, size_t n)
-{
-    size_t i = 0;
-    while (i < n) {
-        unsigned c = s[i];
-        size_t k, len;
-        unsigned cp, min;
-        if (c < 0x80) { i++; continue; }
-        if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; min = 0x80; }
-        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; min = 0x800; }
-        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; min = 0x10000; }
-        else return 0;
-        if (n - i < len) return 0;
-        for (k = 1; k < len; k++) {
-            if ((s[i + k] & 0xC0) != 0x80) return 0;
-            cp = (cp << 6) | (s[i + k] & 0x3F);
-        }
-        if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0;
-        i += len;
-    }
-    return 1;
 }
 
 /* Parses a sha256sum file: "<64 hex>  <name>" or "<64 hex> *<name>" per line.

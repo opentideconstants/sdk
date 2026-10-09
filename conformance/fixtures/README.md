@@ -50,6 +50,11 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `bad/lat-nan/` | a `lat` of `NaN` (not JSON) | `invalid_release` |
 | `bad/jsonl-wrong-sha256/` | only the `.jsonl` has one byte changed (same size) | `checksum_mismatch` |
 | `bad/index-invalid/` | a good release whose `OTC_index.json` entry has a `content_sha256` that is not a digest | loads; the index fails `otc-index-1.0` |
+| `bad/recommended-set-id-number/`, `bad/station-name-number/`, `bad/station-timezone-number/`, `bad/offsets-number-string/`, `bad/validation-number-string/`, `bad/validation-count-fraction/`, `bad/constituent-amplitude-string/`, `bad/datum-msl-string/`, `bad/good-samples-string/`, `bad/set-source-version-number/`, `bad/time-base-correction-string/`, `bad/qc-flag-values-not-object/`, `bad/qc-flag-value-string/`, `bad/evidence-not-objects/`, `bad/evidence-number-string/`, `bad/source-version-number/`, `bad/source-version-null/`, `bad/constant-sets-object/`, `bad/constant-sets-not-objects/`, `bad/constant-sets-null-item/` | one known field of the wrong JSON type (review round 2, PK-R2-05) | `invalid_release` |
+| `bad/lat-overflow-literal/`, `bad/lon-overflow-literal/`, `bad/lat-huge-int/`, `bad/constituent-amplitude-inf/`, `bad/constituent-amplitude-huge-int/` | a number that is not finite as a double (`1e400`, an integer of 401 digits) | `invalid_release` |
+| `bad/invalid-utf8/`, `bad/lone-surrogate/` | a station name with the byte 0xFF, or with the escape `\ud800` alone (CR D17) | `invalid_release` |
+| `bad/constituent-name-twice/`, `bad/duplicate-licence-id/`, `bad/tombstone-twice/` | a constituent name twice in one set (CR2 DR22), a repeated `licence_id`, a repeated tombstone (CR D5) | `invalid_release` |
+| `bad/proto-keys/` | format `1.1`: an alias system `__proto__` and `constructor`, and a set source `constructor` | loads; the names work like any other |
 | `bad/too-new-broken/` | `min_reader_version` `1.99`, and its data is not valid 1.0 | `reader_too_old` (the version gate comes first) |
 | `bad/sha256-dup-name/` | `OTC_20991231.sha256` lists the `.jsonl` twice, first with a wrong SHA-256, then with the right one | `invalid_release` (CR2 DR14) |
 | `bad/sha256-invalid-utf8/` | `OTC_20991231.sha256` has a row whose name is not UTF-8 | `invalid_release` (CR2 DR14) |

@@ -8,15 +8,59 @@ import {
 } from "./release.js";
 import type { FileInfo } from "./types.js";
 
-const utf8 = new TextDecoder("utf-8", { fatal: false });
+// fatal: bytes that are not UTF-8 are invalid_release, as in the other SDKs, never U+FFFD (CR2 PK-R2-05)
+const utf8 = new TextDecoder("utf-8", { fatal: true });
 
-/** @internal */
-export function parseJson(bytes: Uint8Array, what: string): unknown {
+/** @internal The text of UTF-8 bytes; invalid_release when they are not UTF-8. */
+export function decodeUtf8(bytes: Uint8Array, what: string): string {
     try {
-        return JSON.parse(utf8.decode(bytes));
+        return utf8.decode(bytes);
+    } catch (e) {
+        throw new InvalidReleaseError(`${what} is not valid UTF-8`, { cause: e });
+    }
+}
+
+const SURROGATE_ESCAPE = /\\u[dD][89a-fA-F]/;
+const LONE_SURROGATE = /[\uD800-\uDFFF]/u;   // with the u flag, a well-formed pair is one code point and never matches
+
+/** True when a string in v (a key or a value, at any depth) has an unpaired UTF-16 surrogate. */
+function hasLoneSurrogate(v: unknown): boolean {
+    const stack: unknown[] = [v];
+    while (stack.length > 0) {
+        const x = stack.pop();
+        if (typeof x === "string") {
+            if (LONE_SURROGATE.test(x)) return true;
+        } else if (Array.isArray(x)) {
+            stack.push(...x);
+        } else if (typeof x === "object" && x !== null) {
+            for (const [k, y] of Object.entries(x)) {
+                if (LONE_SURROGATE.test(k)) return true;
+                stack.push(y);
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * @internal JSON text to a value. invalid_release when it is not JSON, or when a \u escape makes an unpaired
+ * surrogate, which is not valid Unicode (spec 7.3, CR D17). UTF-8 text cannot hold a surrogate, so only a text with
+ * such an escape is walked.
+ */
+export function parseJsonText(text: string, what: string): unknown {
+    let v: unknown;
+    try {
+        v = JSON.parse(text);
     } catch (e) {
         throw new InvalidReleaseError(`${what} is not JSON`, { cause: e });
     }
+    if (SURROGATE_ESCAPE.test(text) && hasLoneSurrogate(v)) throw new InvalidReleaseError(`${what}: a string with an unpaired surrogate`);
+    return v;
+}
+
+/** @internal */
+export function parseJson(bytes: Uint8Array, what: string): unknown {
+    return parseJsonText(decodeUtf8(bytes, what), what);
 }
 
 /**
@@ -83,13 +127,9 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         // the length leaves out the line end: \n, or \r\n (spec 6.2)
         const body = end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
         const line = bytes.subarray(start, body);
-        if (utf8.decode(line).trim() !== "") {
-            let doc: Json;
-            try {
-                doc = JSON.parse(utf8.decode(line)) as Json;
-            } catch (e) {
-                throw new InvalidReleaseError(`line ${lineNo} of the .jsonl file is not JSON`, { cause: e });
-            }
+        const text = decodeUtf8(line, `line ${lineNo} of the .jsonl file`);
+        if (text.trim() !== "") {
+            const doc = parseJsonText(text, `line ${lineNo} of the .jsonl file`) as Json;
             entries.push(indexDoc(doc, header, start, body - start, convs, lics));
             if (keep) docs.push(deepFreeze(doc) as JsonObject);
         }
@@ -141,7 +181,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
                 if (bytes.length !== e.length) throw bad(`the line of ${e.station_id} is ${bytes.length} bytes, not ${e.length}`);
                 let v: unknown;
                 try {
-                    v = JSON.parse(utf8.decode(bytes));
+                    v = parseJson(bytes, `the line of ${e.station_id}`);
                 } catch (x) {
                     throw bad(`the line of ${e.station_id} at offset ${e.offset} is not JSON`, x);
                 }

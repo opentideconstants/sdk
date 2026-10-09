@@ -51,7 +51,7 @@ class LoadIdsTest < Minitest::Test
     def test_reference_station_id_must_resolve
         sub = ->(doc) { doc["stations"].find { |st| st["subordinate_offsets"].is_a?(Hash) && st["subordinate_offsets"]["reference_station_id"] } }
         {
-            "reference 42" => [42, "reference_station_id 42 names no active station"],
+            "reference 42" => [42, "subordinate_offsets: reference_station_id has the wrong type"],   # the field-type table (PK-R2-05) fires first
             "reference to a tombstone" => [nil, "reference_station_id \"OTC-T-0005\" names no active station"],
             "reference to no station" => ["OTC-T-9999", "reference_station_id \"OTC-T-9999\" names no active station"]
         }.each do |what, (ref, msg)|

@@ -134,6 +134,28 @@ class FormatOneTest < Minitest::Test
     end
 end
 
+# PK-R2-05 (CR D17): an unpaired surrogate escape is invalid_release whatever
+# the json gem does with it (json 2.6.3 reads "\ud800S" as "?" and loads).
+class LoneSurrogateTest < Minitest::Test
+    def check(text)
+        OpenTideConstants::Util.no_lone_surrogate!(text)
+    end
+
+    def test_lone_surrogates_are_refused
+        [%q({"a":"x\ud800y"}), %q({"a":"\uDBFF"}), %q({"a":"\udc00"}), %q({"a":"\ud800\u0041"}),
+         %q({"a":"\ud800\ud800\udc00"}), %q({"\ud800":1}), %q({"a":"\\\\\\ud800"})].each do |t|
+            assert_raises(OpenTideConstants::InvalidReleaseError, t) { check(t) }
+        end
+    end
+
+    def test_pairs_and_escaped_backslashes_are_fine
+        [%q({"a":"\ud83c\udf0a"}), %q({"a":"\\\\ud800"}), %q({"a":"\\\\\\\\ud800"}), %q({"a":"\u00e9 plain"}),
+         %q({"a":"no escapes"})].each do |t|
+            assert_nil check(t), t
+        end
+    end
+end
+
 # The other unit test files (CI runs this file only).
 Dir[File.join(__dir__, "test_*.rb")].sort.each do |f|
     require f unless File.expand_path(f) == File.expand_path(__FILE__)
