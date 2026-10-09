@@ -1,6 +1,8 @@
 """The shared cache layout (spec §5.4): atomic writes, lock directories and datestamp order."""
 from __future__ import annotations
 
+import calendar
+import datetime
 import json
 import os
 import re
@@ -18,7 +20,9 @@ LAYOUT = "v1"
 # spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
 DATESTAMP_RE = re.compile(r"\A[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?\Z")
 LOCK_POLL_S = 0.5
-LOCK_STALE_S = 120.0
+LOCK_STALE_S = 120.0      # how long a waiter waits before it may treat a lock as stale (spec §5.4)
+LOCK_STALE_AGE_S = 120.0  # how old the lock itself must be to be stale (spec §5.4, CR2 DR3)
+_STARTED_AT_RE = re.compile(r"\A([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|\+00:00)\Z")
 
 
 def datestamp_key(d: str):
@@ -201,11 +205,13 @@ class Cache:
 
 
 @contextmanager
-def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
-    """Take <directory>/.lock (spec §5.4 Locks, CR D3). Yields True when the lock is held, or False when
-    ``done()`` became true while waiting (another process finished the work). After 120 s of waiting the lock is
-    stale and is removed; failing to remove it 3 times is CacheError. On release the lock is removed only if its
-    owner.json still carries this lock's token (another process may have taken it as stale)."""
+def lock_dir(directory: Path, sdk: str, done=None, name=".lock", wait=True):
+    """Take <directory>/.lock (spec §5.4 Locks, CR D3, CR2 DR3). Yields True when the lock is held, or False when
+    ``done()`` became true while waiting (another process finished the work), or, with ``wait=False``, when the lock
+    is held and is not stale. A lock is stale when this waiter has waited LOCK_STALE_S and the lock itself is at
+    least LOCK_STALE_AGE_S old; a non-blocking take applies only the age test. A stale lock is removed; failing
+    to remove it 3 times is CacheError. After a removal the wait starts again. On release the lock is removed only
+    if its owner.json still carries this lock's token (another process may have taken it as stale)."""
     lock = directory / name
     waited = 0.0
     held = False
@@ -221,19 +227,30 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
             raise CacheError(f"cannot create the lock {lock}: {e}") from e
         if done is not None and done():
             break
-        if waited >= LOCK_STALE_S:
+        if (not wait or waited >= LOCK_STALE_S) and lock_is_stale(lock):  # the age is read just before the removal
             try:
                 shutil.rmtree(lock)  # stale: safe because every write is an atomic rename
             except FileNotFoundError:
                 pass
             except OSError as e:
                 stale_failures += 1
-                if stale_failures >= 3:
+                if stale_failures >= 3 or not wait:
                     raise CacheError(f"cannot remove the stale lock {lock}: {e}") from e
                 time.sleep(LOCK_POLL_S)
                 continue
             waited = 0.0
+            if not wait:  # one more try only: a process that takes it now holds a young lock
+                try:
+                    os.mkdir(lock)
+                    held = True
+                except FileExistsError:
+                    pass
+                except OSError as e:
+                    raise CacheError(f"cannot create the lock {lock}: {e}") from e
+                break
             continue
+        if not wait:
+            break
         time.sleep(LOCK_POLL_S)
         waited += LOCK_POLL_S
     token = secrets.token_hex(16)
@@ -255,6 +272,32 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
             _release_lock(lock, token)
 
 
+def lock_age(lock: Path):
+    """Seconds since the lock was taken (spec §5.4, CR2 DR3): from owner.json ``started_at``, or from the mtime of
+    the lock directory when owner.json is missing or cannot be read. None when the lock is gone or its age cannot
+    be read: such a lock is never treated as stale."""
+    started = None
+    try:
+        owner = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
+        m = _STARTED_AT_RE.match(owner.get("started_at", "")) if isinstance(owner, dict) and \
+            isinstance(owner.get("started_at"), str) else None
+        if m:
+            started = calendar.timegm(datetime.datetime(*(int(m.group(i)) for i in range(1, 7))).timetuple())
+    except (OSError, ValueError, UnicodeDecodeError, OverflowError):
+        started = None
+    if started is None:
+        try:
+            started = os.stat(lock).st_mtime
+        except OSError:
+            return None
+    return time.time() - started
+
+
+def lock_is_stale(lock: Path) -> bool:
+    age = lock_age(lock)
+    return age is not None and age >= LOCK_STALE_AGE_S
+
+
 def _release_lock(lock: Path, token: str) -> None:
     try:
         owner = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
@@ -270,11 +313,24 @@ def _release_lock(lock: Path, token: str) -> None:
 
 
 def try_lock(directory: Path) -> bool:
-    """Take <directory>/.lock without waiting; False when another process holds it."""
-    try:
-        os.mkdir(directory / ".lock")
-        return True
-    except FileExistsError:
-        return False
-    except OSError as e:
-        raise CacheError(f"cannot create the lock {directory / '.lock'}: {e}") from e
+    """Take <directory>/.lock without waiting (spec §5.4 non-blocking take, CR2 DR3): a lock at least 120 s old
+    is stale and is removed and taken; False when another process holds a younger one. The caller removes the
+    whole directory, the lock with it, so no owner.json is written."""
+    lock = directory / ".lock"
+    for attempt in range(2):
+        try:
+            os.mkdir(lock)
+            return True
+        except FileExistsError:
+            pass
+        except OSError as e:
+            raise CacheError(f"cannot create the lock {lock}: {e}") from e
+        if attempt or not lock_is_stale(lock):
+            return False
+        try:
+            shutil.rmtree(lock)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            raise CacheError(f"cannot remove the stale lock {lock}: {e}") from e
+    return False
