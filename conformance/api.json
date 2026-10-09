@@ -17,6 +17,7 @@
    "field": "a data field with the schema's snake_case name in every language"
   }
  },
+ "after_close": "After close, every call on the client or its Release (every query and every release-management operation; close itself excepted) raises io (FileError, message \"the release is closed\"), the same in eager and stream mode, and no automatic update runs (spec 4.2, 5.6, CR D21). This rule applies to every operation in this manifest, so it is stated once here and not added to each errors list.",
  "client_options": {
   "note": "Options of the client constructor (Ruby keyword arguments, Python keyword-only, TypeScript one options object, C otc_open_options / otc_fetch_options).",
   "c_only": [
@@ -97,7 +98,7 @@
        "required": false,
        "positional": false,
        "default": "latest",
-       "note": "'latest' or a datestamp matching ^[0-9]{8}(\\.[2-9]|\\.[1-9][0-9]+)?$; otherwise invalid_argument"
+       "note": "'latest' or a datestamp matching ^[0-9]{8}(\\.[2-9]|\\.[1-9][0-9]{1,8})?$ (a counter of at most 9 digits); otherwise invalid_argument"
       },
       {
        "name": "file",
@@ -105,7 +106,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "open a local .json, .json.gz or .jsonl (+ .meta.json); TypeScript: Node only"
+       "note": "open a local .json, .json.gz or .jsonl (+ .meta.json); TypeScript: Node only. The name must be OTC_<D><ext> (D a valid datestamp, ext one of these), otherwise invalid_argument; file together with release, offline or on_network_error is invalid_argument"
       },
       {
        "name": "cache_dir",
@@ -121,7 +122,7 @@
        "required": false,
        "positional": false,
        "default": false,
-       "note": "env OPENTIDECONSTANTS_OFFLINE=1"
+       "note": "env OPENTIDECONSTANTS_OFFLINE: 1, true, yes or on (case-insensitive, trimmed) turns offline on; when it does, the env wins and an explicit offline false does not turn it off"
       },
       {
        "name": "mode",
@@ -137,7 +138,7 @@
        "required": false,
        "positional": false,
        "default": "https://data.opentideconstants.org/",
-       "note": "env OPENTIDECONSTANTS_BASE_URL"
+       "note": "env OPENTIDECONSTANTS_BASE_URL; checked at construction (C: at the first otc_fetch_* call): not an absolute http or https URL is invalid_argument, never retried, no cache fallback"
       },
       {
        "name": "timeout",
@@ -153,7 +154,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = HTTPS_PROXY / HTTP_PROXY / NO_PROXY, either case"
+       "note": "null = HTTPS_PROXY / HTTP_PROXY / NO_PROXY, either case, except that upper-case HTTP_PROXY is ignored when REQUEST_METHOD is set (httpoxy); checked at construction: not an absolute http or https URL is invalid_argument, never retried, no cache fallback"
       },
       {
        "name": "ca_file",
@@ -161,7 +162,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = SSL_CERT_FILE, else the system store"
+       "note": "null = SSL_CERT_FILE, else the system store; checked at construction: a file that does not exist or cannot be read is io, never retried, no cache fallback"
       },
       {
        "name": "user_agent",
@@ -231,7 +232,7 @@
      ],
      "c": "otc_open_file",
      "typescript_async": true,
-     "note": "Ruby OpenTideConstants.new(**options) and OpenTideConstants.open(**options) { |otc| }; Python OpenTideConstants(**options), usable as a context manager; TypeScript static async open(options) (a constructor cannot be async); C otc_open_file(path, &opts, &rel) opens a file only, and otc_fetch_latest / otc_fetch_release download first"
+     "note": "Ruby OpenTideConstants.new(**options) and OpenTideConstants.open(**options) { |otc| }; Python OpenTideConstants(**options), usable as a context manager; TypeScript static async open(options) (a constructor cannot be async); C otc_open_file(path, &opts, &rel) opens a file only, and otc_fetch_latest / otc_fetch_release download first; a 200 pointer or index whose body is not JSON counts as a network error for on_network_error (spec 5.2 step 5); a failure to write the cached pointer is logged, not raised"
     },
     {
      "name": "release",
@@ -311,7 +312,7 @@
      ],
      "c": "otc_fetch_latest_info",
      "typescript_async": true,
-     "note": "one conditional GET of the pointer; does not switch release"
+     "note": "reads the latest pointer (OTC_latest-f{MAJOR}.json, or OTC_latest.json on a 404) with a conditional GET, and OTC_index.json too when the pointer's release is not readable by this SDK (spec 5.2 steps 2 and 2a); does not switch release; offline: offline_unavailable, no socket"
     },
     {
      "name": "check_for_update",
@@ -332,7 +333,8 @@
       "c"
      ],
      "c": "otc_fetch_check_for_update",
-     "typescript_async": true
+     "typescript_async": true,
+     "note": "offline: offline_unavailable, no socket; sets newer_format_major from OTC_latest.json (spec 7.4)"
     },
     {
      "name": "newer_format_major",
@@ -346,7 +348,7 @@
       "c"
      ],
      "c": "otc_fetch_newer_format_major",
-     "note": "set by check_for_update: the format major of OTC_latest.json when it is newer than every supported major, else null (spec 7.4)"
+     "note": "set by check_for_update from OTC_latest.json (never the per-major pointer): its format major when it is newer than every supported major, else null (spec 7.4). When check_for_update fails with unsupported_format or reader_too_old because only newer-major releases exist, it is set before the error is raised; on a network error it keeps its earlier value (not reset before the GET)"
     },
     {
      "name": "update",
@@ -373,7 +375,7 @@
      "c": "otc_fetch_update",
      "mutating": true,
      "typescript_async": true,
-     "note": "Ruby update!; a Release held from before stays valid"
+     "note": "Ruby update!; a Release held from before stays valid; offline: offline_unavailable, no socket, and no switch to a newer cached release. C: otc_fetch_update(&fopts, current, path, len, &needed, &updated): needed gets the path length with its NUL; path and len are checked before any network access, so a small buffer is buffer_too_small and downloads nothing; updated is true only when the newer release is in the cache and path names it"
     },
     {
      "name": "download",
@@ -435,7 +437,7 @@
      "c": "otc_fetch_to_dir",
      "typescript_async": true,
      "typescript_env": "node",
-     "note": "spec 4.3.2: writes the data files in formats plus OTC_{D}.sha256 and OTC_{D}.meta.json into to; returns the paths written (an identical existing file is not written and not listed); TypeScript in a browser fails with unsupported; C without otc_fetch returns OTC_E_NOT_BUILT"
+     "note": "spec 4.3.2: writes the data files in formats plus OTC_{D}.sha256 and OTC_{D}.meta.json into to; returns the paths written (an identical existing file is not written and not listed); TypeScript in a browser fails with unsupported; C without otc_fetch returns OTC_E_NOT_BUILT; with release latest and a network error, on_network_error use_cache (the default) writes the newest cached readable release, raise (or no usable cached release) raises network; cache when the cache lock cannot be taken (a stale lock not removed after 3 attempts)"
     },
     {
      "name": "verify",
@@ -454,7 +456,7 @@
      ],
      "c": "otc_verify_file",
      "typescript_async": true,
-     "note": "hashes the files again in full against OTC_{D}.sha256; C otc_verify_file(path, sha256_path, &err) is in the core library"
+     "note": "hashes the files again in full against OTC_{D}.sha256; C otc_verify_file(path, sha256_path, &err) is in the core library; a client with loaded_from file_unverified has no OTC_{D}.sha256: checksum_mismatch, message \"no OTC_{D}.sha256 next to the file\""
     },
     {
      "name": "cached_releases",
@@ -468,7 +470,8 @@
       "typescript",
       "c"
      ],
-     "c": "otc_fetch_cached_releases"
+     "c": "otc_fetch_cached_releases",
+     "note": "a cache operation: lists the configured cache (cache_dir or the default), also on a client opened with file; the file's folder is never treated as a cache"
     },
     {
      "name": "prune",
@@ -494,7 +497,7 @@
       "c"
      ],
      "c": "otc_fetch_prune",
-     "note": "never removes the loaded release"
+     "note": "never removes the loaded release; a cache operation: works on the configured cache, also on a client opened with file, and never touches the file's folder"
     },
     {
      "name": "close",
@@ -507,7 +510,8 @@
       "typescript",
       "c"
      ],
-     "c": "otc_close"
+     "c": "otc_close",
+     "note": "may be called again and does nothing; see after_close"
     }
    ]
   },
@@ -2623,7 +2627,7 @@
  },
  "environment": {
   "OPENTIDECONSTANTS_CACHE_DIR": "cache_dir",
-  "OPENTIDECONSTANTS_OFFLINE": "offline (value 1)",
+  "OPENTIDECONSTANTS_OFFLINE": "offline (1, true, yes or on, case-insensitive and trimmed; it wins over an explicit offline false)",
   "OPENTIDECONSTANTS_BASE_URL": "base_url"
  },
  "reserved_phase2": {
