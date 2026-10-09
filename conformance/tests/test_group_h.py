@@ -12,6 +12,8 @@ import pytest
 
 from _util import CONF
 
+sys.path.insert(0, str(CONF))
+
 FAKE = CONF / "tests" / "fake_sdk"
 RUNNERS = CONF / "runners"
 
@@ -277,3 +279,41 @@ def test_c_null_reply_from_a_thread_is_a_mismatch(tmp_path):  # C68
     finally:
         r.close()
     assert reply["ok"] is False and reply["error"]["code"] in ("uncaught:ThreadMismatch", "uncaught:NoMemory"), reply
+
+
+@pytest.fixture
+def fixture_server():
+    from server import FixtureServer
+    srv = FixtureServer().start()
+    yield srv
+    srv.shutdown()
+
+
+def c_fetch_on_old_release(tmp_path, srv, fault):
+    """A c-fetch runner opened (latest) on 20991231 while the server has 20991231.2."""
+    srv.set_rules([{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}])
+    r = CRunner("c-fetch", {"OTC_RUNNER_FAULT": fault})
+    opened = r("open", base_url=f"{srv.url}/good/", cache_dir=str(tmp_path / "cache"))
+    assert opened["ok"] and opened["result"]["datestamp"] == "20991231", opened
+    srv.set_rules([])
+    return r
+
+
+def test_c_update_keeps_the_error_detail_of_the_swap(tmp_path, fixture_server):  # C62
+    r = c_fetch_on_old_release(tmp_path, fixture_server, "swap")
+    try:
+        reply = r("update")
+    finally:
+        r.close()
+    assert reply["ok"] is False, reply
+    assert reply["error"]["message"] != reply["error"]["code"] and "20000101" in reply["error"]["message"], reply
+
+
+def test_c_update_without_a_move_is_not_updated(tmp_path, fixture_server):  # C64
+    r = c_fetch_on_old_release(tmp_path, fixture_server, "update-path")
+    try:
+        reply = r("update")
+    finally:
+        r.close()
+    assert not (reply.get("ok") and reply["result"]["updated"] and reply["result"]["from"] == reply["result"]["to"]), reply
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply

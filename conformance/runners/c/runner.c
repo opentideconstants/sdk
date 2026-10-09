@@ -1412,16 +1412,15 @@ static cJSON *take_strings(char **v, size_t n, int basenames, int sort)
     return arr;
 }
 
-/* Swaps the current release for the one at path (a Release held from before stays open). */
-static otc_status swap_to(const char *ds)
+/* Swaps the current release for datestamp ds (a Release held from before stays open). */
+static otc_status swap_to(const char *ds, otc_error *err)
 {
     otc_fetch_options fo;
-    otc_error err;
     otc_release *rel = NULL;
     otc_status rc;
     char *path;
-    fetch_options(&fo, &err);
-    rc = otc_fetch_open(&fo, ds, NULL, &rel);
+    fetch_options(&fo, err);   /* the caller's error struct: the detail of a failed open reaches the reply */
+    rc = otc_fetch_open(&fo, fault("swap") ? "20000101" : ds, NULL, &rel);   /* fault: the open fails */
     if (rc != OTC_OK) return rc;
     path = current_jsonl_path(ds);
     if (g_current && !is_held(g_current)) otc_close(g_current);
@@ -1443,12 +1442,13 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
     snprintf(to, to_len, "%s", from);
     rc = otc_fetch_update(&fo, from, path, sizeof path, &up);
     if (rc != OTC_OK || !up) return rc;
+    if (fault("update-path")) snprintf(path, sizeof path, "%s", "/no/such/file.bin");   /* fault: an odd path */
     {   /* the datestamp of the new file: OTC_{D}.jsonl */
         const char *b = base_of(path);
         size_t n = strlen(b);
         if (n > 10 && !strncmp(b, "OTC_", 4)) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
     }
-    rc = swap_to(to);
+    rc = swap_to(to, err);
     if (rc == OTC_OK) *updated = 1;
     return rc;
 }
