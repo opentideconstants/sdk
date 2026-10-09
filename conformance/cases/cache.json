@@ -355,6 +355,178 @@
    ]
   },
   {
+   "id": "cache/prune-stale-lock",
+   "title": "prune removes a release whose lock is at least 120 s old (a crashed process)",
+   "spec": "4.3, 5.4",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "mkdir",
+     "path": "${cache}/v1/releases/20991231/.lock"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231/.lock/owner.json",
+     "text": "{\"pid\": 1, \"host\": \"crashed\", \"sdk\": \"conformance\", \"started_at\": \"2000-01-01T00:00:00Z\", \"token\": \"00000000000000000000000000000000\"}"
+    },
+    {
+     "op": "prune",
+     "args": {
+      "keep": 1
+     },
+     "expect": {
+      "removed": [
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases",
+     "absent": [
+      "20991231"
+     ],
+     "present": [
+      "20991231.2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/prune-fresh-lock",
+   "title": "prune keeps a release whose lock is younger than 120 s (age from the lock's mtime)",
+   "spec": "4.3, 5.4",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "mkdir",
+     "path": "${cache}/v1/releases/20991231/.lock"
+    },
+    {
+     "op": "prune",
+     "args": {
+      "keep": 1
+     },
+     "expect": {
+      "removed": []
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2",
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231",
+     "present": [
+      ".lock",
+      ".verified"
+     ]
+    }
+   ]
+  },
+  {
    "id": "cache/prune-invalid",
    "title": "prune with a negative keep: invalid_argument",
    "spec": "4.3, 4.8",

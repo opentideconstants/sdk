@@ -1233,6 +1233,19 @@ def group_cache():
     out.append(case("cache/prune-keeps-loaded", "prune never removes the loaded release", "4.3",
                     both + [net(step("open", {"loaded_from": "cache", "datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
                             net(step("prune", {"removed": []}, keep=1)), net(step("cached_releases", {"datestamps": [d2, d1]}))], requires=["fs"]))
+    # spec 5.4 (CR2 DR3): prune takes a release lock without waiting and applies the age test at once
+    lk = f"${{cache}}/v1/releases/{d1}/.lock"
+    crashed = {"pid": 1, "host": "crashed", "sdk": "conformance", "started_at": "2000-01-01T00:00:00Z", "token": "0" * 32}
+    out.append(case("cache/prune-stale-lock", "prune removes a release whose lock is at least 120 s old (a crashed process)", "4.3, 5.4",
+                    both + [drv("mkdir", path=lk), drv("write", path=f"{lk}/owner.json", text=json.dumps(crashed)),
+                            net(step("prune", {"removed": [d1]}, keep=1)), net(step("cached_releases", {"datestamps": [d2]})),
+                            drv("assert_files", dir="${cache}/v1/releases", absent=[d1], present=[d2])], requires=["fs"]))
+    out.append(case("cache/prune-fresh-lock", "prune keeps a release whose lock is younger than 120 s (age from the lock's mtime)",
+                    "4.3, 5.4",
+                    both + [drv("mkdir", path=lk),
+                            net(step("prune", {"removed": []}, keep=1)), net(step("cached_releases", {"datestamps": [d2, d1]})),
+                            drv("assert_files", dir=f"${{cache}}/v1/releases/{d1}", present=[".lock", ".verified"])],
+                    requires=["fs"]))
     out.append(case("cache/prune-invalid", "prune with a negative keep: invalid_argument", "4.3, 4.8",
                     [open_latest_step(G), net(step("prune", err("invalid_argument"), keep=-1))], requires=["fs"]))
     out.append(case("cache/verify", "verify on a cached release passes, and fails after a cached file changes", "4.3, 5.3",
