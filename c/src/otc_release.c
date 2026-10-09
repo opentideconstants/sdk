@@ -1236,6 +1236,7 @@ size_t otc_release_file_count(const otc_release *rel) { return rel ? rel->n_file
 
 otc_status otc_release_file_at(const otc_release *rel, size_t i, const otc_file_info **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_files) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->files[i];
     return OTC_OK;
@@ -1444,6 +1445,8 @@ void otc_stats_free(otc_stats *s)
     size_t otc_stats_##F##_count(const otc_stats *s) { return s ? s->F.n : 0; }                \
     otc_status otc_stats_##F##_at(const otc_stats *s, size_t i, const char **key, int64_t *n)   \
     {                                                                                          \
+        if (key) *key = NULL;   /* a failed call leaves no value behind */                    \
+        if (n) *n = -1;                                                                        \
         if (!s || i >= s->F.n || !key || !n) return OTC_E_INVALID_ARGUMENT;                    \
         *key = s->F.items[i].key;                                                              \
         *n = s->F.items[i].n;                                                                  \
@@ -1461,6 +1464,7 @@ size_t otc_release_convention_count(const otc_release *rel) { return rel ? rel->
 
 otc_status otc_release_convention_at(const otc_release *rel, size_t i, const otc_convention **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_conv) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->conv[i];
     return OTC_OK;
@@ -1468,6 +1472,7 @@ otc_status otc_release_convention_at(const otc_release *rel, size_t i, const otc
 
 otc_status otc_release_convention(const otc_release *rel, const char *id, const otc_convention **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || !id) return OTC_E_INVALID_ARGUMENT;
     *out = otc__find_convention(rel, id);
     return *out ? OTC_OK : OTC_E_NOT_FOUND;
@@ -1514,6 +1519,7 @@ size_t otc_release_licence_count(const otc_release *rel) { return rel ? rel->n_l
 
 otc_status otc_release_licence_at(const otc_release *rel, size_t i, const otc_licence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || i >= rel->n_lic) return OTC_E_INVALID_ARGUMENT;
     *out = &rel->lic[i];
     return OTC_OK;
@@ -1521,6 +1527,7 @@ otc_status otc_release_licence_at(const otc_release *rel, size_t i, const otc_li
 
 otc_status otc_release_licence(const otc_release *rel, const char *id, const otc_licence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!rel || !out || !id) return OTC_E_INVALID_ARGUMENT;
     *out = otc__find_licence(rel, id);
     return *out ? OTC_OK : OTC_E_NOT_FOUND;
@@ -1581,6 +1588,7 @@ otc_status otc_release_info_content_sha256(const otc_release_info *ri, char *buf
 size_t otc_release_info_file_count(const otc_release_info *ri) { return ri ? ri->n_files : 0; }
 otc_status otc_release_info_file_at(const otc_release_info *ri, size_t i, const otc_file_info **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!ri || !out || i >= ri->n_files) return OTC_E_INVALID_ARGUMENT;
     *out = &ri->files[i];
     return OTC_OK;

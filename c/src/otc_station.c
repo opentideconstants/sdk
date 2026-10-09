@@ -295,6 +295,7 @@ size_t otc_station_set_count(const otc_station_t *st, bool include_no_constants)
 
 otc_status otc_station_set_at(const otc_station_t *st, bool include_no_constants, size_t i, const otc_set **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!st || !out || i >= otc_station_set_count(st, include_no_constants)) return OTC_E_INVALID_ARGUMENT;
     *out = include_no_constants ? st->order_all[i] : st->order_usable[i];
     return OTC_OK;
@@ -303,8 +304,8 @@ otc_status otc_station_set_at(const otc_station_t *st, bool include_no_constants
 otc_status otc_station_set(const otc_station_t *st, const char *set_id, const otc_set **out)
 {
     size_t i;
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!st || !out || !set_id) return OTC_E_INVALID_ARGUMENT;
-    *out = NULL;
     for (i = 0; i < st->n_sets; i++) {
         const char *id = otc__jstr(st->sets[i].json, "set_id");
         if (id && !strcmp(id, set_id)) { *out = &st->sets[i]; return OTC_OK; }
@@ -338,6 +339,7 @@ size_t otc_station_validation_count(const otc_station_t *st) { return st ? st->n
 
 otc_status otc_station_validation_at(const otc_station_t *st, size_t i, const otc_validation_t **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!st || !out || i >= st->n_val) return OTC_E_INVALID_ARGUMENT;
     *out = &st->val[i];
     return OTC_OK;
@@ -404,6 +406,7 @@ otc_status otc_set_raw_json(const otc_set *s, char *buf, size_t len, size_t *nee
 
 otc_status otc_set_record_span(const otc_set *s, const otc_record_span **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->has_span ? &s->span : NULL;
     return s->has_span ? OTC_OK : OTC_E_NOT_FOUND;
@@ -420,6 +423,7 @@ int64_t otc_record_span_good_samples(const otc_record_span *rs) { return rs ? ot
 
 otc_status otc_set_datum(const otc_set *s, const otc_datum **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->has_datum ? &s->datum : NULL;
     return s->has_datum ? OTC_OK : OTC_E_NOT_FOUND;
@@ -443,6 +447,7 @@ otc_status otc_datum_named_at(const otc_datum *d, size_t i, char *name, size_t l
 size_t otc_set_qc_flag_count(const otc_set *s) { return s ? s->n_flags : 0; }
 otc_status otc_set_qc_flag_at(const otc_set *s, size_t i, const otc_qc_flag **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out || i >= s->n_flags) return OTC_E_INVALID_ARGUMENT;
     *out = &s->flags[i];
     return OTC_OK;
@@ -463,6 +468,7 @@ otc_status otc_qc_flag_values_json(const otc_qc_flag *f, char *buf, size_t len, 
 size_t otc_set_dropped_count(const otc_set *s) { return s ? s->n_drops : 0; }
 otc_status otc_set_dropped_at(const otc_set *s, size_t i, const otc_dropped **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out || i >= s->n_drops) return OTC_E_INVALID_ARGUMENT;
     *out = &s->drops[i];
     return OTC_OK;
@@ -482,12 +488,14 @@ otc_status otc_dropped_detail(const otc_dropped *d, char *buf, size_t len, size_
 
 otc_status otc_set_convention(const otc_set *s, const otc_convention **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->conv;
     return s->conv ? OTC_OK : OTC_E_NOT_FOUND;
 }
 otc_status otc_set_licence(const otc_set *s, const otc_licence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->lic;
     return s->lic ? OTC_OK : OTC_E_NOT_FOUND;
@@ -534,6 +542,7 @@ PROV_JSON(otc_set_provenance_decision_json, "decision")
 
 otc_status otc_set_provenance_build(const otc_set *s, const otc_provenance_build **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->has_build ? &s->build : NULL;
     return s->has_build ? OTC_OK : OTC_E_NOT_FOUND;
@@ -566,6 +575,7 @@ static const cJSON *correction_of(const otc_time_base_t *tb)
 
 otc_status otc_set_time_base(const otc_set *s, const otc_time_base_t **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out) return OTC_E_INVALID_ARGUMENT;
     *out = s->has_tb ? &s->tb : NULL;
     return s->has_tb ? OTC_OK : OTC_E_NOT_FOUND;
@@ -618,6 +628,7 @@ size_t otc_time_base_evidence_count(const otc_time_base_t *tb) { return tb ? tb-
 
 otc_status otc_time_base_evidence_at(const otc_time_base_t *tb, size_t i, const otc_time_base_evidence **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!tb || !out || i >= tb->n_ev) return OTC_E_INVALID_ARGUMENT;
     *out = &tb->ev[i];
     return OTC_OK;
@@ -645,6 +656,7 @@ double otc_time_base_evidence_lag_min(const otc_time_base_evidence *ev)
 size_t otc_set_validation_count(const otc_set *s) { return s ? s->n_val : 0; }
 otc_status otc_set_validation_at(const otc_set *s, size_t i, const otc_validation_t **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out || i >= s->n_val) return OTC_E_INVALID_ARGUMENT;
     *out = s->val[i];
     return OTC_OK;
@@ -653,6 +665,7 @@ otc_status otc_set_validation_at(const otc_set *s, size_t i, const otc_validatio
 size_t otc_set_constituent_count(const otc_set *s) { return s ? s->n_cons : 0; }
 otc_status otc_set_constituent_at(const otc_set *s, size_t i, const otc_constituent_t **out)
 {
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out || i >= s->n_cons) return OTC_E_INVALID_ARGUMENT;
     *out = &s->cons[i];
     return OTC_OK;
@@ -660,8 +673,9 @@ otc_status otc_set_constituent_at(const otc_set *s, size_t i, const otc_constitu
 otc_status otc_set_constituent(const otc_set *s, const char *name, const otc_constituent_t **out)
 {
     size_t i;
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
     if (!s || !out || !name) return OTC_E_INVALID_ARGUMENT;
-    *out = NULL;
+    if (!name[0]) return OTC_E_NOT_FOUND;   /* "" means absent in a constituent: it is no name to find */
     for (i = 0; i < s->n_cons; i++)
         if (!strcmp(s->cons[i].name, name)) { *out = &s->cons[i]; return OTC_OK; }
     return OTC_E_NOT_FOUND;
