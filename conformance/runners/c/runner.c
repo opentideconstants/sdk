@@ -863,6 +863,8 @@ static void op_open(request *q, reply *r)
     }
 }
 
+static const char *base_of(const char *p);
+
 static void op_verify(request *q, reply *r)
 {
     size_t i, n = otc_release_file_count(q->rel);
@@ -896,10 +898,14 @@ static void op_verify(request *q, reply *r)
             if (nl > 7 && !strcmp(name + nl - 7, ".sha256")) continue;
         }
         snprintf(full, sizeof full, "%s%s", dir, name);
-        {   /* only the files that are there (a cached release lists every file of the release) */
+        {   /* only the files that are there (a cached release lists every file of the release), except the two the
+             * release was read from: the opened file and its .meta.json must be there, so a missing one fails */
+            const char *base = base_of(q->path), *dot = strrchr(base, '.');
+            size_t stem = dot && !strcmp(dot, ".jsonl") ? (size_t)(dot - base) : 0;
+            int required = !strcmp(name, base) || (stem && !strncmp(name, base, stem) && !strcmp(name + stem, ".meta.json"));
             FILE *f = fopen(full, "rb");
-            if (!f) continue;
-            fclose(f);
+            if (f) fclose(f);
+            else if (!required) continue;
         }
         otc_error_init(&err);
         rc = otc_verify_file(full, NULL, &err);
