@@ -285,10 +285,12 @@ OTC_API otc_status otc_release_constituent_names(const otc_release *rel, const c
 OTC_API otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, size_t *needed);
 /* The CC BY 4.0 attribution text (spec 4.6): "Tidal constants: OpenTideConstants
  * {D}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ...".
- * ids = NULL: every licence in the release; else the licences of these
- * stations (the recommended set's, plus for a subordinate station its
- * offsets' licence and its reference station's). Each provider once, by
- * licence_id. It never carries the version DOI. */
+ * ids = NULL or n_ids = 0: every licence in the release; else the licences
+ * of these stations (the recommended set's, plus for a subordinate station
+ * its offsets' licence and its reference station's). An id that is not an
+ * active station of the release is OTC_E_INVALID_ARGUMENT. Each provider
+ * once, by licence_id; a licence with no provider gives its attribution
+ * alone and is never merged. It never carries the version DOI. */
 OTC_API otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_t n_ids, char *buf, size_t len,
                                    size_t *needed);
 

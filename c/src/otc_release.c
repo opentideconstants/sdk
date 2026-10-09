@@ -1267,6 +1267,11 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     size_t head_cap;
     otc_status st;
     if (!rel || (n_ids && !ids)) return OTC_E_INVALID_ARGUMENT;
+    if (n_ids == 0) ids = NULL;   /* spec 4.6 (CR D2): an empty list is every licence of the release */
+    for (i = 0; ids && i < n_ids; i++)   /* an unknown or removed id is an error, never skipped (CR D2) */
+        if (!ids[i] || !otc__find_entry(rel, ids[i]))
+            return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_attribution: %s is not an active station of this release",
+                             ids[i] ? ids[i] : "(NULL)");
     cap = ids ? n_ids * 3 + 1 : rel->n_lic + 1;
     lic = (const char **)calloc(cap, sizeof *lic);
     seen_prov = (const char **)calloc(cap, sizeof *seen_prov);
@@ -1280,7 +1285,6 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     } else {
         for (i = 0; i < n_ids; i++) {
             const otc__entry *e = otc__find_entry(rel, ids[i]);
-            if (!e) continue;
             if (e->has_rec && e->rec_licence) lic[n_lic++] = e->rec_licence;
             if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets) {
                 const otc__entry *ref = otc__find_entry(rel, e->ref_id);
@@ -1307,12 +1311,13 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         if (!l) continue;
         prov = otc__jstr(l->json, "provider");
         att = otc__jstr(l->json, "attribution");
-        for (j = 0; j < n_seen; j++)
+        /* each provider once; a licence with no provider is its own entry, never merged (CR D2) */
+        for (j = 0; prov && j < n_seen; j++)
             if (!otc__strcmp_null(seen_prov[j], prov)) dup = 1;
         if (dup) continue;
         seen_prov[n_seen] = prov;
         seen_att[n_seen++] = att;
-        total += (prov ? strlen(prov) : 0) + 2 + (att ? strlen(att) : 0) + 2;
+        total += (prov ? strlen(prov) + 2 : 0) + (att ? strlen(att) : 0) + 2;
     }
     text = (char *)malloc(total);
     if (!text) { free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
@@ -1320,8 +1325,10 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     free(head);
     for (i = 0; i < n_seen; i++) {
         if (i) strcat(text, "; ");
-        strcat(text, seen_prov[i] ? seen_prov[i] : "");
-        strcat(text, ": ");
+        if (seen_prov[i]) {   /* "{provider}: {attribution}", or the attribution alone */
+            strcat(text, seen_prov[i]);
+            strcat(text, ": ");
+        }
         strcat(text, seen_att[i] ? seen_att[i] : "");
     }
     st = otc__copy_str(text, buf, len, needed);

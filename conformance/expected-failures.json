@@ -1288,8 +1288,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"
@@ -1334,8 +1332,6 @@
   {
    "case": "rules/pk15/attribution-unknown-station@jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "typescript"
    ],
    "package": "PK15",
