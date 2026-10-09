@@ -7,6 +7,7 @@ int main(void)
 {
     char *dir = test_tmpdir(), *path, hex[65], row[256];
     otc_error err;
+    otc_error_init(&err);
     test_write(dir, "OTC_20990101.jsonl", "{}\n");
     path = test_join(dir, "OTC_20990101.jsonl");
     otc__sha256_file(path, hex);
