@@ -1,3 +1,7 @@
+// Symbol.dispose and Symbol.asyncDispose below: the published client.d.ts keeps
+// this lib reference, so a consumer without ESNext.Disposable or @types/node
+// still typechecks it (R2-248).
+/// <reference lib="esnext.disposable" preserve="true" />
 import {
     checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
