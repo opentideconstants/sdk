@@ -495,8 +495,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

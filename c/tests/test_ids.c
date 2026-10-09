@@ -44,5 +44,12 @@ int main(void)
                             "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\"},{\"licence_id\":\"l1\"}]}",
                             TEST_STATION("OTC-X-1", "One") "\n"),
                  OTC_E_INVALID_RELEASE);
+    /* C5: a repeated set_id in one station (the recommended one, so the index entry would get two) */
+    CHECK_STATUS(open_lines(meta,
+                            "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
+                            "\"recommended_set_id\":\"s\",\"constant_sets\":["
+                            "{\"set_id\":\"s\",\"source\":\"a\",\"source_type\":\"official\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"},"
+                            "{\"set_id\":\"s\",\"source\":\"b\",\"source_type\":\"model\",\"quantity\":\"water_level\",\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n"),
+                 OTC_E_INVALID_RELEASE);
     return test_done("test_ids");
 }

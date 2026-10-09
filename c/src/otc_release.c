@@ -386,7 +386,15 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             e->off_licence = otc__strdup(otc__jstr(off, "licence_id"));
         }
         cJSON_ArrayForEach(s, sets) {
-            if ((st = index_set(b, s, e, rec_id)) != OTC_OK) break;
+            const cJSON *t;
+            const char *sid = otc__jstr(s, "set_id");
+            for (t = sets->child; sid && t != s; t = t->next) {   /* spec 6.1 (CR D5): a set_id once per station */
+                if (!otc__strcmp_null(otc__jstr(t, "set_id"), sid)) {
+                    st = bad_line(b, "a set_id appears twice in the station");
+                    break;
+                }
+            }
+            if (st != OTC_OK || (st = index_set(b, s, e, rec_id)) != OTC_OK) break;
         }
         if (st == OTC_OK) {
             cJSON_ArrayForEach(a, aliases) {
