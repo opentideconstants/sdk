@@ -25,8 +25,10 @@ are made up for tests. They are not tidal data.
      the error code, or "load" for the higher-minor release.
 
 The schemas (format 1.0 and the 1.0 index) come from the site repository, pinned
-by commit and SHA-256. Pass --schema-dir DIR for local copies; each must have the
-pinned SHA-256.
+by commit and SHA-256, and a copy of each is kept in conformance/schemas/ (spec
+D25), so --check needs no network. --schema-dir DIR reads other local copies, and
+--download-schemas fetches them from the site repository; either way each must have
+the pinned SHA-256.
 """
 import argparse
 import copy
@@ -79,6 +81,7 @@ TOO_NEW = "1.99"
 NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
 GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "nogz",
              "bad", "fixtures.json"]
 
@@ -1500,11 +1503,14 @@ def check(schema_dir=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="check the committed fixtures; write nothing")
-    parser.add_argument("--schema-dir", help="a directory with local copies of the pinned schemas "
-                                             "(otc-1.0.schema.json, otc-index-1.0.schema.json); default: download them")
+    parser.add_argument("--schema-dir", default=str(VENDORED_SCHEMAS),
+                        help="a directory with copies of the pinned schemas (otc-1.0.schema.json, otc-index-1.0.schema.json); "
+                             "default: conformance/schemas")
+    parser.add_argument("--download-schemas", action="store_true",
+                        help="fetch the pinned schemas from the site repository instead of reading --schema-dir")
     args = parser.parse_args()
     if args.check:
-        return check(args.schema_dir)
+        return check(None if args.download_schemas else args.schema_dir)
     FIXTURES.mkdir(parents=True, exist_ok=True)
     # Build next to the fixtures (the same file system), then swap each generated target in with a rename. If a
     # swap fails part-way, the targets already moved are put back: the fixtures are all new or all old.

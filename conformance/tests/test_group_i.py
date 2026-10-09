@@ -73,7 +73,7 @@ def test_reference_reader_raises_fail(tmp_path, tamper, code):
 
 import os  # noqa: E402
 
-SCHEMA_DIR = os.environ.get("OTC_SCHEMA_DIR") or os.path.expanduser("~/.local/share/copilotkit/cr/otc-sdk-int/fix/pk19/schemas")
+SCHEMA_DIR = os.environ.get("OTC_SCHEMA_DIR") or str(CONF / "schemas")   # the vendored pinned schemas (D25)
 
 
 @pytest.fixture(scope="module")
