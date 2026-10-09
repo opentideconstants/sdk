@@ -15,12 +15,20 @@ class ChecksumTest < Minitest::Test
     def test_malformed_sha256_line_is_reported
         dir = tmpdir
         FileUtils.cp(fixture("good", "OTC_#{D}.json"), dir)
-        bad = good_sha256.lines.map { |l| l.include?(".json\n") || l.end_with?(".json") ? "SHA256 (OTC_#{D}.json) = #{l.split.first}\n" : l }.join
-        File.write(File.join(dir, "OTC_#{D}.sha256"), bad)
+        lines = good_sha256.lines
+        json_line = lines.index { |l| l.end_with?("  OTC_#{D}.json\n") }
+        refute_nil json_line, "the fixture lists OTC_#{D}.json"
+        # Only the OTC_D.json line is rewritten (not the .meta.json line).
+        bad = lines.each_with_index.map { |l, i| i == json_line ? "SHA256 (OTC_#{D}.json) = #{l.split.first}\n" : l }
+        assert_equal 1, bad.zip(lines).count { |a, b| a != b }
+        File.write(File.join(dir, "OTC_#{D}.sha256"), bad.join)
         err = assert_raises(OTC::InvalidReleaseError) { OTC.new(file: File.join(dir, "OTC_#{D}.json")) }
+        assert_includes err.message, "line #{json_line + 1} "
         assert_includes err.message, "SHA256 ("
         File.write(File.join(dir, "OTC_#{D}.sha256"), good_sha256.sub(/\A\h{64}/, "abc"))
-        assert_raises(OTC::InvalidReleaseError) { OTC.new(file: File.join(dir, "OTC_#{D}.json")) }
+        err = assert_raises(OTC::InvalidReleaseError) { OTC.new(file: File.join(dir, "OTC_#{D}.json")) }
+        assert_includes err.message, "line 1 "
+        assert_includes err.message, "\"abc  OTC_"
     end
 
     # R38: the .sha256 file is checked against the pointer before it is
@@ -53,11 +61,15 @@ class ChecksumTest < Minitest::Test
         bytes[100] = bytes[100] == "x" ? "y" : "x"
         File.binwrite(cached, bytes)
         c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+        assert_equal bytes, File.binread(cached), "the open left the corrupt cached copy (the precondition)"
+        before = srv.requests.size
         to = tmpdir
         paths = c.download(D, to: to)
         assert_includes paths, File.join(to, "OTC_#{D}.jsonl")
         assert_equal File.binread(fixture("good", "OTC_#{D}.jsonl")), File.binread(File.join(to, "OTC_#{D}.jsonl"))
-        refute_equal bytes, File.binread(cached) if File.file?(cached)
+        # The corrupt copy is deleted from the cache, and the file is downloaded again.
+        refute File.exist?(cached), "the corrupt cached copy is still there"
+        assert_includes srv.requests[before..], "/OTC_#{D}.jsonl"
     ensure
         c&.close
     end
