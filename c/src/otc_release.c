@@ -457,12 +457,13 @@ static otc_status index_line(builder *b, const char *line, size_t len, uint64_t 
     return st;
 }
 
-/* 1 when a line is empty or only spaces and tabs (the other SDKs skip such lines too). */
+/* 1 when a line is empty or holds only ASCII whitespace: SP, HT, LF, VT, FF, CR
+ * (spec 6.2, CR2 DR26, the reference bytes.strip rule). NUL is not blank. */
 static int blank(const char *line, size_t len)
 {
     size_t i;
     for (i = 0; i < len; i++)
-        if (line[i] != ' ' && line[i] != '\t') return 0;
+        if (line[i] != ' ' && (line[i] < '\t' || line[i] > '\r')) return 0;
     return 1;
 }
 

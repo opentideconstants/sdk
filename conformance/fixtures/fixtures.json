@@ -521,6 +521,37 @@
    "valid_as_1_0": false
   },
   {
+   "defect": "the .jsonl has lines of only ASCII whitespace (FF, VT, SP HT VT FF SP CR, CR) between station lines and a last line of one FF with no line end: blank lines, skipped (CR2 DR26)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/blank-lines"
+  },
+  {
+   "defect": "a .jsonl line of one NBSP (U+00A0): not ASCII whitespace, so not blank, and not JSON (CR2 DR26)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/blank-line-nbsp"
+  },
+  {
+   "defect": "a .jsonl line of one NUL byte: not whitespace, so not blank, and not JSON (CR2 DR26)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/blank-line-nul"
+  },
+  {
    "defect": "OTC-T-0002's second set has the set_id OTC-T-0001/gesla-fit, a set_id of OTC-T-0001: a set_id is unique across the release, not only within a station (D5)",
    "expect": {
     "error": "invalid_release"

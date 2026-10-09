@@ -1,7 +1,8 @@
 /* PK07 value checks on the real library.
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
  *      not cut to an integer: it reads as missing (-1).
- * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
+ * C98: a line of only ASCII whitespace (SP, HT, VT, FF, CR) is skipped, as
+ *      in the other SDKs (CR2 DR26); a NUL line is not blank;
  *      text after a line's object is invalid_release, not ignored.
  * C34: the kind filter "other" is not a kind value: it matches no station,
  *      also not one whose kind is unknown (spec 4.4).
@@ -58,7 +59,7 @@ int main(void)
     otc_close(rel);
     free(dir);
     /* C98 */
-    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\n \t \n" TEST_STATION("OTC-X-2", "Two") "\n", &dir);
+    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\n \t \n\f\n\v\n \t\v\f \r\n" TEST_STATION("OTC-X-2", "Two") "\n\f", &dir);
     CHECK(rel != NULL && otc_release_station_count(rel) == 2);
     otc_close(rel);
     free(dir);

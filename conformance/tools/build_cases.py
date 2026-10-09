@@ -1779,6 +1779,28 @@ def rules_r2_pk09():
         out.append(case(f"rules/r2-pk09/set-id-across-stations{label}", f"two stations have a set with the same set_id, opened as {ext} ({mode}): invalid_release at open (D5)",
                         "6.1, 4.8", [step("open", err("invalid_release"), file=f"{FIX}/bad/set-id-across-stations/OTC_20991231{ext}", mode=mode)],
                         requires=["fs"] + req))
+    # CR2 DR26: a blank .jsonl line holds only ASCII whitespace (SP, HT, LF, VT, FF, CR); NBSP and NUL are not blank
+    B = Rel("bad/blank-lines", "20991231")
+    blank_steps = [step("station_count", {"station_count": len(B.active)}),
+                   step("tombstone_count", {"tombstone_count": len(B.tombs)}),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0002"])}, station_id="OTC-T-0002"),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0006"])}, station_id="OTC-T-0006"),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0021"])}, station_id="OTC-T-0021")]
+    for req, mode in [(["eager"], "eager"), (["stream"], "stream")]:
+        out.append(case(f"rules/r2-pk09/blank-lines-jsonl-{mode}", f"lines of only FF, VT, SP, HT, CR in the .jsonl ({mode}) are blank: skipped, and the stations around them are read (CR2 DR26)", "6.2",
+                        [step("open", {"loaded_from": "file", "datestamp": "20991231"}, file=f"{FIX}/bad/blank-lines/OTC_20991231.jsonl", mode=mode)] + blank_steps,
+                        requires=["fs"] + req))
+        for root, what in [("blank-line-nbsp", "one NBSP (U+00A0)"), ("blank-line-nul", "one NUL byte")]:
+            out.append(case(f"rules/r2-pk09/{root}-jsonl-{mode}", f"a .jsonl line of {what} ({mode}) is not blank: invalid_release at open (CR2 DR26)", "6.2, 4.8",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231.jsonl", mode=mode)],
+                            requires=["fs"] + req))
+    bdir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/blank-lines-index", "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/blank-lines/",
+                              cache_dir="${cache}", mode="stream"))] + blank_steps + [
+                     step("close"),
+                     drv("assert_index", path=f"{bdir}/index-v1.json", jsonl=f"{bdir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
     return out
 
 

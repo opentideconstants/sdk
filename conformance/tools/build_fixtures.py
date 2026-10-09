@@ -820,7 +820,33 @@ def _set_id_across_stations(doc):
             v["set_id"] = new
 
 
+def _jsonl_lines(extra):
+    """A tamper that puts extra lines into the .jsonl: extra maps a line number (0 = before the first station
+    line, -1 = at the end, with no line end after it) to the bytes to insert; the digests stay honest."""
+    def tamper(files, sums, entry, reuse):
+        files = dict(files)
+        name = next(n for n in files if n.endswith(".jsonl"))
+        lines = files[name].split(b"\n")[:-1]   # each station line ends in \n
+        out = b""
+        for i, line in enumerate(lines):
+            out += extra.get(i, b"") + line + b"\n"
+        files[name] = out + extra.get(-1, b"")
+        return rehash(files, sums, entry)
+    return tamper
+
+
+# CR2 DR26: a blank .jsonl line holds only ASCII whitespace (SP, HT, LF, VT, FF, CR), the bytes.strip rule
+BLANK_ASCII = {1: b"\x0c\n" + b"\x0b\n" + b" \t\x0b\x0c \r\n", 5: b"\r\n", -1: b"\x0c"}
+
+
 BAD += [
+    ("blank-lines", "load", "the .jsonl has lines of only ASCII whitespace (FF, VT, SP HT VT FF SP CR, CR) between station lines "
+     "and a last line of one FF with no line end: blank lines, skipped (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines(BLANK_ASCII)),
+    ("blank-line-nbsp", "invalid_release", "a .jsonl line of one NBSP (U+00A0): not ASCII whitespace, so not blank, and not JSON (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines({1: b"\xc2\xa0\n"})),
+    ("blank-line-nul", "invalid_release", "a .jsonl line of one NUL byte: not whitespace, so not blank, and not JSON (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines({1: b"\x00\n"})),
     ("set-id-across-stations", "invalid_release", "OTC-T-0002's second set has the set_id OTC-T-0001/gesla-fit, a set_id of "
      "OTC-T-0001: a set_id is unique across the release, not only within a station (D5)",
      changed_doc(_set_id_across_stations), None),
@@ -1286,7 +1312,8 @@ def open_release(root, datestamp, schemas):
     try:
         doc = strict_json(body)
         meta = strict_json(read_file(root, f"OTC_{datestamp}.meta.json"))
-        lines = [strict_json(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
+        # one station per line; a line of only ASCII whitespace (bytes.strip) is blank and skipped (spec 6.2, CR2 DR26)
+        lines = [strict_json(l.decode("utf-8")) for l in read_file(root, f"OTC_{datestamp}.jsonl").split(b"\n") if l.strip()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
     if not isinstance(doc, dict):

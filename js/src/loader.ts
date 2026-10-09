@@ -68,6 +68,15 @@ export interface StreamIndex {
     entries: IndexEntry[];
 }
 
+/**
+ * True when a line holds only ASCII whitespace: SP, HT, LF, VT, FF, CR (spec 6.2, CR2 DR26). NBSP and the other
+ * Unicode spaces, and NUL, are not blank, so such a line is read as JSON (and is not JSON).
+ */
+function isBlank(line: Uint8Array): boolean {
+    for (const b of line) if (b !== 0x20 && (b < 0x09 || b > 0x0d)) return false;
+    return true;
+}
+
 /** @internal Index every line of a `.jsonl` file. Returns the index and, if keep, the parsed documents. */
 export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boolean): { entries: IndexEntry[]; docs: JsonObject[] } {
     const convs = new Set(header.conventions.map((c) => String(c["convention_id"])));
@@ -83,7 +92,7 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         // the length leaves out the line end: \n, or \r\n (spec 6.2)
         const body = end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
         const line = bytes.subarray(start, body);
-        if (utf8.decode(line).trim() !== "") {
+        if (!isBlank(line)) {
             let doc: Json;
             try {
                 doc = JSON.parse(utf8.decode(line)) as Json;

@@ -4605,6 +4605,457 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-lines-jsonl-eager",
+   "title": "lines of only FF, VT, SP, HT, CR in the .jsonl (eager) are blank: skipped, and the stations around them are read (CR2 DR26)",
+   "spec": "6.2",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-lines/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231"
+     }
+    },
+    {
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "op": "tombstone_count",
+     "expect": {
+      "tombstone_count": 1
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0002"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0002",
+       "name": "South San Francisco",
+       "country": "USA",
+       "lat": 37.665,
+       "lon": -122.38,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "noaa": [
+         "9900002"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0002/fallback"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0006"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0006",
+       "name": "Tromsø",
+       "country": "NOR",
+       "lat": 69.6468,
+       "lon": 18.9543,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/Oslo",
+       "aliases": {
+        "kartverket": [
+         "TOS"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0006/kartverket"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0021",
+       "name": "Closing Pier",
+       "country": "GBR",
+       "lat": 52.0,
+       "lon": 1.7,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0021/gesla-fit"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-line-nbsp-jsonl-eager",
+   "title": "a .jsonl line of one NBSP (U+00A0) (eager) is not blank: invalid_release at open (CR2 DR26)",
+   "spec": "6.2, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-line-nbsp/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-line-nul-jsonl-eager",
+   "title": "a .jsonl line of one NUL byte (eager) is not blank: invalid_release at open (CR2 DR26)",
+   "spec": "6.2, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-line-nul/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-lines-jsonl-stream",
+   "title": "lines of only FF, VT, SP, HT, CR in the .jsonl (stream) are blank: skipped, and the stations around them are read (CR2 DR26)",
+   "spec": "6.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-lines/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231"
+     }
+    },
+    {
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "op": "tombstone_count",
+     "expect": {
+      "tombstone_count": 1
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0002"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0002",
+       "name": "South San Francisco",
+       "country": "USA",
+       "lat": 37.665,
+       "lon": -122.38,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "noaa": [
+         "9900002"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0002/fallback"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0006"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0006",
+       "name": "Tromsø",
+       "country": "NOR",
+       "lat": 69.6468,
+       "lon": 18.9543,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/Oslo",
+       "aliases": {
+        "kartverket": [
+         "TOS"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0006/kartverket"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0021",
+       "name": "Closing Pier",
+       "country": "GBR",
+       "lat": 52.0,
+       "lon": 1.7,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0021/gesla-fit"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-line-nbsp-jsonl-stream",
+   "title": "a .jsonl line of one NBSP (U+00A0) (stream) is not blank: invalid_release at open (CR2 DR26)",
+   "spec": "6.2, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-line-nbsp/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-line-nul-jsonl-stream",
+   "title": "a .jsonl line of one NUL byte (stream) is not blank: invalid_release at open (CR2 DR26)",
+   "spec": "6.2, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/blank-line-nul/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/blank-lines-index",
+   "title": "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)",
+   "spec": "6.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/bad/blank-lines/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "op": "tombstone_count",
+     "expect": {
+      "tombstone_count": 1
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0002"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0002",
+       "name": "South San Francisco",
+       "country": "USA",
+       "lat": 37.665,
+       "lon": -122.38,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "noaa": [
+         "9900002"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0002/fallback"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0006"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0006",
+       "name": "Tromsø",
+       "country": "NOR",
+       "lat": 69.6468,
+       "lon": 18.9543,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/Oslo",
+       "aliases": {
+        "kartverket": [
+         "TOS"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0006/kartverket"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0021",
+       "name": "Closing Pier",
+       "country": "GBR",
+       "lat": 52.0,
+       "lon": 1.7,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0021/gesla-fit"
+      }
+     }
+    },
+    {
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231/OTC_20991231.jsonl",
+     "datestamp": "20991231"
+    }
+   ]
   }
  ]
 }

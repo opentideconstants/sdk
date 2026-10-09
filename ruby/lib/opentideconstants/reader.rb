@@ -153,7 +153,7 @@ class OpenTideConstants
                     pos = 0
                     io.each_line do |line|
                         body = line.chomp
-                        unless line.strip.empty?
+                        unless blank?(line)
                             raw = parse_json(body.force_encoding(Encoding::UTF_8))
                             index_rows << index_entry(raw, pos, body.bytesize) if index_rows && raw.is_a?(Hash)
                             y << [raw, pos, body.bytesize]
@@ -264,6 +264,12 @@ class OpenTideConstants
             raise InvalidReleaseError, "bad gzip file #{path}: #{e.message}"
         rescue SystemCallError, IOError => e
             raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+        end
+
+        # True when a .jsonl line holds only ASCII whitespace: SP, HT, LF, VT, FF,
+        # CR (spec 6.2, CR2 DR26). String#strip also drops NUL, which is not blank.
+        def blank?(line)
+            line.b.match?(/\A[ \t\n\v\f\r]*\z/n)
         end
 
         def parse_json(text)
