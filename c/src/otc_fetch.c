@@ -359,10 +359,19 @@ static int fs_mkdir_p(const char *path)
     char *p = otc__strdup(path);
     size_t i, n;
     int ok;
+    size_t start = 1;
     if (!p) return -1;
     n = strlen(p);
     while (n > 1 && (p[n - 1] == '/' || p[n - 1] == '\\')) p[--n] = '\0';
-    for (i = 1; i < n; i++) {
+#ifdef _WIN32
+    /* a UNC root (\\server\share\...): the server and the share are not directories to create */
+    if (n > 2 && (p[0] == '\\' || p[0] == '/') && (p[1] == '\\' || p[1] == '/')) {
+        int parts = 0;
+        for (start = 2; start < n && parts < 2; start++)
+            if (p[start] == '\\' || p[start] == '/') parts++;
+    }
+#endif
+    for (i = start; i < n; i++) {
         if (p[i] == '/' || p[i] == '\\') {
             char c = p[i];
             if (p[i - 1] == ':' || p[i - 1] == '/' || p[i - 1] == '\\') continue; /* C:\ or // */
