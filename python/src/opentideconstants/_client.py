@@ -109,7 +109,6 @@ class OpenTideConstants:
         if user_agent:
             ua += " " + user_agent
         self._http = Http(user_agent=ua, timeout=timeout, proxy=proxy, ca_file=ca_file, logger=self._log)
-        self._opened_files: Tuple[Path, ...] = ()
         if self._file is not None:
             self._open_file(self._file)
         elif self._pinned is not None:
@@ -188,7 +187,7 @@ class OpenTideConstants:
             files = [FileInfo(p.name, None, p.stat().st_size, None) for p in sorted(opened, key=lambda p: p.name)]
             lf = "file_unverified"
         rel = load_document(path, self._mode, files)
-        self._opened_files = tuple(opened)
+        rel._opened = tuple(opened)
         self._set(rel, lf)
 
     @staticmethod
@@ -244,14 +243,35 @@ class OpenTideConstants:
                 raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
             if size is not None and actual_size != size:
                 raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
-                                    expected=rec.get("sha256"), actual=None)
+                                    expected=rec.get("sha256"), actual=file_sha256(p))
             if self._verify_on_open:
                 self._check_file(p, rec.get("sha256"))
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"))
         rel._zenodo_version_doi = v.get("zenodo_version_doi")
+        rel._opened = tuple(check)
         return rel
+
+    def _load_cached_or_heal(self, datestamp: str, mode: str, info: Optional[ReleaseInfo], redownload=True):
+        """Load a cached release. A cached file that fails its size or SHA-256 check is deleted with .verified
+        (spec §4.8 checksum_mismatch), and, online, the release is downloaded again. Returns (Release, loaded_from)."""
+        try:
+            return self._load_cached(datestamp, mode), "cache"
+        except ChecksumError as e:
+            self._log.warning("cached release %s is corrupt (%s); it is removed from the cache", datestamp, e)
+            d = self._cache.release_dir(datestamp)
+            for p in (d / ".verified", Path(e.file) if e.file else None):
+                if p is not None:
+                    try:
+                        p.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except OSError as ux:
+                        self._log.warning("cannot remove %s: %s", p, ux)
+            if self._offline or not redownload:
+                raise
+            return self._download_to_cache(datestamp, mode, info), "download"
 
     def _note_entry(self, info: ReleaseInfo) -> None:
         """Keep the version DOI of a pointer or index entry in the .verified of that cached release (spec §4.3).
@@ -360,7 +380,8 @@ class OpenTideConstants:
                                       f"is not MAJOR.MINOR")
         try:
             files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
-                                           f.get("sha256")) for f in entry.get("files") or ()),
+                                           f["sha256"].lower() if isinstance(f.get("sha256"), str) else None)
+                                  for f in entry.get("files") or ()),
                                  key=lambda f: f.name))
             return ReleaseInfo(entry["datestamp"], entry.get("format_version"), entry.get("concept_doi"),
                                entry.get("zenodo_version_doi"), entry.get("content_sha256"), files,
@@ -417,11 +438,19 @@ class OpenTideConstants:
 
     # ---- downloading into the cache (spec §5.2 step 4)
 
-    def _get_sha256_rows(self, datestamp: str):
-        url = self._url(f"OTC_{datestamp}.sha256")
+    def _get_sha256_rows(self, datestamp: str, info: Optional[ReleaseInfo] = None):
+        """GET OTC_{D}.sha256 from the URL the pointer lists for it (spec §4.3.1), else from base_url, and check it
+        against the pointer's own entry for it."""
+        name = f"OTC_{datestamp}.sha256"
+        listed = {f.name: f for f in info.files} if info is not None else {}
+        url = listed[name].url if name in listed and listed[name].url else self._url(name)
         r = self._http.get(url)
         if r.status == 404:
             raise ReleaseNotFoundError(f"release {datestamp} not found ({url})")
+        ent = listed.get(name)
+        if ent is not None and ent.sha256 is not None and r.sha256 != ent.sha256:
+            raise ChecksumError(f"{name}: SHA-256 {r.sha256} does not match the pointer's {ent.sha256}", file=name,
+                                expected=ent.sha256, actual=r.sha256)
         try:
             return r.body, _parse_sha256(r.body.decode("utf-8"))
         except UnicodeDecodeError as e:
@@ -429,12 +458,19 @@ class OpenTideConstants:
 
     @staticmethod
     def _check_pointer(info: Optional[ReleaseInfo], rows) -> None:
+        """The pointer and the .sha256 file must agree (spec §5.2 step 4.1): the same SHA-256 for every file both
+        list, and no file in the .sha256 that the pointer does not list."""
         if info is None:
             return
-        for f in info.files:
-            if f.name in rows and f.sha256 is not None and f.sha256.lower() != rows[f.name]:
-                raise ChecksumError(f"{f.name}: the pointer and the .sha256 file disagree", file=f.name,
-                                    expected=rows[f.name], actual=f.sha256)
+        listed = {f.name: f for f in info.files}
+        for n, sha in rows.items():
+            f = listed.get(n)
+            if f is None:
+                raise ChecksumError(f"{n} is in the .sha256 file but not in the pointer", file=n, expected=None,
+                                    actual=sha)
+            if f.sha256 is not None and f.sha256 != sha:
+                raise ChecksumError(f"{n}: the pointer and the .sha256 file disagree", file=n,
+                                    expected=sha, actual=f.sha256)
 
     def _fetch_file(self, url: str, dest_dir: Path, expected_sha: Optional[str], expected_size, final_name: str,
                     gz: bool = False):
@@ -463,7 +499,7 @@ class OpenTideConstants:
         with lock_dir(d, SDK, done=lambda: self._usable(datestamp, mode) is not None) as held:
             if not held or self._usable(datestamp, mode) is not None:
                 return self._load_cached(datestamp, mode)
-            sha_body, rows = self._get_sha256_rows(datestamp)
+            sha_body, rows = self._get_sha256_rows(datestamp, info)
             self._check_pointer(info, rows)
             ptr = {f.name: f for f in info.files} if info is not None else {}
             base = f"OTC_{datestamp}"
@@ -533,19 +569,21 @@ class OpenTideConstants:
             # the files table of .verified (spec §4.3.1): the pointer's values, or the .sha256 rows
             old = self._cache.read_verified(datestamp) or {"files": {}}
             files = dict(old.get("files") or {})
+            # every row of the .sha256 file, then the pointer's values over them (they agree: _check_pointer)
+            for n, sha in rows.items():
+                prev = files.get(n) or {}
+                files[n] = {"sha256": sha, "size": written.get(n, prev.get("size")), "url": prev.get("url")}
             if info is not None:
                 for f in info.files:
-                    files[f.name] = {"sha256": f.sha256, "size": f.size, "url": f.url}
-            else:
-                for n, sha in rows.items():
-                    prev = files.get(n) or {}
-                    files[n] = {"sha256": sha, "size": written.get(n, prev.get("size")), "url": self._url(n)}
+                    files[f.name] = {"sha256": f.sha256 or (files.get(f.name) or {}).get("sha256"),
+                                     "size": f.size if f.size is not None else written.get(f.name), "url": f.url}
             files_infos = [FileInfo(n, f.get("url"), f.get("size"), f.get("sha256")) for n, f in sorted(files.items())]
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"))
             zdoi = info.zenodo_version_doi if info is not None else old.get("zenodo_version_doi")
             rel._zenodo_version_doi = zdoi
+            rel._opened = (d / data_name,) + ((d / f"{base}.meta.json",) if data_name.endswith(".jsonl") else ())
             verified = {"files": files, "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "by": SDK, "datestamp": datestamp, "format_version": rel.format_version,
                         "min_reader_version": rel._release.get("min_reader_version"), "zenodo_version_doi": zdoi}
@@ -561,7 +599,7 @@ class OpenTideConstants:
     def _open_pinned(self, datestamp: str) -> None:
         self._ensure_cache_root()
         if self._usable(datestamp, self._mode) is not None:
-            self._set(self._load_cached(datestamp, self._mode), "cache")
+            self._set(*self._load_cached_or_heal(datestamp, self._mode, None))
             return
         if self._offline:
             raise OfflineError(f"offline, and release {datestamp} is not in the cache")
@@ -573,13 +611,13 @@ class OpenTideConstants:
             ds = self._newest_cached(self._mode)
             if ds is None:
                 raise OfflineError("offline, and no release is in the cache")
-            self._set(self._load_cached(ds, self._mode), "cache")
+            self._set(*self._load_cached_or_heal(ds, self._mode, None))
             return
         try:
             info = self._latest_info()
             if self._usable(info.datestamp, self._mode) is not None:
                 self._note_entry(info)
-                self._set(self._load_cached(info.datestamp, self._mode), "cache")
+                self._set(*self._load_cached_or_heal(info.datestamp, self._mode, info))
                 return
             self._set(self._download_to_cache(info.datestamp, self._mode, info), "download")
         except NetworkError as e:
@@ -587,7 +625,7 @@ class OpenTideConstants:
             if ds is None:
                 raise
             self._log.warning("network error (%s); using the cached release %s", e, ds)
-            self._set(self._load_cached(ds, self._mode), "cache_after_error")
+            self._set(self._load_cached_or_heal(ds, self._mode, None, redownload=False)[0], "cache_after_error")
             self._last_error = e
 
     # ------------------------------------------------------------------ release management
@@ -670,7 +708,7 @@ class OpenTideConstants:
         if info is None:
             return UpdateResult(False, cur, cur)
         if self._usable(info.datestamp, self._mode) is not None:
-            rel, lf = self._load_cached(info.datestamp, self._mode), "cache"
+            rel, lf = self._load_cached_or_heal(info.datestamp, self._mode, info)
         else:
             rel, lf = self._download_to_cache(info.datestamp, self._mode, info), "download"
         self._set(rel, lf)
@@ -695,28 +733,26 @@ class OpenTideConstants:
                 self._log.warning("automatic update failed: %s", e)
 
     def verify(self) -> bool:
-        """Hash the loaded release's files again and compare them with OTC_{D}.sha256."""
+        """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A
+        missing file is io; a missing OTC_{D}.sha256, a missing row or another digest is checksum_mismatch."""
         rel = self._release
         ds = rel.datestamp
+        opened = rel._opened
+        if not opened:
+            raise ChecksumError(f"release {ds}: no files to verify", file=None)
+        first = opened[0]
         if self._loaded_from in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED):
-            if not self._opened_files:
-                return True
-            first = self._opened_files[0]
             sha_path = first.with_name(f"OTC_{ds}.sha256")
-            if not sha_path.exists():
-                raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
-            rows = _parse_sha256(self._read_text(sha_path))
-            for p in self._opened_files:
-                self._check_file(p, rows.get(p.name))
-            return True
-        d = self._cache.release_dir(ds)
-        sha_path = d / f"OTC_{ds}.sha256"
-        rows = _parse_sha256(self._read_text(sha_path)) if sha_path.exists() else {}
-        v = self._cache.read_verified(ds) or {"files": {}}
-        for n, rec in v["files"].items():
-            p = d / n
-            if p.is_file():
-                self._check_file(p, rows.get(n) or rec.get("sha256"))
+        else:
+            sha_path = self._cache.release_dir(ds) / f"OTC_{ds}.sha256"
+        if not sha_path.exists():
+            raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
+        rows = _parse_sha256(self._read_text(sha_path))
+        for p in opened:
+            if not p.is_file():
+                raise FileError(f"cannot read {p}: no such file", path=str(p))
+            self._check_file(p, rows.get(p.name))
+        self._log.info("verified %s", ds)
         return True
 
     def cached_releases(self) -> Tuple[str, ...]:
@@ -781,7 +817,7 @@ class OpenTideConstants:
         elif self._offline:
             raise OfflineError(f"offline, and release {ds} is not in the cache")
         else:
-            sha_body, rows = self._get_sha256_rows(ds)
+            sha_body, rows = self._get_sha256_rows(ds, info)
         self._check_pointer(info, rows)
         names = [base + FORMAT_EXT[f] for f in dict.fromkeys(formats)] + [f"{base}.meta.json"]
         for n in names:

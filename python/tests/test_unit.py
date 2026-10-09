@@ -624,6 +624,64 @@ class ErrorClassTest(unittest.TestCase):
                 c.download("20991231.2", to=str(self.root / "out"))
 
 
+class ChecksumTest(unittest.TestCase):
+    """Checksums, verify() and a corrupt cache (spec §4.3, §4.3.1, §4.8, §5.2; review PK11)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "cache"
+        self.dir = self.cache / "v1" / "releases" / "20991231.2"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def pointer(self, edit):
+        doc = json.loads((FIXTURES / "good" / "OTC_latest-f1.json").read_text(encoding="utf-8"))
+        edit(doc)
+        return _Server(script={"/OTC_latest-f1.json": (200, {}, json.dumps(doc).encode())})
+
+    def test_upper_case_pointer_sha256_passes_verify_on_open(self):
+        def up(doc):
+            for f in doc["files"]:
+                f["sha256"] = f["sha256"].upper()
+        srv = self.pointer(up)
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), verify_on_open=True) as c:
+                self.assertEqual(c.loaded_from, "cache")
+        finally:
+            srv.close()
+
+    def test_pointer_without_the_json_digest_still_verifies(self):
+        def edit(doc):
+            for f in doc["files"]:
+                if f["name"] == "OTC_20991231.2.json":
+                    f["sha256"] = None
+        srv = self.pointer(edit)
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), verify_on_open=True) as c:
+                self.assertEqual(c.loaded_from, "cache")
+                self.assertTrue(c.verify())
+        finally:
+            srv.close()
+
+    def test_truncated_cached_file_names_both_digests_and_is_removed(self):
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream").close()
+        finally:
+            srv.close()
+        p = self.dir / "OTC_20991231.2.jsonl"
+        p.write_bytes(p.read_bytes()[:-10])
+        with self.assertRaises(otc.ChecksumError) as cm:
+            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+        self.assertIsNotNone(cm.exception.expected)
+        self.assertIsNotNone(cm.exception.actual)
+        self.assertFalse(p.exists())
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

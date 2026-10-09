@@ -1042,7 +1042,6 @@
    "case": "rules/pk11/bad-sha256-file-differs-latest",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK11",
@@ -1052,7 +1051,6 @@
    "case": "rules/pk11/bad-sums-extra-file-latest",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1063,7 +1061,6 @@
    "case": "rules/pk11/corrupt-same-size-heals-online",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1089,8 +1086,7 @@
   {
    "case": "rules/pk11/sha256-absolute-url",
    "runners": [
-    "c-fetch",
-    "python"
+    "c-fetch"
    ],
    "package": "PK11",
    "reason": "step 1 open: expected a result, got error 'release_not_found' (release 20991231.2 not found (http://127.0.0.1:51308/abs/OTC_20991231.2.sha256))"
@@ -1098,19 +1094,10 @@
   {
    "case": "rules/pk11/verify-missing-data-file",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK11",
    "reason": "step 2 verify: expected error {'$any_of': ['checksum_mismatch', 'io']}, got a result {\"verified\": true}"
-  },
-  {
-   "case": "rules/pk11/verify-missing-verified",
-   "runners": [
-    "python"
-   ],
-   "package": "PK11",
-   "reason": "step 3 verify: expected error 'checksum_mismatch', got a result {\"verified\": true}"
   },
   {
    "case": "rules/pk11/verify-unverified-file",

@@ -304,11 +304,12 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "__weakref__")
+                 "_index_path", "_opened", "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None):
         self._meta = meta
         self._index_path = index_path
+        self._opened = ()  # the files this release was loaded from (the client sets it; verify hashes them)
         rel = meta.get("release")
         if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
             raise InvalidReleaseError("release.datestamp is missing")
