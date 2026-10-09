@@ -1047,12 +1047,22 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
 def as_readable(root, datestamp, schemas):
     """For a release that no 1.0 reader reads (min_reader_version 1.99, or format 2.0): its data must still be a
     valid format 1.0 release once the two version fields say 1.0, so the version is its only defect."""
-    doc = json.loads((root / f"OTC_{datestamp}.json").read_bytes())
-    doc["format_version"] = FORMAT
-    doc["release"]["min_reader_version"] = FORMAT
-    doc.pop("future_top_level", None)
-    meta = {k: v for k, v in doc.items() if k != "stations"}
-    validate_release(doc, meta, doc["stations"], schemas)
+    def as_10(d):
+        d["format_version"] = FORMAT
+        d["release"]["min_reader_version"] = FORMAT
+        d.pop("future_top_level", None)
+        return d
+
+    doc = as_10(json.loads((root / f"OTC_{datestamp}.json").read_bytes()))
+    meta = as_10(json.loads((root / f"OTC_{datestamp}.meta.json").read_bytes()))
+    lines = [json.loads(l) for l in (root / f"OTC_{datestamp}.jsonl").read_text(encoding="utf-8").splitlines()]
+    # the .jsonl and .meta.json of such a release are read too (format/reader-too-old opens the .jsonl): they must
+    # agree with the .json, and each is validated on its own
+    if lines != doc["stations"]:
+        raise Fail("invalid_release", ".jsonl lines differ from .json stations")
+    if meta != {k: v for k, v in doc.items() if k != "stations"}:
+        raise Fail("invalid_release", ".meta.json differs from .json without stations")
+    validate_release(doc, meta, lines, schemas)
 
 
 def index_errors(root, schemas):
@@ -1093,10 +1103,16 @@ def check_pointers(root, fixture):
     latest = json.loads((root / "OTC_latest.json").read_bytes())
     if latest != index["releases"][0] or latest["datestamp"] != fixture["latest"]:
         errs.append("OTC_latest.json is not the newest index entry")
-    major = int(latest["format_version"].split(".")[0])
-    per_major = root / f"OTC_latest-f{major}.json"
-    if not per_major.exists() or json.loads(per_major.read_bytes()) != latest:
-        errs.append(f"{per_major.name} missing or differs from OTC_latest.json")
+    # every per-major pointer is the newest index entry of its major (not only the latest release's major)
+    majors = sorted({int(e["format_version"].split(".")[0]) for e in index["releases"]})
+    for major in majors:
+        newest = next(e for e in index["releases"] if int(e["format_version"].split(".")[0]) == major)
+        per_major = root / f"OTC_latest-f{major}.json"
+        if not per_major.exists() or json.loads(per_major.read_bytes()) != newest:
+            errs.append(f"{per_major.name} missing or not the newest index entry of major {major}")
+    extra = sorted(p.name for p in root.glob("OTC_latest-f*.json") if p.name not in {f"OTC_latest-f{m}.json" for m in majors})
+    if extra:
+        errs.append(f"per-major pointers with no release of that major: {extra}")
     return errs
 
 
@@ -1156,22 +1172,24 @@ def check(schema_dir=None):
             if not ok:
                 errs.append(f"latest for a {'%d.%d' % READER_FORMAT} reader is {got}, not {fx['latest_readable']}")
             print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} latest for a {'%d.%d' % READER_FORMAT} reader is {got}")
-        if not fx["root"].startswith("bad/"):
-            # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
-            for d in fx["releases"]:
-                try:
-                    got = open_release(root, d, schemas)
-                except Fail:
-                    continue
-                if got["unknown_fields"]:
-                    errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
-        if fx["expect"] == "load" and fx["root"].startswith("bad/"):
-            # The higher-minor release must actually carry unknown fields.
+        for d in fx["releases"]:
+            expect = (fx.get("expect_by_release") or {}).get(d, fx["expect"])
+            if expect != "load":
+                continue   # an error outcome is checked above
             try:
-                if not open_release(root, fx["releases"][0], schemas)["unknown_fields"]:
-                    errs.append("higher-minor fixture has no unknown fields")
-            except Fail:
-                pass
+                got = open_release(root, d, schemas)
+            except Fail as e:
+                errs.append(f"{d}: does not load: {e}")   # also reported above; never skipped in silence
+                continue
+            if not fx["root"].startswith("bad/") and got["unknown_fields"]:
+                # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
+                errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
+            if version_key(got["format_version"]) > READER_FORMAT:
+                # A release in a higher minor must carry fields this reader does not know, at several levels: only
+                # schema paths count ($.-prefixed), not the other tolerances (a qc_status read as other, a missing build).
+                schema_paths = [x for x in got["unknown_fields"] if x.startswith("$.")]
+                if len(schema_paths) < 2:
+                    errs.append(f"{d}: a format {got['format_version']} release with too few unknown fields: {schema_paths}")
         problems += [f"{fx['root']}: {e}" for e in errs]
     if problems:
         print(f"{len(problems)} PROBLEMS")
