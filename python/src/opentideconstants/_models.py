@@ -451,8 +451,9 @@ def _finite(v) -> bool:
 
 
 def build_station(d, conventions, licences, kind):
-    """Build an active Station from its parsed JSON. conventions/licences: id -> object. Raises
-    InvalidReleaseError when a reference does not resolve."""
+    """Build a Station from the parsed JSON of a station line (the caller passes active lines only; the status
+    is not checked here). conventions/licences: id -> object. Raises InvalidReleaseError when a reference does
+    not resolve or a field is malformed."""
     try:
         sid = d["station_id"]
         rid = d.get("recommended_set_id")

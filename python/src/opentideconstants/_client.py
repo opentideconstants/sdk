@@ -667,7 +667,9 @@ class OpenTideConstants:
         return infos
 
     def latest(self) -> ReleaseInfo:
-        """The latest release (one conditional GET of the pointer). It does not switch releases."""
+        """The latest release this SDK reads. It reads the latest pointer (OTC_latest-f{MAJOR}.json, or
+        OTC_latest.json when that is a 404) with a conditional GET, and OTC_index.json too when the pointer's
+        release is not readable by this SDK (spec §5.2 steps 2 and 2a, CR D23). It does not switch releases."""
         self._check_open()
         if self._offline:
             raise OfflineError("offline: the latest pointer cannot be read")
@@ -797,7 +799,9 @@ class OpenTideConstants:
 
     def download(self, release: str = "latest", *, to, formats: Sequence[str] = ("jsonl",),
                  overwrite: bool = False) -> Tuple[str, ...]:
-        """Write a verified release into the folder ``to`` (spec §4.3.2). Returns the paths written."""
+        """Write a verified release into the folder ``to`` (spec §4.3.2): the requested formats plus
+        OTC_{D}.meta.json and OTC_{D}.sha256, which are always included. A file that is already there with the
+        right SHA-256 is skipped. Returns the paths this call wrote (skipped files are not in it)."""
         self._check_open()
         if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
             raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")

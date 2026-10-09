@@ -820,6 +820,31 @@ class AttributionTest(RepeatedIdsTest):
                 c.attribution([foreign])
 
 
+class ReadmeTest(unittest.TestCase):
+    """The README quickstart runs as written against the fixture server (review PK16 P72)."""
+
+    def test_readme_quickstart_runs(self):
+        import re
+        import subprocess
+        import tempfile
+        text = (ROOT / "python" / "README.md").read_text(encoding="utf-8")
+        blocks = re.findall(r"```python\n(.*?)```", text, re.S)
+        self.assertTrue(blocks)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("OPENTIDECONSTANTS_")}
+        if not os.environ.get("OTC_TEST_INSTALLED"):
+            env["PYTHONPATH"] = str(ROOT / "python" / "src")
+        for script in (blocks[0], blocks[0].replace('"san fran"', '"no such place"')):
+            srv = _Server()
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    env.update(OPENTIDECONSTANTS_BASE_URL=srv.url, OPENTIDECONSTANTS_CACHE_DIR=tmp)
+                    r = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True,
+                                       timeout=60)
+                    self.assertEqual(r.returncode, 0, r.stderr)
+            finally:
+                srv.close()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 
