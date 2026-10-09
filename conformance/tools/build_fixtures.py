@@ -37,6 +37,7 @@ import shutil
 import sys
 import tempfile
 import urllib.request
+import zlib
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -431,8 +432,12 @@ def gz(data, reuse):
             if gzip.decompress(old) == data:
                 _GZ_SEEN.setdefault(sha(data), old)
                 return old
-        except (OSError, EOFError):
-            pass
+        except (OSError, EOFError, zlib.error) as e:
+            # a bad root's committed .json.gz is not honest gzip on purpose (truncated, a byte changed); anywhere else
+            # an unreadable committed file is worth a line: it is regenerated, and --check then reports the difference
+            if "bad" not in reuse.parts:
+                print(f"note: committed {reuse} is not readable gzip ({type(e).__name__}: {e}); compressing afresh",
+                      file=sys.stderr)
     seen = _GZ_SEEN.get(sha(data))
     if seen is not None:
         return seen
