@@ -828,6 +828,52 @@ class AutoUpdateFailureTest(unittest.TestCase):
             c.close()
 
 
+class AfterCloseTest(unittest.TestCase):
+    """After close: metadata stays readable; every query and iterator step is io (spec §4.2, CR D21, CR2 DR32)."""
+
+    def test_metadata_readable_and_queries_io(self):
+        for mode in ("eager", "stream"):
+            c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode)
+            sub = c.station("OTC-T-0003")
+            ref = c.reference_station(sub)
+            rel = c.release
+            c.close()
+            self.assertIs(c.release, rel, "the release property stays readable after close")
+            self.assertEqual((rel.datestamp, rel.format_version), ("20991231.2", "1.0"))
+            self.assertIsNotNone(rel.created)
+            self.assertIn("20991231.2", rel.citation)
+            self.assertIsInstance(rel.files, tuple)
+            calls = {
+                "reference_station": lambda: rel.reference_station(sub),
+                "subordinates_of": lambda: rel.subordinates_of(ref),
+                "client.reference_station": lambda: c.reference_station(sub),
+                "client.subordinates_of": lambda: c.subordinates_of(ref),
+                "stats": lambda: rel.stats,
+                "station_count": lambda: rel.station_count,
+                "tombstone_count": lambda: rel.tombstone_count,
+                "constituent_names": lambda: rel.constituent_names,
+                "conventions": lambda: rel.conventions,
+                "convention": lambda: rel.convention("x"),
+                "licences": lambda: rel.licences,
+                "licence": lambda: rel.licence("x"),
+                "attribution": lambda: rel.attribution(),
+                "iter_stations": lambda: next(iter(rel.iter_stations())),
+            }
+            for name, call in calls.items():
+                with self.assertRaises(otc.FileError, msg=f"{mode} {name}") as cm:
+                    call()
+                self.assertIn("closed", str(cm.exception))
+
+    def test_an_iterator_made_before_close_fails_at_its_next_step(self):
+        for mode in ("eager", "stream"):
+            c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode)
+            it = c.iter_stations()
+            next(it)
+            c.close()
+            with self.assertRaises(otc.FileError, msg=mode):
+                next(it)
+
+
 class OfflineEnvTest(unittest.TestCase):
     """OPENTIDECONSTANTS_OFFLINE: 1, true, yes, on in any case after a trim, and it wins over offline=False (CR D15)."""
 

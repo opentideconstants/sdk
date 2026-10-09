@@ -467,11 +467,14 @@ def api_errors(api_path):
 
 
 def api_error_problems(cases, errors_by_op):
-    """K77: every error a case expects from an op must be in that operation's api.json errors list."""
+    """K77: every error a case expects from an op must be in that operation's api.json errors list. After a close
+    step, io is allowed for every op: api.json "after_close" states that rule once for every operation (CR D21)."""
     problems = []
     for c in cases:
+        closed = False
         for i, st in enumerate(c.get("steps", [])):
             op = st.get("op")
+            closed = closed or op == "close"
             if op not in errors_by_op:
                 continue
             exps = [st.get("expect")] + list((st.get("expect_if_missing") or {}).values())
@@ -480,7 +483,7 @@ def api_error_problems(cases, errors_by_op):
                     e = exp["error"]
                     codes = e["$any_of"] if isinstance(e, dict) and isinstance(e.get("$any_of"), list) else [e]
                     for code in codes:
-                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
+                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS and not (closed and code == "io"):
                             problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
                                             f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
     return problems

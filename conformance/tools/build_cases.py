@@ -1232,6 +1232,51 @@ def group_update():
     return out
 
 
+def group_lifecycle(R2):
+    """Close (spec 4.2 Close row, CR D21, CR2 DR32). A Release held from before close is closed with the client. Its
+    in-memory metadata stays readable; every query and iterator fails with io "the release is closed". C has no
+    client object, and otc_close frees the release, so a call after it is undefined: the case needs eager, which C
+    does not have."""
+    out = []
+    closed = {"error": "io", "error_message": {"$contains": "closed"}}
+    alias_st = next(s for s in R2.active if s.get("aliases"))
+    system, ids = next(iter(alias_st["aliases"].items()))
+    alias_id = ids[0] if isinstance(ids, list) else ids
+    sub = next(s for s in R2.active if s["type"] == "subordinate" and s.get("subordinate_offsets"))
+    ref_id = sub["subordinate_offsets"]["reference_station_id"]
+    on = "before"
+    queries = [
+        step("station", closed, on=on, station_id="OTC-T-0001"),
+        step("require_station", closed, on=on, station_id="OTC-T-0001"),
+        step("tombstone", closed, on=on, station_id="OTC-T-0005"),
+        step("station_by_alias", closed, on=on, system=system, alias_id=alias_id),
+        step("stations", closed, on=on),
+        step("iter_stations", closed, on=on),
+        step("search", closed, on=on, name="a"),
+        step("near", closed, on=on, lat=0.0, lon=0.0, radius_km=20000),
+        step("nearest", closed, on=on, lat=0.0, lon=0.0),
+        step("reference_station", closed, on=on, station_id=sub["station_id"]),
+        step("subordinates_of", closed, on=on, station_id=ref_id),
+        step("attribution", closed, on=on),
+        step("attribution", closed, on=on, station_ids=["OTC-T-0001"]),
+        step("stats", closed, on=on),
+        step("station_count", closed, on=on),
+        step("tombstone_count", closed, on=on),
+        step("constituent_names", closed, on=on),
+        step("conventions", closed, on=on),
+        step("convention", closed, on=on, convention_id="kartverket-utc1-v1"),
+        step("licences", closed, on=on),
+        step("licence", closed, on=on, licence_id=R2.doc["licences"][0]["licence_id"]),
+    ]
+    out.append(mcase("lifecycle/after-close", "after close, a Release held from before keeps its metadata (datestamp, created, format_version, citation, files) and every query and iterator is io \"the release is closed\", in eager and stream mode (CR D21, CR2 DR32)", "4.2",
+                     [step("hold_release", None, name=on), step("close"),
+                      step("release_metadata", enc_release_meta(R2), on=on),
+                      step("citation", {"citation": citation(R2)}, on=on),
+                      step("release_files", {"files": {"$type": "array"}}, on=on)] + queries,
+                     requires=["eager"]))
+    return out
+
+
 def open_latest_no_cache(G, **kw):
     """open latest with no cache_dir (a file-system option): for the cases a runner without fs (a browser) runs.
     The SDK uses its default cache, which the driver puts in the case's temporary directory."""
@@ -1798,6 +1843,7 @@ GROUPS = {
     "v1": lambda R2, R1: group_v1(),
     "format": lambda R2, R1: group_format(),
     "rules": lambda R2, R1: group_rules(),
+    "lifecycle": lambda R2, R1: group_lifecycle(R2),
 }
 
 

@@ -91,4 +91,35 @@ class LifecycleTest < Minitest::Test
     ensure
         c&.close
     end
+
+    # CR2 DR32: after close the metadata stays readable, and every query and
+    # iterator step (also of an iterator made before close) is io.
+    def test_after_close_metadata_readable_and_queries_io
+        %i[eager stream].each do |mode|
+            c = OTC.new(file: fixture("good", "OTC_20991231.2.jsonl"), mode: mode)
+            sub = c.station("OTC-T-0003")
+            ref = c.reference_station(sub)
+            rel = c.release
+            it = rel.iter_stations
+            it.next
+            c.close
+            assert_same rel, c.release, "the release attribute stays readable after close"
+            assert_equal ["20991231.2", "1.0"], [rel.datestamp, rel.format_version]
+            refute_nil rel.created
+            assert_includes rel.citation, "20991231.2"
+            assert_kind_of Array, rel.files
+            calls = {
+                station: -> { rel.station("OTC-T-0001") }, tombstone: -> { rel.tombstone("OTC-T-0005") },
+                reference_station: -> { rel.reference_station(sub) }, subordinates_of: -> { rel.subordinates_of(ref) },
+                stats: -> { rel.stats }, station_count: -> { rel.station_count }, conventions: -> { rel.conventions },
+                licences: -> { rel.licences }, constituent_names: -> { rel.constituent_names },
+                attribution: -> { rel.attribution }, iter_before_close: -> { it.next },
+                iter_after_close: -> { rel.iter_stations.next }
+            }
+            calls.each do |name, call|
+                err = assert_raises(OTC::FileError, "#{mode} #{name}") { call.call }
+                assert_includes err.message, "the release is closed"
+            end
+        end
+    end
 end

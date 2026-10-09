@@ -443,3 +443,24 @@ test("R2-125/CR2 DR5: an update worker that cannot start never escapes a query: 
         srv.close();
     }
 });
+
+test("CR2 DR32: after close, metadata and client.release stay readable; queries and an iterator made before close are io", async () => {
+    for (const mode of ["eager", "stream"]) {
+        const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), mode });
+        const rel = c.release;
+        const sub = c.station("OTC-T-0003");
+        const ref = c.referenceStation(sub);
+        const it = c.iterStations();
+        it.next();
+        c.close();
+        assert.equal(c.release, rel, `${mode}: client.release after close`);
+        assert.deepEqual([rel.datestamp, rel.format_version], ["20991231.2", "1.0"]);
+        assert.ok(rel.created);
+        assert.match(rel.citation, /20991231\.2/);
+        assert.ok(Array.isArray(rel.files));
+        assert.throws(() => it.next(), isCode("io"), `${mode}: an iterator made before close`);
+        assert.throws(() => rel.referenceStation(sub), isCode("io"), mode);
+        assert.throws(() => rel.subordinatesOf(ref), isCode("io"), mode);
+        assert.throws(() => rel.stats, isCode("io"), mode);
+    }
+});

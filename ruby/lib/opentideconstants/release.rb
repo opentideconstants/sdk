@@ -21,8 +21,11 @@ class OpenTideConstants
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
                            :aliases, :pos, :len, :station, keyword_init: true)
 
+        # The metadata: readable after close too (CR2 DR32). Every other
+        # method is a query, and after close it is io "the release is
+        # closed" (spec §4.2, CR D21).
         attr_reader :datestamp, :created, :format_version, :concept_doi, :zenodo_version_doi, :source_versions,
-                    :build_commit, :changelog_url, :files, :conventions, :licences, :constituent_names
+                    :build_commit, :changelog_url, :files
 
         # meta: the release document without its stations. stations: an
         # enumerator of [raw_station, pos, len]. files: [FileInfo]. checks:
@@ -36,6 +39,7 @@ class OpenTideConstants
             @io = io
             @on_bad_index = on_bad_index
             @io_lock = Mutex.new
+            @state = { closed: false } # not frozen with the Release: close sets it
             @files = files.sort_by(&:name).freeze
             @checks = checks.freeze
             Util.deep_freeze(meta)
@@ -117,23 +121,43 @@ class OpenTideConstants
 
         # ---- release-level values
 
+        def conventions
+            check_open!
+            @conventions
+        end
+
+        def licences
+            check_open!
+            @licences
+        end
+
+        def constituent_names
+            check_open!
+            @constituent_names
+        end
+
         def convention(convention_id)
+            check_open!
             @convention_by_id[convention_id]
         end
 
         def licence(licence_id)
+            check_open!
             @licence_by_id[licence_id]
         end
 
         def station_count
+            check_open!
             @entries.size
         end
 
         def tombstone_count
+            check_open!
             @tombstones.size
         end
 
         def stats
+            check_open!
             count = ->(values) { values.compact.tally.sort_by { |k, _| k.to_s }.to_h.freeze }
             Stats.new(type: count.call(@entries.map(&:type)), kind: count.call(@entries.map(&:kind)),
                       country: count.call(@entries.map(&:country)), source: count.call(@set_sources),
@@ -155,6 +179,7 @@ class OpenTideConstants
         # skipped (CR D2). A licence with no provider prints its attribution
         # alone and is never merged with another.
         def attribution(stations = nil)
+            check_open!
             raise InvalidArgumentError, "stations must be an Array of Station" unless stations.nil? || stations.is_a?(Array)
             ids = if stations.nil? || stations.empty?
                       @licences.map(&:licence_id)
@@ -195,12 +220,14 @@ class OpenTideConstants
         # ---- station queries (spec §4.4)
 
         def station(station_id)
+            check_open!
             check_id!(station_id)
             e = @by_id[station_id]
             e && materialize(e)
         end
 
         def require_station(station_id)
+            check_open!
             check_id!(station_id)
             e = @by_id[station_id]
             return materialize(e) if e
@@ -210,11 +237,13 @@ class OpenTideConstants
         end
 
         def tombstone(station_id)
+            check_open!
             check_id!(station_id)
             @tomb_by_id[station_id]
         end
 
         def station_by_alias(system, alias_id)
+            check_open!
             unless (system.is_a?(String) || system.is_a?(Symbol)) && alias_id.is_a?(String)
                 raise InvalidArgumentError, "system must be a String or Symbol and alias_id a String"
             end
@@ -223,18 +252,27 @@ class OpenTideConstants
         end
 
         def stations(**filters)
+            check_open!
             filter(filters).map { |e| materialize(e) }.freeze
         end
 
+        # Each step checks that the release is not closed, also for an
+        # enumerator made before close (CR2 DR32).
         def iter_stations(**filters)
+            check_open!
             list = filter(filters)
             return enum_for(:iter_stations, **filters) unless block_given?
-            list.each { |e| yield materialize(e) }
+            list.each do |e|
+                check_open!
+                yield materialize(e)
+            end
+            check_open!
             self
         end
         alias each_station iter_stations
 
         def search(name: nil, limit: nil, match: nil, **filters)
+            check_open!
             raise InvalidArgumentError, "name must be a String" unless name.is_a?(String)
             check_limit!(limit)
             unless match.nil? || match.to_s == "exact"
@@ -260,6 +298,7 @@ class OpenTideConstants
         end
 
         def near(lat: nil, lon: nil, radius_km: nil, limit: nil, **filters)
+            check_open!
             check_point!(lat, lon)
             unless real?(radius_km) && radius_km >= 0
                 raise InvalidArgumentError, "radius_km must be a number >= 0"
@@ -271,6 +310,7 @@ class OpenTideConstants
         end
 
         def nearest(lat: nil, lon: nil, max_km: nil, **filters)
+            check_open!
             check_point!(lat, lon)
             unless max_km.nil? || (real?(max_km) && max_km >= 0)
                 raise InvalidArgumentError, "max_km must be nil or a number >= 0"
@@ -281,12 +321,14 @@ class OpenTideConstants
         end
 
         def reference_station(station)
+            check_open!
             raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
             off = station.subordinate_offsets
             off && off.reference_station_id && station(off.reference_station_id)
         end
 
         def subordinates_of(station)
+            check_open!
             raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
             (@subordinates[station.station_id] || []).map { |e| materialize(e) }.freeze
         end
@@ -316,8 +358,15 @@ class OpenTideConstants
         end
 
         def close
-            @io_lock.synchronize { @io.close if @io && !@io.closed? }
+            @io_lock.synchronize do
+                @state[:closed] = true
+                @io.close if @io && !@io.closed?
+            end
             nil
+        end
+
+        def check_open!
+            raise FileError.new("the release is closed", path: @io&.path) if @state[:closed]
         end
 
         # The resolved kind of each active station, {station_id => "tide" | "current" | "other" | nil},

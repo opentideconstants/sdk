@@ -415,9 +415,9 @@ export class OpenTideConstants {
 
     // ------------------------------------------------------------------ release management (spec 4.3)
 
-    /** The loaded release. */
+    /** The loaded release. After close it stays readable: the closed Release, whose metadata stays readable (CR2 DR32). */
     get release(): Release {
-        return this.#current();
+        return this.#closed ? this.#release : this.#current();
     }
 
     /** Where the loaded release came from. */
