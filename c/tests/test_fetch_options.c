@@ -23,6 +23,7 @@ int main(void)
     size_t need;
     static const double bad[] = {-2.0, -0.001};
     size_t i;
+    unsetenv("OPENTIDECONSTANTS_OFFLINE");
     otc_fetch_options_init(&fo);
     CHECK(fo.timeout_s == OTC_TIMEOUT_DEFAULT && fo.formats == OTC_FORMATS_DEFAULT);
     otc_error_init(&err);
@@ -39,6 +40,13 @@ int main(void)
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
     fo.timeout_s = 1e300;   /* too large for the millisecond options of libcurl */
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    /* too small for them: 0.1 ms would be CONNECTTIMEOUT_MS 0 (libcurl's 300 s) and no read timeout */
+    fo.timeout_s = 0.0001;
+    {
+        otc_status st = otc_fetch_latest(&fo, path, sizeof path, &need);
+        if (st != OTC_E_INVALID_ARGUMENT) fprintf(stderr, "timeout_s 0.0001: %s, want invalid_argument\n", otc_status_code(st));
+        PENDING("PK-R2-13", st == OTC_E_INVALID_ARGUMENT);
+    }
     /* CR 4c */
     fo.timeout_s = 0;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
@@ -95,7 +103,6 @@ int main(void)
         otc_fetch_options small;
         otc_error e2;
         otc_fetch_options_init(&small);
-        memset(&e2, 0x5A, sizeof e2);
         otc_error_init(&e2);
         small.error = &e2;
         small.struct_size = sizeof small - 1;

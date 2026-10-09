@@ -1,50 +1,70 @@
 /* PK11 / C22: a cached file that fails its check.
- *  - online: the release is downloaded again (and the good file is back);
- *  - after a network error with use_cache: the error is the network's, not
- *    the corrupt cache's checksum_mismatch. */
+ *  - after a network error with use_cache: the cache is tried (and fails its
+ *    check), and the error is the network's, not the corrupt cache's
+ *    checksum_mismatch;
+ *  - online: the release is downloaded again because its check failed (and
+ *    the good file is back).
+ * The library's own log lines show which path ran. */
 #include "otc_test.h"
+
+static int g_fallback_failed, g_redownload;
+
+static void log_fn(void *u, int level, const char *msg)
+{
+    (void)u;
+    if (level == 2 && strstr(msg, "cannot be used either")) g_fallback_failed++;
+    if (level == 2 && strstr(msg, "failed its check (") && strstr(msg, "downloading it again")) g_redownload++;
+}
 
 static void corrupt(const char *path)
 {
     FILE *f = fopen(path, "r+b");
     int ch;
     if (!f) { perror(path); exit(2); }
-    fseek(f, 100, SEEK_SET);
-    ch = fgetc(f);
-    fseek(f, 100, SEEK_SET);
-    fputc(ch == 'x' ? 'y' : 'x', f);
-    fclose(f);
+    if (fseek(f, 100, SEEK_SET) != 0 || (ch = fgetc(f)) == EOF || fseek(f, 100, SEEK_SET) != 0
+        || fputc(ch == 'x' ? 'y' : 'x', f) == EOF || fclose(f) != 0) {
+        perror(path);
+        exit(2);
+    }
 }
 
 int main(void)
 {
-    char *cache = test_tmpdir(), base[512], path[4096], *jsonl;
+    char *cache = test_tmpdir(), base[512], path[4096];
     otc_fetch_options fo;
     otc_release *rel = NULL;
     otc_error err;
     size_t need;
-    if (!test_server()) { printf("test_fetch_heal: skipped (no OTC_TEST_SERVER)\n"); return 0; }
+    if (!test_server()) return test_skip("test_fetch_heal", "no OTC_TEST_SERVER");
     otc_fetch_options_init(&fo);
     otc_error_init(&err);
     snprintf(base, sizeof base, "%s/good/", test_server());
     fo.cache_dir = cache;
     fo.base_url = base;
     fo.error = &err;
+    fo.log_fn = log_fn;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_OK);
-    jsonl = test_join(cache, "v1/releases/20991231.2/OTC_20991231.2.jsonl");
-    /* the network is down, the cache is corrupt: network error */
-    corrupt(jsonl);
+    CHECK(strstr(path, "OTC_20991231.2.jsonl") != NULL);
+    /* the network is down, the cache is corrupt: the cache is tried, and the error is the network's */
+    corrupt(path);
+    CHECK(otc_verify_file(path, NULL, &err) == OTC_E_CHECKSUM);   /* the premise */
     fo.base_url = "http://127.0.0.1:9/";
+    g_fallback_failed = g_redownload = 0;
     CHECK_STATUS(otc_fetch_open(&fo, NULL, NULL, &rel), OTC_E_NETWORK);
+    CHECK(rel == NULL);
+    CHECK(g_fallback_failed == 1);
+    CHECK(err.status == OTC_E_NETWORK && strstr(err.message, "SHA-256") == NULL);
+    if (err.status != OTC_E_NETWORK || strstr(err.message, "SHA-256")) fprintf(stderr, "error: %s\n", err.message);
     otc_close(rel);
     rel = NULL;
-    /* online again: healed */
+    /* online again: downloaded again because the check failed, and healed */
     fo.base_url = base;
+    g_fallback_failed = g_redownload = 0;
     CHECK_STATUS(otc_fetch_open(&fo, NULL, NULL, &rel), OTC_OK);
     if (rel) CHECK(otc_release_loaded_from(rel) == OTC_LOADED_FROM_DOWNLOAD);
+    CHECK(g_redownload == 1);
     otc_close(rel);
-    CHECK_STATUS(otc_verify_file(jsonl, NULL, &err), OTC_OK);
-    free(jsonl);
+    CHECK_STATUS(otc_verify_file(path, NULL, &err), OTC_OK);
     free(cache);
     return test_done("test_fetch_heal");
 }

@@ -1,6 +1,8 @@
 /* PK20 / C25: otc_fetch_open passes the caller's open options to the open
  * of the cached file: its log_fn sees that open, and require_checksum
- * applies (spec 4.2, header of otc_fetch_open). */
+ * applies (spec 4.2, header of otc_fetch_open): with the .sha256 gone, the
+ * same open gives io with require_checksum, and opens from the cache without
+ * it (the control, so the io is require_checksum's doing). */
 #include "otc_test.h"
 
 static int g_file_open_logged;
@@ -19,7 +21,7 @@ int main(void)
     otc_open_options oo;
     otc_release *rel = NULL;
     otc_error err;
-    if (!test_server()) { printf("test_fetch_open_opts: skipped (no OTC_TEST_SERVER)\n"); return 0; }
+    if (!test_server()) return test_skip("test_fetch_open_opts", "no OTC_TEST_SERVER");
     otc_fetch_options_init(&fo);
     otc_open_options_init(&oo);
     otc_error_init(&err);
@@ -36,11 +38,19 @@ int main(void)
     /* from the cache, require_checksum with the .sha256 removed: io */
     {
         char *sums = test_join(cache, "v1/releases/20991231.2/OTC_20991231.2.sha256");
-        unlink(sums);
+        if (unlink(sums) != 0) { perror(sums); return 2; }
         free(sums);
     }
     fo.offline = true;
     CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", &oo, &rel), OTC_E_IO);
+    CHECK(strstr(err.message, "require_checksum") != NULL);
+    if (!strstr(err.message, "require_checksum")) fprintf(stderr, "error: %s\n", err.message);
+    otc_close(rel);
+    rel = NULL;
+    /* the control: the same open without require_checksum opens the cached release */
+    oo.require_checksum = false;
+    CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", &oo, &rel), OTC_OK);
+    if (rel) CHECK(otc_release_loaded_from(rel) == OTC_LOADED_FROM_CACHE);
     otc_close(rel);
     free(cache);
     return test_done("test_fetch_open_opts");
