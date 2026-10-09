@@ -119,8 +119,16 @@ jobs:
           cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
       - name: Install the tarball in a clean container and run the quickstart against the fixture server
         run: |
-          uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 &
-          sleep 3
+          uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 >"$RUNNER_TEMP/server.log" 2>&1 &
+          server=$!
+          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "--- fixture server log"; cat "$RUNNER_TEMP/server.log"; fi' EXIT
+          # Wait until the server answers (at most 60 s; uv may first fetch a Python).
+          for _ in $(seq 1 120); do
+            if curl -s -o /dev/null http://127.0.0.1:18765/ && curl -s -o /dev/null http://127.0.0.1:18766/; then break; fi
+            kill -0 "$server" 2>/dev/null || { echo "the fixture server exited before it was ready"; exit 1; }
+            sleep 0.5
+          done
+          curl -s -o /dev/null http://127.0.0.1:18765/ || { echo "the fixture server is not ready after 60 s"; exit 1; }
           docker run --rm --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim sh -ec '
             node --version
             mkdir /app && cd /app && npm init -y >/dev/null

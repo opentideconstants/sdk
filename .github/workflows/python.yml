@@ -67,16 +67,26 @@ jobs:
           grep "opentideconstants/supported-formats.json" wheel-files.txt
       - name: Install the wheel in a clean python:3.10-slim container, run the unit tests on it, and run the quickstart against the fixture server
         run: |
-          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim sh -c '
-            set -e
-            pip install --no-index --quiet /dist/opentideconstants-*-py3-none-any.whl
-            cd /tmp
-            OTC_TEST_INSTALLED=1 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s /repo/python/tests -v
-            python /repo/conformance/server.py --port 8765 --proxy-port 8766 >/tmp/server.log 2>&1 &
-            sleep 2
-            OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:8765/good/ python /repo/python/examples/quickstart.py
-            python /repo/conformance/runners/python/check_api.py --installed
-            python /repo/conformance/driver.py --runner "python /repo/conformance/runners/python/runner.py --installed"'
+          docker run --rm -i -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim bash -eo pipefail -s <<'SCRIPT'
+          pip install --no-index --quiet /dist/opentideconstants-*-py3-none-any.whl
+          cd /tmp
+          OTC_TEST_INSTALLED=1 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s /repo/python/tests -v
+          python /repo/conformance/server.py --port 8765 --proxy-port 8766 >/tmp/server.log 2>&1 &
+          server=$!
+          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "--- fixture server log"; cat /tmp/server.log; fi' EXIT
+          # Wait until the server accepts connections on both ports (at most 30 s).
+          for _ in $(seq 1 150); do
+            if python -c 'import socket; [socket.create_connection(("127.0.0.1", p), 1).close() for p in (8765, 8766)]' 2>/dev/null; then
+              break
+            fi
+            kill -0 "$server" 2>/dev/null || { echo "the fixture server exited before it was ready"; exit 1; }
+            sleep 0.2
+          done
+          python -c 'import socket; [socket.create_connection(("127.0.0.1", p), 1).close() for p in (8765, 8766)]' || { echo "the fixture server is not ready after 30 s"; exit 1; }
+          OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:8765/good/ python /repo/python/examples/quickstart.py
+          python /repo/conformance/runners/python/check_api.py --installed
+          python /repo/conformance/driver.py --runner "python /repo/conformance/runners/python/runner.py --installed"
+          SCRIPT
       - uses: actions/upload-artifact@v4
         with:
           name: python-dist
