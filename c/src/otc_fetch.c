@@ -44,6 +44,7 @@
 #define USER_AGENT SDK_ID " (+https://opentideconstants.org)"
 #define CONNECT_TIMEOUT_S 10.0
 #define READ_TIMEOUT_S 60.0
+#define TIMEOUT_MAX_S 1.0e6
 #define ATTEMPTS 3
 #define RETRY_AFTER_MAX_S 60.0
 /* spec 5.4 Locks; the tests (c/tests/test_fetch_lock.c) build a copy with short timers */
@@ -510,6 +511,11 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     c->formats = (o && o->formats) ? o->formats : (unsigned)OTC_FORMAT_JSONL;
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: unknown bits");
+    /* timeout_s: 0 is the defaults; otherwise a finite number of seconds, at most
+     * TIMEOUT_MAX_S so that the millisecond options of libcurl stay in a long */
+    if (o && (!(o->timeout_s >= 0) || o->timeout_s > TIMEOUT_MAX_S))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "timeout_s must be 0 (the defaults) or a number of seconds up to %g",
+                    TIMEOUT_MAX_S);
     c->connect_s = (o && o->timeout_s > 0) ? o->timeout_s : CONNECT_TIMEOUT_S;
     c->read_s = (o && o->timeout_s > 0) ? o->timeout_s : READ_TIMEOUT_S;
     c->raise = o && o->on_network_error == OTC_ON_NETWORK_ERROR_RAISE;
