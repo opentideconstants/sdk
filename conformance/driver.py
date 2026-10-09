@@ -1123,6 +1123,8 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                     if status != 0:
                         failures.append({"step": i, "driver": "restart_runner", "runner_fault": True,
                                          "problems": [f"the runner exited with status {status} when it was stopped"]})
+                        if not all_steps:   # a failed step stops the case, as every other one does
+                            break
                     env_extra.update(restart_env)
                     live["main"] = start("main")
                 if problems:

@@ -542,3 +542,19 @@ def test_check_cases_lints_the_expected_failure_step(tmp_path, step):
     bad = [{"case": "a", "runners": ["python"], "package": "PK01", "reason": "x", "step": step}]
     r = run_driver("--check-cases", "--cases", str(cases), "--expected-failures", str(_xf(tmp_path, bad)))
     assert r.returncode == 2 and re.search(r"^PROBLEM expected-failures entry 0 .*step", r.stdout, re.M), r.stdout[-400:]
+
+
+# --- R2-148: a restart_runner whose old runner exits non-zero stops the case (without --all-steps), like any failed step
+
+def test_failed_restart_stops_the_case(tmp_path):
+    p = tmp_path / "exit1.py"
+    p.write_text("import sys\nprint('{\"hello\": {\"runner\": \"fake\", \"features\": []}}', flush=True)\n"
+                 "for l in sys.stdin:\n    print('{\"ok\": true, \"result\": {\"count\": 1}}', flush=True)\nsys.exit(1)\n")
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"driver": "restart_runner"}, OK_STEP]}])
+    report = tmp_path / "r.json"
+    r = run_driver("--runner", f"{sys.executable} {p}", "--cases", str(cases), "--report", str(report))
+    doc = json.loads(report.read_text())
+    assert re.search(r"^FAIL  a  \[step 0 restart_runner\]", r.stdout, re.M) and r.returncode == 1, r.stdout[-500:]
+    assert doc["steps"]["steps_compared"] == 0, doc["steps"]       # step 1 did not run
+    r = run_driver("--runner", f"{sys.executable} {p}", "--cases", str(cases), "--report", str(report), "--all-steps")
+    assert json.loads(report.read_text())["steps"]["steps_compared"] == 1, r.stdout[-500:]   # --all-steps goes on
