@@ -675,11 +675,27 @@ class ChecksumTest(unittest.TestCase):
             srv.close()
         p = self.dir / "OTC_20991231.2.jsonl"
         p.write_bytes(p.read_bytes()[:-10])
-        with self.assertRaises(otc.ChecksumError) as cm:
-            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+        with self.assertRaises(otc.ChecksumError) as cm:  # pinned: the release asked for is corrupt
+            otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream", release="20991231.2")
         self.assertIsNotNone(cm.exception.expected)
         self.assertIsNotNone(cm.exception.actual)
         self.assertFalse(p.exists())
+        self.assertFalse((self.dir / ".verified").exists())
+
+    def test_offline_latest_heals_a_corrupt_release_and_raises_offline_when_none_loads(self):
+        # spec §5.2 step 6 (CR2 DR16): the corrupt release is healed; with no other one, the original error
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream").close()
+        finally:
+            srv.close()
+        p = self.dir / "OTC_20991231.2.jsonl"
+        p.write_bytes(p.read_bytes()[:-10])
+        with self.assertLogs("opentideconstants", "WARNING"):
+            with self.assertRaises(otc.OfflineError):
+                otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+        self.assertFalse(p.exists())
+        self.assertFalse((self.dir / ".verified").exists())
 
 
 class HttpTest(unittest.TestCase):

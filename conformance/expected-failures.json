@@ -5,7 +5,6 @@
    "case": "cache/newest-bitrot-verify-on-open-network-error",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -16,7 +15,6 @@
    "case": "cache/newest-corrupt-network-error",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -27,7 +25,6 @@
    "case": "cache/newest-corrupt-offline",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -38,7 +35,6 @@
    "case": "cache/newest-corrupt-undeletable-offline",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK-R2-10",
@@ -47,7 +43,6 @@
   {
    "case": "cache/newest-unparsable-offline-eager",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -75,7 +70,6 @@
    "case": "cache/only-cached-corrupt-network-error",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -86,7 +80,6 @@
    "case": "cache/only-cached-corrupt-offline",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],

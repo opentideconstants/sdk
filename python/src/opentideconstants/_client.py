@@ -268,23 +268,38 @@ class OpenTideConstants:
         rel._opened = tuple(check)
         return rel
 
-    def _load_cached_or_heal(self, datestamp: str, mode: str, info: Optional[ReleaseInfo], redownload=True):
-        """Load a cached release. A cached file that fails its size or SHA-256 check is deleted with .verified
-        (spec §4.8 checksum_mismatch), and, online, the release is downloaded again. Returns (Release, loaded_from)."""
+    def _heal(self, datestamp: str, mode: str, e: Exception) -> None:
+        """Remove a cached release that failed its size or SHA-256 check or does not parse (spec §5.2 step 6, §4.8):
+        its .verified goes first, so it is no longer trusted, then the bad file (the one the check names, or the data
+        files of this mode). A failure to delete is logged; it never hides the original error."""
+        self._log.warning("cached release %s is corrupt (%s); it is removed from the cache", datestamp, e)
+        d = self._cache.release_dir(datestamp)
+        bad = getattr(e, "file", None)
+        if bad:
+            files = [d / Path(bad).name]  # only ever a file of this release's directory
+        else:
+            path = d / f"OTC_{datestamp}.json"
+            if mode == "stream" or not path.is_file():
+                path = d / f"OTC_{datestamp}.jsonl"
+                files = [path, meta_path_for(path)]
+            else:
+                files = [path]
+        for p in [d / ".verified"] + files:
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as ux:
+                self._log.warning("cannot remove %s: %s", p, ux)
+
+    def _load_cached_or_heal(self, datestamp: str, mode: str, info: Optional[ReleaseInfo]):
+        """Load a cached release. One that fails its size or SHA-256 check or does not parse is healed (spec §5.2
+        step 6), and, online, downloaded again. Returns (Release, loaded_from)."""
         try:
             return self._load_cached(datestamp, mode), "cache"
-        except ChecksumError as e:
-            self._log.warning("cached release %s is corrupt (%s); it is removed from the cache", datestamp, e)
-            d = self._cache.release_dir(datestamp)
-            for p in (d / ".verified", Path(e.file) if e.file else None):
-                if p is not None:
-                    try:
-                        p.unlink()
-                    except FileNotFoundError:
-                        pass
-                    except OSError as ux:
-                        self._log.warning("cannot remove %s: %s", p, ux)
-            if self._offline or not redownload:
+        except (ChecksumError, InvalidReleaseError) as e:
+            self._heal(datestamp, mode, e)
+            if self._offline:
                 raise
             return self._download_to_cache(datestamp, mode, info), "download"
 
@@ -317,13 +332,13 @@ class OpenTideConstants:
         except (ValueError, UnicodeDecodeError, KeyError, TypeError):
             return {}
 
-    def _newest_cached(self, mode: str):
-        """The newest verified cached release this SDK reads (spec §5.2 step 1): its format major and
-        min_reader_version come from .verified or the cached index."""
+    def _cached_candidates(self, mode: str):
+        """The verified cached releases this SDK reads, newest first (spec §5.2 step 1): their format major and
+        min_reader_version come from .verified or the cached index. A release with no recorded version is a
+        candidate too; its own header is read when it is loaded (never guess, CR D9)."""
         index = None
         for ds in self._cache.cached():
-            path = self._usable(ds, mode)
-            if path is None:
+            if self._usable(ds, mode) is None:
                 continue
             v = self._cache.read_verified(ds) or {}
             fv, mr = v.get("format_version"), v.get("min_reader_version")
@@ -332,17 +347,27 @@ class OpenTideConstants:
                     index = self._cached_index_entries()
                 ifv, imr = index.get(ds, (None, None))
                 fv, mr = fv or ifv, mr or imr
-            if fv is None:
-                # no recorded version: read the release's own header before choosing it (never guess, CR D9)
-                try:
-                    self._load_cached(ds, mode)._close()
-                except (UnsupportedFormatError, ReaderTooOldError, InvalidReleaseError) as e:
-                    self._log.info("cached release %s is not readable: %s", ds, e)
-                    continue
-                return ds
-            if not readable(fv, mr):
+            if fv is not None and not readable(fv, mr):
                 continue
+            yield ds
+
+    def _newest_cached(self, mode: str):
+        """The newest cached release this SDK reads (spec §5.2 step 1), without loading it."""
+        for ds in self._cached_candidates(mode):
             return ds
+        return None
+
+    def _load_newest_cached(self, mode: str):
+        """Load the newest cached release this SDK reads (spec §5.2 steps 1, 5 and 6). A candidate that fails its
+        check or does not parse is healed and the next older one is tried; one whose format this SDK cannot read is
+        skipped. Returns the Release, or None when no candidate loads (the caller raises its original error)."""
+        for ds in self._cached_candidates(mode):
+            try:
+                return self._load_cached(ds, mode)
+            except (UnsupportedFormatError, ReaderTooOldError) as e:
+                self._log.info("cached release %s is not readable: %s", ds, e)
+            except (ChecksumError, InvalidReleaseError) as e:
+                self._heal(ds, mode, e)
         return None
 
     # ---- pointer and index
@@ -623,10 +648,10 @@ class OpenTideConstants:
     def _open_latest(self) -> None:
         self._ensure_cache_root()
         if self._offline:
-            ds = self._newest_cached(self._mode)
-            if ds is None:
+            rel = self._load_newest_cached(self._mode)
+            if rel is None:
                 raise OfflineError("offline, and no release is in the cache")
-            self._set(*self._load_cached_or_heal(ds, self._mode, None))
+            self._set(rel, "cache")
             return
         try:
             info = self._latest_info()
@@ -636,11 +661,11 @@ class OpenTideConstants:
                 return
             self._set(self._download_to_cache(info.datestamp, self._mode, info), "download")
         except NetworkError as e:
-            ds = self._newest_cached(self._mode) if self._on_network_error == "use_cache" else None
-            if ds is None:
+            rel = self._load_newest_cached(self._mode) if self._on_network_error == "use_cache" else None
+            if rel is None:
                 raise
-            self._log.warning("network error (%s); using the cached release %s", e, ds)
-            self._set(self._load_cached_or_heal(ds, self._mode, None, redownload=False)[0], "cache_after_error")
+            self._log.warning("network error (%s); using the cached release %s", e, rel.datestamp)
+            self._set(rel, "cache_after_error")
             self._last_error = e
 
     # ------------------------------------------------------------------ release management
