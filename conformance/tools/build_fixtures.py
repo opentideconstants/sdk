@@ -629,9 +629,13 @@ def honest(change):
     return t
 
 
-def _gz_differs(files):
+def gz_differs(files, sums, entry, reuse):
+    """The .json.gz holds other data than the .json. It goes through gz(), like every other .json.gz, so the
+    committed bytes are reused when they hold the same tampered data and a different zlib build changes nothing."""
+    files = dict(files)
     name = next(n for n in files if n.endswith(".json.gz"))
-    files[name] = gzip.compress(files[name[:-3]].replace(b"San Francisco", b"San Franciscx", 1), compresslevel=9, mtime=0)
+    files[name] = gz(files[name[:-3]].replace(b"San Francisco", b"San Franciscx", 1), reuse / name if reuse else None)
+    return rehash(files, sums, entry)
 
 
 def _jsonl_differs(files):
@@ -767,7 +771,7 @@ BAD = [
     # turning a rule off fails --check. The first three are reader-only (D37: SDKs do not cross-check the files of a
     # release; each file is checked against OTC_{D}.sha256).
     ("gz-differs", "checksum_mismatch", "honest digests, but the .json.gz decompresses to other data than the .json (reader only, D37)",
-     lambda: [release_doc(BASE)], honest(_gz_differs)),
+     lambda: [release_doc(BASE)], gz_differs),
     ("jsonl-differs", "invalid_release", "honest digests, but a .jsonl line differs from the .json station (reader only, D37)",
      lambda: [release_doc(BASE)], honest(_jsonl_differs)),
     ("meta-differs", "invalid_release", "honest digests, but the .meta.json differs from the .json without stations (reader only, D37)",
