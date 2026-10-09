@@ -96,7 +96,7 @@ otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed)
 const char *otc__jstr(const cJSON *obj, const char *key);
 /* A number member, or NaN. */
 double otc__jnum(const cJSON *obj, const char *key);
-/* An integer member, or -1. */
+/* A whole, non-negative number member, or -1 (missing, not a number, or with a fraction). */
 int64_t otc__jint(const cJSON *obj, const char *key);
 const cJSON *otc__jget(const cJSON *obj, const char *key);
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...);

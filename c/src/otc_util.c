@@ -336,7 +336,9 @@ double otc__jnum(const cJSON *obj, const char *key)
 int64_t otc__jint(const cJSON *obj, const char *key)
 {
     const cJSON *v = otc__jget(obj, key);
-    if (!cJSON_IsNumber(v) || v->valuedouble < 0 || v->valuedouble > 9.0e18) return -1;
+    /* a count is a whole number; a fraction is not cut to one, it reads as missing */
+    if (!cJSON_IsNumber(v) || !(v->valuedouble >= 0) || v->valuedouble > 9.0e18 || v->valuedouble != floor(v->valuedouble))
+        return -1;
     return (int64_t)v->valuedouble;
 }
 
