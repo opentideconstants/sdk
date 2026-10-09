@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.cc }}" = msvc ]; then
-            cmake -S c -B c/build
+            cmake -S c -B c/build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           else
             cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           fi
@@ -77,7 +77,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.cc }}" = msvc ]; then
-            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           else
             cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
           fi
