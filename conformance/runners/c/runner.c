@@ -809,30 +809,40 @@ static void op_open(request *q, reply *r)
         set_error(r, "invalid_argument", "file cannot be combined with release, offline or on_network_error");
         return;
     }
-    close_current();
-    client_free();
-    g_client.cache_dir = dup_or_null(arg_str(&q->a, "cache_dir"));
-    g_client.base_url = dup_or_null(arg_str(&q->a, "base_url"));
-    g_client.proxy = dup_or_null(arg_str(&q->a, "proxy"));
-    g_client.ca_file = dup_or_null(arg_str(&q->a, "ca_file"));
-    g_client.user_agent = dup_or_null(arg_str(&q->a, "user_agent"));
-    g_client.offline = arg_bool(&q->a, "offline", false);
-    /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it is,
-     * so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails loudly */
-    g_client.timeout_s = arg_num(&q->a, "timeout", OTC_TIMEOUT_DEFAULT);
-    if (q->a.obj && cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(q->a.obj, "timeout")) &&
-        g_client.timeout_s == OTC_TIMEOUT_DEFAULT) {
-        set_error(r, "uncaught:TimeoutSentinel", "timeout equals OTC_TIMEOUT_DEFAULT, which C reads as the defaults");
-        return;
+    {   /* every option is read and checked before anything changes: a rejected open keeps the open release and the
+         * client options, as in the other SDKs */
+        const char *cache_dir = arg_str(&q->a, "cache_dir"), *base_url = arg_str(&q->a, "base_url");
+        const char *proxy = arg_str(&q->a, "proxy"), *ca_file = arg_str(&q->a, "ca_file");
+        const char *user_agent = arg_str(&q->a, "user_agent");
+        bool offline = arg_bool(&q->a, "offline", false), auto_update = arg_bool(&q->a, "auto_update", false);
+        /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it
+         * is, so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails
+         * loudly */
+        double timeout_s = arg_num(&q->a, "timeout", OTC_TIMEOUT_DEFAULT);
+        double update_interval = arg_num(&q->a, "update_interval", 86400.0);
+        if (q->a.bad) { set_error(r, "invalid_argument", "an open option has the wrong type"); return; }
+        if (q->a.obj && cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(q->a.obj, "timeout")) &&
+            timeout_s == OTC_TIMEOUT_DEFAULT) {
+            set_error(r, "uncaught:TimeoutSentinel", "timeout equals OTC_TIMEOUT_DEFAULT, which C reads as the defaults");
+            return;
+        }
+        close_current();
+        client_free();
+        g_client.cache_dir = dup_or_null(cache_dir);
+        g_client.base_url = dup_or_null(base_url);
+        g_client.proxy = dup_or_null(proxy);
+        g_client.ca_file = dup_or_null(ca_file);
+        g_client.user_agent = dup_or_null(user_agent);
+        g_client.offline = offline;
+        g_client.timeout_s = timeout_s;
+        g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
+        /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */
+        g_client.formats = mode && !strcmp(mode, "eager") ? (unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSONL) : OTC_FORMATS_DEFAULT;
+        g_client.pinned = file != NULL || (release && strcmp(release, "latest") != 0);
+        g_client.auto_update = auto_update;
+        g_client.update_interval = update_interval;
+        g_client.last_check = now_s();
     }
-    g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
-    /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */
-    g_client.formats = mode && !strcmp(mode, "eager") ? (unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSONL) : OTC_FORMATS_DEFAULT;
-    g_client.pinned = file != NULL || (release && strcmp(release, "latest") != 0);
-    g_client.auto_update = arg_bool(&q->a, "auto_update", false);
-    g_client.update_interval = arg_num(&q->a, "update_interval", 86400.0);
-    g_client.last_check = now_s();
-    if (q->a.bad) { set_error(r, "invalid_argument", "an open option has the wrong type"); return; }
     otc_error_init(&err);
     if (file) {
         otc_open_options opts;
