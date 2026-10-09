@@ -629,6 +629,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     env_extra.update(subst(case.get("env", {}), ctx))
     srv.set_rules([])
     srv.log.clear()
+    srv.errors.clear()
     proxy.log.clear()
     failures = []
     live = {}
@@ -712,6 +713,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     finally:
         for r in live.values():
             r.close()
+        if srv.errors:  # a server rule that could not be applied: the harness is wrong, not the SDK
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "server", "harness_error": True,
+                             "problems": [f"harness error: fixture server: {e}" for e in srv.errors[:5]]})
         if not srv.running:
             srv.resume()
         srv.set_rules([])

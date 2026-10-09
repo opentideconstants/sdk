@@ -28,6 +28,8 @@ What it does:
     {"match": RE, "action": "file", "file": "good/OTC_20991231.jsonl"}       serve another fixture file
     {"match": RE, "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}   serve one JSON value of a fixture (RFC 6901 pointer)
   Rules are tried in order; the first active match applies. "times" null = always.
+  A rule that cannot be applied when a request comes (for example a JSON pointer that does not resolve) gets a
+  500, a log entry with an "error", and a line in errors; the driver fails the case with a harness error.
 - Records every request (method, path, query, headers, status, time) in a log.
 - stop() closes the HTTP listener and every open (keep-alive) connection, and
   puts a tripwire on the same port: it accepts any connection, records it, and
@@ -209,6 +211,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:  # a rule that cannot be applied: log it and answer 500, do not drop the connection
             msg = f"{type(e).__name__}: {e}"
             print(f"fixture server: cannot serve {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
+            self.fx.errors.append(f"cannot serve {path} with rule {rule!r}: {msg}")
             self._record(500, rule.get("name") if rule else None, error=msg)
             try:
                 self.close_connection = True
@@ -307,6 +310,9 @@ class FixtureServer:
         self._conns = set()
         self._conns_lock = threading.Lock()
         self.trip_errors = []
+        # Harness errors: a rule that could not be applied to a request (the request got a 500). The driver fails
+        # the case when this list is not empty, so a broken rule never looks like correct SDK error handling.
+        self.errors = []
         self.running = False
 
     @property

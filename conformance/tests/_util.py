@@ -13,8 +13,9 @@ NULL_RUNNER = CONF / "runners" / "null" / "runner.py"
 
 # A fake runner: prints the hello from $FAKE_HELLO (raw line) and answers every
 # request with $FAKE_REPLY (raw line); FAKE_HELLO=- exits 3 with no hello. Optional $FAKE_STDERR is written first.
+# A request whose args have "fetch_url" makes the fake runner GET that URL first (the reply is still $FAKE_REPLY).
 FAKE_RUNNER = textwrap.dedent('''
-    import os, sys
+    import json, os, sys, urllib.request
     if os.environ.get("FAKE_STDERR"):
         sys.stderr.write(os.environ["FAKE_STDERR"] + "\\n"); sys.stderr.flush()
     if os.environ.get("FAKE_HOME_PROBE"):
@@ -25,6 +26,12 @@ FAKE_RUNNER = textwrap.dedent('''
     sys.stdout.write(hello + "\\n"); sys.stdout.flush()
     for line in sys.stdin:
         if line.strip():
+            url = (json.loads(line).get("args") or {}).get("fetch_url")
+            if url:
+                try:
+                    urllib.request.urlopen(url, timeout=10).read()
+                except Exception:
+                    pass
             sys.stdout.write(os.environ.get("FAKE_REPLY", '{"ok": true, "result": {}}') + "\\n"); sys.stdout.flush()
 ''')
 
