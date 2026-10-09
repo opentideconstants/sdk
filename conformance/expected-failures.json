@@ -1104,7 +1104,6 @@
   {
    "case": "rules/pk10/bad-ca-file-no-retry",
    "runners": [
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

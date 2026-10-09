@@ -470,6 +470,13 @@ static char *default_root(void)
 #endif
 }
 
+/* 1 for an absolute http:// or https:// URL with a host. */
+static int http_url(const char *u)
+{
+    size_t n = !strncmp(u, "http://", 7) ? 7 : !strncmp(u, "https://", 8) ? 8 : 0;
+    return n && u[n] && u[n] != '/' && !strchr(u, ' ');
+}
+
 /* 1 when the environment names a home for the default cache root. */
 static int default_root_env(void)
 {
@@ -509,6 +516,17 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
      * dropped when a file name is resolved against it (spec 4.2, 5.2) */
     c->base_url = (v[0] && v[strlen(v) - 1] != '/') ? otc__join(v, "/") : otc__strdup(v);
     if (!c->base || !c->base_url) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    /* spec 4.2, 5.7 (CR D19): checked here, before any network access; never retried, never a
+     * reason to fall back to the cache */
+    if (!http_url(c->base_url))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "base_url must be an absolute http or https URL: %s", c->base_url);
+    if (o && o->proxy && o->proxy[0] && !http_url(o->proxy))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "proxy must be an absolute http or https URL: %s", o->proxy);
+    if (o && o->ca_file) {
+        FILE *f = fs_kind(o->ca_file) == 2 ? fs_fopen(o->ca_file, "rb") : NULL;
+        if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
+        fclose(f);
+    }
     v = env_get("OPENTIDECONSTANTS_OFFLINE");
     c->offline = (o && o->offline) || (v && !strcmp(v, "1"));
     c->formats = (o && o->formats) ? o->formats : (unsigned)OTC_FORMAT_JSONL;

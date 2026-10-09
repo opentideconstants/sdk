@@ -1,6 +1,9 @@
 /* PK07 / C59: a timeout_s that is NaN, negative or infinite is
  * invalid_argument, checked before any network access (spec 4.2, 5.7). 0
- * means the defaults (connect 10 s, read 60 s). */
+ * means the defaults (connect 10 s, read 60 s).
+ * D19: a ca_file that does not exist is io, and a base_url or proxy that is
+ * not an absolute http(s) URL is invalid_argument, at the first call and
+ * before any network access (they never fall back to the cache). */
 #include "otc_test.h"
 
 #include <math.h>
@@ -32,6 +35,21 @@ int main(void)
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     fo.timeout_s = 2.5;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
+    /* D19 */
+    fo.timeout_s = 0;
+    fo.offline = false;
+    fo.on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
+    fo.base_url = "http://127.0.0.1:9/";   /* nothing listens there: any request would fail as network */
+    fo.ca_file = "/no/such/ca.pem";
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_IO);
+    fo.ca_file = NULL;
+    fo.base_url = "ftp://127.0.0.1/";
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    fo.base_url = "127.0.0.1/good/";
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    fo.base_url = "http://127.0.0.1:9/";
+    fo.proxy = "not a url";
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
     free(cache);
     return test_done("test_fetch_options");
 }

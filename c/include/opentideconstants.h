@@ -635,13 +635,15 @@ OTC_API otc_status otc_constituent_raw_json(const otc_set *set, size_t i, char *
 typedef struct otc_fetch_options {
     size_t               struct_size;   /* set by otc_fetch_options_init() */
     const char          *cache_dir;     /* NULL: OPENTIDECONSTANTS_CACHE_DIR, else the platform default (spec 5.4) */
-    const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/ */
+    const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/;
+                                           an absolute http(s) URL, else OTC_E_INVALID_ARGUMENT */
     bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE=1; no socket is ever opened */
     double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both, in seconds
                                            (at most 1e6); NaN, negative or larger: OTC_E_INVALID_ARGUMENT */
     const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
                                            https_proxy / HTTPS_PROXY, ALL_PROXY and NO_PROXY (spec 5.7) */
-    const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default */
+    const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default; a file that cannot be
+                                           read is OTC_E_IO before any network access */
     const char          *user_agent;    /* a suffix, added after one space */
     otc_on_network_error on_network_error; /* latest only: USE_CACHE (default) or RAISE */
     otc_error           *error;
