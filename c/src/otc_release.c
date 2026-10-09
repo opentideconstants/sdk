@@ -546,7 +546,7 @@ static int entry_ok(const cJSON *e, int64_t size)
     size_t i;
     if (!cJSON_IsObject(e) || !whole_ok(otc__jget(e, "offset")) || !whole_ok(otc__jget(e, "length"))) return 0;
     /* the bounds check of spec 6.2 (CR D4): length > 0 and offset + length <= jsonl_size (the
-     * caller checks that the offsets increase) */
+     * caller checks that no two entries overlap) */
     if (otc__jget(e, "length")->valuedouble <= 0) return 0;
     if (otc__jget(e, "offset")->valuedouble + otc__jget(e, "length")->valuedouble > (double)size) return 0;
     if (!otc__jstr(e, "station_id") || !otc__jstr(e, "status")) return 0;
@@ -638,10 +638,12 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     v = otc__jget(doc, "jsonl_size");
     if (!cJSON_IsNumber(v) || v->valuedouble != (double)size || !cJSON_IsArray(otc__jget(doc, "stations"))) goto done;
     {
-        double prev = -1;
+        /* each offset is at least the previous offset + the previous length + 1 (the
+         * line end), so that no two entries overlap (spec 6.2, CR2 DR9) */
+        double start = 0;
         cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
-            if (!entry_ok(e, size) || otc__jget(e, "offset")->valuedouble <= prev) goto done;
-            prev = otc__jget(e, "offset")->valuedouble;
+            if (!entry_ok(e, size) || otc__jget(e, "offset")->valuedouble < start) goto done;
+            start = otc__jget(e, "offset")->valuedouble + otc__jget(e, "length")->valuedouble + 1;
         }
     }
     st = OTC_OK;

@@ -1402,6 +1402,37 @@ def group_cross(R2):
                      drv("assert_index", path=idx, jsonl=jl, datestamp=d)],
                     roles=roles, timeout_s=90))
     out += cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir)
+    out += cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir)
+    return out
+
+
+def reference_index(jsonl, datestamp):
+    """The reference index-v1.json of a .jsonl file (conformance/stream_index.py)."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import stream_index
+    finally:
+        sys.path.pop(0)
+    return stream_index.build(jsonl, datestamp)
+
+
+def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
+    """Cross-SDK cases of review round 2, package PK-R2-07: the stream index path agrees with the full pass
+    (spec 6.2; CR2 DR9, DR10)."""
+    out = []
+    d = R2.datestamp
+    ref = reference_index(FIXTURES / "good" / f"OTC_{d}.jsonl", d)["stations"]
+    reader_open = as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream"))
+    # DR9: an entry that starts at the previous offset + the previous length overlaps nothing in bytes, but it
+    # leaves no room for the line end, so it is not the start of a line. Every reader finds the index stale.
+    a, b = ref[0], ref[1]
+    out.append(case("cross/index-overlap", "an index entry starts at the previous offset + the previous length (no byte for the line end): the index is stale, so it is rebuilt, and the query is right (CR2 DR9)", "6.2",
+                    fill + [drv("json_set", path=idx, pointer="/stations/1/offset", value=a["offset"] + a["length"])] + offline + [
+                        reader_open,
+                        as_("reader", step("station", {"station": enc_station(R2, R2.by_id[b["station_id"]])}, station_id=b["station_id"])),
+                        as_("reader", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
+                    roles=roles))
     return out
 
 

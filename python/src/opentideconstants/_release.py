@@ -223,7 +223,7 @@ def _usable_index(idx, name, sha256, size, conv, lic):
             or not is_int(idx.get("jsonl_size")) or idx["jsonl_size"] != size or not isinstance(idx.get("stations"), list):
         return None
     out = []
-    end = 0
+    start = 0  # the least offset the next entry may have
     for e in idx["stations"]:
         if not isinstance(e, dict) or not is_int(e.get("offset")) or not is_int(e.get("length")) \
                 or not isinstance(e.get("station_id"), str) or not isinstance(e.get("status"), str) \
@@ -233,10 +233,11 @@ def _usable_index(idx, name, sha256, size, conv, lic):
             return None
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
             return None
-        # the bounds check (CR D4): a line inside the file, after the one before it
-        if e["length"] <= 0 or e["offset"] < end or e["offset"] + e["length"] > size:
+        # the bounds check (CR D4): a line inside the file, and after the line before it and its line end, so
+        # that no two entries overlap (CR2 DR9)
+        if e["length"] <= 0 or e["offset"] < start or e["offset"] + e["length"] > size:
             return None
-        end = e["offset"] + e["length"]
+        start = e["offset"] + e["length"] + 1
         if e["status"] == "active" and (not isinstance(e["lat"], (int, float)) or not isinstance(e["lon"], (int, float))
                                         or not math.isfinite(e["lat"]) or not math.isfinite(e["lon"])
                                         or abs(e["lat"]) > 90 or abs(e["lon"]) > 180):

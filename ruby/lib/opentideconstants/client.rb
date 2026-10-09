@@ -661,12 +661,14 @@ class OpenTideConstants
     end
 
     # The bounds check of a fresh index (spec §6.2, CR D4): each length > 0,
-    # offset + length <= the .jsonl size, and offsets strictly increasing.
+    # offset + length <= the .jsonl size, and each offset at least the
+    # previous offset + the previous length + 1, so that no two entries
+    # overlap (CR2 DR9).
     def index_in_bounds?(entries, size)
-        last = -1
+        start = 0
         entries.all? do |e|
-            ok = e["length"].positive? && e["offset"] > last && e["offset"] + e["length"] <= size
-            last = e["offset"]
+            ok = e["length"].positive? && e["offset"] >= start && e["offset"] + e["length"] <= size
+            start = e["offset"] + e["length"] + 1
             ok
         end
     end
