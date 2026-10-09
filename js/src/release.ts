@@ -103,10 +103,19 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     const conventions = doc["conventions"];
     const licences = doc["licences"];
     if (!Array.isArray(conventions) || !Array.isArray(licences)) throw new InvalidReleaseError("conventions or licences is missing");
+    if (!conventions.every(isObject) || !licences.every(isObject)) throw new InvalidReleaseError("a convention or licence is not a JSON object");
     const cs = conventions.filter(isObject);
     const ls = licences.filter(isObject);
     if (cs.some((c) => typeof c["convention_id"] !== "string") || ls.some((l) => typeof l["licence_id"] !== "string")) {
         throw new InvalidReleaseError("a convention or licence has no id");
+    }
+    for (const [list, key] of [[cs, "convention_id"], [ls, "licence_id"]] as const) {
+        const seen = new Set<string>();
+        for (const x of list) {
+            const id = String(x[key]);
+            if (seen.has(id)) throw new InvalidReleaseError(`${key} ${id} appears twice (CR D5)`);
+            seen.add(id);
+        }
     }
     return deepFreeze({ format_version: fv, release, conventions: cs, licences: ls });
 }
@@ -248,6 +257,7 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
         // kind is derived, not trusted: from the recommended set here, and from the reference station below
         out.push(entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null }));
     }
+    checkLinks(out);
     resolveKinds(out);
     const given = stations as unknown as StoredEntry[];
     if (out.some((x, i) => x.status === "active" && x.kind !== (given[i]?.kind ?? null))) return null;
@@ -257,6 +267,40 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
 /** @internal The station kind of a recommended set's quantity (spec 6.2 `kind`). */
 export function kindOfQuantity(q: string | null): string | null {
     return q === "water_level" ? "tide" : q === "current" ? "current" : "other";
+}
+
+/**
+ * @internal The links between stations, checked at load in every path (spec 6.1, CR D5): a station_id appears once
+ * across the active stations and the tombstones; a (system, alias id) pair once; a set_id once among the active
+ * stations' sets; and an active subordinate's reference_station_id names an active station. Throws invalid_release.
+ */
+export function checkLinks(entries: readonly IndexEntry[]): void {
+    const ids = new Set<string>();
+    const active = new Set<string>();
+    for (const e of entries) {
+        if (ids.has(e.station_id)) throw new InvalidReleaseError(`station_id ${e.station_id} appears twice`);
+        ids.add(e.station_id);
+        if (e.status === "active") active.add(e.station_id);
+    }
+    const aliases = new Set<string>();
+    const sets = new Set<string>();
+    for (const e of entries) {
+        if (e.status !== "active") continue;
+        for (const [system, list] of Object.entries(e.aliases)) {
+            for (const id of list) {
+                const k = JSON.stringify([system, id]);
+                if (aliases.has(k)) throw new InvalidReleaseError(`the ${system} alias ${id} appears twice (at ${e.station_id})`);
+                aliases.add(k);
+            }
+        }
+        for (const cs of e.stored.sets) {
+            const id = cs.set_id ?? "";
+            if (sets.has(id)) throw new InvalidReleaseError(`set_id ${id} appears twice`);
+            sets.add(id);
+        }
+        const ref = e.stored.reference_station_id;
+        if (ref !== null && !active.has(ref)) throw new InvalidReleaseError(`station ${e.station_id}: reference_station_id ${ref} does not resolve`);
+    }
 }
 
 /** @internal Resolve the kind of subordinate stations with offsets only (from their reference station). */
@@ -475,8 +519,11 @@ export class Station {
             const rows = this.#validation.filter((v) => v.set_id === setId)
                 .map((v, i) => [v, i] as const)
                 .sort((a, b) => cmp(a[0].window ?? "", b[0].window ?? "") || a[1] - b[1]).map((x) => x[0]);
-            return new ConstantSet(cs, setId === recId, release.convention(str(cs, "convention_id") ?? "") as Convention,
-                release.licence(str(cs, "licence_id") ?? "") as Licence, Object.freeze(rows));
+            const conv = release.convention(str(cs, "convention_id") ?? "");
+            const lic = release.licence(str(cs, "licence_id") ?? "");
+            // load checked both links (indexDoc); a miss here is a broken release, not a null to hide
+            if (!conv || !lic) throw new InvalidReleaseError(`set ${String(setId)} of ${entry.station_id}: a convention or licence does not resolve`);
+            return new ConstantSet(cs, recId !== null && setId === recId, conv, lic, Object.freeze(rows));
         }));
         this.#recommended = this.#sets.find((s) => s.isRecommended) ?? null;
         const off = obj(raw, "subordinate_offsets");
@@ -940,6 +987,7 @@ export function indexStations(header: ReleaseHeader, docs: readonly Json[]): Ind
     const convs = new Set(header.conventions.map((c) => str(c, "convention_id") ?? ""));
     const lics = new Set(header.licences.map((l) => str(l, "licence_id") ?? ""));
     const entries = docs.map((d, i) => indexDoc(d, header, i, 0, convs, lics));
+    checkLinks(entries);
     resolveKinds(entries);
     return entries;
 }

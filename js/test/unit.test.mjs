@@ -208,3 +208,11 @@ test("T41/T18/T95/D4: usableIndex rejects out-of-bounds, unordered, wrongly fold
     assert.equal(use([entry({ sets: [set({ set_id: null })], recommended_set_id: null, kind: null })]), null, "set_id null");
     assert.equal(use([entry({ offsets_licence_id: "nope" })]), null, "offsets licence");
 });
+
+test("T46: a convention or licence that is not an object, and a repeated licence_id, are invalid_release", async () => {
+    const { parseHeader } = await import("../dist/release.js");
+    const h = (o) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }], licences: [{ licence_id: "l" }], ...o });
+    assert.ok(parseHeader(h({})));
+    assert.throws(() => parseHeader(h({ conventions: [{ convention_id: "c" }, 5] })), isCode("invalid_release"));
+    assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l" }, { licence_id: "l" }] })), isCode("invalid_release"));
+});

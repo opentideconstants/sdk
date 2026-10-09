@@ -339,8 +339,7 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -349,8 +348,7 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -359,8 +357,7 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -371,8 +368,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -381,8 +377,7 @@
    "case": "rules/pk06/bad-duplicate-alias-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -391,8 +386,7 @@
    "case": "rules/pk06/bad-duplicate-alias-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -401,8 +395,7 @@
    "case": "rules/pk06/bad-duplicate-alias-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -413,8 +406,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -423,8 +415,7 @@
    "case": "rules/pk06/bad-duplicate-convention-id-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -433,8 +424,7 @@
    "case": "rules/pk06/bad-duplicate-convention-id-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -443,8 +433,7 @@
    "case": "rules/pk06/bad-duplicate-convention-id-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -455,8 +444,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -465,8 +453,7 @@
    "case": "rules/pk06/bad-duplicate-set-id-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -475,8 +462,7 @@
    "case": "rules/pk06/bad-duplicate-set-id-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -485,8 +471,7 @@
    "case": "rules/pk06/bad-duplicate-set-id-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -497,8 +482,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -507,8 +491,7 @@
    "case": "rules/pk06/bad-duplicate-station-id-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -517,8 +500,7 @@
    "case": "rules/pk06/bad-duplicate-station-id-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -527,8 +509,7 @@
    "case": "rules/pk06/bad-duplicate-station-id-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -537,8 +518,7 @@
    "case": "rules/pk06/bad-duplicate-station-id-jsonl-stream",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -565,8 +545,7 @@
    "case": "rules/pk06/bad-unresolved-reference-station-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -575,8 +554,7 @@
    "case": "rules/pk06/bad-unresolved-reference-station-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -585,8 +563,7 @@
    "case": "rules/pk06/bad-unresolved-reference-station-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -597,8 +574,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"

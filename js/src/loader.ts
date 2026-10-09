@@ -3,7 +3,7 @@ import { formatMajor, isDatestamp, readerReads, supportedFormat, SUPPORTED_FORMA
 import { InvalidReleaseError, ReaderTooOldError, UnsupportedFormatError } from "./errors.js";
 import { deepFreeze, isObject, type Json, type JsonObject } from "./json.js";
 import {
-    Release, indexDoc, indexStations, parseHeader, resolveKinds,
+    Release, checkLinks, indexDoc, indexStations, parseHeader, resolveKinds,
     type IndexEntry, type ReleaseHeader, type StationSource,
 } from "./release.js";
 import type { FileInfo } from "./types.js";
@@ -95,6 +95,7 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         }
         start = end + 1;
     }
+    checkLinks(entries);
     resolveKinds(entries);
     return { entries, docs };
 }
