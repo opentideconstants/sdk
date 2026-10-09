@@ -255,7 +255,8 @@ class OpenTideConstants
         def gunzip(path, expected_sha256 = nil)
             bytes = File.binread(path)
             check_bytes!(path, bytes, expected_sha256) if expected_sha256
-            Zlib::GzipReader.new(StringIO.new(bytes)).read.force_encoding(Encoding::UTF_8)
+            # zcat reads every gzip member, not only the first.
+            Zlib::GzipReader.zcat(StringIO.new(bytes)).force_encoding(Encoding::UTF_8)
         rescue Zlib::Error => e
             raise InvalidReleaseError, "bad gzip file #{path}: #{e.message}"
         rescue SystemCallError, IOError => e

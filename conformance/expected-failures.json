@@ -1144,7 +1144,6 @@
    "case": "rules/pk12/gz-with-content-encoding",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK12",
@@ -1164,7 +1163,6 @@
    "case": "rules/pk12/redirect-five-hops",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK12",

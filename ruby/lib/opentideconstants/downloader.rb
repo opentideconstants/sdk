@@ -87,8 +87,9 @@ class OpenTideConstants
             size = 0
             begin
                 File.open(tmp, "wb") do |out|
-                    Zlib::GzipReader.open(gz) do |zr|
-                        while (chunk = zr.read(1 << 16))
+                    File.open(gz, "rb") do |zin|
+                        # zcat reads every gzip member, not only the first.
+                        Zlib::GzipReader.zcat(zin) do |chunk|
                             out.write(chunk)
                             digest << chunk
                             size += chunk.bytesize

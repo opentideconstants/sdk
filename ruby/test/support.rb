@@ -5,6 +5,7 @@ require "tmpdir"
 require "fileutils"
 require "json"
 require "digest"
+require "openssl"
 
 module TestSupport
     ROOT = File.expand_path("../..", __dir__)
@@ -13,11 +14,12 @@ module TestSupport
     # A one-thread HTTP/1.1 server. The handler gets the request path and
     # headers and returns [status, headers, body]. Every request is recorded.
     class Server
-        attr_reader :requests
+        attr_reader :requests, :headers
 
         def initialize(&handler)
             @handler = handler
             @requests = []
+            @headers = []
             @server = TCPServer.new("127.0.0.1", 0)
             @thread = Thread.new { serve }
         end
@@ -57,11 +59,12 @@ module TestSupport
                 headers[k.strip.downcase] = v.to_s.strip
             end
             @requests << path
+            @headers << headers
             status, out_headers, body = @handler.call(path, headers)
             body = body.to_s.b
             head = +"HTTP/1.1 #{status} X\r\nConnection: close\r\n"
             out_headers = { "Content-Length" => body.bytesize.to_s }.merge(out_headers || {})
-            out_headers.each { |k, v| head << "#{k}: #{v}\r\n" unless v.nil? }
+            out_headers.each { |k, v| Array(v).each { |x| head << "#{k}: #{x}\r\n" } unless v.nil? }
             sock.write(head + "\r\n")
             sock.write(body) unless status == 304
         end
@@ -89,6 +92,58 @@ module TestSupport
                 end
             end
         end
+    end
+
+    # A TLS server on 127.0.0.1 with a self-signed certificate; returns
+    # [port, ca_file path, stop lambda]. The handler is as for Server.
+    def tls_server(&handler)
+        key = OpenSSL::PKey::RSA.new(2048)
+        cert = OpenSSL::X509::Certificate.new
+        cert.version = 2
+        cert.serial = 1
+        cert.subject = cert.issuer = OpenSSL::X509::Name.parse("/CN=127.0.0.1")
+        cert.public_key = key.public_key
+        cert.not_before = Time.now - 60
+        cert.not_after = Time.now + 3600
+        ef = OpenSSL::X509::ExtensionFactory.new(cert, cert)
+        cert.add_extension(ef.create_extension("subjectAltName", "IP:127.0.0.1"))
+        cert.add_extension(ef.create_extension("basicConstraints", "CA:TRUE", true))
+        cert.sign(key, OpenSSL::Digest.new("SHA256"))
+        ca = File.join(tmpdir, "ca.pem")
+        File.write(ca, cert.to_pem)
+        ctx = OpenSSL::SSL::SSLContext.new
+        ctx.cert = cert
+        ctx.key = key
+        tcp = TCPServer.new("127.0.0.1", 0)
+        ssl = OpenSSL::SSL::SSLServer.new(tcp, ctx)
+        t = Thread.new do
+            loop do
+                s = begin
+                    ssl.accept
+                rescue OpenSSL::SSL::SSLError, SystemCallError
+                    next
+                end
+                begin
+                    line = s.gets
+                    path = line.to_s.split(" ")[1]
+                    h = {}
+                    while (x = s.gets) && x != "\r\n"
+                        k, v = x.split(":", 2)
+                        h[k.strip.downcase] = v.to_s.strip
+                    end
+                    status, hdrs, body = handler.call(path, h)
+                    body = body.to_s.b
+                    out = +"HTTP/1.1 #{status} X\r\nConnection: close\r\nContent-Length: #{body.bytesize}\r\n"
+                    (hdrs || {}).each { |k, v| out << "#{k}: #{v}\r\n" }
+                    s.write(out + "\r\n" + body)
+                rescue StandardError
+                    nil
+                ensure
+                    s.close rescue nil
+                end
+            end
+        end
+        [tcp.addr[1], ca, -> { t.kill; tcp.close rescue nil }]
     end
 
     def tmpdir
