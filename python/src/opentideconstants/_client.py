@@ -581,6 +581,9 @@ class OpenTideConstants:
                     data_name = f"{base}.jsonl"
                 elif f"{base}.json.gz" in rows:
                     gzn, jn = f"{base}.json.gz", f"{base}.json"
+                    if jn not in rows:
+                        # the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
+                        raise ChecksumError(f"{jn} is not listed in {base}.sha256", file=jn, expected=None, actual=None)
                     tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, gz=True)
                     wanted.append((gzn, tmp_gz))  # removed in the finally below if anything fails
                     try:
@@ -594,7 +597,7 @@ class OpenTideConstants:
                         self._log.warning("cannot remove %s: %s", tmp_gz, e)
                     import hashlib
                     actual = hashlib.sha256(raw).hexdigest()
-                    if jn in rows and actual != rows[jn]:
+                    if actual != rows[jn]:
                         raise ChecksumError(f"{jn}: SHA-256 {actual} does not match {rows[jn]}", file=jn,
                                             expected=rows[jn], actual=actual)
                     tmp = tmp_name(d)

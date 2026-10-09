@@ -492,7 +492,10 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         const writes: [string, Uint8Array][] = [];
         if (ctx.mode === "stream") {
             for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
-        } else if (rows.has(n.gz) && rows.has(n.json)) {
+        } else if (rows.has(n.gz) && !rows.has(n.json)) {
+            // the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
+            throw new ChecksumError(`${n.json} is not listed in ${n.sha}`, { file: n.json, expected: null, actual: null });
+        } else if (rows.has(n.gz)) {
             log(ctx, "info", `downloading ${n.gz}`);
             const gz = await fetchChecked(ctx, n.gz, rows, entry);
             let json: Uint8Array;
