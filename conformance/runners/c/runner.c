@@ -1058,6 +1058,7 @@ static void op_query(request *q, reply *r)
             const cJSON *it;
             if (!cJSON_IsArray(ids)) { set_error(r, "invalid_argument", "station_ids"); return; }
             idv = (const char **)calloc((size_t)cJSON_GetArraySize(ids) + 1, sizeof *idv);
+            if (!idv) { set_error(r, "uncaught:NoMemory", "attribution: no memory for the station ids"); return; }
             cJSON_ArrayForEach(it, ids) {
                 if (!cJSON_IsString(it)) { free((void *)idv); set_error(r, "invalid_argument", "station_ids"); return; }
                 idv[n++] = it->valuestring;
