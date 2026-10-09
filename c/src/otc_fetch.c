@@ -465,6 +465,18 @@ static char *default_root(void)
 #endif
 }
 
+/* 1 when the environment names a home for the default cache root. */
+static int default_root_env(void)
+{
+#ifdef _WIN32
+    return env_get("LOCALAPPDATA") || env_get("USERPROFILE");
+#elif defined(__APPLE__)
+    return env_get("HOME") != NULL;
+#else
+    return env_get("XDG_CACHE_HOME") || env_get("HOME");
+#endif
+}
+
 static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
 {
     const char *v;
@@ -480,8 +492,10 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     if (!g_curl_ok) return fail(c, OTC_E_NETWORK, NULL, "curl_global_init failed");
     if (o && o->cache_dir) root = otc__strdup(o->cache_dir);
     else if ((v = env_get("OPENTIDECONSTANTS_CACHE_DIR")) != NULL) root = otc__strdup(v);
-    else root = default_root();
-    if (!root) return fail(c, OTC_E_CACHE, NULL, "no cache directory: set cache_dir or OPENTIDECONSTANTS_CACHE_DIR");
+    else if (!(root = default_root()) && !default_root_env()) {
+        return fail(c, OTC_E_CACHE, NULL, "no cache directory: set cache_dir or OPENTIDECONSTANTS_CACHE_DIR");
+    }
+    if (!root) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     c->base = path2(root, LAYOUT);
     free(root);
     v = (o && o->base_url) ? o->base_url : env_get("OPENTIDECONSTANTS_BASE_URL");
@@ -1155,13 +1169,22 @@ static const otc_file_info *info_file(const otc_release_info *ri, const char *na
 
 static char *pointer_dir(fctx *c) { return path2(c->base, "pointer"); }
 
-/* Reads a whole file; NULL if it is missing. */
+/* Reads a whole file; NULL if it is missing (or cannot be read). */
 static char *slurp(const char *path)
 {
     char *t = NULL;
     if (fs_kind(path) != 2) return NULL;
     if (otc__read_all(path, &t, NULL) != OTC_OK) return NULL;
     return t;
+}
+
+/* The same with a status: OTC_OK with *out NULL when the file is missing,
+ * OTC_E_NOMEM, or OTC_E_IO when it is there but cannot be read. */
+static otc_status slurp_st(const char *path, char **out)
+{
+    *out = NULL;
+    if (fs_kind(path) != 2) return OTC_OK;
+    return otc__read_all(path, out, NULL);
 }
 
 /*
@@ -1401,14 +1424,25 @@ static char *rel_file(fctx *c, const char *ds, const char *suffix)
     return p;
 }
 
-static cJSON *read_verified(fctx *c, const char *ds)
+/* A release's .verified record: OTC_OK with *out NULL when it is missing or not a
+ * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. */
+static otc_status read_verified_st(fctx *c, const char *ds, cJSON **out)
 {
-    char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = p ? slurp(p) : NULL;
+    char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = NULL;
+    otc_status st = p ? slurp_st(p, &t) : OTC_E_NOMEM;
     cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
     free(d);
     free(p);
     free(t);
     if (doc && !cJSON_IsObject(otc__jget(doc, "files"))) { cJSON_Delete(doc); doc = NULL; }
+    *out = doc;
+    return st;
+}
+
+static cJSON *read_verified(fctx *c, const char *ds)
+{
+    cJSON *doc = NULL;
+    (void)read_verified_st(c, ds, &doc);
     return doc;
 }
 
@@ -1480,22 +1514,40 @@ static int usable_impl(fctx *c, const char *ds, int strict)
 static int usable_strict(fctx *c, const char *ds) { return usable_impl(c, ds, 1); }
 static int usable_loose(fctx *c, const char *ds) { return usable_impl(c, ds, 0); }
 
-/* Datestamps of verified cached releases, newest first. */
+/* Datestamps of verified cached releases, newest first. A cache with no
+ * releases directory is empty; one that is there but cannot be listed or read
+ * is OTC_E_CACHE (or OTC_E_NOMEM), never "empty". */
 static otc_status cached_list(fctx *c, char ***out, size_t *n_out)
 {
     char *r = path2(c->base, "releases"), **names = NULL;
     size_t n = 0, i, k = 0;
+    int kind;
+    otc_status st;
     *out = NULL;
     *n_out = 0;
     if (!r) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
-    if (fs_kind(r) != 1 || fs_list(r, &names, &n) != OTC_OK) { free(r); return OTC_OK; }
-    free(r);
+    kind = fs_kind(r);
+    if (kind == 0) { free(r); return OTC_OK; }
+    st = kind == 1 ? fs_list(r, &names, &n) : OTC_E_IO;
+    if (st != OTC_OK) {
+        st = st == OTC_E_NOMEM ? fail(c, st, r, "out of memory") : fail(c, OTC_E_CACHE, r, "cannot list the cache %s", r);
+        free(r);
+        return st;
+    }
     for (i = 0; i < n; i++) {
-        cJSON *v = valid_datestamp(names[i]) ? read_verified(c, names[i]) : NULL;
+        cJSON *v = NULL;
+        if (st == OTC_OK && valid_datestamp(names[i])) {
+            st = read_verified_st(c, names[i], &v);
+            if (st != OTC_OK)
+                st = st == OTC_E_NOMEM ? fail(c, st, r, "out of memory")
+                                       : fail(c, OTC_E_CACHE, r, "cannot read the .verified record of %s in %s", names[i], r);
+        }
         if (v) names[k++] = names[i];
         else free(names[i]);
         cJSON_Delete(v);
     }
+    free(r);
+    if (st != OTC_OK) { free_list(names, k); return st; }
     if (k > 1) qsort(names, k, sizeof *names, ds_cmp_desc);
     *out = names;
     *n_out = k;
@@ -1537,24 +1589,27 @@ static int cached_readable(fctx *c, const char *ds, const cJSON *index)
     return ok;
 }
 
-/* The newest cached release that C can open and read (spec 5.2 step 1, 7.4). */
-static char *newest_cached(fctx *c)
+/* The newest cached release that C can open and read (spec 5.2 step 1, 7.4):
+ * OTC_OK with *out NULL when there is none; OTC_E_CACHE or OTC_E_NOMEM when
+ * the cache cannot be read. */
+static otc_status newest_cached(fctx *c, char **out)
 {
-    char **list = NULL, *best = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
+    char **list = NULL, *dir = pointer_dir(c), *ip = dir ? path2(dir, "OTC_index.json") : NULL;
     char *it = ip ? slurp(ip) : NULL;
     cJSON *index = it ? otc__json_parse(it, strlen(it)) : NULL;
     size_t n = 0, i;
+    otc_status st = (dir && ip) ? cached_list(c, &list, &n) : fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    *out = NULL;
     free(dir);
     free(ip);
     free(it);
-    if (cached_list(c, &list, &n) != OTC_OK) { cJSON_Delete(index); return NULL; }
-    for (i = 0; i < n && !best; i++) {
+    for (i = 0; st == OTC_OK && i < n && !*out; i++) {
         if (!usable_loose(c, list[i]) || !cached_readable(c, list[i], index)) continue;
-        best = otc__strdup(list[i]);
+        if (!(*out = otc__strdup(list[i]))) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
     }
     free_list(list, n);
     cJSON_Delete(index);
-    return best;
+    return st;
 }
 
 /* release.files from .verified (spec 4.3.1), sorted by name. */
@@ -1986,7 +2041,7 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
     }
     if ((st = ensure_root(c)) != OTC_OK) return st;
     if (c->offline) {
-        *ds_out = newest_cached(c);
+        if ((st = newest_cached(c, ds_out)) != OTC_OK) return st;
         if (!*ds_out) return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache");
         *lf = OTC_LOADED_FROM_CACHE;
         return open_cached(c, *ds_out, rel);
@@ -1998,7 +2053,9 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
         otc_release_info_free(info);
     }
     if (st == OTC_E_NETWORK && !c->raise) {
-        char *ds = newest_cached(c);
+        char *ds = NULL;
+        otc_error net = *c->err;
+        if (newest_cached(c, &ds) != OTC_OK) *c->err = net;   /* the network error stays the one reported */
         if (ds) {
             snprintf(last_msg, last_len, "%s", c->err->message);
             logf_(c, 2, "network error (%s); using the cached release %s", last_msg, ds);
@@ -2411,7 +2468,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     /* which release */
     if (!release || !strcmp(release, "latest")) {
         if (c.offline) {
-            ds = newest_cached(&c);
+            if ((st = newest_cached(&c, &ds)) != OTC_OK) goto out;
             if (!ds) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache"); goto out; }
         } else {
             if ((st = latest_info(&c, &info, NULL)) != OTC_OK) goto out;
