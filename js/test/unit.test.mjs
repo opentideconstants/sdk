@@ -403,3 +403,36 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
+
+test("R2-085 (CR2 DR16): update() heals a cached release whose file has the wrong size and downloads it again", async () => {
+    const index = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8"));
+    let pointer = JSON.stringify(index.releases.find((e) => e.datestamp === "20991231"));
+    const srv = http.createServer((req, res) => {
+        const name = decodeURIComponent(new URL(req.url, "http://x").pathname.slice(1));
+        if (name === "OTC_latest-f1.json") return res.end(pointer);
+        try {
+            res.end(fs.readFileSync(path.join(GOOD, path.basename(name))));
+        } catch {
+            res.statusCode = 404;
+            res.end();
+        }
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    const cacheDir = tmpdir();
+    const o = { baseUrl: `http://127.0.0.1:${srv.address().port}/`, cacheDir, mode: "stream" };
+    try {
+        (await otc.OpenTideConstants.open({ ...o, release: "20991231.2" })).close();
+        const jsonl = path.join(cacheDir, "v1", "releases", "20991231.2", "OTC_20991231.2.jsonl");
+        fs.writeFileSync(jsonl, "truncated\n");
+        const c = await otc.OpenTideConstants.open(o);
+        assert.equal(c.release.datestamp, "20991231");
+        pointer = fs.readFileSync(path.join(GOOD, "OTC_latest-f1.json"), "utf8");
+        const r = await c.update();
+        assert.deepEqual({ ...r }, { updated: true, from: "20991231", to: "20991231.2" });
+        assert.equal(c.loadedFrom, "download");
+        assert.equal(fs.statSync(jsonl).size, fs.statSync(path.join(GOOD, "OTC_20991231.2.jsonl")).size);
+        c.close();
+    } finally {
+        srv.close();
+    }
+});

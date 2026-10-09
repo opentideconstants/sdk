@@ -3,7 +3,7 @@ import {
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
-    loadCached, log, newestCached, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
+    loadCached, log, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, usable, verifyCached,
     checkBytes, type Ctx, type PointerEntry, type SyncDir,
 } from "./core.js";
 import {
@@ -206,56 +206,118 @@ export class OpenTideConstants {
 
         let d: string;
         let from: LoadedFrom;
+        let rel: Release;
         if (release !== "latest") {
             from = await ensureRelease(ctx, release, null);
             d = release;
+            ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen));
         } else if (offline) {
-            const c = await newestCached(ctx);
-            if (!c) throw new OfflineError("offline and no release is cached");
-            d = c;
+            const got = await OpenTideConstants.#loadNewestCached(ctx, node, verifyOnOpen);
+            if (!got) throw new OfflineError("offline and no release is cached");
+            ({ d, rel } = got);
             from = "cache";
         } else {
             try {
                 const entry = await getPointer(ctx);
                 from = await ensureRelease(ctx, entry.datestamp, entry);
                 d = entry.datestamp;
+                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen));
             } catch (e) {
-                let c: string | null = null;
+                let got: { d: string; rel: Release } | null = null;
                 if (e instanceof NetworkError && onNetworkError === "use_cache") {
                     try {
-                        c = await newestCached(ctx);
+                        got = await OpenTideConstants.#loadNewestCached(ctx, node, verifyOnOpen);
                     } catch (fallback) {
                         // the caller gets the network error; the failed fallback is logged (PK10 T35)
                         log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
                     }
                 }
-                if (!c) throw e;
-                log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using cached release ${c}`);
-                d = c;
+                if (!got) throw e;
+                log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using cached release ${got.d}`);
+                ({ d, rel } = got);
                 from = "cache_after_error";
                 extra.lastError = e as NetworkError;
             }
         }
-        let rel = await OpenTideConstants.#loadStored(ctx, node, d);
-        if (verifyOnOpen) {
+        return new OpenTideConstants(ctx, node, rel, from, extra);
+    }
+
+    /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
+    static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean): Promise<Release> {
+        const rel = await OpenTideConstants.#loadStored(ctx, node, d);
+        if (verify) {
             try {
                 await verifyCached(ctx, d);
             } catch (e) {
-                // the bad file was deleted from the cache; online, download it again and check once more (spec 5.3)
                 rel._close();
-                if (!(e instanceof ChecksumError) || offline) throw e;
-                log(ctx, "warn", `${e.message}; downloading release ${d} again`);
-                from = await ensureRelease(ctx, d, null);
-                rel = await OpenTideConstants.#loadStored(ctx, node, d);
-                try {
-                    await verifyCached(ctx, d);
-                } catch (again) {
-                    rel._close();
-                    throw again;
-                }
+                throw e;
             }
         }
-        return new OpenTideConstants(ctx, node, rel, from, extra);
+        return rel;
+    }
+
+    /** A cached release that fails its size or SHA-256 check or does not parse; a format this SDK cannot read is not. */
+    static #corrupt(e: unknown): e is ChecksumError | InvalidReleaseError {
+        return e instanceof ChecksumError || e instanceof InvalidReleaseError;
+    }
+
+    /**
+     * Remove a corrupt cached release (spec 5.2 step 6): `.verified` first, so it is no longer trusted, then the bad
+     * file (the one the error names, or the data files of this mode). A failure to delete is logged; it never hides
+     * the original error.
+     */
+    static async #heal(ctx: Ctx, d: string, e: ChecksumError | InvalidReleaseError): Promise<void> {
+        log(ctx, "warn", `the cached release ${d} is corrupt (${e.message}); removing it from the cache`);
+        const store = ctx.store;
+        if (!store) return;
+        const n = releaseNames(d);
+        const file = e instanceof ChecksumError && e.file ? e.file.split(/[\\/]/).pop() ?? null : null;
+        const present = new Set(await store.list(relDir(d)).catch(() => [] as string[]));
+        const bad = file ? [file] : ctx.mode === "eager" && present.has(n.json) ? [n.json] : [n.jsonl, n.meta];
+        for (const name of [".verified", ...bad]) {
+            await store.remove(`${relDir(d)}/${name}`).catch((x: unknown) => log(ctx, "warn", `cannot delete ${store.describe(`${relDir(d)}/${name}`)}: ${x instanceof Error ? x.message : String(x)}`));
+        }
+    }
+
+    /**
+     * Load release d after ensureRelease said where it came from. A cached copy that is corrupt is healed and, online,
+     * downloaded again once (spec 4.8, 5.2 step 6, 5.3); offline, or right after a download, the error is raised.
+     */
+    static async #loadOrHeal(ctx: Ctx, node: NodeMod | null, d: string, from: LoadedFrom, verify: boolean): Promise<{ rel: Release; from: LoadedFrom }> {
+        try {
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify), from };
+        } catch (e) {
+            if (!OpenTideConstants.#corrupt(e)) throw e;
+            await OpenTideConstants.#heal(ctx, d, e);
+            if (ctx.offline || from !== "cache") throw e;
+            log(ctx, "warn", `downloading release ${d} again`);
+            const again = await ensureRelease(ctx, d, null);
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify), from: again };
+        }
+    }
+
+    /**
+     * Load the newest cached release this SDK reads (spec 5.2 steps 1, 5 and 6). A candidate that fails its check or
+     * does not parse is healed and the next older one is tried; one whose format this SDK cannot read is skipped.
+     * Null when none loads: the caller raises its original error.
+     */
+    static async #loadNewestCached(ctx: Ctx, node: NodeMod | null, verify: boolean): Promise<{ d: string; rel: Release } | null> {
+        const store = ctx.store;
+        if (!store) return null;
+        for (const d of await cachedDatestamps(ctx)) {
+            if (!usable(ctx.mode, d, new Set(await store.list(relDir(d))))) continue;
+            try {
+                return { d, rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify) };
+            } catch (e) {
+                if (e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError) {
+                    log(ctx, "info", `the cached release ${d} is not readable: ${e.message}`);
+                    continue;
+                }
+                if (!OpenTideConstants.#corrupt(e)) throw e;
+                await OpenTideConstants.#heal(ctx, d, e);
+            }
+        }
+        return null;
     }
 
     static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string): Promise<Release> {
@@ -509,8 +571,8 @@ export class OpenTideConstants {
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
-        const how = await ensureRelease(this.#ctx, entry.datestamp, entry);
-        this.#swap(await OpenTideConstants.#loadStored(this.#ctx, this.#node, entry.datestamp), how);
+        const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false);
+        this.#swap(got.rel, got.from);
         log(this.#ctx, "info", `updated from ${from} to ${entry.datestamp}`);
         return Object.freeze({ updated: true, from, to: entry.datestamp });
     }
