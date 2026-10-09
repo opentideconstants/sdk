@@ -29,9 +29,11 @@ function need(obj, field) {
     return obj[field];
 }
 
+// Every field must be there: a field the SDK leaves undefined fails the step (need). Only a missing parent object
+// gives nulls.
 const pick = (obj, fields) => {
     const out = {};
-    for (const f of fields) out[f] = obj == null || obj[f] === undefined ? null : obj[f];
+    for (const f of fields) out[f] = obj == null ? null : need(obj, f);
     return out;
 };
 
