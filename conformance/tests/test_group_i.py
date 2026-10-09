@@ -197,3 +197,12 @@ def test_fixture_write_is_all_or_nothing(tmp_path, monkeypatch):
         bf.main()
     after = {p.relative_to(fx).as_posix(): p.read_bytes() for p in fx.rglob("*") if p.is_file()}
     assert after == before, sorted(set(before) ^ set(after))[:10]
+
+
+# --- K23: the oracle's source filter and stats.source agree on which sets count (only ok and flagged)
+
+def test_source_filter_and_stats_agree():
+    import build_cases as bc
+    rel = bc.Rel("bad/format-minor", "20991231")
+    by_filter = {src for s in rel.active for src in bc.usable_sources(s)}
+    assert by_filter == set(bc.stats(rel)["source"]), sorted(by_filter ^ set(bc.stats(rel)["source"]))

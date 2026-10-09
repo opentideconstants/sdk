@@ -256,7 +256,9 @@ def read_qc(cs):
 
 
 def usable_sources(s):
-    return {cs["source"] for cs in s.get("constant_sets", []) if cs["qc_status"] not in NOT_USABLE}
+    """The sources the source filter matches: sets with constants (ok, flagged), the same sets stats.source counts.
+    A qc_status 1.0 does not have ("other", spec 7.3) counts for neither."""
+    return {cs["source"] for cs in s.get("constant_sets", []) if cs["qc_status"] in WITH_CONSTANTS}
 
 
 def apply_filters(rel, stations, f):
@@ -672,7 +674,9 @@ def group_tolerant():
     out.append(mcase("tolerant/unknown-qc-status", "a qc_status 1.0 does not have (excluded, a 0.x leftover) is \"other\": listed by default, counted under other, and not counted as a source", "4.3, 4.5, 7.3",
                      [step("constant_set", {"set": enc_set(rel, eq, legacy)}, station_id="OTC-T-0010", set_id=legacy["set_id"]),
                       step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(eq)]}, station_id="OTC-T-0010"),
-                      step("stats", {"stats": stats(rel)})],
+                      step("stats", {"stats": stats(rel)}),
+                      # the source filter counts the same sets as stats.source: not the "other" set of legacy-fit
+                      step("stations", {"station_ids": [x["station_id"] for x in apply_filters(rel, rel.active, {"source": "legacy-fit"})]}, source="legacy-fit")],
                      root="bad/format-minor", release="20991231", open_expect={"format_version": "1.1"}))
     nb = Rel("bad/no-build", "20991231")
     nbs = nb.by_id["OTC-T-0004"]
