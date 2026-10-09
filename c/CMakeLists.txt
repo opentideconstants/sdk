@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.14)
-project(opentideconstants VERSION 0.1.0 LANGUAGES C)
+# The version and the ABI version have one source, the public header (C74):
+# OTC_VERSION is the project VERSION, OTC_ABI_VERSION the soname major.
+file(READ ${CMAKE_CURRENT_LIST_DIR}/include/opentideconstants.h OTC_HEADER_TEXT)
+string(REGEX MATCH "#define OTC_VERSION \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" _otc_v "${OTC_HEADER_TEXT}")
+set(OTC_HEADER_VERSION "${CMAKE_MATCH_1}")
+string(REGEX MATCH "#define OTC_ABI_VERSION ([0-9]+)" _otc_abi "${OTC_HEADER_TEXT}")
+set(OTC_HEADER_ABI_VERSION "${CMAKE_MATCH_1}")
+if(NOT OTC_HEADER_VERSION OR NOT OTC_HEADER_ABI_VERSION)
+    message(FATAL_ERROR "include/opentideconstants.h has no OTC_VERSION \"X.Y.Z\" or OTC_ABI_VERSION")
+endif()
+project(opentideconstants VERSION ${OTC_HEADER_VERSION} LANGUAGES C)
 
 option(OTC_WITH_FETCH "Build the otc_fetch module (needs libcurl)" OFF)
 # The conformance runner lives outside c/ (conformance/runners/c), so it is built
