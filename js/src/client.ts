@@ -11,6 +11,7 @@ import {
     OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
 import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
+import type { BlockingResult, NodeMod } from "./node-api.js";
 import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
 import type {
@@ -18,8 +19,6 @@ import type {
     PruneOptions, ReleaseInfo, SearchOptions, StationFilters, Tombstone, UpdateResult,
 } from "./types.js";
 
-type NodeMod = typeof import("./node.js");
-type BlockingResult = import("./node.js").BlockingResult;
 
 /** Releases the file handle of a swapped-out release that nobody holds any more. */
 const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
@@ -168,7 +167,9 @@ export class OpenTideConstants {
         }
         const suffix = optStr(options.userAgent, "userAgent");
 
-        const node = isNode() ? await import("./node.js") : null;
+        // "#node" is node.ts under the "node" condition and no-node.ts elsewhere (package.json "imports"), so browser code
+        // never imports node.ts (CR T64)
+        const node: NodeMod | null = isNode() ? (await import("#node")).nodeApi : null;
         const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
         if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
         if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");

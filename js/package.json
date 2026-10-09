@@ -19,14 +19,17 @@
     },
     "./package.json": "./package.json"
   },
+  "imports": {
+    "#node": { "node": "./dist/node.js", "default": "./dist/no-node.js" }
+  },
   "files": ["dist", "README.md", "LICENSE", "supported-formats.json"],
   "sideEffects": false,
   "engines": { "node": ">=22.12" },
   "scripts": {
     "gen": "node scripts/gen-fold-table.mjs",
     "gen:check": "node scripts/gen-fold-table.mjs --check",
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && tsc -p tsconfig.browser.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.browser.json",
     "check:api": "node scripts/check-api.mjs",
     "test:unit": "node --test \"test/*.test.mjs\"",
     "conformance": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/runner.mjs\"",

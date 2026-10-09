@@ -12,7 +12,10 @@ import type { Duplex } from "node:stream";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { CACHE_LAYOUT_VERSION, SDK_ID } from "./constants.js";
 import { CacheError, FileError, InvalidArgumentError, NetworkError } from "./errors.js";
+import type { BlockingResult, NodeMod, NodePath } from "./node-api.js";
 import type { CacheStore, HttpOptions, HttpResponse, LockOptions, Platform, Unlock } from "./platform.js";
+
+export type { BlockingResult } from "./node-api.js";
 
 export function sha256Sync(bytes: Uint8Array): string {
     return createHash("sha256").update(bytes).digest("hex");
@@ -444,7 +447,7 @@ export function nodePlatform(): Platform {
 
 // ------------------------------------------------------------------ files outside the cache
 
-export const nodePath = path;
+export const nodePath: NodePath = path;
 
 export function exists(p: string): boolean {
     return fs.existsSync(p);
@@ -501,18 +504,6 @@ export function writeInto(dir: string, name: string, bytes: Uint8Array): string 
 
 // ------------------------------------------------------------------ blocking helper for autoUpdate (spec 5.6)
 
-export interface BlockingResult {
-    ok: boolean;
-    datestamp?: string;
-    how?: string;
-    message?: string;
-    /** The SDK error code of a failure (spec 4.8), and its url, status and path when it has them. */
-    code?: string;
-    url?: string | null;
-    status?: number | null;
-    path?: string | null;
-}
-
 /**
  * Run a worker module and block until it answers. The query that triggers an automatic update must
  * already see the new release (spec 5.6), and JavaScript queries are synchronous, so the check runs
@@ -550,3 +541,9 @@ import(url).catch((e) => {
         void w.terminate();
     }
 }
+
+/** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
+export const nodeApi: NodeMod = {
+    nodePlatform, nodePath, sha256Sync, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
+    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, writeInto, runBlocking,
+};
