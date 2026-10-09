@@ -51,5 +51,4 @@ for await (const line of rl) {
     }
     out(await runner.handle(msg));
 }
-await runner.shutdown();
-process.exit(0);
+process.exit((await runner.shutdown()) ? 0 : 1);

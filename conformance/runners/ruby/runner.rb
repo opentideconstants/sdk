@@ -47,10 +47,13 @@ class Runner
         { "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "#{e.message} #{e.backtrace&.first(3)&.join(' | ')}" } }
     end
 
+    # Closes the client at shutdown; a close that fails is reported (stderr, and false for a non-zero exit).
     def close
         @client&.close
-    rescue StandardError
-        nil
+        true
+    rescue StandardError => e
+        $stderr.puts("close failed at shutdown: #{e.class}: #{e.message}")
+        false
     end
 
     private
@@ -407,4 +410,4 @@ $stdin.each_line do |line|
     end
     $stdout.write(line_out + "\n")
 end
-runner.close
+exit(runner.close ? 0 : 1)

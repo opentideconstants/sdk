@@ -95,7 +95,10 @@ for await (const line of rl) {
     }
     out(await page.evaluate((m) => window.__otc.runner.handle(m), msg));
 }
-await page.evaluate(() => window.__otc.runner.shutdown()).catch(() => undefined);
+const closed = await page.evaluate(() => window.__otc.runner.shutdown()).catch((e) => {
+    process.stderr.write(`close failed at shutdown: ${e && e.stack ? e.stack : e}\n`);
+    return false;
+});
 await browser.close();
 server.close();
-process.exit(0);
+process.exit(closed ? 0 : 1);

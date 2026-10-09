@@ -317,3 +317,22 @@ def test_c_update_without_a_move_is_not_updated(tmp_path, fixture_server):  # C6
         r.close()
     assert not (reply.get("ok") and reply["result"]["updated"] and reply["result"]["from"] == reply["result"]["to"]), reply
     assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+# --- T52 (and R55, P66): a close() error when the runner shuts down is reported: stderr and a non-zero exit
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_close_error_at_shutdown_is_reported(lang):
+    rc, hello, out, err = talk(lang, [OPEN], mode="close-raises")
+    assert len(out) == 1 and strict(out[0])["ok"] is True, (out, err[-300:])
+    assert rc != 0 and "close failed" in err and "Traceback" not in err, (rc, err[-500:])
+
+
+def test_driver_fails_a_case_whose_runner_exits_non_zero(tmp_path):
+    from _util import run_driver, write_cases
+    script = tmp_path / "r.py"
+    script.write_text("import sys\nprint('{\"hello\": {\"runner\": \"x\", \"features\": []}}', flush=True)\n"
+                      "for l in sys.stdin:\n    print('{\"ok\": true, \"result\": {\"count\": 1}}', flush=True)\nsys.exit(1)\n")
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "station_count", "expect": {"count": 1}}]}])
+    r = run_driver("--runner", f"{sys.executable} {script}", "--cases", str(cases))
+    assert "FAIL  a" in r.stdout and "exited with status 1" in r.stdout and r.returncode == 1, r.stdout[-500:]

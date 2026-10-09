@@ -554,16 +554,19 @@ class Runner:
         self.proc.stdin.flush()
 
     def close(self):
+        """Close stdin and wait for the runner. Returns its exit status (None if it had to be killed)."""
         try:
             self.proc.stdin.close()
         except OSError:
             pass
         try:
-            self.proc.wait(timeout=10)
+            status = self.proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self.proc.kill()
             self.proc.wait()
+            status = None
         self.stderr_f.close()
+        return status
 
 
 def parse_hello(line):
@@ -850,7 +853,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 except OSError as e:  # a file the case names is missing, or the server cannot stop: not the SDK
                     raise CaseError(f"driver action {st['driver']}: {type(e).__name__}: {e}") from e
                 if restart_env is not None:
-                    live["main"].close()
+                    status = live.pop("main").close()
+                    if status != 0:
+                        failures.append({"step": i, "driver": "restart_runner",
+                                         "problems": [f"the runner exited with status {status} when it was stopped"]})
                     env_extra.update(restart_env)
                     live["main"] = start("main")
                 if problems:
@@ -888,8 +894,11 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
         stats["harness_errors"] += 1
         failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
     finally:
-        for r in live.values():
-            r.close()
+        for role, r in live.items():
+            status = r.close()
+            if status != 0 and not failures:  # a runner that fails at shutdown (a close() error) fails the case
+                failures.append({"step": None, **({"as": role} if role != "main" else {}),
+                                 "problems": [f"the runner exited with status {status} at the end of the case"]})
         if srv.errors:  # a server rule that could not be applied: the harness is wrong, not the SDK
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "server", "harness_error": True,

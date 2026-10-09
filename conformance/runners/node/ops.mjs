@@ -365,9 +365,18 @@ export function makeRunner(sdk) {
         return { ok: false, error: { code: e.code, message: String(e.message), fields: finite(fields) } };
     }
 
+    // Closes the client at shutdown. Returns false (and the runner exits non-zero) when close() fails.
     async function shutdown() {
-        if (state.client) {
-            try { await state.client.close(); } catch { /* the runner is exiting */ }
+        if (!state.client) return true;
+        try {
+            await state.client.close();
+            return true;
+        } catch (e) {
+            const text = `close failed at shutdown: ${e && e.stack ? e.stack : e}`;
+            if (globalThis.process && globalThis.process.stderr) globalThis.process.stderr.write(text + "\n");
+            else console.error(text);
+            return false;
+        } finally {
             state.client = null;
         }
     }

@@ -40,7 +40,7 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 1. The driver starts the fixture server and the recording proxy on free ports on 127.0.0.1.
 2. For each case it makes a new temporary directory, starts the runner, and reads the runner's hello line.
 3. It sends the case's runner steps one at a time and compares each reply with the step's `expect`. Between runner steps it runs its own driver steps (server rules, file changes, request checks).
-4. A case passes when every step passes. At the end the driver closes the runner's stdin; the runner then closes its client and exits.
+4. A case passes when every step passes. At the end the driver closes the runner's stdin; the runner then closes its client and exits. A runner that exits with a status other than 0 (for example because closing its client failed) fails the case.
 
 The runner gets a clean environment: no `OPENTIDECONSTANTS_*` and no proxy variables; `HOME` (and `USERPROFILE`), `XDG_CACHE_HOME` and `LOCALAPPDATA` inside the case's temporary directory, so no default cache directory is shared between cases or with the real home directory; plus the case's `env`. The first runner start (the probe that reads the hello) gets the same isolation.
 

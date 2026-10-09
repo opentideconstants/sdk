@@ -402,7 +402,11 @@ def main():
                 reply = {"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": str(e)}}
         write_reply(out, reply)
     if runner.client is not None:
-        runner.client.close()
+        try:
+            runner.client.close()
+        except Exception as e:  # noqa: BLE001 - a close that fails is reported: stderr and exit status 1
+            print(f"close failed at shutdown: {type(e).__name__}: {e}", file=sys.stderr)
+            return 1
     return 0
 
 
