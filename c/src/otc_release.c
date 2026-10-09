@@ -864,25 +864,30 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
 cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by)
 {
     cJSON *doc, *arr;
-    const char *ds;
-    char jsonl[80];
-    size_t line_no = 0;
+    const char *jsonl;
+    char *ds;
+    size_t line_no = 0, n;
     int ok = 1;
     ix_ctx x;
-    if (!rel || !rel->file || !jsonl_sha256) return NULL;
-    ds = otc__jstr(rel->release_obj, "datestamp");
+    if (!rel || !rel->file || !rel->path || !jsonl_sha256) return NULL;
+    /* the index names the release of the file, OTC_{D}.jsonl, not release.datestamp
+     * (spec 6.2, CR2 DR23): that is what index_from_file compares it with */
+    jsonl = path_base(rel->path);
+    n = strlen(jsonl);
+    if (n < 11 || strncmp(jsonl, "OTC_", 4) != 0 || strcmp(jsonl + n - 6, ".jsonl") != 0) return NULL;
+    ds = otc__strndup(jsonl + 4, n - 10);
     doc = cJSON_CreateObject();
     arr = cJSON_CreateArray();
-    if (!doc || !arr || !ds) { cJSON_Delete(doc); cJSON_Delete(arr); return NULL; }
+    if (!doc || !arr || !ds) { cJSON_Delete(doc); cJSON_Delete(arr); free(ds); return NULL; }
     x.rel = rel;
     x.arr = arr;
     x.st = OTC_OK;
     if (scan_lines(rel->file, &line_no, stored_entry_cb, &x) != OTC_OK || x.st != OTC_OK) {
         cJSON_Delete(doc);
         cJSON_Delete(arr);
+        free(ds);
         return NULL;
     }
-    snprintf(jsonl, sizeof jsonl, "OTC_%s.jsonl", ds);
     put(doc, "index_version", cJSON_CreateNumber(1), &ok);
     put(doc, "datestamp", cJSON_CreateString(ds), &ok);
     put(doc, "jsonl", cJSON_CreateString(jsonl), &ok);
@@ -890,6 +895,7 @@ cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const ch
     put(doc, "jsonl_size", cJSON_CreateNumber((double)otc__file_size(rel->file)), &ok);
     put(doc, "by", cJSON_CreateString(by), &ok);
     put(doc, "stations", arr, &ok);
+    free(ds);
     if (!ok) {
         cJSON_Delete(doc);
         return NULL;

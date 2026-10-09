@@ -1597,6 +1597,33 @@ def rules_r2_pk07():
                          drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
                          step("open", err("invalid_release"), release=d, cache_dir="${cache}", offline=True, mode="stream")],
                         requires=["fs", "fetch", "stream"]))
+    # The index is named from the .jsonl file, not from release.datestamp (CR2 DR23: no cross-file check): a
+    # verified release whose .meta.json gives another datestamp gets an index for its own file name, which the
+    # next open finds fresh and does not rewrite.
+    d2 = "20991231.2"
+    rdir2 = f"${{cache}}/v1/releases/{d2}"
+    meta = json.loads((FIXTURES / "good" / f"OTC_{d2}.meta.json").read_text(encoding="utf-8"))
+    meta["release"]["datestamp"] = "20991230"
+    meta_text = json.dumps(meta, ensure_ascii=False, indent=1) + "\n"
+    jl = (FIXTURES / "good" / f"OTC_{d2}.jsonl").read_bytes()
+    digests = {f"OTC_{d2}.jsonl": hashlib.sha256(jl).hexdigest(), f"OTC_{d2}.meta.json": hashlib.sha256(meta_text.encode("utf-8")).hexdigest()}
+    sizes = {f"OTC_{d2}.jsonl": len(jl), f"OTC_{d2}.meta.json": len(meta_text.encode("utf-8"))}
+    sums = "".join(f"{digests[n]}  {n}\n" for n in sorted(digests))
+    verified = {"files": {n: {"sha256": digests[n], "size": sizes[n], "url": None} for n in digests}
+                | {f"OTC_{d2}.sha256": {"sha256": hashlib.sha256(sums.encode()).hexdigest(), "size": len(sums), "url": None}},
+                "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+    reopen = net(step("open", {"loaded_from": "cache", "datestamp": "20991230"}, release=d2, cache_dir="${cache}", offline=True, mode="stream"))
+    out.append(case("rules/r2-pk07/index-named-from-file", "a cached release whose .meta.json gives release.datestamp 20991230: the stream index the SDK writes names the file's release (20991231.2), and the next open uses it without rewriting it (CR2 DR23)", "6.2",
+                    [drv("copy", files=[f"{FIX}/good/OTC_{d2}.jsonl"], to=rdir2),
+                     drv("write", path=f"{rdir2}/OTC_{d2}.meta.json", text=meta_text),
+                     drv("write", path=f"{rdir2}/OTC_{d2}.sha256", text=sums),
+                     drv("write", path=f"{rdir2}/.verified", text=json.dumps(verified, sort_keys=True)),
+                     reopen, step("close"),
+                     drv("assert_index", path=f"{rdir2}/index-v1.json", jsonl=f"{rdir2}/OTC_{d2}.jsonl", datestamp=d2),
+                     drv("copy", files=[f"{rdir2}/index-v1.json"], to="${tmp}/index-copy"),
+                     reopen, step("station_count", {"station_count": len(Rel("good", d2).active)}), step("close"),
+                     drv("assert_sha256", path=f"{rdir2}/index-v1.json", equals="${tmp}/index-copy/index-v1.json")],
+                    requires=["fs", "fetch", "stream"]))
     return out
 
 

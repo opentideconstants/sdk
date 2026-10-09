@@ -4491,6 +4491,106 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk07/index-named-from-file",
+   "title": "a cached release whose .meta.json gives release.datestamp 20991230: the stream index the SDK writes names the file's release (20991231.2), and the next open uses it without rewriting it (CR2 DR23)",
+   "spec": "6.2",
+   "requires": [
+    "fs",
+    "fetch",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl"
+     ],
+     "to": "${cache}/v1/releases/20991231.2"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.meta.json",
+     "text": "{\n \"astro_tables\": [\n  {\n   \"astro_table_id\": \"otc-test-astro-1\",\n   \"constituents\": {\n    \"K1\": {\n     \"f\": [\n      0.99,\n      1.0,\n      1.01,\n      0.99\n     ],\n     \"speed_deg_per_hour\": 15.0410686,\n     \"v0u_deg\": [\n      0.0,\n      11.25,\n      22.5,\n      33.75\n     ]\n    },\n    \"M2\": {\n     \"f\": [\n      1.0,\n      1.01,\n      0.99,\n      1.0\n     ],\n     \"speed_deg_per_hour\": 28.9841042,\n     \"v0u_deg\": [\n      37.5,\n      48.75,\n      60.0,\n      71.25\n     ]\n    },\n    \"M4\": {\n     \"f\": [\n      1.01,\n      0.99,\n      1.0,\n      1.01\n     ],\n     \"speed_deg_per_hour\": 57.9682084,\n     \"v0u_deg\": [\n      75.0,\n      86.25,\n      97.5,\n      108.75\n     ]\n    },\n    \"N2\": {\n     \"f\": [\n      0.99,\n      1.0,\n      1.01,\n      0.99\n     ],\n     \"speed_deg_per_hour\": 28.4397295,\n     \"v0u_deg\": [\n      112.5,\n      123.75,\n      135.0,\n      146.25\n     ]\n    },\n    \"O1\": {\n     \"f\": [\n      1.0,\n      1.01,\n      0.99,\n      1.0\n     ],\n     \"speed_deg_per_hour\": 13.9430356,\n     \"v0u_deg\": [\n      150.0,\n      161.25,\n      172.5,\n      183.75\n     ]\n    },\n    \"S2\": {\n     \"f\": [\n      1.01,\n      0.99,\n      1.0,\n      1.01\n     ],\n     \"speed_deg_per_hour\": 30.0,\n     \"v0u_deg\": [\n      187.5,\n      198.75,\n      210.0,\n      221.25\n     ]\n    },\n    \"SA\": {\n     \"f\": [\n      0.99,\n      1.0,\n      1.01,\n      0.99\n     ],\n     \"speed_deg_per_hour\": 0.0410686,\n     \"v0u_deg\": [\n      225.0,\n      236.25,\n      247.5,\n      258.75\n     ]\n    }\n   },\n   \"first_year\": 2098,\n   \"generator\": \"synthetic test values (not congen output)\",\n   \"last_year\": 2101,\n   \"tables_sha256\": \"77caf905e367f7071d77789797e9bc2853faa44fcf34f7b06c6ef9670a14b811\",\n   \"v0_model\": \"schureman_tcd\"\n  }\n ],\n \"constituents\": [\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"165 555\",\n   \"name\": \"K1\",\n   \"nodal_formula_id\": \"K1\",\n   \"speed_deg_per_hour\": 15.0410686\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"255 555\",\n   \"name\": \"M2\",\n   \"nodal_formula_id\": \"M2\",\n   \"speed_deg_per_hour\": 28.9841042\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"455 555\",\n   \"name\": \"M4\",\n   \"nodal_formula_id\": \"M2^2\",\n   \"speed_deg_per_hour\": 57.9682084\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"245 655\",\n   \"name\": \"N2\",\n   \"nodal_formula_id\": \"M2\",\n   \"speed_deg_per_hour\": 28.4397295\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"145 555\",\n   \"name\": \"O1\",\n   \"nodal_formula_id\": \"O1\",\n   \"speed_deg_per_hour\": 13.9430356\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"273 555\",\n   \"name\": \"S2\",\n   \"nodal_formula_id\": 0,\n   \"speed_deg_per_hour\": 30.0\n  },\n  {\n   \"constituent_table_version\": \"otc-test-1\",\n   \"doodson\": \"056 555\",\n   \"name\": \"SA\",\n   \"speed_deg_per_hour\": 0.0410686\n  }\n ],\n \"conventions\": [\n  {\n   \"astro_table_id\": \"otc-test-astro-1\",\n   \"canary\": {\n    \"status\": \"not_applicable\"\n   },\n   \"constituent_table_version\": \"otc-test-1\",\n   \"convention_id\": \"otc-greenwich-v1\",\n   \"nodal_formula_ids\": {\n    \"K1\": \"K1\",\n    \"M2\": \"M2\",\n    \"M4\": \"M2^2\",\n    \"N2\": \"M2\",\n    \"O1\": \"O1\",\n    \"S2\": 0\n   },\n   \"nodal_handling\": \"f_u_at_prediction\",\n   \"phase_reference\": \"greenwich_utc\",\n   \"tables_sha256\": \"77caf905e367f7071d77789797e9bc2853faa44fcf34f7b06c6ef9670a14b811\",\n   \"v0_model\": \"schureman_tcd\"\n  },\n  {\n   \"astro_table_id\": \"otc-test-astro-1\",\n   \"canary\": {\n    \"gauges\": 3,\n    \"median_amp_diff_m\": 0.004,\n    \"median_phase_diff_deg\": 0.8,\n    \"status\": \"pass\"\n   },\n   \"constituent_table_version\": \"otc-test-1\",\n   \"convention_id\": \"kartverket-utc1-v1\",\n   \"nodal_handling\": \"f_u_at_prediction\",\n   \"phase_reference\": \"local\",\n   \"utc_offset_hours\": 1,\n   \"v0_model\": \"schureman_tcd\"\n  },\n  {\n   \"astro_table_id\": \"otc-test-astro-1\",\n   \"constituent_table_version\": \"otc-test-1\",\n   \"convention_id\": \"noaa-greenwich-v1\",\n   \"nodal_handling\": \"f_u_at_prediction\",\n   \"phase_reference\": \"greenwich_utc\",\n   \"v0_model\": \"schureman_tcd\"\n  }\n ],\n \"format_version\": \"1.0\",\n \"licences\": [\n  {\n   \"attribution\": \"Synthetic test data in the style of a public-domain US agency.\",\n   \"commercial_use\": true,\n   \"licence_id\": \"noaa\",\n   \"provider\": \"Example Ocean Service\",\n   \"spdx\": \"LicenseRef-PublicDomain-USGov\"\n  },\n  {\n   \"attribution\": \"Synthetic test data, Example Mapping Authority.\",\n   \"commercial_use\": true,\n   \"licence_id\": \"kartverket\",\n   \"provider\": \"Example Mapping Authority\",\n   \"spdx\": \"CC-BY-4.0\"\n  },\n  {\n   \"attribution\": \"Example tide model, interpolated by OpenTideConstants tests.\",\n   \"commercial_use\": true,\n   \"licence_id\": \"eot20\",\n   \"provider\": \"Example Tide Model Group\",\n   \"spdx\": \"CC-BY-4.0\"\n  },\n  {\n   \"attribution\": \"Contains synthetic test data in the style of GESLA-4.\",\n   \"citation\": \"Example Gauge Agency (2099). Example sea level records. Test citation.\",\n   \"commercial_use\": true,\n   \"licence_id\": \"gesla-derived\",\n   \"provider\": \"Example Gauge Agency via GESLA\",\n   \"spdx\": \"CC-BY-4.0\",\n   \"url\": \"https://example.org/gesla-test\"\n  }\n ],\n \"release\": {\n  \"concept_doi\": \"10.5072/zenodo.1\",\n  \"created\": \"2099-12-31T12:00:00Z\",\n  \"datestamp\": \"20991230\",\n  \"fit_min_good_hours\": 360,\n  \"min_reader_version\": \"1.0\",\n  \"source_versions\": {\n   \"eot20\": \"20991231\",\n   \"gesla\": \"4.1\",\n   \"kartverket\": \"20991231\",\n   \"noaa\": \"20991231\"\n  }\n }\n}\n"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nd70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.2.jsonl\": {\"sha256\": \"759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1\", \"size\": 25827, \"url\": null}, \"OTC_20991231.2.meta.json\": {\"sha256\": \"d70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa\", \"size\": 5350, \"url\": null}, \"OTC_20991231.2.sha256\": {\"sha256\": \"517948045d2fe586eda1dcb386488bc2a7d77d27d5654f43a302c2d9720e3dcf\", \"size\": 178, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991230"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${cache}/v1/releases/20991231.2/index-v1.json"
+     ],
+     "to": "${tmp}/index-copy"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991230"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
+    }
+   ]
   }
  ]
 }
