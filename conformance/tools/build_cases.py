@@ -2483,6 +2483,12 @@ def group_rules():
                      drv("corrupt", path=f"{rdir}/OTC_{d2}.jsonl", offset=100),
                      step("verify", err("checksum_mismatch"))],
                     requires=["fs", "stream"]))
+    # PK-R2-25: verify of a cached release compares with the cached OTC_{D}.sha256, so a missing one fails (spec 4.3)
+    for m in ["stream", "eager"]:
+        out.append(case(f"rules/pk25/verify-cached-missing-sha256-{m}", f"verify on a cached release ({m}) after the cached OTC_{{D}}.sha256 is deleted: checksum_mismatch, never verified", "4.3, 5.3",
+                        [latest({"datestamp": d2}, mode=m), drv("delete", path=f"{rdir}/OTC_{d2}.sha256"),
+                         step("verify", err("checksum_mismatch"))],
+                        requires=["fs", m]))
     out.append(case("rules/pk11/verify-unverified-file", "verify on a file opened with no .sha256 next to it (file_unverified): checksum_mismatch (D20)", "4.3",
                     [drv("copy", files=[f"{FIX}/good/OTC_{d2}.jsonl", f"{FIX}/good/OTC_{d2}.meta.json"], to="${tmp}/rel"),
                      step("open", {"loaded_from": "file_unverified"}, file=f"${{tmp}}/rel/OTC_{d2}.jsonl"),

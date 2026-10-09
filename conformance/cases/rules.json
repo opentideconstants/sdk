@@ -4100,6 +4100,80 @@
    ]
   },
   {
+   "id": "rules/pk25/verify-cached-missing-sha256-stream",
+   "title": "verify on a cached release (stream) after the cached OTC_{D}.sha256 is deleted: checksum_mismatch, never verified",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "checksum_mismatch"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk25/verify-cached-missing-sha256-eager",
+   "title": "verify on a cached release (eager) after the cached OTC_{D}.sha256 is deleted: checksum_mismatch, never verified",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "checksum_mismatch"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk11/verify-unverified-file",
    "title": "verify on a file opened with no .sha256 next to it (file_unverified): checksum_mismatch (D20)",
    "spec": "4.3",

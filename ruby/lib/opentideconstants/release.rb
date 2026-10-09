@@ -358,14 +358,24 @@ class OpenTideConstants
 
         # Used by OpenTideConstants#verify and #close (not public on Release:
         # the API manifest has them on the client only).
-        # Hashes the release files again and compares them with OTC_{D}.sha256.
-        def verify
-            @checks.each do |path, expected|
+        # Hashes the release files again and compares them with rows, the
+        # {name => sha256} of OTC_{D}.sha256 that the client reads again
+        # (spec §4.3). A file with no row is checksum_mismatch.
+        def verify(rows)
+            raise ChecksumError.new("release #{@datestamp}: no files to verify", file: nil, expected: nil, actual: nil) if @checks.empty?
+            @checks.each_key do |path|
+                expected = rows[File.basename(path)]
                 actual = Release.sha256_file(path)
                 next if actual == expected
-                raise ChecksumError.new("#{File.basename(path)}: SHA-256 mismatch", file: path, expected: expected, actual: actual)
+                what = expected ? "SHA-256 mismatch" : "not listed in OTC_#{@datestamp}.sha256"
+                raise ChecksumError.new("#{File.basename(path)}: #{what}", file: path, expected: expected, actual: actual)
             end
             true
+        end
+
+        # The paths of the data files this release was opened from.
+        def opened_paths
+            @checks.keys
         end
 
         def close

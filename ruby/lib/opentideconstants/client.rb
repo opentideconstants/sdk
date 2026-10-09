@@ -189,7 +189,17 @@ class OpenTideConstants
         if @loaded_from == :file_unverified
             raise ChecksumError.new("no OTC_#{@release.datestamp}.sha256 next to the file", file: @file, expected: nil, actual: nil)
         end
-        @release.send(:verify)
+        # Compare with OTC_{D}.sha256, read again: next to the file, or in
+        # the cache directory of a cached release. A missing one is
+        # checksum_mismatch, never verified (spec §4.3, §5.3).
+        d = @release.datestamp
+        sha_name = "OTC_#{d}.sha256"
+        first = @release.send(:opened_paths).first
+        dir = @file ? File.dirname(first || @file) : cache.release_dir(d)
+        sha_path = File.join(dir, sha_name)
+        raise ChecksumError.new("no #{sha_name} next to #{first}", file: first, expected: nil, actual: nil) unless File.file?(sha_path)
+        rows = Reader.parse_sha256(Reader.read_text(sha_path), sha_name)
+        @release.send(:verify, rows)
     end
 
     # Datestamps in the cache, newest first.
