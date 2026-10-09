@@ -4,6 +4,8 @@
  * D19: a ca_file that does not exist is io, and a base_url or proxy that is
  * not an absolute http(s) URL is invalid_argument, at the first call and
  * before any network access (they never fall back to the cache).
+ * D15 (C side of R69): OPENTIDECONSTANTS_OFFLINE is on for 1, true, yes and
+ * on, without regard to case and after trimming spaces.
  * C56: when struct_size is too small, the caller's error (whose field is
  * there in every layout) still says why. */
 #include "otc_test.h"
@@ -52,6 +54,25 @@ int main(void)
     fo.base_url = "http://127.0.0.1:9/";
     fo.proxy = "not a url";
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    /* D15 */
+    {
+        static const char *const on[] = {"1", "true", "TRUE", " yes ", "On", NULL}, *const off[] = {"0", "no", "", "2", NULL};
+        size_t k;
+        otc_fetch_options e;
+        otc_fetch_options_init(&e);
+        e.cache_dir = cache;
+        e.base_url = "http://127.0.0.1:9/";
+        e.on_network_error = OTC_ON_NETWORK_ERROR_RAISE;
+        for (k = 0; on[k]; k++) {
+            setenv("OPENTIDECONSTANTS_OFFLINE", on[k], 1);
+            CHECK_STATUS(otc_fetch_latest(&e, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
+        }
+        for (k = 0; off[k]; k++) {
+            setenv("OPENTIDECONSTANTS_OFFLINE", off[k], 1);
+            CHECK_STATUS(otc_fetch_latest(&e, path, sizeof path, &need), OTC_E_NETWORK);
+        }
+        unsetenv("OPENTIDECONSTANTS_OFFLINE");
+    }
     /* C56 */
     {
         otc_fetch_options small;

@@ -477,6 +477,28 @@ static const char *env_get(const char *name)
     return v && v[0] ? v : NULL;
 }
 
+/* An "on" value of a boolean environment variable (spec 4.2, CR D15): 1, true,
+ * yes or on, without regard to case, after trimming spaces and tabs. */
+static int env_on(const char *v)
+{
+    static const char *const ON[] = {"1", "true", "yes", "on", NULL};
+    size_t n, i, k;
+    if (!v) return 0;
+    while (*v == ' ' || *v == '\t') v++;
+    n = strlen(v);
+    while (n && (v[n - 1] == ' ' || v[n - 1] == '\t')) n--;
+    for (k = 0; ON[k]; k++) {
+        if (strlen(ON[k]) != n) continue;
+        for (i = 0; i < n; i++) {
+            char ch = v[i];
+            if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32);
+            if (ch != ON[k][i]) break;
+        }
+        if (i == n) return 1;
+    }
+    return 0;
+}
+
 static char *default_root(void)
 {
     const char *v;
@@ -559,8 +581,7 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
         if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
         fclose(f);
     }
-    v = env_get("OPENTIDECONSTANTS_OFFLINE");
-    c->offline = (o && o->offline) || (v && !strcmp(v, "1"));
+    c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
     c->formats = (o && o->formats) ? o->formats : (unsigned)OTC_FORMAT_JSONL;
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: unknown bits");

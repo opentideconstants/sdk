@@ -656,7 +656,8 @@ typedef struct otc_fetch_options {
     const char          *cache_dir;     /* NULL: OPENTIDECONSTANTS_CACHE_DIR, else the platform default (spec 5.4) */
     const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/;
                                            an absolute http(s) URL, else OTC_E_INVALID_ARGUMENT */
-    bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE=1; no socket is ever opened */
+    bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE = 1, true, yes or on (any case,
+                                           trimmed); no socket is ever opened */
     double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both, in seconds
                                            (at most 1e6); NaN, negative or larger: OTC_E_INVALID_ARGUMENT */
     const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
