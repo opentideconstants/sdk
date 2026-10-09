@@ -570,7 +570,8 @@ OTC_API otc_status otc_set_convention(const otc_set *set, const otc_convention *
 OTC_API otc_status otc_set_licence(const otc_set *set, const otc_licence **out);
 
 /* Provenance (spec 4.6): one field (a string field as its text, any other
- * value as JSON), or the whole object as JSON (raw, with any further fields). */
+ * value as JSON), or the whole object as JSON (raw, with any further fields).
+ * OTC_E_NOT_FOUND when the set has no provenance object (CR D34). */
 OTC_API otc_status otc_set_provenance_field(const otc_set *set, const char *field, char *buf, size_t len,
                                             size_t *needed);
 OTC_API otc_status otc_set_provenance_json(const otc_set *set, char *buf, size_t len, size_t *needed);

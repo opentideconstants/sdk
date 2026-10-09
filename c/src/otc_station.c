@@ -513,8 +513,7 @@ otc_status otc_set_provenance_json(const otc_set *s, char *buf, size_t len, size
     const cJSON *p;
     if (!s) return OTC_E_INVALID_ARGUMENT;
     p = prov_of(s);
-    if (!p) return otc__copy_str("{}", buf, len, needed); /* a missing provenance reads as {} */
-    return otc__copy_json(p, buf, len, needed);
+    return otc__copy_json(p, buf, len, needed);   /* absent: OTC_E_NOT_FOUND, as for every other value (CR D34) */
 }
 
 #define PROV_STR(NAME, KEY)                                                                    \

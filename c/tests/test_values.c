@@ -9,6 +9,8 @@
  *      for any missing number and count, not zeros.
  * C13: a string cut to fit a small buffer (BUFFER_TOO_SMALL) ends on a whole
  *      UTF-8 character, never inside one.
+ * C43: a set without provenance: otc_set_provenance_json is OTC_E_NOT_FOUND,
+ *      as every other accessor of an absent value (CR D34), not "{}".
  * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
  *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
 #include "otc_test.h"
@@ -101,7 +103,13 @@ int main(void)
                      "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
     st = NULL;
     if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+        const otc_set *set = NULL;
+        char pj[16];
+        size_t pn = 0;
         CHECK(otc_station_kind(st) == OTC_KIND_UNSET);
+        /* C43: this set has no provenance */
+        CHECK_STATUS(otc_station_recommended_set(st, &set), OTC_OK);
+        CHECK_STATUS(otc_set_provenance_json(set, pj, sizeof pj, &pn), OTC_E_NOT_FOUND);
         if (otc_station_kind(st) != OTC_KIND_UNSET) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
     }
     otc_station_free(st);
