@@ -85,6 +85,13 @@ int main(void)
     CHECK(g_requests == 1);
     if (g_requests != 1) fprintf(stderr, "a permanent failure was retried: %d requests\n", g_requests);
     if (g_trap_hits) fprintf(stderr, "libcurl followed the redirect to ftp:// (%d connections)\n", g_trap_hits);
+    /* stop the two server threads (shutdown wakes accept), so nothing is left running */
+    shutdown(g_http, SHUT_RDWR);
+    shutdown(g_trap, SHUT_RDWR);
+    close(g_http);
+    close(g_trap);
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
     free(cache);
     return test_done("test_fetch_redirect");
 }
