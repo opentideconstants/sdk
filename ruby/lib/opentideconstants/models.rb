@@ -53,7 +53,8 @@ class OpenTideConstants
         dropped_reason: %w[rayleigh noise long_period_rule non_tidal_rule convention other],
         qc_flag: %w[time_base broken_record microtidal non_tidal_signal short_record sibling_disagreement carried_over],
         time_base_code: %w[verified corrected unverified disputed],
-        alias_system: %w[noaa gesla ticon xtide kartverket slackwater webcaltides]
+        alias_system: %w[noaa gesla ticon xtide kartverket slackwater webcaltides linz shom pegelonline rws mi dmi smhi fmi
+                          uhslc]
     }.freeze
 
     # One file of a release: name, url, size and sha256 (spec §4.3.1).

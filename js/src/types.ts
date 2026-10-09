@@ -20,7 +20,8 @@ export type QcFlagName = "time_base" | "broken_record" | "microtidal" | "non_tid
     | "carried_over";
 export type DecisionTier = "rule" | "review" | "fallback";
 export type DecisionOutcome = "accept" | "fallback";
-export type AliasSystem = "noaa" | "gesla" | "ticon" | "xtide" | "kartverket" | "slackwater" | "webcaltides";
+export type AliasSystem = "noaa" | "gesla" | "ticon" | "xtide" | "kartverket" | "slackwater" | "webcaltides" | "linz"
+    | "shom" | "pegelonline" | "rws" | "mi" | "dmi" | "smhi" | "fmi" | "uhslc";
 export type Mode = "eager" | "stream";
 export type OnNetworkError = "use_cache" | "raise";
 export type Format = "json" | "json.gz" | "jsonl";
