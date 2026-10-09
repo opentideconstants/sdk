@@ -215,13 +215,24 @@ class OpenTideConstants
     # Closes the client and every Release it loaded (stream mode holds a file
     # handle per release). After close every query and call is io "the
     # release is closed" (CR D21). A second close does nothing.
+    # Every release is closed even when one close fails; the first failure is
+    # raised after, as an SDK error (FileError, io, with the system error as
+    # its cause) (R2-104).
     def close
+        failure = nil
         @lock.synchronize do
             return nil if @closed
             @closed = true
-            ([@release] + @loaded.keys).compact.uniq.each { |r| r.send(:close) }
+            ([@release] + @loaded.keys).compact.uniq.each do |r|
+                r.send(:close)
+            rescue StandardError => e
+                failure ||= [e, r]
+            end
         end
-        nil
+        return nil unless failure
+        e, r = failure
+        raise e if e.is_a?(Error)
+        raise FileError.new("cannot close release #{r.datestamp}: #{e.message}"), cause: e
     end
 
     # ---- queries, forwarded to the current release (spec §4.4–§4.7)
