@@ -32,6 +32,10 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `bad/unresolved-convention/` | a set whose `convention_id` does not exist | `invalid_release` |
 | `bad/min-reader/` | the only release has `min_reader_version` `1.99` | `reader_too_old` |
 | `bad/no-build/` | `OTC-T-0004`'s set has no `provenance.build` (malformed 1.0; valid once it is put back) | loads; `build` is null |
+| `bad/min-reader-malformed/`, `bad/format-version-malformed/` | `min_reader_version` `"2"`, `format_version` `"1.x"` (not MAJOR.MINOR; the index entry is valid) | `invalid_release` (D9) |
+| `bad/active-and-removed-same-id/`, `bad/duplicate-set-id/`, `bad/duplicate-convention-id/` | an id that is both active and a tombstone; two sets with one `set_id`; two conventions with one id | `invalid_release` (D5) |
+| `bad/unresolved-reference-station/`, `bad/unresolved-offsets-licence/` | `subordinate_offsets` naming a station or a licence that does not exist | `invalid_release` |
+| `bad/station-id-not-string/`, `bad/lat-string/`, `bad/aliases-not-object/`, `bad/qc-flags-not-array/`, `bad/convention-without-id/`, `bad/created-not-string/`, `bad/source-versions-not-object/` | one value of the wrong type (schema-invalid) | `invalid_release` |
 | `bad/gz-differs/` | honest digests, but the `.json.gz` decompresses to other data than the `.json` | `checksum_mismatch` (reference reader only) |
 | `bad/jsonl-differs/` | honest digests, but a `.jsonl` line differs from the `.json` station | `invalid_release` (reference reader only) |
 | `bad/meta-differs/` | honest digests, but the `.meta.json` differs from the `.json` without stations | `invalid_release` (reference reader only) |
@@ -102,3 +106,13 @@ The licences are not in `licence_id` order. Every gauge set has a `time_base` an
 | `OTC-T-0108` | a tombstone, `removed_reason` `merged`, `merged_into` `OTC-T-0101` |
 
 The `reader/` and `major/` releases hold only `OTC-T-0101`.
+
+Roots for the cross-SDK value rules of review round 1 (each loads):
+
+| Root | What it has |
+|---|---|
+| `values/` | `release.created` with an offset and a fraction (`2099-12-31T02:00:00.5+02:00`), a non-number in `validation.previous_release`, a station name with a NUL inside and one that ends in NUL |
+| `values-kept-reason/` | a constituent `kept_reason` of 48 bytes (the schema sets no maxLength) |
+| `values-source-name/` | a constituent `source_name` of 31 characters that are 62 UTF-8 bytes |
+| `fold/` | station names for the fold rules of D12 (final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP) |
+| `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |

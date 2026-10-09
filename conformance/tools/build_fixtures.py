@@ -79,7 +79,8 @@ TOO_NEW = "1.99"
 NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-GENERATED = ["good", "order", "v1", "reader", "major", "bad", "fixtures.json"]
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "nogz",
+             "bad", "fixtures.json"]
 
 BASE = "20991231"
 SECOND = "20991231.2"
@@ -672,13 +673,25 @@ def changed_doc(change):
     def make():
         doc = release_doc(BASE)
         change(doc)
-        doc["stations"].sort(key=lambda s: s["station_id"])
+        doc["stations"].sort(key=lambda s: str(s["station_id"]))
         return [doc]
     return make
 
 
 def _station(doc, sid):
     return next(s for s in doc["stations"] if s["station_id"] == sid)
+
+
+def index_honest(files, sums, entry, reuse):
+    """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
+    entry = copy.deepcopy(entry)
+    entry.update(format_version=FORMAT, min_reader_version=FORMAT, created="2099-12-31T00:00:00Z")
+    return files, sums, entry
+
+
+def _duplicate_set(doc):
+    st = _station(doc, "OTC-T-0001")
+    st["constant_sets"].append(copy.deepcopy(st["constant_sets"][0]))
 
 
 def _duplicate_station(doc):
@@ -718,6 +731,35 @@ BAD = [
      lambda: [versioned(small_doc(BASE), TOO_NEW)], None),
     ("no-build", "load", "OTC-T-0004's set has no provenance.build (malformed: format 1.0 requires it); it must load, with build null",
      lambda: [no_build_doc()], None),
+    # Cross-SDK rules of review round 1 (PK03, PK06, PK07): each SDK must refuse these with invalid_release.
+    ("min-reader-malformed", "invalid_release", "release.min_reader_version is \"2\" (not MAJOR.MINOR; D9)",
+     changed_doc(lambda d: d["release"].update(min_reader_version="2")), index_honest),
+    ("format-version-malformed", "invalid_release", "format_version is \"1.x\" (not MAJOR.MINOR; D9)",
+     changed_doc(lambda d: d.update(format_version="1.x")), index_honest),
+    ("active-and-removed-same-id", "invalid_release", "OTC-T-0020 is both an active station and a tombstone (D5)",
+     changed_doc(lambda d: d["stations"].append(tombstone("OTC-T-0020", "Minimal Station", BASE, "duplicate", "OTC-T-0001"))), None),
+    ("duplicate-set-id", "invalid_release", "OTC-T-0001 has two sets with the set_id OTC-T-0001/noaa (D5)",
+     changed_doc(_duplicate_set), None),
+    ("unresolved-reference-station", "invalid_release", "OTC-T-0003's subordinate_offsets.reference_station_id is OTC-T-9999",
+     changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(reference_station_id="OTC-T-9999")), None),
+    ("unresolved-offsets-licence", "invalid_release", "OTC-T-0003's subordinate_offsets.licence_id is no-such-licence",
+     changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(licence_id="no-such-licence")), None),
+    ("duplicate-convention-id", "invalid_release", "two conventions with the convention_id noaa-greenwich-v1 (D5)",
+     changed_doc(lambda d: d["conventions"].append(copy.deepcopy(d["conventions"][2]))), None),
+    ("station-id-not-string", "invalid_release", "OTC-T-0020's station_id is the number 20 (malformed: schema-invalid)",
+     changed_doc(lambda d: _station(d, "OTC-T-0020").update(station_id=20)), None),
+    ("lat-string", "invalid_release", "OTC-T-0010's lat is the string \"0.0\" (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat="0.0")), None),
+    ("aliases-not-object", "invalid_release", "OTC-T-0006's aliases is a list (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0006").update(aliases=["TOS"])), None),
+    ("qc-flags-not-array", "invalid_release", "OTC-T-0002's first set has qc_flags as an object (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0002")["constant_sets"][0].update(qc_flags={"flag": "carried_over"})), None),
+    ("convention-without-id", "invalid_release", "the first convention has no convention_id (malformed; the .meta.json path reads it too)",
+     changed_doc(lambda d: d["conventions"][1].pop("convention_id")), None),
+    ("created-not-string", "invalid_release", "release.created is the number 2099 (malformed)",
+     changed_doc(lambda d: d["release"].update(created=2099)), index_honest),
+    ("source-versions-not-object", "invalid_release", "release.source_versions is a list (malformed)",
+     changed_doc(lambda d: d["release"].update(source_versions=["gesla 4.1"])), None),
     # Reference-reader coverage (review round 1, B2-T1): each rule of the reader decides one of these outcomes, so
     # turning a rule off fails --check. The first three are reader-only (D37: SDKs do not cross-check the files of a
     # release; each file is checked against OTC_{D}.sha256).
@@ -865,6 +907,61 @@ def small_doc(datestamp, full=False, concept_doi="10.5072/zenodo.1"):
     return doc
 
 
+VALUES = "20991231.2"
+FOLD_D = "20991231.2"
+
+
+def values_doc():
+    """Values the SDKs gave four answers for (review round 1, PK08), in a valid 1.0 release:
+    a created time with an offset and a fraction, a validation previous_release with a non-number value, a station
+    name with a NUL inside, and one that ends in NUL."""
+    doc = small_doc(VALUES)
+    doc["release"]["created"] = "2099-12-31T02:00:00.5+02:00"
+    s1 = doc["stations"][0]
+    s1["validation"] = [{"set_id": f"{s1['station_id']}/noaa", "reference_source": "noaa", "window": "2099-01",
+                         "time_mae_min": 1.5, "height_mae_m": 0.01, "previous_release": {"time_mae_min": "n/a", "height_mae_m": 0.02}}]
+    doc["stations"] += [gauge_station("OTC-T-0151", "Me\u0000da", "MLT", 35.9, 14.5, "Europe/Malta", 0.4),
+                        gauge_station("OTC-T-0152", "Pier\u0000", "MLT", 35.8, 14.4, "Europe/Malta", 0.4)]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
+def kept_reason_doc():
+    """A constituent kept_reason of 48 bytes (the schema sets no maxLength; PK08 B2-1, D13)."""
+    doc = small_doc(VALUES)
+    doc["stations"][0]["constant_sets"][0]["constituents"][0]["kept_reason"] = "snr above 2.0 and stable across the yearly fits"
+    return doc
+
+
+def source_name_doc():
+    """A constituent source_name of 31 characters that are 62 UTF-8 bytes (maxLength counts characters; PK08 B2-2)."""
+    doc = small_doc(VALUES)
+    doc["stations"][0]["constant_sets"][0]["constituents"][0]["source_name"] = "\u00d8" * 31
+    return doc
+
+
+FOLD_NAMES = [("OTC-T-0161", "\u0126amrun"), ("OTC-T-0162", "\u0166orvik"), ("OTC-T-0163", "\u014aaliq"),
+              ("OTC-T-0164", "\u0138immik"), ("OTC-T-0165", "\u03a0\u03cc\u03c1\u03bf\u03c2"),
+              ("OTC-T-0166", "Paral\u00b7lel"), ("OTC-T-0167", "Saint\u00a0Malo")]
+
+
+def fold_doc():
+    """Station names for the fold rules of D12: \u03c2 (final sigma), \u0127, \u0167, \u014b, \u0138, the middle dot and NBSP."""
+    doc = small_doc(FOLD_D)
+    doc["stations"] += [gauge_station(sid, name, "MLT", 35.0 + i / 10, 14.0, "Europe/Malta", 0.3)
+                        for i, (sid, name) in enumerate(FOLD_NAMES)]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
+def no_gz(files, sums, entry, reuse):
+    """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
+    files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
+    entry = copy.deepcopy(entry)
+    entry["files"] = [f for f in entry["files"] if not f["name"].endswith(".json.gz")]
+    return rehash(files, sums, entry)
+
+
 ROOTS = [
     # (root, docs, version DOIs, zenodo_material, manifest entry)
     ("good", lambda: [release_doc(BASE), release_doc(SECOND)], {SECOND: "10.5072/zenodo.2"}, (),
@@ -881,6 +978,15 @@ ROOTS = [
       "expect": "load", "expect_by_release": {READER_NEW: {"error": "reader_too_old"}}, "defect": None,
       "note": f"the pointers name {READER_NEW} (min_reader_version {TOO_NEW}); a 1.0 reader takes {READER_OK} "
               "from OTC_index.json (spec 5.2 step 2a)"}),
+    ("values", lambda: [values_doc()], {VALUES: "10.5072/zenodo.5"}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None,
+      "note": "created with an offset and a fraction, a non-number in validation.previous_release, station names with a NUL"}),
+    ("values-kept-reason", lambda: [kept_reason_doc()], {}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a kept_reason of 48 bytes"}),
+    ("values-source-name", lambda: [source_name_doc()], {}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a source_name of 31 characters, 62 bytes"}),
+    ("fold", lambda: [fold_doc()], {}, (),
+     {"releases": [FOLD_D], "latest": FOLD_D, "expect": "load", "defect": None, "note": "station names for the D12 fold rules"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
@@ -901,6 +1007,9 @@ def build(out, reuse):
     for name, docs, vdois, material, entry in ROOTS:
         write_root(out / name, docs(), reuse_root=(reuse / name) if reuse else None, version_dois=vdois, material=material)
         manifest["fixtures"].append({"root": name, **entry})
+    write_root(out / "nogz", [release_doc(SECOND)], reuse_root=(reuse / "nogz") if reuse else None, tamper=no_gz)
+    manifest["fixtures"].append({"root": "nogz", "releases": [SECOND], "latest": SECOND, "expect": "load", "defect": None,
+                                 "note": "the release publishes no .json.gz"})
     for name, expect, defect, docs, tamper, *extra in BAD:
         write_root(out / "bad" / name, docs(), reuse_root=(reuse / "bad" / name) if reuse else None, tamper=tamper)
         manifest["fixtures"].append({"root": f"bad/{name}", "releases": [BASE], "latest": BASE,
@@ -1006,6 +1115,10 @@ def strip_unknown(schema, value, node):
 
 def cross_ref_errors(doc):
     errs = []
+    for what, key in (("conventions", "convention_id"), ("licences", "licence_id")):
+        ids = [x[key] for x in doc[what]]
+        if len(ids) != len(set(ids)):
+            errs.append(f"duplicate {key} in {what}")
     conv = {c["convention_id"] for c in doc["conventions"]}
     lic = {l["licence_id"] for l in doc["licences"]}
     table = {(c["constituent_table_version"], c["name"]) for c in doc["constituents"]}
@@ -1129,12 +1242,13 @@ def open_release(root, datestamp, schemas):
         if sha(data) != f["sha256"]:
             raise Fail("checksum_mismatch", f"{f['name']}: sha256 {sha(data)} vs {f['sha256']}")
     body = read_file(root, f"OTC_{datestamp}.json")
-    try:
-        unzipped = gzip.decompress(read_file(root, f"OTC_{datestamp}.json.gz"))
-    except (OSError, EOFError, zlib.error) as e:
-        raise Fail("checksum_mismatch", f".json.gz is not gzip: {type(e).__name__}: {e}") from None
-    if unzipped != body:
-        raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
+    if f"OTC_{datestamp}.json.gz" in {f["name"] for f in entry["files"]}:   # a release need not publish .json.gz
+        try:
+            unzipped = gzip.decompress(read_file(root, f"OTC_{datestamp}.json.gz"))
+        except (OSError, EOFError, zlib.error) as e:
+            raise Fail("checksum_mismatch", f".json.gz is not gzip: {type(e).__name__}: {e}") from None
+        if unzipped != body:
+            raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
     try:
         doc = strict_json(body)
         meta = strict_json(read_file(root, f"OTC_{datestamp}.meta.json"))
@@ -1200,7 +1314,8 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
     errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
-    errs += cross_ref_errors(checked)
+    if not errs:   # the cross-references assume the types the schema gives
+        errs = cross_ref_errors(checked)
     if errs:
         raise Fail("invalid_release", "; ".join(errs[:5]))
     if exact is not None:
