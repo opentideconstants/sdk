@@ -123,7 +123,9 @@ jobs:
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
         env: { OTC_RUNNER_THREADS: "8" }
+      # Also after a failed run, so the report that failed it is printed.
       - name: No sanitizer reports
+        if: ${{ !cancelled() }}
         run: |
           if [ -n "$(ls -A san)" ]; then head -50 san/*; exit 1; fi
           echo "no sanitizer report files"
@@ -153,12 +155,15 @@ jobs:
           OTC_RUNNER_THREADS: "4"
           OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
         run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+      # Also after a failed run, so the report that failed it is printed.
       - name: No Valgrind reports
+        if: ${{ !cancelled() }}
         run: |
-          echo "valgrind log files: $(ls vg | wc -l)"
-          test "$(ls vg | wc -l)" -gt 400
+          count=$(find vg -type f | wc -l)
+          echo "valgrind log files: $count"
           bad=$(find vg -type f -size +0)
-          if [ -n "$bad" ]; then head -60 $bad; exit 1; fi
+          if [ -n "$bad" ]; then echo "$bad" | xargs head -60; exit 1; fi
+          test "$count" -gt 400
           echo "every valgrind log is empty"
 
   amalgamation:
