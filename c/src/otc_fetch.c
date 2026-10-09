@@ -320,7 +320,8 @@ static int fs_kind_nofollow(const char *path)
 }
 
 /* rm -r that never follows a symlink: a link is removed, not what it points
- * to. 0 when nothing is left at path, -1 when something could not be removed. */
+ * to. 0 when nothing is left at path, -1 when something could not be removed,
+ * -2 when memory ran out (something may be left). */
 static int fs_rm_rf(const char *path)
 {
     int k = fs_kind_nofollow(path), bad = 0;
@@ -328,14 +329,17 @@ static int fs_rm_rf(const char *path)
     if (k == 1) {
         char **names = NULL;
         size_t n = 0, i;
-        if (fs_list(path, &names, &n) != OTC_OK) return -1;
+        otc_status st = fs_list(path, &names, &n);
+        if (st != OTC_OK) return st == OTC_E_NOMEM ? -2 : -1;
         for (i = 0; i < n; i++) {
             char *p = path2(path, names[i]);
-            if (!p || fs_rm_rf(p) != 0) bad = 1;
+            int r = p ? fs_rm_rf(p) : -2;
+            if (r == -2 || (r && !bad)) bad = r;
             free(p);
         }
         free_list(names, n);
-        if (fs_rmdir(path) != 0) bad = 1;
+        if (bad == -2) return -2;
+        if (fs_rmdir(path) != 0) bad = -1;
     } else {
 #ifdef _WIN32
         /* a directory junction or symlink is removed with rmdir, a file with unlink */
@@ -344,7 +348,7 @@ static int fs_rm_rf(const char *path)
         if (fs_unlink(path) != 0) bad = 1;
 #endif
     }
-    return bad || fs_kind_nofollow(path) != 0 ? -1 : 0;
+    return (bad || fs_kind_nofollow(path) != 0) ? -1 : 0;
 }
 
 /* mkdir -p; 0 when path is a directory afterwards */
@@ -2386,6 +2390,12 @@ otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char **dates
     if (st == OTC_OK) {
         *count = n;
         if (n > cap) st = OTC_E_BUFFER_TOO_SMALL;
+    } else if (datestamps) {   /* a failure hands the caller nothing to free */
+        size_t j;
+        for (j = 0; j < i && j < cap; j++) {
+            free(datestamps[j]);
+            datestamps[j] = NULL;
+        }
     }
     free_list(list, n);
     ctx_free(&c);
@@ -2404,7 +2414,7 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
     if (st == OTC_OK) st = cached_list(&c, &list, &n);
     for (i = keep; st == OTC_OK && i < n; i++) {
         char *d, *v, token[33];
-        int held = 0;
+        int held = 0, rm;
         if (current && !strcmp(current, list[i])) continue;
         d = rel_dir(&c, list[i]);
         v = d ? path2(d, ".verified") : NULL;
@@ -2418,8 +2428,13 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
             continue;
         }
         /* readers stop trusting it first; a release whose .verified cannot be removed is left whole */
-        if ((fs_unlink(v) != 0 && fs_kind_nofollow(v) != 0) || fs_rm_rf(d) != 0) {
+        if (fs_unlink(v) != 0 && fs_kind_nofollow(v) != 0) {
             st = fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
+            lock_release(&c, d, token);
+        } else if ((rm = fs_rm_rf(d)) != 0) {
+            /* .verified is gone, so the release is no longer listed; the rest is left over */
+            st = rm == -2 ? fail(&c, OTC_E_NOMEM, d, "out of memory while removing %s", d)
+                          : fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
             lock_release(&c, d, token);
         } else {
             logf_(&c, 1, "pruned %s", list[i]);
