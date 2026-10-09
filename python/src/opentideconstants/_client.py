@@ -57,6 +57,18 @@ def _split_file_name(name: str):
     return None, None
 
 
+def _check_user_agent(v) -> None:
+    """user_agent is a string with no control characters (C0, DEL, C1) and only latin-1 characters, the ones an HTTP
+    header can carry; otherwise invalid_argument at construction (spec §4.2, §5.7, CR2 DR20)."""
+    if v is None:
+        return
+    if not isinstance(v, str):
+        raise InvalidArgumentError(f"user_agent must be a string, not {type(v).__name__}")
+    bad = next((c for c in v if ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F or ord(c) > 0xFF), None)
+    if bad is not None:
+        raise InvalidArgumentError(f"user_agent has a control or non-latin-1 character (U+{ord(bad):04X}): {v!r}")
+
+
 def _flag(v) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
@@ -110,6 +122,7 @@ class OpenTideConstants:
         self._update_interval = float(update_interval if update_interval is not None else 86_400)
         self._verify_on_open = verify_on_open
         ua = f"opentideconstants-python/{__version__} (+https://opentideconstants.org)"
+        _check_user_agent(user_agent)
         if user_agent:
             ua += " " + user_agent
         self._http = Http(user_agent=ua, timeout=timeout, proxy=proxy, ca_file=ca_file, logger=self._log)
@@ -355,6 +368,10 @@ class OpenTideConstants:
         not raised (CR D8)."""
         url = self._url(name)
         body, etag = self._cache.read_pointer(name)
+        if etag and not all(0x20 <= ord(c) < 0x7F for c in etag):
+            # a stored ETag that is not a valid header value is not sent (the server sends a 200 and a new one)
+            self._log.warning("the cached ETag of %s is not a valid header value; not sending it", name)
+            etag = None
         headers = {"If-None-Match": etag} if body is not None and etag else {}
         r = self._http.get(url, headers=headers, accept_gzip=True)
         if r.status == 304 and not headers:

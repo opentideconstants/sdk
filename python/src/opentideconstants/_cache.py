@@ -164,7 +164,8 @@ class Cache:
         d = self.pointer_dir()
         try:
             body = (d / name).read_bytes()
-            etag = (d / (name + ".etag")).read_text(encoding="utf-8").strip()
+            # an ETag that is not UTF-8 is read with U+FFFD in it, so the client does not send it
+            etag = (d / (name + ".etag")).read_bytes().decode("utf-8", "replace").strip()
             return body, etag
         except OSError:
             return None, None

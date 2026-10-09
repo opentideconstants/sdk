@@ -724,6 +724,46 @@ class HttpTest(unittest.TestCase):
             srv.close()
 
 
+class ErrorClassificationTest(unittest.TestCase):
+    """Failures leave the SDK as SDK errors with the spec 4.8 code (CR2 PK-R2-11)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "cache"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_bad_user_agent_is_invalid_argument_at_construction(self):
+        # DR20: a string with no control characters, latin-1 only; checked before any request
+        srv = _Server()
+        try:
+            for ua in [5, b"app/1", "app/1\r\nX-Injected: 1", "app\u00851", "app/\u20ac1"]:
+                with self.subTest(ua=ua), self.assertRaises(otc.InvalidArgumentError):
+                    otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), user_agent=ua)
+            self.assertEqual(srv.requests, [])
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), user_agent="caf\u00e9/1") as c:
+                self.assertEqual(c.release.datestamp, "20991231.2")
+        finally:
+            srv.close()
+
+    def test_cached_etag_with_a_control_character_is_not_sent(self):
+        # a cached ETag that is not a valid header value is ignored, never a raw ValueError at the request
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            etag = self.cache / "v1" / "pointer" / "OTC_latest-f1.json.etag"
+            for bad in ['"a"\r\nX-Injected: 1'.encode(), '"caf\u20ac"'.encode(), b'"\xff\xfe"']:
+                etag.write_bytes(bad)
+                srv.requests.clear()
+                with self.subTest(etag=bad), otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as c:
+                    self.assertEqual(c.release.datestamp, "20991231.2")
+                self.assertNotIn("If-None-Match", srv.requests[0][1])
+        finally:
+            srv.close()
+
+
 class LifecycleTest(unittest.TestCase):
     """close(), swapped-out releases and the automatic update (spec §4.2, §4.3, §5.6, CR D21; review PK13)."""
 
