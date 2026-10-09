@@ -26,8 +26,8 @@ from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, Inv
                       ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError, redact_credentials)
 from ._http import TIMEOUT_MAX_S, TIMEOUT_MIN_S, Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
-from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
-                       meta_path_for, readable, version_key)
+from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, _read_bytes, file_sha256,
+                       load_document, meta_path_for, readable, version_key)
 
 __version__ = "0.1.0"
 SDK = f"opentideconstants-python/{__version__}"
@@ -307,7 +307,7 @@ class OpenTideConstants:
                 raise FileError(f"cannot open {p}: no such file", path=str(p))
         sha_path = path.with_name(f"OTC_{d}.sha256")
         if sha_path.exists():
-            rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
+            rows = _parse_sha256(_read_bytes(sha_path), sha_path.name)
             for p in opened:
                 self._check_file(p, rows.get(p.name))
             files = [FileInfo(n, None, (path.parent / n).stat().st_size if (path.parent / n).exists() else None, rows[n])
@@ -319,13 +319,6 @@ class OpenTideConstants:
         rel = load_document(path, self._mode, files)
         rel._opened = tuple(opened)
         self._set(rel, lf)
-
-    @staticmethod
-    def _read_bytes(p: Path) -> bytes:
-        try:
-            return p.read_bytes()
-        except OSError as e:
-            raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
 
     @staticmethod
     def _check_file(p: Path, expected: Optional[str]) -> None:
@@ -957,7 +950,7 @@ class OpenTideConstants:
             sha_path = self._cache.release_dir(ds) / f"OTC_{ds}.sha256"
         if not sha_path.exists():
             raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
-        sha_body = self._read_bytes(sha_path)
+        sha_body = _read_bytes(sha_path)
         if self._loaded_from not in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED):
             actual = hashlib.sha256(sha_body).hexdigest()
             for expected in self._cached_pointer_sha256(ds):
