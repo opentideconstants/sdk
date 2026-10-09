@@ -166,8 +166,10 @@ static int fs_mkdir(const char *path)
 {
 #ifdef _WIN32
     wchar_t *w = widen(path);
-    int r = w ? _wmkdir(w) : -1;
-    int e = errno;
+    int r, e;
+    if (!w) return -1;   /* no conversion: an error, never "exists" from a stale errno */
+    r = _wmkdir(w);
+    e = errno;
     free(w);
     if (r == 0) return 0;
     return e == EEXIST ? 1 : -1;
