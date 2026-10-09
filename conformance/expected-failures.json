@@ -364,8 +364,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "typescript"
    ],

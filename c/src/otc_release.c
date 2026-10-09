@@ -749,8 +749,13 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s has no release.datestamp", meta_path);
         return OTC_E_INVALID_RELEASE;
     }
-    {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions */
+    {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions; a
+         * min_reader_version that is present but not MAJOR.MINOR is invalid_release (CR D9) */
         const char *mrv = otc__jstr(r->release_obj, "min_reader_version");
+        if (otc__jget(r->release_obj, "min_reader_version") && !otc__version_valid(mrv)) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "release.min_reader_version is not MAJOR.MINOR");
+            return OTC_E_INVALID_RELEASE;
+        }
         if (mrv && !otc__readable(NULL, mrv)) {
             otc__err_set(err, OTC_E_READER_TOO_OLD, meta_path,
                          "release %s needs a reader for format %s; this SDK reads format %s",

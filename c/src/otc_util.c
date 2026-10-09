@@ -115,9 +115,11 @@ int otc__readable(const char *fv, const char *mrv)
 {
     long major, minor;
     if (fv) {
+        if (!otc__version_valid(fv)) return 0;
         version_parse(fv, &major, &minor);
         if (major != OTC_FORMAT_MAJOR) return 0;
     }
+    if (mrv && !otc__version_valid(mrv)) return 0;   /* fail closed (spec 7.4, CR D9) */
     return !mrv || otc__version_cmp(mrv, OTC_FORMAT_VERSION) <= 0;
 }
 

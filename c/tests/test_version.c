@@ -36,5 +36,16 @@ int main(void)
         if (st != OTC_E_INVALID_RELEASE) fprintf(stderr, "format_version %s: %s\n", bad_fv[i], otc_status_code(st));
         CHECK(st == OTC_E_INVALID_RELEASE);
     }
+    /* min_reader_version: present, so it must be a valid version (a number or a malformed string fails closed) */
+    CHECK_STATUS(open_with("\"1.0\"", "\"1.0\""), OTC_OK);
+    CHECK_STATUS(open_with("\"1.0\"", "\"1.1\""), OTC_E_READER_TOO_OLD);
+    CHECK_STATUS(open_with("\"1.0\"", "null"), OTC_OK);
+    for (i = 0; bad_fv[i]; i++) {
+        otc_status st = open_with("\"1.0\"", bad_fv[i]);
+        if (st != OTC_E_INVALID_RELEASE) fprintf(stderr, "min_reader_version %s: %s\n", bad_fv[i], otc_status_code(st));
+        CHECK(st == OTC_E_INVALID_RELEASE);
+    }
+    CHECK_STATUS(open_with("\"1.0\"", "2"), OTC_E_INVALID_RELEASE);
+    CHECK_STATUS(open_with("\"1.0\"", "\"2\""), OTC_E_INVALID_RELEASE);
     return test_done("test_version");
 }

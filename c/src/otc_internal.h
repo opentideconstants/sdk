@@ -114,7 +114,8 @@ int otc__version_valid(const char *v);
  * unparsable version sorts as 0.0. */
 int otc__version_cmp(const char *a, const char *b);
 /* 1 when this library reads a release of format_version fv whose
- * release.min_reader_version is mrv (either may be NULL). */
+ * release.min_reader_version is mrv (either may be NULL; a malformed one is
+ * never readable). */
 int otc__readable(const char *fv, const char *mrv);
 otc_phase_reference otc__parse_phase_reference(const char *s);
 otc_nodal_handling otc__parse_nodal_handling(const char *s);

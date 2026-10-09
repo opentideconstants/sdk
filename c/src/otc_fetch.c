@@ -999,9 +999,10 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     *out = NULL;
     if (!cJSON_IsObject(e) || !ds || !valid_datestamp(ds) || (files && !cJSON_IsArray(files)))
         return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a release entry without a valid datestamp or files", doc_url);
-    if (otc__jget(e, "format_version") && !otc__version_valid(fv))   /* spec 7.4 (CR D9) */
-        return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: release %s has a format_version that is not MAJOR.MINOR",
-                    doc_url, ds);
+    if ((otc__jget(e, "format_version") && !otc__version_valid(fv))   /* spec 7.4 (CR D9) */
+        || (otc__jget(e, "min_reader_version") && !otc__version_valid(mrv)))
+        return fail(c, OTC_E_INVALID_RELEASE, doc_url,
+                    "%s: release %s has a format_version or min_reader_version that is not MAJOR.MINOR", doc_url, ds);
     ri = (otc_release_info *)calloc(1, sizeof *ri);
     if (!ri) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     ri->datestamp = otc__strdup(ds);
@@ -1387,9 +1388,16 @@ static otc_status cached_list(fctx *c, char ***out, size_t *n_out)
     return OTC_OK;
 }
 
-static int ver_ok(const char *fv, const char *mrv)
+/* The versions of obj (a .verified record, an index entry, or a .meta.json and
+ * its release object) are readable. An absent one is taken as readable (the
+ * release's own files are checked at open); a present one that is not
+ * MAJOR.MINOR, a string or not, is not (spec 7.4, CR D9). */
+static int ver_ok(const cJSON *fv_obj, const cJSON *mrv_obj)
 {
-    return (!fv || format_major(fv) == OTC_FORMAT_MAJOR) && otc__readable(NULL, mrv);
+    const cJSON *fv = otc__jget(fv_obj, "format_version"), *mrv = otc__jget(mrv_obj, "min_reader_version");
+    if (fv && format_major(cJSON_IsString(fv) ? fv->valuestring : NULL) != OTC_FORMAT_MAJOR) return 0;
+    if (mrv && !cJSON_IsString(mrv)) return 0;
+    return otc__readable(NULL, mrv ? mrv->valuestring : NULL);
 }
 
 /* A cached release this library reads (spec 5.2 step 1): its format_version
@@ -1399,16 +1407,16 @@ static int cached_readable(fctx *c, const char *ds, const cJSON *index)
     cJSON *v = read_verified(c, ds), *meta = NULL;
     const cJSON *e;
     char *mp, *t;
-    int ok = ver_ok(otc__jstr(v, "format_version"), otc__jstr(v, "min_reader_version"));
+    int ok = ver_ok(v, v);
     cJSON_Delete(v);
     cJSON_ArrayForEach(e, otc__jget(index, "releases"))
         if (ok && !otc__strcmp_null(otc__jstr(e, "datestamp"), ds))
-            ok = ver_ok(otc__jstr(e, "format_version"), otc__jstr(e, "min_reader_version"));
+            ok = ver_ok(e, e);
     if (!ok) return 0;
     mp = rel_file(c, ds, ".meta.json");
     t = mp ? slurp(mp) : NULL;
     meta = t ? otc__json_parse(t, strlen(t)) : NULL;
-    if (meta) ok = ver_ok(otc__jstr(meta, "format_version"), otc__jstr(otc__jget(meta, "release"), "min_reader_version"));
+    if (meta) ok = ver_ok(meta, otc__jget(meta, "release"));
     cJSON_Delete(meta);
     free(t);
     free(mp);
