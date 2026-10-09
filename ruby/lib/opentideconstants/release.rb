@@ -564,6 +564,8 @@ class OpenTideConstants
                 raise InvalidReleaseError, "station_id #{sid} appears twice" unless ids.add?(sid)
                 # A line with no status (or null) is an active station, as in the stream index (CR2 DR28).
                 status = raw["status"].nil? ? "active" : raw["status"]
+                # A status that is there but not a String is malformed (schema type string, CR2 DR43).
+                raise InvalidReleaseError, "station #{sid}: status is not a string: #{status.inspect[0, 100]}" unless status.is_a?(String)
                 if status == "removed"
                     Release.check_tombstone!(raw)
                     tombs << Tombstone.new(raw)

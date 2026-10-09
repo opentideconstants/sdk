@@ -816,6 +816,8 @@ BAD_R2_05 = [
      changed_doc(lambda d: _station(d, "OTC-T-0010").update(name=7)), None),
     ("station-timezone-number", "OTC-T-0010's timezone is the number 1 (malformed)",
      changed_doc(lambda d: _station(d, "OTC-T-0010").update(timezone=1)), None),
+    ("status-number", "OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(status=5)), None),
     ("offsets-number-string", "OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed)",
      changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(time_offset_high_min="12")), None),
     ("validation-number-string", "OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed)",

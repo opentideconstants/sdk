@@ -10166,6 +10166,92 @@
    ]
   },
   {
+   "id": "rules/r2-pk24/bad-status-number-json",
+   "title": "bad/status-number opened as .json (eager): invalid_release at open (OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43))",
+   "spec": "4.4, 4.8, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/status-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk24/bad-status-number-json-gz",
+   "title": "bad/status-number opened as .json.gz (eager): invalid_release at open (OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43))",
+   "spec": "4.4, 4.8, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/status-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk24/bad-status-number-jsonl",
+   "title": "bad/status-number opened as .jsonl (eager): invalid_release at open (OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43))",
+   "spec": "4.4, 4.8, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/status-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk24/bad-status-number-jsonl-stream",
+   "title": "bad/status-number opened as .jsonl (stream): invalid_release at open (OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43))",
+   "spec": "4.4, 4.8, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/status-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/r2-pk07/index-line-qc-flags",
    "title": "bad/qc-flags-not-array cached with a fresh index-v1.json: the open uses the index; reading OTC-T-0002's line is invalid_release naming index-v1.json, which is deleted; the next open fails the full pass",
    "spec": "6.2",

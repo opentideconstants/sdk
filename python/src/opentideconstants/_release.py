@@ -181,9 +181,14 @@ def _n(d, k):
 
 
 def _status(d):
-    """A line's status: a line with no status (or null) is an active station, as in the stream index (CR2 DR28)."""
+    """A line's status: a line with no status (or null) is an active station, as in the stream index (CR2 DR28). A
+    status that is there but not a string is invalid_release (schema type string, CR2 DR43)."""
     s = d.get("status")
-    return "active" if s is None else s
+    if s is None:
+        return "active"
+    if not isinstance(s, str):
+        raise InvalidReleaseError(f"station {d.get('station_id')!r}: status is not a string: {s!r}")
+    return s
 
 
 def _entry(d, offset=None, length=None):

@@ -746,6 +746,17 @@
    "root": "bad/station-timezone-number"
   },
   {
+   "defect": "OTC-T-0010's status is the number 5: present but not a string (malformed, CR2 DR43)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/status-number"
+  },
+  {
    "defect": "OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed)",
    "expect": {
     "error": "invalid_release"

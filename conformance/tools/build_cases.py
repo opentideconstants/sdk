@@ -2595,6 +2595,7 @@ def group_rules():
                             requires=["fs"] + req))
     out += r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned)
     out += rules_r2_pk05()
+    out += rules_r2_pk24()
     out += rules_r2_pk07()
     out += rules_r2_pk09()
     return out
@@ -2723,6 +2724,25 @@ R2_PK05_BAD = ["recommended-set-id-number", "station-name-number", "station-time
                "constant-sets-null-item", "lat-overflow-literal", "lon-overflow-literal", "lat-huge-int",
                "constituent-amplitude-inf", "constituent-amplitude-huge-int", "invalid-utf8", "lone-surrogate",
                "constituent-name-twice", "duplicate-licence-id", "tombstone-twice"]
+
+
+def rules_r2_pk24():
+    """Review round 2, PK-R2-24: a station status that is present but not a string is invalid_release in every SDK and
+    every load path (CR2 DR43, orchestrator decision 2026-10-09); a null status stays active (CR2 DR28)."""
+    out = []
+    fixtures = {f["root"]: f for f in json.loads((FIXTURES / "fixtures.json").read_bytes())["fixtures"]}
+    for root in ["status-number"]:
+        fx = fixtures[f"bad/{root}"]
+        if fx["expect"] != {"error": "invalid_release"}:
+            raise SystemExit(f"bad/{root}: fixtures.json expects {fx['expect']}, not invalid_release")
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"rules/r2-pk24/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open ({fx['defect']})",
+                            "4.4, 4.8, 7.3",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
+    return out
 
 
 def rules_r2_pk05():
