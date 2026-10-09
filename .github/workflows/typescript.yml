@@ -129,14 +129,16 @@ jobs:
             sleep 0.5
           done
           curl -s -o /dev/null http://127.0.0.1:18765/ || { echo "the fixture server is not ready after 60 s"; exit 1; }
-          docker run --rm --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim sh -ec '
-            node --version
-            mkdir /app && cd /app && npm init -y >/dev/null
-            npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
-            test "$(npm ls --all --omit=dev --parseable | wc -l)" -eq 2
-            cp /pkg/quickstart.mjs .
-            OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:18765/good/ node quickstart.mjs 9900001 | tee out.txt
-            grep -q "OTC-T-0001 San Francisco: M2 amplitude 0.5 m" out.txt
-            OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | grep -q "(cache)"
-            node -e "const { OpenTideConstants } = require(\"opentideconstants\"); if (typeof OpenTideConstants.open !== \"function\") process.exit(1)"
-          '
+          docker run --rm -i --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim bash -eo pipefail -s <<'SCRIPT'
+          node --version
+          mkdir /app && cd /app && npm init -y >/dev/null
+          npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
+          npm ls --all --omit=dev --parseable > deps.txt
+          test "$(wc -l < deps.txt)" -eq 2
+          cp /pkg/quickstart.mjs .
+          OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:18765/good/ node quickstart.mjs 9900001 | tee out.txt
+          grep -q "OTC-T-0001 San Francisco: M2 amplitude 0.5 m" out.txt
+          OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | tee offline.txt
+          grep -q "(cache)" offline.txt
+          node -e 'const { OpenTideConstants } = require("opentideconstants"); if (typeof OpenTideConstants.open !== "function") process.exit(1)'
+          SCRIPT
