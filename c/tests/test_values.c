@@ -5,9 +5,13 @@
  *      text after a line's object is invalid_release, not ignored.
  * C34: the kind filter "other" is not a kind value: it matches no station,
  *      also not one whose kind is unknown (spec 4.4).
+ * C35: a validation row without previous_release has NaN and -1 there, as
+ *      for any missing number and count, not zeros.
  * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
  *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
 #include "otc_test.h"
+
+#include <math.h>
 
 static otc_release *open_lines(const char *lines, char **dir_out)
 {
@@ -39,6 +43,10 @@ int main(void)
         if (v) {
             CHECK(v->missed_events == -1);
             CHECK(v->extra_events == 2);
+            /* C35 */
+            CHECK(!v->has_previous_release);
+            CHECK(isnan(v->previous_release.time_mae_min) && isnan(v->previous_release.range_error_m));
+            CHECK(v->previous_release.missed_events == -1 && v->previous_release.extra_events == -1);
             if (v->missed_events != -1) fprintf(stderr, "missed_events 1.5 read as %lld\n", (long long)v->missed_events);
         }
     }

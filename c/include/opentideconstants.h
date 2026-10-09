@@ -467,7 +467,7 @@ typedef struct otc_validation_t {
     int64_t                missed_events;
     int64_t                extra_events;
     bool                   has_previous_release;
-    otc_previous_release_t previous_release;
+    otc_previous_release_t previous_release;   /* NaN and -1 throughout when has_previous_release is false */
 } otc_validation_t;
 /* Every row of the station, in file order. */
 OTC_API size_t otc_station_validation_count(const otc_station_t *st);

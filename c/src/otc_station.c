@@ -21,6 +21,10 @@ static void fill_validation(otc_validation_t *v, const cJSON *row)
     v->range_error_m = otc__jnum(row, "range_error_m");
     v->missed_events = otc__jint(row, "missed_events");
     v->extra_events = otc__jint(row, "extra_events");
+    /* without previous_release its numbers read as missing (NaN, -1), not as zeros */
+    v->previous_release.time_mae_min = v->previous_release.time_p95_min = v->previous_release.time_bias_min = NAN;
+    v->previous_release.height_mae_m = v->previous_release.range_error_m = NAN;
+    v->previous_release.missed_events = v->previous_release.extra_events = -1;
     if (cJSON_IsObject(prev)) {
         v->has_previous_release = true;
         v->previous_release.time_mae_min = otc__jnum(prev, "time_mae_min");
