@@ -236,7 +236,7 @@ typedef void (*otc_log_fn)(void *user_data, int level, const char *message); /* 
 
 typedef struct otc_open_options {
     size_t      struct_size;      /* set by otc_open_options_init() */
-    bool        require_checksum; /* a missing OTC_{D}.sha256 next to the file is an error */
+    bool        require_checksum; /* a missing OTC_{D}.sha256 next to the file is OTC_E_CHECKSUM (DR34) */
     otc_error  *error;            /* detail of a failed open; NULL = not wanted */
     otc_log_fn  log_fn;           /* optional */
     void       *log_user_data;

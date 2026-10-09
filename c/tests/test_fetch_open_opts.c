@@ -1,8 +1,9 @@
 /* PK20 / C25: otc_fetch_open passes the caller's open options to the open
  * of the cached file: its log_fn sees that open, and require_checksum
  * applies (spec 4.2, header of otc_fetch_open): with the .sha256 gone, the
- * same open gives io with require_checksum, and opens from the cache without
- * it (the control, so the io is require_checksum's doing). */
+ * same open gives checksum_mismatch with require_checksum (DR34), and opens
+ * from the cache without it (the control, so the failure is
+ * require_checksum's doing). */
 #include "otc_test.h"
 
 static int g_file_open_logged;
@@ -35,14 +36,14 @@ int main(void)
     otc_close(rel);
     rel = NULL;
     CHECK(g_file_open_logged >= 1);
-    /* from the cache, require_checksum with the .sha256 removed: io */
+    /* from the cache, require_checksum with the .sha256 removed: checksum_mismatch (DR34) */
     {
         char *sums = test_join(cache, "v1/releases/20991231.2/OTC_20991231.2.sha256");
         if (unlink(sums) != 0) { perror(sums); return 2; }
         free(sums);
     }
     fo.offline = true;
-    CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", &oo, &rel), OTC_E_IO);
+    CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", &oo, &rel), OTC_E_CHECKSUM);
     CHECK(strstr(err.message, "require_checksum") != NULL);
     if (!strstr(err.message, "require_checksum")) fprintf(stderr, "error: %s\n", err.message);
     otc_close(rel);

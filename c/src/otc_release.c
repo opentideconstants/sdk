@@ -1058,8 +1058,9 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         if ((st = check_digest(meta_path, path_base(meta_path), hex, names, digests, n_rows, err)) != OTC_OK) goto done;
         r->loaded_from = OTC_LOADED_FROM_FILE;
     } else if (opts && opts->require_checksum) {
-        otc__err_set(err, OTC_E_IO, sha_path, "require_checksum: %s does not exist", sha_path);
-        st = OTC_E_IO;
+        /* DR34: the same answer as otc_verify_file (D20): nothing to check against is a checksum failure */
+        otc__err_set(err, OTC_E_CHECKSUM, path, "require_checksum: no %s next to the file %s", path_base(sha_path), path);
+        st = OTC_E_CHECKSUM;
         goto done;
     } else {
         r->loaded_from = OTC_LOADED_FROM_FILE_UNVERIFIED;

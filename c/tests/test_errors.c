@@ -3,7 +3,11 @@
  *      read reports that failure, not station_removed with "?" fields.
  * C46: otc_station_offsets on a station with no offsets (NOT_FOUND) leaves
  *      no stale values from an earlier call in *out: every field the earlier
- *      call set is cleared. */
+ *      call set is cleared.
+ * DR34: otc_open_file with require_checksum and no OTC_{D}.sha256 next to
+ *      the file is OTC_E_CHECKSUM, "no OTC_{D}.sha256 next to the file", the
+ *      same as otc_verify_file (D20); without require_checksum it opens
+ *      (file_unverified), the control. */
 #include "otc_test.h"
 
 #include <math.h>
@@ -67,6 +71,28 @@ int main(void)
         CHECK(off.struct_size == sizeof off);
         otc_station_free(sub);
         otc_station_free(ref);
+    }
+    otc_close(rel);
+    rel = NULL;
+    /* DR34 (no OTC_20990101.sha256 in dir) */
+    {
+        otc_open_options oo;
+        otc_error err;
+        otc_open_options_init(&oo);
+        otc_error_init(&err);
+        oo.error = &err;
+        oo.require_checksum = true;
+        CHECK_STATUS(otc_open_file(path, &oo, &rel), OTC_E_CHECKSUM);
+        CHECK(rel == NULL);
+        CHECK(err.status == OTC_E_CHECKSUM);
+        CHECK(strstr(err.message, "no OTC_20990101.sha256 next to") != NULL);
+        if (!strstr(err.message, "no OTC_20990101.sha256 next to")) fprintf(stderr, "message: %s\n", err.message);
+        otc_close(rel);
+        rel = NULL;
+        CHECK_STATUS(otc_verify_file(path, NULL, &err), OTC_E_CHECKSUM);   /* the same answer (D20) */
+        oo.require_checksum = false;
+        CHECK_STATUS(otc_open_file(path, &oo, &rel), OTC_OK);
+        if (rel) CHECK(otc_release_loaded_from(rel) == OTC_LOADED_FROM_FILE_UNVERIFIED);
     }
     otc_close(rel);
     free(path);
