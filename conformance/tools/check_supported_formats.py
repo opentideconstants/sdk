@@ -17,6 +17,8 @@ check fails when, for any language:
     version.rb VERSION, the top-level "version" of js/package.json read as JSON, C OTC_VERSION);
   - supported_format_version is not the SDK's declared SUPPORTED_FORMAT_VERSION (C: OTC_FORMAT_VERSION);
   - the SDK declares no SUPPORTED_FORMAT_VERSION, or declares it more than once with different values.
+  - a file that the check reads cannot be read (missing, a directory, not UTF-8; a .py file that is not valid
+    Python). This is a FAIL line for that language, and the other languages are still checked.
 
 The declaration is read from the source, so the check needs no toolchain. Every declaration counts, in
 every source file of the SDK:
@@ -80,16 +82,26 @@ def rel(p):
     return p.relative_to(ROOT).as_posix()
 
 
+class Unreadable(Exception):
+    """A file that cannot be read as UTF-8 text (missing, a directory, not UTF-8, no permission)."""
+
+
 def read(p):
-    return p.read_text(encoding="utf-8")
+    try:
+        return p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise Unreadable(f"cannot read {rel(p)}: {e}") from None
 
 
-# ---- the package version
+# ---- the package version: (versions found, the file, an error or None)
 
 
 def version_by_regex(path, regex):
     def get():
-        return [m.group(1) for m in re.finditer(regex, read(ROOT / path), re.M)], path
+        try:
+            return [m.group(1) for m in re.finditer(regex, read(ROOT / path), re.M)], path, None
+        except Unreadable as e:
+            return [], path, str(e)
     return get
 
 
@@ -97,10 +109,12 @@ def version_from_package_json():
     path = "js/package.json"
     try:
         doc = json.loads(read(ROOT / path))
-    except ValueError:
-        return [], path
+    except Unreadable as e:
+        return [], path, str(e)
+    except ValueError as e:
+        return [], path, f"{path} is not JSON: {e}"
     v = doc.get("version") if isinstance(doc, dict) else None
-    return ([v] if isinstance(v, str) else []), path
+    return ([v] if isinstance(v, str) else []), path, None
 
 
 # ---- the declared SUPPORTED_FORMAT_VERSION: a list of (file, version or None for "cannot read")
@@ -110,8 +124,11 @@ def python_declarations():
     out = []
     for p in files(["python/src/**/*.py", "python/src/**/*.pyi"]):
         try:
-            tree = ast.parse(read(p), filename=str(p))
-        except SyntaxError as e:
+            tree = ast.parse(p.read_bytes(), filename=str(p))  # bytes: ast honours a PEP 263 coding line
+        except OSError as e:
+            out.append((rel(p), None, f"cannot read: {e}"))
+            continue
+        except (SyntaxError, ValueError) as e:  # ValueError: a NUL byte (Python 3.10, 3.11)
             out.append((rel(p), None, f"not valid Python: {e}"))
             continue
 
@@ -142,7 +159,11 @@ def python_declarations():
 def ruby_declarations():
     out = []
     for p in files(["ruby/lib/**/*.rb"]):
-        text = re.sub(r"^=begin\b.*?^=end\b[^\n]*", "", read(p), flags=re.M | re.S)
+        try:
+            text = re.sub(r"^=begin\b.*?^=end\b[^\n]*", "", read(p), flags=re.M | re.S)
+        except Unreadable as e:
+            out.append((rel(p), None, str(e)))
+            continue
         for m in RUBY_ASSIGN.finditer(text):
             out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
         for m in RUBY_CONST_SET.finditer(text):
@@ -154,7 +175,11 @@ def ts_declarations():
     out = []
     exts = ("ts", "mts", "cts", "tsx", "js", "mjs", "cjs")
     for p in files([f"js/src/**/*.{e}" for e in exts]):
-        text = read(p)
+        try:
+            text = read(p)
+        except Unreadable as e:
+            out.append((rel(p), None, str(e)))
+            continue
         for rx in (TS_DECL, TS_ASSIGN):
             for m in rx.finditer(text):
                 out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
@@ -166,7 +191,12 @@ def ts_declarations():
 def c_declarations():
     out = []
     for p in files(["c/include/**/*.h", "c/src/**/*.h", "c/src/**/*.c"]):
-        for m in C_DEFINE.finditer(read(p)):
+        try:
+            text = read(p)
+        except Unreadable as e:
+            out.append((rel(p), None, str(e)))
+            continue
+        for m in C_DEFINE.finditer(text):
             out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
     return out
 
@@ -178,7 +208,7 @@ LANGUAGES = {
     "ruby": (version_by_regex("ruby/lib/opentideconstants/version.rb", r'^\s*VERSION\s*=\s*"([^"]+)"'),
              ruby_declarations),
     "js": (version_from_package_json, ts_declarations),
-    "c": (version_by_regex("c/include/opentideconstants.h", r'^#define\s+OTC_VERSION\s+"([^"]+)"'),
+    "c": (version_by_regex("c/include/opentideconstants.h", r'^\s*#\s*define\s+OTC_VERSION\s+"([^"]+)"'),
           c_declarations),
 }
 
@@ -190,6 +220,8 @@ def check_language(lang):
         return [f"{lang}: {path.relative_to(ROOT)} is missing"], None
     try:
         doc = json.loads(read(path))
+    except Unreadable as e:
+        return [f"{lang}: {e}"], None
     except ValueError as e:
         return [f"{lang}: {path.relative_to(ROOT)} is not JSON: {e}"], None
     if not isinstance(doc, dict) or set(doc) != KEYS:
@@ -197,8 +229,10 @@ def check_language(lang):
     errs = []
     if doc["language"] != lang:
         errs.append(f"{lang}: language is {doc['language']!r}, not {lang!r} (the tag prefix {lang}-v)")
-    versions, vfile = get_version()
-    if len(versions) != 1:
+    versions, vfile, verr = get_version()
+    if verr:
+        errs.append(f"{lang}: {verr}")
+    elif len(versions) != 1:
         errs.append(f"{lang}: expected one package version in {vfile}, found {len(versions)}")
     elif doc["version"] != versions[0]:
         errs.append(f"{lang}: version is {doc['version']!r}, but {vfile} says {versions[0]!r}")
@@ -225,7 +259,10 @@ def check_language(lang):
 def main():
     problems = []
     for lang in LANGUAGES:
-        errs, note = check_language(lang)
+        try:
+            errs, note = check_language(lang)
+        except Exception as e:  # noqa: BLE001 - report it as this language's failure and check the others
+            errs, note = [f"{lang}: the check itself failed: {type(e).__name__}: {e}"], None
         print(f"{'FAIL' if errs else 'PASS'}  {lang:7} {note or ''}")
         problems += errs
     for p in problems:
