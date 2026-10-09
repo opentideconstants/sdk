@@ -69,3 +69,28 @@ def test_reference_reader_raises_fail(tmp_path, tamper, code):
     with pytest.raises(bf.Fail) as e:
         bf.open_release(root, bf.BASE, None)
     assert e.value.code == code, str(e.value)
+
+
+import os  # noqa: E402
+
+SCHEMA_DIR = os.environ.get("OTC_SCHEMA_DIR") or os.path.expanduser("~/.local/share/copilotkit/cr/otc-sdk-int/fix/pk19/schemas")
+
+
+@pytest.fixture(scope="module")
+def schemas():
+    try:
+        return bf.load_schemas(SCHEMA_DIR if os.path.isdir(SCHEMA_DIR) else None)
+    except (OSError, SystemExit) as e:
+        pytest.skip(f"no pinned schemas: {e}")
+
+
+# --- K46: a set with no provenance at all is invalid_release; the missing-build repair does not crash on it
+
+def test_set_without_provenance_is_invalid_not_keyerror(schemas):
+    doc = bf.release_doc(bf.BASE)
+    st = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0004")
+    del st["constant_sets"][0]["provenance"]
+    meta = {k: v for k, v in doc.items() if k != "stations"}
+    with pytest.raises(bf.Fail) as e:
+        bf.validate_release(doc, meta, doc["stations"], schemas, allow_missing_build=True)
+    assert e.value.code == "invalid_release"

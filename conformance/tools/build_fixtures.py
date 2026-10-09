@@ -617,7 +617,8 @@ def restore_station_build(st):
     """One station (a .jsonl line) with every missing provenance.build put back."""
     st = copy.deepcopy(st)
     for cs in st.get("constant_sets", []):
-        cs["provenance"].setdefault("build", dict(BUILD))
+        if isinstance(cs.get("provenance"), dict):   # the same sets the detection picks
+            cs["provenance"].setdefault("build", dict(BUILD))
     return st
 
 
@@ -999,7 +1000,9 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
     tolerated = []
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
-    missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", []) if "build" not in cs.get("provenance", {})]
+    # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
+    missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", [])
+               if isinstance(cs.get("provenance"), dict) and "build" not in cs["provenance"]]
     if missing and allow_missing_build:
         tolerated = [f"no provenance.build in {m}" for m in missing]
         doc = restore_build(doc)
