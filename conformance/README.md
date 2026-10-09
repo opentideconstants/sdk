@@ -13,7 +13,7 @@ The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pa
 | `server.py` | The fixture HTTP server, the recording proxy and the tripwire. |
 | `driver.py` | Runs the cases against one runner and reports PASS / FAIL / SKIP. |
 | `runners/<lang>/` | One runner per SDK. `runners/null/` is the null runner. |
-| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`; 0.5 for an SDK that does not declare one yet, which reads only the format 0.x drafts). |
+| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version; for `js/` the top-level `version` of `package.json`, read as JSON) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`, C `OTC_FORMAT_VERSION`). Every SDK must declare it with a quoted `MAJOR.MINOR` literal; an SDK that declares none, or declares different values, fails. The declaration is read from every source file of the SDK (Python with `ast`, `.py` and `.pyi`; Ruby `=`, `\|\|=` and `&&=`; TypeScript `.ts`, `.mts`, `.cts`; C every header and source); comments and docstrings do not count. |
 
 All Python here uses the standard library only (Python 3.10 or later).
 

@@ -13,43 +13,47 @@ The publication plan's reader gate reads it from the GitHub release of the tag <
 check fails when, for any language:
   - the file is missing, is not a JSON object, or has other keys than these three;
   - language is not the directory's tag prefix (python, ruby, js, c);
-  - version is not the package version (pyproject / version.rb / package.json / OTC_VERSION);
-  - supported_format_version is not the SDK's declared SUPPORTED_FORMAT_VERSION (C: OTC_FORMAT_VERSION).
+  - version is not the package version (python/src/opentideconstants/_client.py __version__, ruby
+    version.rb VERSION, the top-level "version" of js/package.json read as JSON, C OTC_VERSION);
+  - supported_format_version is not the SDK's declared SUPPORTED_FORMAT_VERSION (C: OTC_FORMAT_VERSION);
+  - the SDK declares no SUPPORTED_FORMAT_VERSION, or declares it more than once with different values.
 
-An SDK that does not declare SUPPORTED_FORMAT_VERSION yet predates format 1.0: it reads only the format 0.x
-drafts (0.5 at most) and does not read release.min_reader_version. For such an SDK the only accepted value is
-0.5; the SDK work for format 1.0 declares SUPPORTED_FORMAT_VERSION and moves the file to 1.0 with it.
-This allowance is temporary: removing it (so an undeclared version fails) is an exit item of the K7 language
-work, before any SDK release 1.0.0.
-The declaration is read from the source, so the check needs no toolchain: every assignment to
-SUPPORTED_FORMAT_VERSION (C: #define OTC_FORMAT_VERSION), with a value in single or double quotes. A
-declaration whose value is not such a literal (a computed value) cannot be checked, so it fails.
+The declaration is read from the source, so the check needs no toolchain. Every declaration counts, in
+every source file of the SDK:
+  - Python: python/src/**/*.py and *.pyi, parsed with the ast module; an assignment, an annotated
+    assignment with a value, an augmented assignment or a walrus to the name (or to an attribute of that
+    name). A docstring or a comment is not a declaration.
+  - Ruby: ruby/lib/**/*.rb; a line that starts with the constant (optionally Module::-qualified) and
+    assigns it with =, ||= or &&=, and any const_set of the name. Comment lines and =begin/=end blocks
+    are not declarations.
+  - TypeScript: js/src/**/*.{ts,mts,cts,tsx,js,mjs,cjs}; a line that starts with a const/let/var
+    declaration of the name (optionally export/declare), a line that starts with an assignment to it, and
+    an export that renames another binding to it ("as SUPPORTED_FORMAT_VERSION"). A JSDoc or block
+    comment line starts with "*" or "/*", so it is not a declaration.
+  - C: c/include/**/*.h and c/src/**/*.{h,c}; a #define OTC_FORMAT_VERSION line.
+A declaration whose value is not a quoted MAJOR.MINOR literal (a computed value, an aliased export, a
+const_set) cannot be checked, so it fails.
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+NAME = "SUPPORTED_FORMAT_VERSION"
 VERSION_RE = r"[0-9]+\.[0-9]+"
-PRE_10 = "0.5"  # the newest format an SDK with no SUPPORTED_FORMAT_VERSION reads (a 0.x draft)
 KEYS = {"language", "version", "supported_format_version"}
 
-# Any assignment: optional keywords and a type annotation before "=" (never "=="), the value up to the line end.
-ASSIGN = r'^[^\n#/]*\bSUPPORTED_FORMAT_VERSION\b\s*(?::[^=\n]+)?=(?!=)\s*([^\n]*)$'
-# language: (package version: file, regex), (declared supported format version: glob, regex)
-LANGUAGES = {
-    "python": (("python/src/opentideconstants/_client.py", r'^__version__\s*=\s*"([^"]+)"'),
-               ("python/src/opentideconstants/**/*.py", ASSIGN)),
-    "ruby": (("ruby/lib/opentideconstants/version.rb", r'^\s*VERSION\s*=\s*"([^"]+)"'),
-             ("ruby/lib/**/*.rb", ASSIGN)),
-    "js": (("js/package.json", r'^\s*"version"\s*:\s*"([^"]+)"'),
-           ("js/src/**/*.ts", ASSIGN)),
-    "c": (("c/include/opentideconstants.h", r'^#define\s+OTC_VERSION\s+"([^"]+)"'),
-          ("c/include/*.h", r'^\s*#\s*define\s+OTC_FORMAT_VERSION\b\s*([^\n]*)$')),
-}
+RUBY_ASSIGN = re.compile(rf"^\s*(?:(?:::)?[A-Z]\w*::)*(?:::)?{NAME}\s*(?:\|\||&&)?=(?![=~>])\s*([^\n]*)$", re.M)
+RUBY_CONST_SET = re.compile(rf"^(?!\s*#).*\bconst_set\b[\s(]*[:'\"]?{NAME}\b[^\n]*$", re.M)
+TS_DECL = re.compile(rf"^\s*(?:export\s+)?(?:declare\s+)?(?:const|let|var)\s+{NAME}\b\s*(?::[^=\n]+)?=(?![=>])\s*([^\n]*)$",
+                     re.M)
+TS_ASSIGN = re.compile(rf"^\s*{NAME}\s*(?:\|\||&&|\?\?)?=(?![=>])\s*([^\n]*)$", re.M)
+TS_ALIAS = re.compile(rf"^(?!\s*(?:\*|//|/\*)).*\bas\s+{NAME}\b[^\n]*$", re.M)
+C_DEFINE = re.compile(r"^\s*#\s*define\s+OTC_FORMAT_VERSION\b\s*([^\n]*)$", re.M)
 
 
 def literal(rhs):
@@ -63,21 +67,129 @@ def literal(rhs):
     return m.group(2) if m else None
 
 
-def find_all(pattern_glob, regex):
-    hits = []
-    for p in sorted(ROOT.glob(pattern_glob)):
-        for m in re.finditer(regex, p.read_text(encoding="utf-8"), re.M):
-            hits.append((p.relative_to(ROOT).as_posix(), m.group(1)))
-    return hits
+def files(globs):
+    seen = set()
+    for g in globs:
+        for p in sorted(ROOT.glob(g)):
+            if p.is_file() and p not in seen:
+                seen.add(p)
+                yield p
+
+
+def rel(p):
+    return p.relative_to(ROOT).as_posix()
+
+
+def read(p):
+    return p.read_text(encoding="utf-8")
+
+
+# ---- the package version
+
+
+def version_by_regex(path, regex):
+    def get():
+        return [m.group(1) for m in re.finditer(regex, read(ROOT / path), re.M)], path
+    return get
+
+
+def version_from_package_json():
+    path = "js/package.json"
+    try:
+        doc = json.loads(read(ROOT / path))
+    except ValueError:
+        return [], path
+    v = doc.get("version") if isinstance(doc, dict) else None
+    return ([v] if isinstance(v, str) else []), path
+
+
+# ---- the declared SUPPORTED_FORMAT_VERSION: a list of (file, version or None for "cannot read")
+
+
+def python_declarations():
+    out = []
+    for p in files(["python/src/**/*.py", "python/src/**/*.pyi"]):
+        try:
+            tree = ast.parse(read(p), filename=str(p))
+        except SyntaxError as e:
+            out.append((rel(p), None, f"not valid Python: {e}"))
+            continue
+
+        def named(t):
+            return (isinstance(t, ast.Name) and t.id == NAME) or (isinstance(t, ast.Attribute) and t.attr == NAME)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets = [t for tgt in node.targets for t in (tgt.elts if isinstance(tgt, (ast.Tuple, ast.List)) else [tgt])]
+                value = node.value if any(named(t) for t in node.targets) else None
+                if not any(named(t) for t in targets):
+                    continue
+            elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and named(node.target):
+                value = node.value
+                if value is None:  # an annotation only (x: str) declares no value
+                    continue
+            elif isinstance(node, ast.AugAssign) and named(node.target):
+                value = None
+            else:
+                continue
+            if isinstance(value, ast.Constant) and isinstance(value.value, str) and re.fullmatch(VERSION_RE, value.value):
+                out.append((rel(p), value.value, None))
+            else:
+                out.append((rel(p), None, f"line {node.lineno}: not a quoted MAJOR.MINOR literal"))
+    return out
+
+
+def ruby_declarations():
+    out = []
+    for p in files(["ruby/lib/**/*.rb"]):
+        text = re.sub(r"^=begin\b.*?^=end\b[^\n]*", "", read(p), flags=re.M | re.S)
+        for m in RUBY_ASSIGN.finditer(text):
+            out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
+        for m in RUBY_CONST_SET.finditer(text):
+            out.append((rel(p), None, repr(m.group(0).strip())))
+    return out
+
+
+def ts_declarations():
+    out = []
+    exts = ("ts", "mts", "cts", "tsx", "js", "mjs", "cjs")
+    for p in files([f"js/src/**/*.{e}" for e in exts]):
+        text = read(p)
+        for rx in (TS_DECL, TS_ASSIGN):
+            for m in rx.finditer(text):
+                out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
+        for m in TS_ALIAS.finditer(text):
+            out.append((rel(p), None, repr(m.group(0).strip())))
+    return out
+
+
+def c_declarations():
+    out = []
+    for p in files(["c/include/**/*.h", "c/src/**/*.h", "c/src/**/*.c"]):
+        for m in C_DEFINE.finditer(read(p)):
+            out.append((rel(p), literal(m.group(1)), None if literal(m.group(1)) else repr(m.group(0).strip())))
+    return out
+
+
+# language: (package version reader, declaration reader)
+LANGUAGES = {
+    "python": (version_by_regex("python/src/opentideconstants/_client.py", r'^__version__\s*=\s*"([^"]+)"'),
+               python_declarations),
+    "ruby": (version_by_regex("ruby/lib/opentideconstants/version.rb", r'^\s*VERSION\s*=\s*"([^"]+)"'),
+             ruby_declarations),
+    "js": (version_from_package_json, ts_declarations),
+    "c": (version_by_regex("c/include/opentideconstants.h", r'^#define\s+OTC_VERSION\s+"([^"]+)"'),
+          c_declarations),
+}
 
 
 def check_language(lang):
-    (vfile, vre), (dglob, dre) = LANGUAGES[lang]
+    get_version, get_declarations = LANGUAGES[lang]
     path = ROOT / lang / "supported-formats.json"
     if not path.exists():
         return [f"{lang}: {path.relative_to(ROOT)} is missing"], None
     try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc = json.loads(read(path))
     except ValueError as e:
         return [f"{lang}: {path.relative_to(ROOT)} is not JSON: {e}"], None
     if not isinstance(doc, dict) or set(doc) != KEYS:
@@ -85,34 +197,29 @@ def check_language(lang):
     errs = []
     if doc["language"] != lang:
         errs.append(f"{lang}: language is {doc['language']!r}, not {lang!r} (the tag prefix {lang}-v)")
-    versions = find_all(vfile, vre)
+    versions, vfile = get_version()
     if len(versions) != 1:
         errs.append(f"{lang}: expected one package version in {vfile}, found {len(versions)}")
-    elif doc["version"] != versions[0][1]:
-        errs.append(f"{lang}: version is {doc['version']!r}, but {vfile} says {versions[0][1]!r}")
+    elif doc["version"] != versions[0]:
+        errs.append(f"{lang}: version is {doc['version']!r}, but {vfile} says {versions[0]!r}")
     sfv = doc["supported_format_version"]
     if not isinstance(sfv, str) or not re.fullmatch(VERSION_RE, sfv):
         errs.append(f"{lang}: supported_format_version {sfv!r} is not MAJOR.MINOR")
-    declared = find_all(dglob, dre)
-    unparsed = [(f, rhs) for f, rhs in declared if literal(rhs) is None]
+    declared = get_declarations()
+    unparsed = [(f, why) for f, v, why in declared if v is None]
     if unparsed:
-        errs.append(f"{lang}: cannot read SUPPORTED_FORMAT_VERSION as a quoted MAJOR.MINOR literal: {unparsed}")
+        errs.append(f"{lang}: cannot read {NAME} as a quoted MAJOR.MINOR literal: {unparsed}")
         return errs, None
-    declared = [(f, literal(rhs)) for f, rhs in declared]
-    values = sorted({v for _, v in declared})
+    values = sorted({v for _, v, _ in declared})
+    if not values:
+        errs.append(f"{lang}: the SDK declares no {NAME} (C: OTC_FORMAT_VERSION); every SDK must declare it")
+        return errs, None
     if len(values) > 1:
-        errs.append(f"{lang}: SUPPORTED_FORMAT_VERSION is declared with different values: {declared}")
+        errs.append(f"{lang}: {NAME} is declared with different values: {[(f, v) for f, v, _ in declared]}")
         return errs, None
-    if values:
-        if sfv != values[0]:
-            errs.append(f"{lang}: supported_format_version is {sfv!r}, but the SDK declares {values[0]!r} ({declared[0][0]})")
-        note = f"declared {values[0]} in {declared[0][0]}"
-    else:
-        if sfv != PRE_10:
-            errs.append(f"{lang}: the SDK declares no SUPPORTED_FORMAT_VERSION (it predates format 1.0 and reads "
-                        f"{PRE_10} at most), but supported_format_version is {sfv!r}")
-        note = f"no SUPPORTED_FORMAT_VERSION declared: an SDK before format 1.0, so {PRE_10}"
-    return errs, note
+    if sfv != values[0]:
+        errs.append(f"{lang}: supported_format_version is {sfv!r}, but the SDK declares {values[0]!r} ({declared[0][0]})")
+    return errs, f"declared {values[0]} in {declared[0][0]}"
 
 
 def main():
