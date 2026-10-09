@@ -21,7 +21,7 @@ class CacheLockTest < Minitest::Test
         dir = cache.ensure_dir(cache.release_dir("20991231"))
         lock = File.join(dir, ".lock")
         Dir.mkdir(lock)
-        File.write(File.join(lock, "owner.json"), "{}")
+        File.write(File.join(lock, "owner.json"), JSON.generate("started_at" => "2000-01-01T00:00:00Z")) # old: stale (CR2 DR3)
         FileUtils.chmod(0o555, lock)
         t = Thread.new { cache.with_lock(dir) { :ran } }
         t.report_on_exception = false
@@ -164,5 +164,113 @@ class CacheLockTest < Minitest::Test
         refute_nil held.station("OTC-T-0001")
     ensure
         c&.close
+    end
+
+    # ---- spec §5.4 (CR2 DR3): a lock is stale only when the waiter has
+    # waited the stale time and the lock itself is at least 120 s old. These
+    # tests shorten the wait; the age stays 120 s, and the lock's age is set
+    # by its started_at or its mtime, so the outcome does not depend on timing.
+
+    def held_lock(cache, ds, started_at: nil, mtime: nil)
+        dir = cache.ensure_dir(cache.release_dir(ds))
+        lock = File.join(dir, ".lock")
+        Dir.mkdir(lock)
+        File.write(File.join(lock, "owner.json"), JSON.generate("token" => "other", "started_at" => started_at)) if started_at
+        File.utime(mtime, mtime, lock) if mtime
+        [dir, lock]
+    end
+
+    def owner_token(lock)
+        JSON.parse(File.read(File.join(lock, "owner.json")))["token"]
+    end
+
+    def test_a_waiter_does_not_remove_a_young_lock
+        cache = quick_cache
+        dir, lock = held_lock(cache, "20991231", started_at: Time.now.utc.iso8601)
+        polls = 0
+        ran = false
+        # done ends the wait after 30 polls: 7.5 times the (shortened) stale wait
+        result = cache.with_lock(dir, done: -> { (polls += 1) >= 30 }) { ran = true }
+        refute ran, "a waiter took a lock that is only seconds old"
+        assert_equal :done, result
+        assert_equal "other", owner_token(lock)
+    end
+
+    def test_a_waiter_takes_an_old_lock_by_started_at_or_by_mtime
+        cache = quick_cache
+        [{ started_at: "2000-01-01T00:00:00Z" }, { mtime: Time.at(946_684_800) }].each_with_index do |how, i|
+            dir, lock = held_lock(cache, "2099123#{i}", **how)
+            token = nil
+            cache.with_lock(dir) { token = owner_token(lock) }
+            refute_nil token
+            refute_equal "other", token
+        end
+    end
+
+    def test_two_waiters_on_a_crashed_lock_never_hold_it_together
+        cache = quick_cache
+        dir, = held_lock(cache, "20991231", started_at: "2000-01-01T00:00:00Z")
+        first_in = Queue.new
+        second_in = Queue.new
+        overlap = []
+        mutex = Mutex.new
+        first = true
+        # the second waiter starts once the first holds the lock, so it meets a
+        # young lock (two waiters that read the crashed lock's age at the same
+        # instant can still both remove it; spec §5.4 accepts that)
+        waiters = 2.times.map do |i|
+            first_in.pop.tap { |x| first_in << x } if i == 1
+            Thread.new do
+                cache.with_lock(dir) do
+                    am_first = mutex.synchronize { f = first; first = false; f }
+                    if am_first
+                        first_in << true
+                        # the other waiter has waited past the stale time; it must not take this young lock
+                        overlap << !second_in.pop(timeout: 1.0).nil?
+                    else
+                        second_in << true
+                    end
+                end
+            end
+        end
+        waiters.each { |t| t.join(10) }
+        assert_equal [false], overlap, "two waiters held the lock at the same time"
+        assert_equal 1, second_in.size, "the second waiter never took the lock"
+    end
+
+    # R2-011/R2-013: prune takes the lock without waiting and applies the age
+    # test, so the lock of a crashed process does not keep a release forever,
+    # also a partial directory that never got a .verified.
+    def test_prune_removes_a_partial_directory_with_a_crashed_lock_and_keeps_a_young_one
+        srv = serve
+        cache, c = two_cached(srv)
+        old = File.join(cache, "v1", "releases", "20991230")
+        young = File.join(cache, "v1", "releases", "20991229")
+        [old, young].each { |d| FileUtils.mkdir_p(File.join(d, ".lock")) }
+        File.write(File.join(old, ".lock", "owner.json"), JSON.generate("token" => "x", "started_at" => "2000-01-01T00:00:00Z"))
+        c.prune(keep: 5)
+        refute File.exist?(old), "prune kept a partial directory whose lock a crashed process left"
+        assert File.directory?(File.join(young, ".lock")), "prune removed a partial directory that another process holds"
+    ensure
+        c&.close
+    end
+
+    # R2-016: the DOI note rewrites .verified under the release lock, taken
+    # without waiting: it is skipped while another process holds a young
+    # lock, and it recovers an old one.
+    def test_the_doi_note_takes_the_release_lock
+        srv = serve
+        cache_dir, c = two_cached(srv)
+        c.close
+        cache = OTC::Cache.new(cache_dir)
+        ver = File.join(cache.release_dir("20991231"), ".verified")
+        _, lock = held_lock(cache, "20991231", started_at: Time.now.utc.iso8601)
+        before = File.read(ver)
+        cache.note_version_doi("20991231", "10.5072/zenodo.77")
+        assert_equal before, File.read(ver), "the DOI note rewrote .verified while another process held the lock"
+        File.write(File.join(lock, "owner.json"), JSON.generate("token" => "other", "started_at" => "2000-01-01T00:00:00Z"))
+        cache.note_version_doi("20991231", "10.5072/zenodo.77")
+        assert_equal "10.5072/zenodo.77", JSON.parse(File.read(ver))["zenodo_version_doi"]
+        refute File.exist?(lock), "the DOI note did not release the lock it took"
     end
 end

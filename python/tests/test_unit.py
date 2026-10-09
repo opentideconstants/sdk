@@ -261,7 +261,7 @@ class LockAndPruneTest(unittest.TestCase):
         from opentideconstants import _cache
         d = self.root / "rel"
         (d / ".lock").mkdir(parents=True)
-        (d / ".lock" / "owner.json").write_text("{}")
+        (d / ".lock" / "owner.json").write_text('{"started_at": "2000-01-01T00:00:00Z"}')  # old: stale (CR2 DR3)
         (d / ".lock").chmod(0o555)  # owner.json cannot be deleted, so the stale lock cannot be removed
         saved = _cache.LOCK_STALE_S, _cache.LOCK_POLL_S
         _cache.LOCK_STALE_S, _cache.LOCK_POLL_S = 0.05, 0.01
@@ -291,6 +291,109 @@ class LockAndPruneTest(unittest.TestCase):
             owner["token"] = "another process"
             (d / ".lock" / "owner.json").write_text(json.dumps(owner))
         self.assertTrue((d / ".lock").is_dir())
+
+    # spec §5.4 (CR2 DR3): a lock is stale only when the waiter has waited LOCK_STALE_S and the lock itself is at
+    # least 120 s old. These tests shorten the wait; the age stays 120 s, and the lock's age is set by its
+    # started_at or its mtime, so the outcome does not depend on timing.
+    def _lock(self, started_at=None, mtime=None):
+        d = self.root / "rel"
+        (d / ".lock").mkdir(parents=True)
+        if started_at is not None:
+            (d / ".lock" / "owner.json").write_text(json.dumps({"pid": 1, "token": "other", "started_at": started_at}))
+        if mtime is not None:
+            os.utime(d / ".lock", (mtime, mtime))
+        return d
+
+    def _fast_wait(self):
+        from opentideconstants import _cache
+        saved = _cache.LOCK_STALE_S, _cache.LOCK_POLL_S
+        _cache.LOCK_STALE_S, _cache.LOCK_POLL_S = 0.05, 0.01
+
+        def restore():
+            _cache.LOCK_STALE_S, _cache.LOCK_POLL_S = saved
+        self.addCleanup(restore)
+        return _cache
+
+    def test_a_waiter_does_not_remove_a_young_lock(self):
+        import time
+        _cache = self._fast_wait()
+        d = self._lock(started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        polls = []
+
+        def done():  # ends the wait after 30 polls: 6 times the (shortened) stale wait
+            polls.append(1)
+            return len(polls) >= 30
+        with _cache.lock_dir(d, "test", done=done) as held:
+            self.assertFalse(held, "a waiter took a lock that is only seconds old")
+        self.assertEqual(json.loads((d / ".lock" / "owner.json").read_text())["token"], "other")
+
+    def test_a_waiter_takes_an_old_lock_by_started_at_or_by_mtime(self):
+        _cache = self._fast_wait()
+        for kind in ("started_at", "mtime"):
+            with self.subTest(kind):
+                d = self._lock(started_at="2000-01-01T00:00:00Z") if kind == "started_at" else self._lock(mtime=946684800)
+                with _cache.lock_dir(d, "test", done=lambda: False) as held:
+                    self.assertTrue(held)
+                    self.assertNotEqual(json.loads((d / ".lock" / "owner.json").read_text())["token"], "other")
+                os.rmdir(d)
+
+    def test_two_waiters_on_a_crashed_lock_never_hold_it_together(self):
+        import threading
+        _cache = self._fast_wait()
+        d = self._lock(started_at="2000-01-01T00:00:00Z")
+        first_in, second_in = threading.Event(), threading.Event()
+        overlap = []
+
+        def waiter(i):
+            with _cache.lock_dir(d, f"t{i}") as held:
+                if not first_in.is_set():
+                    first_in.set()
+                    # the other waiter has waited past the stale time; it must not take this young lock
+                    overlap.append(second_in.wait(1.0))
+                else:
+                    second_in.set()
+                self.assertTrue(held)
+        # the second waiter starts once the first holds the lock, so it meets a young lock (two waiters that read
+        # the crashed lock's age at the same instant can still both remove it; spec §5.4 accepts that)
+        ts = [threading.Thread(target=waiter, args=(i,), daemon=True) for i in (1, 2)]
+        ts[0].start()
+        self.assertTrue(first_in.wait(10))
+        ts[1].start()
+        for t in ts:
+            t.join(10)
+        self.assertEqual(overlap, [False], "two waiters held the lock at the same time")
+        self.assertTrue(second_in.is_set())
+
+    def test_try_lock_takes_an_old_lock_and_leaves_a_young_one(self):
+        from opentideconstants import _cache
+        d = self._lock(started_at="2000-01-01T00:00:00Z")
+        self.assertTrue(_cache.try_lock(d), "a non-blocking take did not recover a crashed process's lock")
+        os.rmdir(d / ".lock")
+        (d / ".lock").mkdir()
+        self.assertFalse(_cache.try_lock(d))
+        self.assertTrue((d / ".lock").is_dir())
+
+    def test_the_doi_note_does_not_wait_for_a_held_lock(self):
+        import threading
+        import types
+        from opentideconstants import _cache
+        srv = _Server()
+        saved = _cache.LOCK_STALE_S
+        _cache.LOCK_STALE_S = 30.0
+        self.addCleanup(setattr, _cache, "LOCK_STALE_S", saved)
+        try:
+            with otc.OpenTideConstants(release="20991231", base_url=srv.url, cache_dir=str(self.cache)) as c:
+                rd = self.cache / "v1" / "releases" / "20991231"
+                (rd / ".lock").mkdir()  # another process holds it (young)
+                before = (rd / ".verified").read_text()
+                info = types.SimpleNamespace(datestamp="20991231", zenodo_version_doi="10.5072/zenodo.77")
+                t = threading.Thread(target=c._note_entry, args=(info,), daemon=True)
+                t.start()
+                t.join(5)
+                self.assertFalse(t.is_alive(), "the DOI note waits for the release lock")
+                self.assertEqual((rd / ".verified").read_text(), before)
+        finally:
+            srv.close()
 
     def test_an_index_entry_without_a_doi_keeps_the_known_doi(self):
         srv = _Server()

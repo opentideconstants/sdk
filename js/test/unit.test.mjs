@@ -160,6 +160,100 @@ test("T5/D3: owner.json carries a token, and a release whose lock was taken over
     assert.ok(fs.existsSync(owner), "the lock of another owner was removed");
 });
 
+// spec 5.4 (CR2 DR3): a lock is stale only when the waiter has waited lockTimers.staleMs and the lock itself is at
+// least 120 s old. These tests shorten the wait; the age stays 120 s, and the lock's age is set by its started_at or
+// its mtime, so the outcome does not depend on timing.
+async function fastLocks(t) {
+    const { lockTimers } = await import("../dist/node.js");
+    const saved = { ...lockTimers };
+    Object.assign(lockTimers, { staleMs: 50, pollMs: 10 });
+    t.after(() => Object.assign(lockTimers, saved));
+}
+
+function heldLock(root, ds, { startedAt, mtime } = {}) {
+    const dir = path.join(root, "v1", "releases", ds);
+    const lock = path.join(dir, ".lock");
+    fs.mkdirSync(lock, { recursive: true });
+    if (startedAt) fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: 1, token: "other", started_at: startedAt }));
+    if (mtime !== undefined) fs.utimesSync(lock, mtime, mtime);
+    return lock;
+}
+
+const tokenOf = (lock) => JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8")).token;
+
+test("DR3: a waiter does not remove a lock that is only seconds old", async (t) => {
+    await fastLocks(t);
+    const { nodePlatform } = await import("../dist/node.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    const lock = heldLock(root, "20991231", { startedAt: new Date().toISOString() });
+    let polls = 0;
+    // done ends the wait after 30 polls: 6 times the (shortened) stale wait
+    const unlock = await store.lock("releases/20991231", { done: async () => ++polls >= 30 });
+    await unlock();
+    assert.ok(fs.existsSync(path.join(lock, "owner.json")), "a waiter removed a lock that is only seconds old");
+    assert.equal(tokenOf(lock), "other", "a waiter took a lock that is only seconds old");
+});
+
+test("DR3: a waiter takes an old lock, by started_at or by mtime", async (t) => {
+    await fastLocks(t);
+    const { nodePlatform } = await import("../dist/node.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    for (const [ds, how] of [["20991231", { startedAt: "2000-01-01T00:00:00Z" }], ["20991230", { mtime: 946684800 }]]) {
+        const lock = heldLock(root, ds, how);
+        const unlock = await store.lock(`releases/${ds}`, { done: async () => false });
+        assert.notEqual(tokenOf(lock), "other");
+        await unlock();
+    }
+});
+
+test("DR3: two waiters on a crashed lock never hold it together", async (t) => {
+    await fastLocks(t);
+    const { nodePlatform } = await import("../dist/node.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    heldLock(root, "20991231", { startedAt: "2000-01-01T00:00:00Z" });
+    let inside = 0;
+    let overlap = false;
+    let firstIn;
+    const held = new Promise((r) => { firstIn = r; });
+    const one = async () => {
+        const unlock = await store.lock("releases/20991231");
+        firstIn();
+        if (++inside > 1) overlap = true;
+        // hold it for a while: the other waiter has waited past the stale time and must not take this young lock
+        await new Promise((r) => setTimeout(r, 500));
+        inside--;
+        await unlock();
+    };
+    // the second waiter starts once the first holds the lock, so it meets a young lock (two waiters that read the
+    // crashed lock's age at the same instant can still both remove it; spec 5.4 accepts that)
+    const a = one();
+    await held;
+    await Promise.all([a, one()]);
+    assert.equal(overlap, false, "two waiters held the lock at the same time");
+});
+
+test("DR3: the DOI note recovers a crashed lock and skips a young one", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    const { syncZenodo } = await import("../dist/core.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    const v = { files: {}, verified_at: "x", by: "x", datestamp: "20991231", format_version: "1.0", zenodo_version_doi: "10.1/old" };
+    const vp = path.join(root, "v1", "releases", "20991231", ".verified");
+    const lock = heldLock(root, "20991231");
+    fs.writeFileSync(vp, JSON.stringify(v));
+    const { ctx } = fakeCtx(store, []);
+    const entry = { datestamp: "20991231", format_version: "1.0", zenodo_version_doi: "10.1/new", files: [] };
+    await syncZenodo(ctx, v, entry);
+    assert.equal(JSON.parse(fs.readFileSync(vp, "utf8")).zenodo_version_doi, "10.1/old", "the note rewrote .verified under a young lock");
+    fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ token: "other", started_at: "2000-01-01T00:00:00Z" }));
+    await syncZenodo(ctx, v, entry);
+    assert.equal(JSON.parse(fs.readFileSync(vp, "utf8")).zenodo_version_doi, "10.1/new", "the note never recovers a crashed lock");
+    assert.equal(fs.existsSync(lock), false, "the note did not release the lock it took");
+});
+
 test("T104: syncZenodo does not rewrite .verified while another process holds the release lock", async () => {
     const { syncZenodo } = await import("../dist/core.js");
     const v = { files: {}, verified_at: "x", by: "x", datestamp: "20991231", format_version: "1.0", zenodo_version_doi: "10.1/old" };

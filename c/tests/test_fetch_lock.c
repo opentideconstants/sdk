@@ -9,7 +9,15 @@
  *     releases its own lock (none is left), which is the control for 3.
  *  3. A lock taken over by another process while this one downloads: this
  *     one's release leaves the other's lock alone (owner.json token), and
- *     says so in the log. */
+ *     says so in the log.
+ *  4. Two takers on a crashed lock (CR2 DR3, R2-010, R2-015): the first
+ *     removes the old lock and takes it; the second starts once the first
+ *     holds it, waits past the stale time while the first downloads (2 s),
+ *     and must not remove that young lock. One stale removal, both succeed.
+ *     (Two takers that read the crashed lock's age at the same instant can
+ *     still both remove it; spec 5.4 accepts that: at worst two downloads.)
+ * The lock's age stays 120 s in the test build: a lock is old because its
+ * started_at is from 2000, so the outcome does not depend on timing. */
 #include "otc_test.h"
 
 #include <pthread.h>
@@ -34,6 +42,21 @@ static void log_fn(void *u, int level, const char *msg)
     (void)u;
     if (level == 2 && strstr(msg, "removing the stale lock")) __atomic_fetch_add(&g_removals, 1, __ATOMIC_SEQ_CST);
     if (level == 1 && strstr(msg, "now belongs to another process")) __atomic_fetch_add(&g_left_alone, 1, __ATOMIC_SEQ_CST);
+}
+
+struct taker {
+    otc_fetch_options fo;
+    otc_error err;
+    otc_status st;
+};
+
+static void *take_thread(void *arg)
+{
+    struct taker *t = arg;
+    char path[4096];
+    size_t need;
+    t->st = otc_fetch_release(&t->fo, "20991231.2", path, sizeof path, &need);
+    return NULL;
 }
 
 static void *fetch_thread(void *arg)
@@ -82,12 +105,16 @@ static char *mkdirs(const char *cache, const char *ds)
     return test_join(p, ".lock");
 }
 
-/* another process's lock: the directory and its owner.json */
-static void foreign_lock(const char *lock, const char *token)
+/* another process's lock: the directory and its owner.json; started_at NULL leaves the
+ * age to the directory's mtime (a young lock) */
+static void foreign_lock(const char *lock, const char *token, const char *started_at)
 {
-    char text[128];
+    char text[160];
     if (mkdir(lock, 0777) != 0) { perror(lock); exit(2); }
-    snprintf(text, sizeof text, "{\"pid\":1,\"token\":\"%s\"}", token);
+    if (started_at)
+        snprintf(text, sizeof text, "{\"pid\":1,\"token\":\"%s\",\"started_at\":\"%s\"}", token, started_at);
+    else
+        snprintf(text, sizeof text, "{\"pid\":1,\"token\":\"%s\"}", token);
     test_write(lock, "owner.json", text);
 }
 
@@ -138,7 +165,7 @@ int main(void)
      *    unremovable: skipped) */
     options(cache, base, &err);
     lock = mkdirs(cache, "20991231.2");
-    foreign_lock(lock, "someone-else");
+    foreign_lock(lock, "someone-else", "2000-01-01T00:00:00Z");
     test_chmod(lock, 0555);
     if (!test_is_root()) {
         double t0 = now_s(), took;
@@ -160,7 +187,7 @@ int main(void)
     /* 2. a live lock: waited on while it is younger than the stale time, then taken once it is released */
     options(cache3, base, &err);
     lock = mkdirs(cache3, "20991231.2");
-    foreign_lock(lock, "a-live-process");
+    foreign_lock(lock, "a-live-process", NULL);
     start_fetch(&t);
     sleep_ms(300);   /* half the stale time */
     CHECK(owned_by(lock, "a-live-process"));
@@ -187,7 +214,7 @@ int main(void)
         sleep_ms(50);   /* its owner.json is written */
         CHECK(!__atomic_load_n(&g_done, __ATOMIC_SEQ_CST));   /* still downloading */
         drop_lock(lock);
-        foreign_lock(lock, "the-other-process");
+        foreign_lock(lock, "the-other-process", NULL);
         pthread_join(t, NULL);
         CHECK_STATUS(g_st, OTC_OK);
         CHECK(owned_by(lock, "the-other-process"));
@@ -196,6 +223,38 @@ int main(void)
     }
     free(owner);
     free(lock);
+
+    /* 4. two takers on a crashed lock */
+    {
+        char *cache4 = test_tmpdir();
+        struct taker tk[2];
+        pthread_t th[2];
+        int k;
+        lock = mkdirs(cache4, "20991231.2");
+        foreign_lock(lock, "crashed", "2000-01-01T00:00:00Z");
+        __atomic_store_n(&g_removals, 0, __ATOMIC_SEQ_CST);
+        for (k = 0; k < 2; k++) {
+            otc_fetch_options_init(&tk[k].fo);
+            otc_error_init(&tk[k].err);
+            tk[k].fo.cache_dir = cache4;
+            tk[k].fo.base_url = base;
+            tk[k].fo.error = &tk[k].err;
+            tk[k].fo.log_fn = log_fn;
+        }
+        if (pthread_create(&th[0], NULL, take_thread, &tk[0]) != 0) { fprintf(stderr, "test_fetch_lock: pthread_create failed\n"); exit(2); }
+        /* the second taker starts once the first holds the lock (owner.json is its own) */
+        for (i = 0; i < 2000 && (owned_by(lock, "crashed") || !owned_by(lock, "\"token\"")); i++) sleep_ms(5);
+        if (pthread_create(&th[1], NULL, take_thread, &tk[1]) != 0) { fprintf(stderr, "test_fetch_lock: pthread_create failed\n"); exit(2); }
+        for (k = 0; k < 2; k++) pthread_join(th[k], NULL);
+        CHECK_STATUS(tk[0].st, OTC_OK);
+        CHECK_STATUS(tk[1].st, OTC_OK);
+        CHECK(__atomic_load_n(&g_removals, __ATOMIC_SEQ_CST) == 1);
+        if (__atomic_load_n(&g_removals, __ATOMIC_SEQ_CST) != 1)
+            fprintf(stderr, "part 4: stale lock removals: %d (the second taker removed the first one's young lock)\n",
+                    __atomic_load_n(&g_removals, __ATOMIC_SEQ_CST));
+        free(lock);
+        free(cache4);
+    }
     free(cache);
     free(cache2);
     free(cache3);

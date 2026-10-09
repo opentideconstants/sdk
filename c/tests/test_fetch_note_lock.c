@@ -3,7 +3,8 @@
  * .lock. While another process holds it (a download or an index build that
  * also writes .verified), the note is skipped, not raced: .verified is still
  * there and unchanged, the other process's lock is left as it was, the call
- * says nothing in its error, and the skip is logged. This test links the
+ * says nothing in its error, and the skip is logged. A lock at least 120 s
+ * old (a crashed process) is taken over (CR2 DR3). This test links the
  * library with the normal lock timers, so an alarm stops a regression that
  * waits for the lock (120 s) instead of skipping. */
 #include "otc_test.h"
@@ -80,9 +81,9 @@ int main(void)
         CHECK(otc__read_all(owner, &text, &len) == OTC_OK && text && strstr(text, "another-process") != NULL);
         free(text);
     }
-    /* the lock is gone: the note is made */
-    CHECK(unlink(owner) == 0);
-    CHECK(rmdir(lock) == 0);
+    /* a lock left by a crashed process (at least 120 s old) is taken over, and the
+     * note is made (spec 5.4 non-blocking takes, CR2 DR3, R2-011) */
+    test_write(lock, "owner.json", "{\"pid\":1,\"token\":\"crashed\",\"started_at\":\"2000-01-01T00:00:00Z\"}");
     CHECK_STATUS(otc_fetch_latest_info(&fo, &info), OTC_OK);
     otc_release_info_free(info);
     CHECK(verified_has(vpath, "10.5072/zenodo.2") == 1);

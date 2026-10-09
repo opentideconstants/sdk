@@ -290,7 +290,8 @@ class OpenTideConstants:
 
     def _note_entry(self, info: ReleaseInfo) -> None:
         """Keep the version DOI of a pointer or index entry in the .verified of that cached release (spec §4.3).
-        An entry with no DOI does not erase a known one. The read-modify-write runs under the release lock."""
+        An entry with no DOI does not erase a known one. The read-modify-write runs under the release lock, taken
+        without waiting (spec §5.4, CR2 DR3): when another process holds a young lock, the note is skipped."""
         if info.zenodo_version_doi is None:
             return
         v = self._cache.read_verified(info.datestamp)
@@ -298,7 +299,7 @@ class OpenTideConstants:
             return
         d = self._cache.release_dir(info.datestamp)
         try:
-            with lock_dir(d, SDK) as held:
+            with lock_dir(d, SDK, wait=False) as held:
                 v = self._cache.read_verified(info.datestamp) if held else None
                 if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
                     return

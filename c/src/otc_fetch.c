@@ -59,6 +59,8 @@
 #else
 #define LOCK_STALE_MS 120000
 #endif
+/* how old the lock itself must be to be stale (spec 5.4, CR2 DR3); the tests keep 120 s */
+#define LOCK_STALE_AGE_S 120
 
 /* ------------------------------------------------------------- one-time init */
 
@@ -1156,14 +1158,102 @@ static void lock_write_owner(fctx *c, const char *lock, char token[33])
     free(owner);
 }
 
-/* One attempt at <dir>/.lock: *held = 1 when this call took it. */
+static char *slurp(const char *path);
+
+/* Seconds since 1970 of a proleptic Gregorian UTC date and time (no timegm on Windows). */
+static long long utc_seconds(int y, int mo, int d, int h, int mi, int sec)
+{
+    long long era, yoe, doy, doe;
+    y -= mo <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (era * 146097 + doe - 719468) * 86400 + h * 3600 + mi * 60 + sec;
+}
+
+/* owner.json started_at, "YYYY-MM-DDTHH:MM:SS[.frac](Z|+00:00)", as seconds since 1970; 0 when it is not one */
+static int parse_started_at(const char *s, long long *out)
+{
+    int v[6], i, k = 0;
+    static const int width[6] = {4, 2, 2, 2, 2, 2};
+    static const char sep[6] = {'-', '-', 'T', ':', ':', '\0'};
+    if (!s) return 0;
+    for (i = 0; i < 6; i++) {
+        int j;
+        v[i] = 0;
+        for (j = 0; j < width[i]; j++, k++) {
+            if (s[k] < '0' || s[k] > '9') return 0;
+            v[i] = v[i] * 10 + (s[k] - '0');
+        }
+        if (sep[i] && s[k++] != sep[i]) return 0;
+    }
+    if (s[k] == '.') {
+        if (s[++k] < '0' || s[k] > '9') return 0;
+        while (s[k] >= '0' && s[k] <= '9') k++;
+    }
+    if (strcmp(s + k, "Z") != 0 && strcmp(s + k, "+00:00") != 0) return 0;
+    if (v[1] < 1 || v[1] > 12 || v[2] < 1 || v[2] > 31 || v[3] > 23 || v[4] > 59 || v[5] > 60) return 0;
+    *out = utc_seconds(v[0], v[1], v[2], v[3], v[4], v[5]);
+    return 1;
+}
+
+/* The mtime of path, seconds since 1970; 0 when it cannot be read. */
+static int fs_mtime(const char *path, long long *out)
+{
+#ifdef _WIN32
+    struct _stat64 sb;
+    wchar_t *w = widen(path);
+    int r = w ? _wstat64(w, &sb) : -1;
+    free(w);
+    if (r != 0) return 0;
+#else
+    struct stat sb;
+    if (stat(path, &sb) != 0) return 0;
+#endif
+    *out = (long long)sb.st_mtime;
+    return 1;
+}
+
+/* A lock is stale when it is at least LOCK_STALE_AGE_S old (spec 5.4, CR2 DR3). Its
+ * age comes from owner.json started_at, or from the mtime of the lock directory when
+ * owner.json is missing or cannot be read. A lock whose age cannot be read (it is
+ * gone, or memory ran out) is never stale. */
+static int lock_is_stale(const char *lock)
+{
+    char *owner = path2(lock, "owner.json"), *t = owner ? slurp(owner) : NULL;
+    cJSON *o = t ? otc__json_parse(t, strlen(t)) : NULL;
+    long long started = 0;
+    int known = parse_started_at(otc__jstr(o, "started_at"), &started);
+    cJSON_Delete(o);
+    free(t);
+    free(owner);
+    if (!known && !fs_mtime(lock, &started)) return 0;
+    return (long long)time(NULL) - started >= LOCK_STALE_AGE_S;
+}
+
+/* One attempt at <dir>/.lock, without waiting: *held = 1 when this call took it. A lock
+ * at least 120 s old is stale: it is removed and taken (spec 5.4 non-blocking takes,
+ * CR2 DR3); one that cannot be removed is OTC_E_CACHE. */
 static otc_status lock_try(fctx *c, const char *dir, int *held, char token[33])
 {
     char *lock = path2(dir, ".lock");
-    int m;
+    int m, attempt;
     *held = 0;
     if (!lock) return fail(c, OTC_E_NOMEM, dir, "out of memory");
-    m = fs_mkdir(lock);
+    for (attempt = 0;; attempt++) {
+        int rm;
+        m = fs_mkdir(lock);
+        /* once only: a process that takes it after the removal holds a young lock */
+        if (m != 1 || attempt > 0 || !lock_is_stale(lock)) break;
+        logf_(c, 2, "removing the stale lock %s", lock);
+        if ((rm = fs_rm_rf(lock)) != 0) {
+            otc_status st = rm == -2 ? fail(c, OTC_E_NOMEM, lock, "out of memory while removing %s", lock)
+                                     : fail(c, OTC_E_CACHE, lock, "cannot remove the stale lock %s", lock);
+            free(lock);
+            return st;
+        }
+    }
     if (m == 0) {
         *held = 1;
         lock_write_owner(c, lock, token);
@@ -1190,10 +1280,15 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
             return st;
         }
         if (done && done(c, ds) > 0) break;   /* -1 (out of memory) is not done */
-        if (waited >= LOCK_STALE_MS) {
+        /* stale only when this waiter has waited and the lock itself is old; the age is
+         * read just before the removal (spec 5.4, CR2 DR3) */
+        if (waited >= LOCK_STALE_MS && lock_is_stale(lock)) {
             /* spec 5.4 (CR D3): a stale lock that cannot be removed 3 times is a cache error */
             logf_(c, 2, "removing the stale lock %s", lock);
-            if (fs_rm_rf(lock) == 0) continue;
+            if (fs_rm_rf(lock) == 0) {
+                waited = 0;   /* the wait starts again: a peer may take the lock first (R2-010) */
+                continue;
+            }
             if (++failed_removals >= 3) {
                 otc_status st = fail(c, OTC_E_CACHE, lock, "cannot remove the stale lock %s", lock);
                 free(lock);
@@ -1207,8 +1302,6 @@ static otc_status lock_take(fctx *c, const char *dir, const char *ds, done_fn do
     free(lock);
     return OTC_OK;
 }
-
-static char *slurp(const char *path);
 
 /* Releases <dir>/.lock only when its owner.json carries this process's token:
  * a lock that another process took over as stale is left alone (spec 5.4, CR D3). */
