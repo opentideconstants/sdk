@@ -7,7 +7,7 @@ Run: python conformance/tools/check_supported_formats.py     (exit 0 only if eve
 
 Each language commits one supported-formats.json in its package directory (python/, ruby/, js/, c/):
 
-    {"language": "python", "version": "0.1.0", "supported_format_version": "0.6"}
+    {"language": "python", "version": "1.0.0", "supported_format_version": "1.0"}
 
 The publication plan's reader gate reads it from the GitHub release of the tag <language>-v<version>. This
 check fails when, for any language:
@@ -16,8 +16,9 @@ check fails when, for any language:
   - version is not the package version (pyproject / version.rb / package.json / OTC_VERSION);
   - supported_format_version is not the SDK's declared SUPPORTED_FORMAT_VERSION (C: OTC_FORMAT_VERSION).
 
-An SDK that does not declare SUPPORTED_FORMAT_VERSION yet predates format 0.6: it does not read
-release.min_reader_version, so it reads format 0.5 at most. For such an SDK the only accepted value is 0.5.
+An SDK that does not declare SUPPORTED_FORMAT_VERSION yet predates format 1.0: it reads only the format 0.x
+drafts (0.5 at most) and does not read release.min_reader_version. For such an SDK the only accepted value is
+0.5; the SDK work for format 1.0 declares SUPPORTED_FORMAT_VERSION and moves the file to 1.0 with it.
 The declaration is read from the source with a regular expression, so the check needs no toolchain.
 """
 from __future__ import annotations
@@ -29,7 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 VERSION_RE = r"[0-9]+\.[0-9]+"
-PRE_06 = "0.5"  # the newest format an SDK with no SUPPORTED_FORMAT_VERSION can read (spec 7.4)
+PRE_10 = "0.5"  # the newest format an SDK with no SUPPORTED_FORMAT_VERSION reads (a 0.x draft)
 KEYS = {"language", "version", "supported_format_version"}
 
 # language: (package version: file, regex), (declared supported format version: glob, regex)
@@ -85,10 +86,10 @@ def check_language(lang):
             errs.append(f"{lang}: supported_format_version is {sfv!r}, but the SDK declares {values[0]!r} ({declared[0][0]})")
         note = f"declared {values[0]} in {declared[0][0]}"
     else:
-        if sfv != PRE_06:
-            errs.append(f"{lang}: the SDK declares no SUPPORTED_FORMAT_VERSION (it predates format 0.6, so it reads "
-                        f"{PRE_06} at most), but supported_format_version is {sfv!r}")
-        note = f"no SUPPORTED_FORMAT_VERSION declared: an SDK before format 0.6, so {PRE_06}"
+        if sfv != PRE_10:
+            errs.append(f"{lang}: the SDK declares no SUPPORTED_FORMAT_VERSION (it predates format 1.0 and reads "
+                        f"{PRE_10} at most), but supported_format_version is {sfv!r}")
+        note = f"no SUPPORTED_FORMAT_VERSION declared: an SDK before format 1.0, so {PRE_10}"
     return errs, note
 
 
