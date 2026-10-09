@@ -377,7 +377,6 @@
    "case": "rules/pk03/check-for-update-only-newer-major",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK03",

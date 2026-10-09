@@ -97,10 +97,16 @@ class OpenTideConstants
 
     # A release newer than the loaded one, with a supported format major and
     # a readable min_reader_version, or nil (spec §4.3, §5.2 step 2a). It also
-    # sets newer_format_major when the server has a release of a newer major.
+    # sets newer_format_major when the server has a release of a newer major,
+    # also when it then raises because only such releases exist (CR D10).
     def check_for_update
         raise OfflineError, "offline: the latest pointer is not available" if @offline
-        entry, url = resolve_latest
+        begin
+            entry, url = resolve_latest
+        rescue UnsupportedFormatError, ReaderTooOldError
+            check_newer_major
+            raise
+        end
         check_newer_major
         info = release_info(entry, url)
         newer?(info.datestamp, @release.datestamp) ? info : nil
@@ -342,6 +348,15 @@ class OpenTideConstants
         (fv.nil? || Release.supported_major?(fv)) && (mrv.nil? || Release.readable_version?(mrv))
     end
 
+    # The format_version and release of a .json release file, as a Hash
+    # ({} when it cannot be read; the load then checks it).
+    def release_versions(path)
+        doc = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
+        doc.is_a?(Hash) ? doc.slice("format_version", "release") : {}
+    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+        {}
+    end
+
     def cached_meta(d)
         path = File.join(cache.release_dir(d), "OTC_#{d}.meta.json")
         doc = File.file?(path) ? JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)) : {}
@@ -351,15 +366,23 @@ class OpenTideConstants
     end
 
     # check_for_update: a conditional GET of OTC_latest.json; a release there
-    # with a major newer than every supported one sets newer_format_major (spec §7.4).
+    # with a major newer than every supported one sets newer_format_major,
+    # else it is nil (spec §7.4). When the check fails (a network error, a
+    # malformed entry), the value from before stays (CR D10).
     def check_newer_major
-        @newer_format_major = nil
         entry = fetch_pointer_doc("OTC_latest.json", missing: :nil)
-        return if entry.nil?
+        if entry.nil?
+            @newer_format_major = nil
+            return
+        end
         key = entry.is_a?(Hash) ? Release.version_key(entry["format_version"]) : nil
-        return unless key && key[0] > SUPPORTED_FORMAT_MAJORS.max
-        @newer_format_major = key[0]
-        log(:warn, "a newer format (#{key[0]}) exists; upgrade opentideconstants to read it")
+        raise InvalidReleaseError, "OTC_latest.json: bad format_version #{entry.is_a?(Hash) ? entry['format_version'].inspect : nil}" unless key
+        if key[0] > SUPPORTED_FORMAT_MAJORS.max
+            @newer_format_major = key[0]
+            log(:warn, "a newer format (#{key[0]}) exists; upgrade opentideconstants to read it")
+        else
+            @newer_format_major = nil
+        end
     rescue NetworkError, InvalidReleaseError => e
         log(:warn, "cannot check OTC_latest.json for a newer format: #{e.message}")
     end
@@ -610,9 +633,10 @@ class OpenTideConstants
                 FileUtils.rm_f(tmp_gz)
             end
         end
-        if entry.nil? && @mode == :stream
-            # A pinned download reads no pointer: take the versions from the sidecar.
-            meta = cached_meta(d)
+        if entry.nil?
+            # A pinned download reads no pointer: take the versions from the
+            # release's own file (the sidecar, or the .json in eager mode).
+            meta = @mode == :stream ? cached_meta(d) : release_versions(File.join(dir, "OTC_#{d}.json"))
             info["format_version"] = meta["format_version"]
             info["min_reader_version"] = meta["release"]["min_reader_version"] if meta["release"].is_a?(Hash)
         end
