@@ -4,8 +4,8 @@
  * C98: a line of only ASCII whitespace (SP, HT, VT, FF, CR) is skipped, as
  *      in the other SDKs (CR2 DR26); a NUL line is not blank;
  *      text after a line's object is invalid_release, not ignored.
- * C34: the kind filter "other" is not a kind value: it matches no station,
- *      also not one whose kind is unknown (spec 4.4).
+ * C34: the kind filter "other" matches a station whose kind is unknown, and
+ *      the raw quantity matches nothing (spec 4.4, CR2 DR7).
  * C35: a validation row without previous_release has NaN and -1 there, as
  *      for any missing number and count, not zeros.
  * C13: a string cut to fit a small buffer (BUFFER_TOO_SMALL) ends on a whole
@@ -87,6 +87,9 @@ int main(void)
         size_t n = 9;
         otc_filter_init(&f);
         f.kind = "other";
+        CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
+        CHECK(n == 1);
+        f.kind = "salinity";
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
         CHECK(n == 0);
         f.kind = "tide";

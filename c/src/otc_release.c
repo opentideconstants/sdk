@@ -1401,7 +1401,7 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
     if (!s) return OTC_E_NOMEM;
     for (i = 0; i < rel->n_st && st == OTC_OK; i++) {
         const otc__entry *e = &rel->st[i];
-        st = otc__kv_add(&s->type, e->type_s, 1);
+        st = otc__kv_add(&s->type, otc_station_type_name(e->type), 1);   /* typed: unknown is "other" (CR2 DR7) */
         if (st == OTC_OK) st = otc__kv_add(&s->kind, otc_kind_name(e->kind), 1);
         if (st == OTC_OK) st = otc__kv_add(&s->country, e->country, 1);
     }

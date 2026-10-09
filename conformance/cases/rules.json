@@ -4925,6 +4925,281 @@
    ]
   },
   {
+   "id": "rules/r2-pk09/unknown-enums",
+   "title": "format 1.1 enum values a 1.0 reader does not know (type lighthouse, quantity tidal_stream, source_type satellite): each reads as other; type, kind and source_type \"other\" match them, the raw strings match nothing, stats counts other (CR2 DR7)",
+   "spec": "4.4, 4.5, 7.3",
+   "matrix": {
+    "root": "bad/unknown-enums",
+    "release": "20991231"
+   },
+   "open_expect": {
+    "format_version": "1.1"
+   },
+   "steps": [
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0014"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0014",
+       "name": "Harbour",
+       "country": "GBR",
+       "lat": 50.8,
+       "lon": -1.1,
+       "type": "other",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": false,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0014/gesla-fit"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0015"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0015",
+       "name": "Harbour",
+       "country": "IRL",
+       "lat": 53.35,
+       "lon": -6.2,
+       "type": "reference",
+       "kind": "other",
+       "timezone": "Europe/Dublin",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": false,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0015/gesla-fit"
+      }
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "type": "other"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0014"
+      ]
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "type": "lighthouse"
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "kind": "other"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0015"
+      ]
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "kind": "tidal_stream"
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source_type": "other"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0016"
+      ]
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source_type": "satellite"
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "name": "harbour",
+      "type": "other"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0014"
+      ]
+     }
+    },
+    {
+     "op": "stats",
+     "expect": {
+      "stats": {
+       "type": {
+        "other": 1,
+        "reference": 17,
+        "subordinate": 2
+       },
+       "kind": {
+        "current": 1,
+        "other": 1,
+        "tide": 18
+       },
+       "country": {
+        "DEU": 1,
+        "FJI": 1,
+        "GAB": 1,
+        "GBR": 5,
+        "IRL": 1,
+        "KIR": 1,
+        "NOR": 2,
+        "POL": 1,
+        "SJM": 1,
+        "USA": 6
+       },
+       "source": {
+        "eot20": 3,
+        "gesla-fit": 11,
+        "kartverket": 1,
+        "noaa": 4,
+        "ticon-fallback": 1
+       },
+       "qc_status": {
+        "flagged": 3,
+        "no_constants": 1,
+        "ok": 17
+       }
+      }
+     }
+    },
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0015",
+      "set_id": "OTC-T-0015/gesla-fit"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0015/gesla-fit",
+       "source": "gesla-fit",
+       "source_type": "gauge",
+       "quantity": "other",
+       "source_record_id": "gesla-fit:T-0015",
+       "source_version": "20991231",
+       "record_span": {
+        "start": "2090-01-01T00:00:00Z",
+        "end": "2098-12-31T23:00:00Z",
+        "good_samples": null
+       },
+       "datum": null,
+       "qc_status": "ok",
+       "qc_flags": [],
+       "dropped_constituents": [],
+       "time_base": {
+        "code": "verified",
+        "reason": "test: time base verified",
+        "declared": "utc_instant",
+        "published": "utc_instant",
+        "correction": null,
+        "months_dropped": [],
+        "decided_in": "20991231",
+        "decided_build_commit": "0123456",
+        "evidence": [
+         {
+          "comparator_kind": "official_constants",
+          "comparator_id": "noaa:9900001",
+          "distance_km": 0.0,
+          "lag_min": 0.5,
+          "detail": "M2 phase lag against the official constants"
+         }
+        ]
+       },
+       "is_recommended": true,
+       "convention_id": "otc-greenwich-v1",
+       "licence_id": "gesla-derived",
+       "constituent_count": 2
+      }
+     }
+    },
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0016",
+      "set_id": "OTC-T-0016/gesla-fit"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0016/gesla-fit",
+       "source": "gesla-fit",
+       "source_type": "other",
+       "quantity": "water_level",
+       "source_record_id": "gesla-fit:T-0016",
+       "source_version": "20991231",
+       "record_span": {
+        "start": "2090-01-01T00:00:00Z",
+        "end": "2098-12-31T23:00:00Z",
+        "good_samples": null
+       },
+       "datum": null,
+       "qc_status": "ok",
+       "qc_flags": [],
+       "dropped_constituents": [],
+       "time_base": {
+        "code": "verified",
+        "reason": "test: time base verified",
+        "declared": "utc_instant",
+        "published": "utc_instant",
+        "correction": null,
+        "months_dropped": [],
+        "decided_in": "20991231",
+        "decided_build_commit": "0123456",
+        "evidence": [
+         {
+          "comparator_kind": "official_constants",
+          "comparator_id": "noaa:9900001",
+          "distance_km": 0.0,
+          "lag_min": 0.5,
+          "detail": "M2 phase lag against the official constants"
+         }
+        ]
+       },
+       "is_recommended": true,
+       "convention_id": "otc-greenwich-v1",
+       "licence_id": "gesla-derived",
+       "constituent_count": 2
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/r2-pk09/blank-lines-index",
    "title": "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)",
    "spec": "6.2",

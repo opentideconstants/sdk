@@ -699,12 +699,18 @@ function checkFilters(f: StationFilters | undefined | null): CheckedFilters {
     return out;
 }
 
+const STATION_TYPES = ["reference", "subordinate"] as const;
+const KINDS = ["tide", "current"] as const;
+const SOURCE_TYPES = ["official", "gauge", "model"] as const;
+
+/** An enum filter compares the typed value: an unknown value in the data is "other", so "other" matches it and its
+ * raw string matches nothing (spec 4.4, CR2 DR7). */
 function matches(e: IndexEntry, f: CheckedFilters): boolean {
     if (f.country !== null && e.country !== f.country) return false;
-    if (f.type !== null && e.type !== f.type) return false;
-    if (f.kind !== null && e.kind !== f.kind) return false;
+    if (f.type !== null && en(e.type, STATION_TYPES) !== f.type) return false;
+    if (f.kind !== null && en(e.kind, KINDS) !== f.kind) return false;
     if (f.source !== null && !e.usable_sources.includes(f.source)) return false;
-    if (f.sourceType !== null && e.recommended_source_type !== f.sourceType) return false;
+    if (f.sourceType !== null && en(e.recommended_source_type, SOURCE_TYPES) !== f.sourceType) return false;
     return true;
 }
 
@@ -891,7 +897,9 @@ export class Release {
         this.#open();
         const a = this.#active;
         return Object.freeze({
-            type: countBy(a.map((e) => e.type)), kind: countBy(a.map((e) => e.kind)), country: countBy(a.map((e) => e.country)),
+            // the typed values, as the Station reports them (CR2 DR7)
+            type: countBy(a.map((e) => en(e.type, STATION_TYPES))), kind: countBy(a.map((e) => en(e.kind, KINDS))),
+            country: countBy(a.map((e) => e.country)),
             source: countBy(a.flatMap((e) => e.set_sources)), qc_status: countBy(a.flatMap((e) => e.set_qc_statuses)),
         });
     }

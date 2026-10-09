@@ -521,6 +521,15 @@
    "valid_as_1_0": false
   },
   {
+   "defect": "format 1.1: OTC-T-0014's type is lighthouse, OTC-T-0015's recommended set has quantity tidal_stream, OTC-T-0016's has source_type satellite; each reads as other, and the filters and stats use other (CR2 DR7)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unknown-enums"
+  },
+  {
    "defect": "the .jsonl has lines of only ASCII whitespace (FF, VT, SP HT VT FF SP CR, CR) between station lines and a last line of one FF with no line end: blank lines, skipped (CR2 DR26)",
    "expect": "load",
    "latest": "20991231",

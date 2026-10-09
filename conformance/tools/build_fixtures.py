@@ -839,7 +839,23 @@ def _jsonl_lines(extra):
 BLANK_ASCII = {1: b"\x0c\n" + b"\x0b\n" + b" \t\x0b\x0c \r\n", 5: b"\r\n", -1: b"\x0c"}
 
 
+def unknown_enums_doc():
+    """Format 1.1 (min_reader_version 1.0) with enum values format 1.0 does not have: a 1.0 reader reads each as
+    "other" (spec 7.3), and the filters and stats use that typed value (CR2 DR7)."""
+    doc = release_doc(BASE)
+    doc["format_version"] = "1.1"
+    doc["future_top_level"] = {"note": "added by format 1.1 (test)"}
+    doc["release"]["future_release_field"] = "1.1 release field"
+    _station(doc, "OTC-T-0014")["type"] = "lighthouse"
+    _station(doc, "OTC-T-0015")["constant_sets"][0]["quantity"] = "tidal_stream"
+    _station(doc, "OTC-T-0016")["constant_sets"][0]["source_type"] = "satellite"
+    return [doc]
+
+
 BAD += [
+    ("unknown-enums", "load", "format 1.1: OTC-T-0014's type is lighthouse, OTC-T-0015's recommended set has quantity tidal_stream, "
+     "OTC-T-0016's has source_type satellite; each reads as other, and the filters and stats use other (CR2 DR7)",
+     unknown_enums_doc, None),
     ("blank-lines", "load", "the .jsonl has lines of only ASCII whitespace (FF, VT, SP HT VT FF SP CR, CR) between station lines "
      "and a last line of one FF with no line end: blank lines, skipped (CR2 DR26)",
      lambda: [release_doc(BASE)], _jsonl_lines(BLANK_ASCII)),
@@ -1394,6 +1410,20 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                 if cs["qc_status"] not in known_qc:
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
+        # The same for a station type, a quantity and a source_type (CR2 DR7): checked with a known value in place
+        known_type = schema["$defs"]["active_station"]["properties"]["type"]["enum"]
+        set_enums = schema["$defs"]["constant_set"]["properties"]
+        for st in checked["stations"]:
+            if st.get("status") == "active" and st.get("type") not in known_type:
+                dropped.append(f"{st['station_id']}: type {st.get('type')!r} (read as other)")
+                st["type"] = "subordinate" if "subordinate_offsets" in st else "reference"
+            for cs in st.get("constant_sets", []):
+                if cs.get("quantity") is not None and cs["quantity"] not in set_enums["quantity"]["enum"]:
+                    dropped.append(f"{cs['set_id']}: quantity {cs['quantity']!r} (read as other)")
+                    cs["quantity"] = "current" if "current_bins" in cs else "water_level"
+                if cs.get("source_type") not in set_enums["source_type"]["enum"]:
+                    dropped.append(f"{cs['set_id']}: source_type {cs.get('source_type')!r} (read as other)")
+                    cs["source_type"] = "gauge" if "time_base" in cs else "model"
     errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
     if not errs:   # the cross-references assume the types the schema gives
         errs = cross_ref_errors(checked)

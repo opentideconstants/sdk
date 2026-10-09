@@ -111,12 +111,22 @@ def g(d, k):
 # --------------------------------------------------------------------------- encodings (README "Result encodings")
 
 
+STATION_TYPES = ("reference", "subordinate")
+QUANTITIES = ("water_level", "current")
+SOURCE_TYPES = ("official", "gauge", "model")
+
+
+def typed(v, known):
+    """An enum value as an SDK reads it: null stays null, a value format 1.0 does not have is "other" (spec 7.3)."""
+    return None if v is None else v if v in known else "other"
+
+
 def enc_station(rel, s):
     k = rel.kind(s)
     rs = rel.rec_set(s)
     return {
         "station_id": s["station_id"], "name": s["name"], "country": s["country"],
-        "lat": s["lat"], "lon": s["lon"], "type": s["type"], "kind": k,
+        "lat": s["lat"], "lon": s["lon"], "type": typed(s["type"], STATION_TYPES), "kind": k,
         "timezone": s.get("timezone"), "aliases": aliases_enc(s), "status": s["status"],
         "is_reference": s["type"] == "reference", "is_subordinate": s["type"] == "subordinate",
         "is_tide": k == "tide", "is_current": k == "current",
@@ -134,7 +144,8 @@ def enc_set(rel, s, cs):
     span = cs.get("record_span")
     datum = cs.get("datum")
     return {
-        "set_id": cs["set_id"], "source": cs["source"], "source_type": cs["source_type"], "quantity": cs["quantity"],
+        "set_id": cs["set_id"], "source": cs["source"], "source_type": typed(cs["source_type"], SOURCE_TYPES),
+        "quantity": typed(cs.get("quantity"), QUANTITIES),
         "source_record_id": cs.get("source_record_id"), "source_version": cs.get("source_version"),
         "record_span": None if span is None else {"start": span.get("start"), "end": span.get("end"), "good_samples": span.get("good_samples")},
         "datum": None if datum is None else {"msl_offset_m": datum.get("msl_offset_m"), "named": dict(datum.get("named") or {})},
@@ -266,7 +277,8 @@ def apply_filters(rel, stations, f):
     for s in stations:
         if "country" in f and s["country"] != f["country"]:
             continue
-        if "type" in f and s["type"] != f["type"]:
+        # the filters compare the typed value: an unknown enum value is "other" (CR2 DR7)
+        if "type" in f and typed(s["type"], STATION_TYPES) != f["type"]:
             continue
         if "kind" in f and rel.kind(s) != f["kind"]:
             continue
@@ -274,7 +286,7 @@ def apply_filters(rel, stations, f):
             continue
         if "source_type" in f:
             rs = rel.rec_set(s)
-            if rs is None or rs["source_type"] != f["source_type"]:
+            if rs is None or typed(rs["source_type"], SOURCE_TYPES) != f["source_type"]:
                 continue
         out.append(s)
     return out
@@ -384,7 +396,7 @@ def stats(rel):
                 out[v] = out.get(v, 0) + 1
         return dict(sorted(out.items()))
     sets = [cs for s in rel.active for cs in s.get("constant_sets", [])]
-    return {"type": count(s["type"] for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
+    return {"type": count(typed(s["type"], STATION_TYPES) for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
             "country": count(s["country"] for s in rel.active),
             "source": count(cs["source"] for cs in sets if cs["qc_status"] in WITH_CONSTANTS),
             "qc_status": count(read_qc(cs) for cs in sets)}
@@ -1794,6 +1806,24 @@ def rules_r2_pk09():
             out.append(case(f"rules/r2-pk09/{root}-jsonl-{mode}", f"a .jsonl line of {what} ({mode}) is not blank: invalid_release at open (CR2 DR26)", "6.2, 4.8",
                             [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231.jsonl", mode=mode)],
                             requires=["fs"] + req))
+    # CR2 DR7: filters and stats use the typed enum value; an unknown value is "other", and the raw string matches nothing
+    U = Rel("bad/unknown-enums", "20991231")
+    ids = lambda f: [s["station_id"] for s in apply_filters(U, U.active, f)]   # noqa: E731
+    u15, u16 = U.by_id["OTC-T-0015"], U.by_id["OTC-T-0016"]
+    out.append(mcase("rules/r2-pk09/unknown-enums", "format 1.1 enum values a 1.0 reader does not know (type lighthouse, quantity tidal_stream, source_type satellite): each reads as other; type, kind and source_type \"other\" match them, the raw strings match nothing, stats counts other (CR2 DR7)", "4.4, 4.5, 7.3",
+                     [step("station", {"station": enc_station(U, U.by_id["OTC-T-0014"])}, station_id="OTC-T-0014"),
+                      step("station", {"station": enc_station(U, u15)}, station_id="OTC-T-0015"),
+                      step("stations", {"station_ids": ids({"type": "other"})}, type="other"),
+                      step("stations", {"station_ids": []}, type="lighthouse"),
+                      step("stations", {"station_ids": ids({"kind": "other"})}, kind="other"),
+                      step("stations", {"station_ids": []}, kind="tidal_stream"),
+                      step("stations", {"station_ids": ids({"source_type": "other"})}, source_type="other"),
+                      step("stations", {"station_ids": []}, source_type="satellite"),
+                      step("search", {"station_ids": search(U, "harbour", type="other")}, name="harbour", type="other"),
+                      step("stats", {"stats": stats(U)}),
+                      step("constant_set", {"set": enc_set(U, u15, U.rec_set(u15))}, station_id="OTC-T-0015", set_id=U.rec_set(u15)["set_id"]),
+                      step("constant_set", {"set": enc_set(U, u16, U.rec_set(u16))}, station_id="OTC-T-0016", set_id=U.rec_set(u16)["set_id"])],
+                     root="bad/unknown-enums", release="20991231", open_expect={"format_version": "1.1"}))
     bdir = "${cache}/v1/releases/20991231"
     out.append(case("rules/r2-pk09/blank-lines-index", "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)", "6.2",
                     [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/blank-lines/",

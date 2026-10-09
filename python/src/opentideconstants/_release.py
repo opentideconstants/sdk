@@ -148,6 +148,13 @@ def _limit(limit):
     return limit
 
 
+def _typed(cls, v):
+    """The value of an enum field as the Station reports it: None, a schema value, or "other" for a value this
+    SDK does not know (spec 7.3). Filters and stats use it (CR2 DR7)."""
+    m = E.enum_or_raw(cls, v)
+    return None if m is None else m.value
+
+
 def haversine(lat1, lon1, lat2, lon2):
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dl = math.radians(lon2 - lon1)
@@ -437,11 +444,8 @@ class Release:
                 return MappingProxyType(dict(sorted(out.items())))
             sets = [s for e in self._entries for s in e.get("sets") or ()]
             qc = [E.enum_or_raw(E.QcStatus, s.get("qc_status")) for s in sets]
-            def norm(cls, v):  # bucket a value as the Station reports it (an unknown one is "other")
-                m = E.enum_or_raw(cls, v)
-                return None if m is None else m.value
-            self._stats = Stats(count(norm(E.StationType, e.get("type")) for e in self._entries),
-                                count(norm(E.Kind, e.get("kind")) for e in self._entries),
+            self._stats = Stats(count(_typed(E.StationType, e.get("type")) for e in self._entries),
+                                count(_typed(E.Kind, e.get("kind")) for e in self._entries),
                                 count(e.get("country") for e in self._entries),
                                 count(s.get("source") for s, q in zip(sets, qc) if q in _USABLE),
                                 count(None if q is None else q.value for q in qc))
@@ -553,16 +557,18 @@ class Release:
         for e in self._entries:
             if country is not None and e.get("country") != country:
                 continue
-            if type is not None and e.get("type") != str(type):
+            # an enum filter compares the typed value: an unknown value in the data is "other", so "other" matches
+            # it and its raw string matches nothing (CR2 DR7)
+            if type is not None and _typed(E.StationType, e.get("type")) != str(type):
                 continue
-            if kind is not None and e.get("kind") != str(kind):
+            if kind is not None and _typed(E.Kind, e.get("kind")) != str(kind):
                 continue
             sets = e.get("sets") or ()
             if source is not None and not any(s.get("source") == source and s.get("qc_status") in _USABLE for s in sets):
                 continue
             if source_type is not None:
                 rec = [s for s in sets if s.get("set_id") == e.get("recommended_set_id")]
-                if not rec or rec[0].get("source_type") != str(source_type):
+                if not rec or _typed(E.SourceType, rec[0].get("source_type")) != str(source_type):
                     continue
             out.append(e)
         return out
