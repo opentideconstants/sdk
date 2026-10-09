@@ -4117,6 +4117,57 @@
    ]
   },
   {
+   "id": "rules/pk12/gz-redirect-content-encoding",
+   "title": "the .json.gz redirects to a URL with no .gz suffix that sends it with Content-Encoding: gzip (a CDN): the SDK still keeps the gzip bytes, checks them, and loads (CR2 R2-118)",
+   "spec": "5.7",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.2\\.json\\.gz$",
+       "action": "status",
+       "status": 302,
+       "headers": {
+        "Location": "/cdn/blob-1"
+       }
+      },
+      {
+       "match": "^/cdn/blob-1$",
+       "action": "file",
+       "file": "good/OTC_20991231.2.json.gz",
+       "headers": {
+        "Content-Encoding": "gzip"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2",
+      "loaded_from": "download"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk13/auto-update-failure-sets-last-error",
    "title": "an automatic update whose pointer request fails: the query still answers from the old release, and last_error is network",
    "spec": "4.3, 5.6",

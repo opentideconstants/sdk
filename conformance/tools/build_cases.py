@@ -1723,6 +1723,13 @@ def group_rules():
                                                  "headers": {"Content-Encoding": "gzip"}}]),
                      pinned(d2, {"datestamp": d2, "loaded_from": "download"}, mode="eager", on_network_error="raise")],
                     requires=["fs", "eager"]))
+    out.append(case("rules/pk12/gz-redirect-content-encoding", "the .json.gz redirects to a URL with no .gz suffix that sends it with Content-Encoding: gzip (a CDN): the SDK still keeps the gzip bytes, checks them, and loads (CR2 R2-118)", "5.7",
+                    [drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d2)}\.json\.gz$", "action": "status", "status": 302,
+                                                 "headers": {"Location": "/cdn/blob-1"}},
+                                                {"match": r"^/cdn/blob-1$", "action": "file", "file": f"good/OTC_{d2}.json.gz",
+                                                 "headers": {"Content-Encoding": "gzip"}}]),
+                     pinned(d2, {"datestamp": d2, "loaded_from": "download"}, mode="eager", on_network_error="raise")],
+                    requires=["fs", "eager"]))
     # PK13: an automatic update that fails sets last_error and keeps the release
     R1 = Rel("good", d1)
     out.append(case("rules/pk13/auto-update-failure-sets-last-error", "an automatic update whose pointer request fails: the query still answers from the old release, and last_error is network", "4.3, 5.6",

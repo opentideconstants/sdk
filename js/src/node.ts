@@ -309,8 +309,10 @@ const MAX_REDIRECTS = 5;
  */
 async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     let current = url;
+    // decided by the URL asked for, not the redirect hop: a CDN may send the .gz from a URL with no suffix (CR2 R2-118)
+    const keepGz = new URL(url).pathname.endsWith(".gz");
     for (let hop = 0; ; hop++) {
-        const res = await nodeGetOnce(current, o);
+        const res = await nodeGetOnce(current, o, keepGz);
         if (!REDIRECTS.has(res.status)) return res;
         const loc = res.header("location");
         let next: URL;
@@ -338,7 +340,7 @@ function proxyAuth(proxy: URL): Record<string, string> {
     return { "Proxy-Authorization": `Basic ${Buffer.from(cred, "utf8").toString("base64")}` };
 }
 
-function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
+function nodeGetOnce(url: string, o: HttpOptions, keepGz: boolean): Promise<HttpResponse> {
     const target = new URL(url);
     const proxy = proxyFor(target, o.proxy);
     const connectMs = (o.timeout ?? 10) * 1000;
@@ -378,7 +380,7 @@ function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
                 let body: Uint8Array = Buffer.concat(chunks);
                 const enc = (res.headers["content-encoding"] ?? "").toLowerCase();
                 // a .gz file sent with Content-Encoding: gzip (some CDNs) is the file itself: keep the bytes (T10)
-                if ((enc === "gzip" || enc === "x-gzip") && !target.pathname.endsWith(".gz")) {
+                if ((enc === "gzip" || enc === "x-gzip") && !keepGz) {
                     try {
                         body = zlib.gunzipSync(body);
                     } catch (e) {

@@ -424,3 +424,30 @@ test("CR2 DR19: a timeout outside 0.001 to 1e6 s is invalid_argument, before any
         srv.close();
     }
 });
+
+test("R2-118: a .gz that redirects to a URL with no suffix, sent with Content-Encoding: gzip, keeps its gzip bytes", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    const { gzipSync } = await import("node:zlib");
+    const gz = gzipSync(Buffer.from('{"x":1}\n'));
+    const srv = http.createServer((req, res) => {
+        if (req.url === "/OTC_20991231.json.gz") {
+            res.writeHead(302, { Location: "/cdn/blob-1" });
+            res.end();
+        } else {
+            res.writeHead(200, { "Content-Encoding": "gzip", "Content-Length": gz.length });
+            res.end(gz);
+        }
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+        const base = `http://127.0.0.1:${srv.address().port}`;
+        const res = await nodePlatform().get(`${base}/OTC_20991231.json.gz`, { headers: {}, timeout: 5, proxy: null, caFile: null });
+        assert.equal(res.status, 200);
+        assert.deepEqual(Buffer.from(res.body), gz);
+        // a suffix-less URL asked for directly is still decoded
+        const plain = await nodePlatform().get(`${base}/cdn/blob-1`, { headers: {}, timeout: 5, proxy: null, caFile: null });
+        assert.equal(Buffer.from(plain.body).toString(), '{"x":1}\n');
+    } finally {
+        srv.close();
+    }
+});
