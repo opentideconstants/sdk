@@ -2076,7 +2076,7 @@ int main(void)
     g_fault = getenv("OTC_RUNNER_FAULT");
     printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s]}}\n",
            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
-           OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\", \"require_checksum\""
+           OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\", \"require_checksum\", \"https_proxy\""
                             : "\"fs\", \"stream\", \"require_checksum\"");
     fflush(stdout);
     while ((got = read_line(stdin, &line)) != 0) {

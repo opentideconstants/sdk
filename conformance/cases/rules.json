@@ -4776,6 +4776,43 @@
    ]
   },
   {
+   "id": "rules/pk24/https-proxy-private-ca",
+   "title": "an https proxy whose certificate comes from the ca_file's CA, and an http base_url: latest loads through it (the proxy hop trusts the system roots plus ca_file, DR39)",
+   "spec": "5.7",
+   "requires": [
+    "fs",
+    "https_proxy"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "http://otc-target.invalid/good/",
+      "cache_dir": "${cache}",
+      "proxy": "${server_tls}",
+      "ca_file": "${tls_ca}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2",
+      "loaded_from": "download"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "match": "^/good/OTC_latest",
+     "status": 200,
+     "count": 1
+    }
+   ]
+  },
+  {
    "id": "rules/pk12/http-proxy-uppercase-cgi",
    "title": "with REQUEST_METHOD set (a CGI request), upper-case HTTP_PROXY is not used (httpoxy, D7)",
    "spec": "5.7",

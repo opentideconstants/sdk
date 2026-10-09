@@ -18,7 +18,7 @@ import json
 import re
 import sys
 
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy"]
 DATESTAMP = re.compile(r"OTC_(\d{8}(?:\.[1-9]\d*)?)\.")
 
 

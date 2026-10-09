@@ -51,9 +51,9 @@ FIXTURES = HERE / "fixtures"
 CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy"]
 # The features of Python, Ruby and TypeScript on Node. require_checksum is the C open option (otc_open_options), which
-# no other SDK has (CR2 DR34).
+# no other SDK has (CR2 DR34). https_proxy: a proxy reached over TLS (CR2 DR39); Ruby's Net::HTTP has none.
 LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
@@ -118,9 +118,9 @@ SERVER_ALIAS = "otc-fixture.invalid"
 # The features each SDK must claim (spec: Python, Ruby and TypeScript on Node have every feature).
 # The profile is the hello's "runner" name, or --profile.
 PROFILES = {
-    "python": LANG_FEATURES, "ruby": LANG_FEATURES, "typescript": LANG_FEATURES,
+    "python": LANG_FEATURES + ["https_proxy"], "ruby": LANG_FEATURES, "typescript": LANG_FEATURES + ["https_proxy"],
     "typescript-browser": ["fetch", "json", "eager", "stream"],
-    "c": ["fs", "stream", "require_checksum"], "c-fetch": ["fs", "fetch", "stream", "require_checksum"],
+    "c": ["fs", "stream", "require_checksum"], "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"],
     "none": [],
 }
 
@@ -559,6 +559,8 @@ def step_needs(st):
             need.add("fs")      # README "Hello": cache_dir is a file-system option
         if "require_checksum" in a:
             need.add("require_checksum")   # the C open option (CR2 DR34)
+        if isinstance(a.get("proxy"), str) and a["proxy"].startswith(("https:", "${server_tls}")):
+            need.add("https_proxy")        # a proxy reached over TLS (CR2 DR39)
     if op in FETCH_OPS:
         need.add("fetch")
     if op == "download":

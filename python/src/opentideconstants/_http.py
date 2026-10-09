@@ -88,6 +88,7 @@ class Http:
         self.proxy = proxy
         self.log = logger or logging.getLogger("opentideconstants")
         self._ctx = None
+        self._proxy_ctx = None
         # ca_file, else SSL_CERT_FILE: checked at construction, before any network access; io, never retried and
         # never a reason to fall back to the cache (spec §4.2, §5.7, CR D19, CR2 DR20)
         what = "ca_file"
@@ -109,9 +110,21 @@ class Http:
     # ---- connection
 
     def _context(self):
+        """The TLS context of the hop to an https target: ca_file alone when it is set, else the system roots."""
         if self._ctx is None:
             self._ctx = ssl.create_default_context(cafile=self.ca_file) if self.ca_file else ssl.create_default_context()
         return self._ctx
+
+    def _proxy_context(self):
+        """The TLS context of the hop to an https proxy: the system roots plus ca_file, so a ca_file meant for the
+        target does not drop the roots a public proxy's certificate chains to, and a private-CA proxy is trusted
+        too (spec §5.7, CR2 DR39)."""
+        if self._proxy_ctx is None:
+            ctx = ssl.create_default_context()
+            if self.ca_file:
+                ctx.load_verify_locations(cafile=self.ca_file)
+            self._proxy_ctx = ctx
+        return self._proxy_ctx
 
     def _proxy_for(self, u) -> Optional[str]:
         if self.proxy:
@@ -156,7 +169,8 @@ class Http:
                 conn.set_tunnel(u.hostname, port, headers=auth)
             else:
                 if p.scheme == "https":
-                    conn = http.client.HTTPSConnection(ph, pp, timeout=self.connect_timeout, context=self._context())
+                    conn = http.client.HTTPSConnection(ph, pp, timeout=self.connect_timeout,
+                                                       context=self._proxy_context())
                 else:
                     conn = http.client.HTTPConnection(ph, pp, timeout=self.connect_timeout)
                 path = url

@@ -430,6 +430,9 @@ typedef struct fctx {
     int         raise;     /* on_network_error RAISE */
     otc_error   own;       /* the error detail when the caller passed none */
     const otc_open_options *oo;   /* otc_fetch_open's caller options (log_fn, require_checksum), or NULL */
+    char       *proxy_ca;  /* the proxy hop's CA blob (CR2 DR39), made once by proxy_ca_blob, or NULL */
+    size_t      proxy_ca_len;
+    int         proxy_ca_done;
 } fctx;
 
 /* The options of an open of a cached file: the caller's (otc_fetch_open), with
@@ -693,6 +696,7 @@ static void ctx_free(fctx *c)
 {
     free(c->base);
     free(c->base_url);
+    free(c->proxy_ca);
 }
 
 /* ------------------------------------------------------------------ datestamps */
@@ -921,6 +925,58 @@ static int add_header(struct curl_slist **list, const char *line)
     return 1;
 }
 
+/*
+ * The CA certificates of the TLS hop to an https proxy (spec 5.7, CR2 DR39): the system roots plus ca, so a ca_file
+ * meant for the target does not drop the roots a public proxy's certificate chains to, and a private-CA proxy is
+ * trusted too. The target hop trusts ca alone (CURLOPT_CAINFO). libcurl takes one CA source for the proxy hop, so
+ * the default bundle that libcurl names (CURLINFO_CAINFO, libcurl 7.84 and later) and ca go to it as one PEM blob,
+ * made once per call (c->proxy_ca). A libcurl that names no bundle (an older one, or one that uses a native store)
+ * keeps its own trust for the proxy hop, without ca; that is logged.
+ */
+static otc_status proxy_ca_blob(fctx *c, const char *ca)
+{
+    if (c->proxy_ca_done) return OTC_OK;
+    c->proxy_ca_done = 1;
+#if LIBCURL_VERSION_NUM >= 0x075400
+    {
+        CURL *h = curl_easy_init();
+        char *def = NULL, *a = NULL, *b = NULL;
+        size_t al = 0, bl = 0;
+        otc_status st;
+        if (!h) return fail(c, OTC_E_NOMEM, NULL, "curl_easy_init failed");
+        st = curl_easy_getinfo(h, CURLINFO_CAINFO, &def) == CURLE_OK && def && def[0] ? otc__read_all(def, &a, &al)
+                                                                                     : OTC_E_NOT_FOUND;
+        curl_easy_cleanup(h);
+        if (st == OTC_E_NOMEM) return fail(c, st, NULL, "out of memory");
+        if (st != OTC_OK) {
+            logf_(c, 1, "this libcurl names no readable CA bundle: an https proxy is checked against its own trust, "
+                  "without the ca_file");
+            return OTC_OK;
+        }
+        if ((st = otc__read_all(ca, &b, &bl)) != OTC_OK) {
+            free(a);
+            return st == OTC_E_NOMEM ? fail(c, st, NULL, "out of memory") : fail(c, OTC_E_IO, ca, "cannot read the ca_file %s", ca);
+        }
+        c->proxy_ca = (char *)malloc(al + 1 + bl);
+        if (!c->proxy_ca) {
+            free(a);
+            free(b);
+            return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+        }
+        memcpy(c->proxy_ca, a, al);
+        c->proxy_ca[al] = '\n';   /* a bundle that does not end in a newline must not join its last line to ca's first */
+        memcpy(c->proxy_ca + al + 1, b, bl);
+        c->proxy_ca_len = al + 1 + bl;
+        free(a);
+        free(b);
+    }
+#else
+    (void)ca;
+    logf_(c, 1, "libcurl before 7.84 names no CA bundle: an https proxy is checked against its own trust, without the ca_file");
+#endif
+    return OTC_OK;
+}
+
 static otc_status http_get(fctx *c, const char *url, const char *if_none_match, int accept_gzip,
                            const char *sink_path, http_resp *r, int *result)
 {
@@ -944,6 +1000,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
     if (strncmp(url, "http://", 7) != 0 && !https) {
         fail(c, OTC_E_NETWORK, url, "not an http(s) URL: %s", url);
         return OTC_E_NETWORK;
+    }
+    if (ca) {
+        otc_status pst = proxy_ca_blob(c, ca);
+        if (pst != OTC_OK) return pst;
     }
     if (c->o && c->o->user_agent && c->o->user_agent[0])
         snprintf(ua, sizeof ua, "%s %s", USER_AGENT, c->o->user_agent);
@@ -1007,6 +1067,15 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;
         }
         if (ca) bad_opt |= curl_easy_setopt(h, CURLOPT_CAINFO, ca) != CURLE_OK;
+#if LIBCURL_VERSION_NUM >= 0x075400
+        if (c->proxy_ca) {   /* the proxy hop: the system roots plus ca (CR2 DR39); libcurl copies the blob */
+            struct curl_blob blob;
+            blob.data = c->proxy_ca;
+            blob.len = c->proxy_ca_len;
+            blob.flags = CURL_BLOB_COPY;
+            bad_opt |= curl_easy_setopt(h, CURLOPT_PROXY_CAINFO_BLOB, &blob) != CURLE_OK;
+        }
+#endif
         if (bad_opt || no_mem) {   /* a header, limit or URL that libcurl did not take: no request without it */
             curl_easy_cleanup(h);
             curl_slist_free_all(hdrs);

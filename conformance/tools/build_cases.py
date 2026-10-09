@@ -2529,6 +2529,14 @@ def group_rules():
                      drv("assert_requests", source="server", match=sha_rx, status=302, count=1),   # the https request got the redirect
                      drv("assert_requests", source="server", match=sha_rx, status=200, count=0)],  # and http was not used
                     requires=["fs"], timeout_s=90))
+    # CR2 DR39 (orchestrator decision 2026-10-09): the TLS hop to an https proxy trusts the system roots plus
+    # ca_file, so a proxy whose certificate comes from the ca_file's private CA works, for an http target (the https
+    # listener serves the fixtures to an absolute-URI GET, as a proxy would). The target hop trusts ca_file alone
+    out.append(case("rules/pk24/https-proxy-private-ca", "an https proxy whose certificate comes from the ca_file's CA, and an http base_url: latest loads through it (the proxy hop trusts the system roots plus ca_file, DR39)", "5.7",
+                    [latest({"datestamp": d2, "loaded_from": "download"}, base="http://otc-target.invalid/good/",
+                            proxy="${server_tls}", ca_file="${tls_ca}", on_network_error="raise"),
+                     drv("assert_requests", source="server", match=r"^/good/OTC_latest", status=200, count=1)],
+                    requires=["fs", "https_proxy"]))
     out.append(case("rules/pk12/http-proxy-uppercase-cgi", "with REQUEST_METHOD set (a CGI request), upper-case HTTP_PROXY is not used (httpoxy, D7)", "5.7",
                     [drv("restart_runner", env={"REQUEST_METHOD": "GET", "HTTP_PROXY": "${proxy}"}),
                      latest(err("network"), base=f"{SRV_ALIAS}/good/", on_network_error="raise"),

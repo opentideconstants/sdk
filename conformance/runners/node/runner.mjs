@@ -40,7 +40,7 @@ if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "
     process.exit(3);
 }
 
-out({ hello: { runner: "typescript", version: sdk.VERSION, features: ["fs", "fetch", "json", "eager", "stream"] } });
+out({ hello: { runner: "typescript", version: sdk.VERSION, features: ["fs", "fetch", "json", "eager", "stream", "https_proxy"] } });
 
 // An error that escapes the op (a promise that rejects with no handler, a timer that throws: SDK background work)
 // must not kill the runner in the middle of a case: it fails the step it happened in, or the next one, as in the

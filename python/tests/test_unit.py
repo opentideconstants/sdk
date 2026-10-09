@@ -1550,3 +1550,87 @@ class StreamIndexWriteTest(unittest.TestCase):
             self.assertEqual(rel.station("OTC-T-0001").station_id, "OTC-T-0001")
             rel._close()
             self.assertTrue(any("index-v1.json" in m for m in logs.output), logs.output)
+
+
+class ProxyTrustTest(unittest.TestCase):
+    """CR2 DR39: the TLS hop to an https proxy trusts the system roots plus ca_file; the hop to an https target trusts
+    ca_file alone when it is set. Two throw-away CAs (conformance/server.py make_tls_files, the openssl command): the
+    "system" CA stands in for the system roots (it is what ssl.SSLContext.load_default_certs loads here), and the
+    "private" CA is the ca_file. Each signs a server certificate for 127.0.0.1."""
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+        import tempfile
+        sys.path.insert(0, str(ROOT / "conformance"))
+        try:
+            from server import make_tls_files
+        finally:
+            sys.path.remove(str(ROOT / "conformance"))
+        cls.tmp = Path(tempfile.mkdtemp(prefix="otc-dr39-"))
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, True)
+        cls.files = {}
+        for name in ("system", "private"):
+            (cls.tmp / name).mkdir()
+            cls.files[name] = make_tls_files(cls.tmp / name)   # (ca, cert, key)
+
+    def setUp(self):
+        import ssl
+        from unittest import mock
+        roots = str(self.files["system"][0])
+
+        def system_roots(ctx, purpose=ssl.Purpose.SERVER_AUTH):
+            ctx.load_verify_locations(cafile=roots)
+
+        p = mock.patch.object(ssl.SSLContext, "load_default_certs", system_roots)
+        p.start()
+        self.addCleanup(p.stop)
+        env = {k: v for k, v in os.environ.items()
+               if k.lower() not in ("http_proxy", "https_proxy", "no_proxy", "ssl_cert_file", "request_method")}
+        e = mock.patch.dict(os.environ, env, clear=True)
+        e.start()
+        self.addCleanup(e.stop)
+
+    def _https(self, name, body):
+        import http.server
+        import ssl
+        import threading
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        _, cert, key = self.files[name]
+        ctx.load_cert_chain(cert, key)
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        return f"https://127.0.0.1:{srv.server_address[1]}"
+
+    def _get(self, url, **kw):
+        from opentideconstants._http import Http
+        return Http(user_agent="t", timeout=5, **kw).get(url).body
+
+    def test_the_proxy_hop_trusts_the_system_roots_plus_ca_file(self):
+        ca = str(self.files["private"][0])
+        public = self._https("system", b"via-public-proxy")    # a certificate from a system root
+        private = self._https("private", b"via-private-proxy")  # a certificate from the ca_file's CA
+        # a ca_file meant for the target does not drop the system roots the proxy's certificate chains to
+        self.assertEqual(self._get("http://example.invalid/x", proxy=public, ca_file=ca), b"via-public-proxy")
+        # and a proxy with a private CA is trusted through ca_file
+        self.assertEqual(self._get("http://example.invalid/x", proxy=private, ca_file=ca), b"via-private-proxy")
+
+    def test_the_target_hop_trusts_ca_file_alone(self):
+        target = self._https("system", b"target")   # a certificate from a system root
+        self.assertEqual(self._get(target + "/x"), b"target")   # the control: the system roots are used
+        with self.assertRaises(otc.NetworkError):
+            self._get(target + "/x", ca_file=str(self.files["private"][0]))

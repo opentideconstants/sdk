@@ -34,7 +34,7 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 **The null runner** (`runners/null/runner.py`) answers every step with an empty result. It must fail every case. That is the RED proof of phase step S2. It fails each case at its first compared step, which is usually the open step. **The almost-right runner** (`runners/almost/runner.py`) answers `open` correctly for the open variants and every other op with an empty result; run with `--all-steps`, it shows that the later runner steps and the driver steps fail an SDK that opens and then does nothing. Every case must fail against it too.
 
-**Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`; `typescript-browser` all but `fs`; `c` must claim `fs`, `stream` and `require_checksum`, `c-fetch` also `fetch`. A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
+**Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`, and `python` and `typescript` also `https_proxy`; `typescript-browser` `fetch`, `json`, `eager` and `stream`; `c` must claim `fs`, `stream` and `require_checksum`, `c-fetch` also `fetch` and `https_proxy`. A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
 
 ## Expected failures
 
@@ -73,6 +73,7 @@ A runner is a small program in the SDK's own language. It may call **only the pu
 | `json` | It reads `.json` and `.json.gz` files. (Not C, which reads `.jsonl` + `.meta.json`.) |
 | `eager` | It has eager mode. (Not C.) |
 | `stream` | It has stream mode. |
+| `https_proxy` | It reaches a proxy over TLS (an `https://` proxy). Not Ruby: `Net::HTTP` speaks plain HTTP to every proxy, so Ruby refuses an `https://` proxy (CR2 DR39). |
 | `require_checksum` | Its `open` takes `require_checksum` (a missing `OTC_{D}.sha256` is `checksum_mismatch`). C only: the `otc_open_options` field, for `otc_open_file` and for the open of the cached file in `otc_fetch_open` (CR2 DR34). |
 
 The driver skips a case whose `requires` names a feature that the runner lacks. A step's `expect_if_missing` gives the expectation when the runner lacks a feature; the case ends after that step. So C without `otc_fetch` must return `not_built`, and TypeScript in a browser must fail `download` with `unsupported`.

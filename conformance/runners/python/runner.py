@@ -22,7 +22,7 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-FEATURES = ["fs", "fetch", "json", "eager", "stream"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy"]
 
 
 def _load_sdk():
