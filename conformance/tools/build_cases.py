@@ -1045,6 +1045,15 @@ def group_network():
                     [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": "1"}), drv("server_stop"), drv("clear_log"),
                      open_latest({"loaded_from": "cache", "datestamp": d2}), drv("assert_requests", source="any", count=0)],
                     requires=["fs"]))
+    # CR D15 (CR2 G8): the variable is read without regard to case and after a trim, and it wins over offline: false
+    out.append(case("net/offline-env-trim-case", "OPENTIDECONSTANTS_OFFLINE=' Yes ' (case and spaces) works like offline: true (CR D15)", "4.2, 5.5",
+                    [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": " Yes "}), drv("server_stop"), drv("clear_log"),
+                     open_latest({"loaded_from": "cache", "datestamp": d2}), drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
+    out.append(case("net/offline-env-wins-over-option", "OPENTIDECONSTANTS_OFFLINE=On with offline: false: the variable wins, no socket (CR D15)", "4.2, 5.5",
+                    [open_latest(), drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": "On"}), drv("server_stop"), drv("clear_log"),
+                     open_latest({"loaded_from": "cache", "datestamp": d2}, offline=False), drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
     out.append(case("net/offline-pinned-not-cached", "offline, a pinned release that is not cached: offline_unavailable", "5.5",
                     [open_latest(), drv("restart_runner"), drv("server_stop"), drv("clear_log"),
                      net(step("open", err("offline_unavailable"), release=d1, offline=True, base_url=G, cache_dir="${cache}")),

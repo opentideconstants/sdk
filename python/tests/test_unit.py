@@ -781,6 +781,30 @@ class LifecycleTest(unittest.TestCase):
         c._maybe_auto_update()
 
 
+class OfflineEnvTest(unittest.TestCase):
+    """OPENTIDECONSTANTS_OFFLINE: 1, true, yes, on in any case after a trim, and it wins over offline=False (CR D15)."""
+
+    def test_values_and_precedence(self):
+        import tempfile
+        saved = os.environ.get("OPENTIDECONSTANTS_OFFLINE")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                for v in ("1", " TRUE ", "Yes", "on"):
+                    os.environ["OPENTIDECONSTANTS_OFFLINE"] = v
+                    for kw in ({}, {"offline": False}):
+                        with self.assertRaises(otc.OfflineError, msg=f"{v!r} {kw}"):
+                            otc.OpenTideConstants(cache_dir=tmp, base_url="http://127.0.0.1:9/", **kw)
+                for v in ("no", " 0 "):
+                    os.environ["OPENTIDECONSTANTS_OFFLINE"] = v
+                    with self.assertRaises(otc.NetworkError, msg=repr(v)):
+                        otc.OpenTideConstants(cache_dir=tmp, base_url="http://127.0.0.1:9/", timeout=1)
+        finally:
+            if saved is None:
+                os.environ.pop("OPENTIDECONSTANTS_OFFLINE", None)
+            else:
+                os.environ["OPENTIDECONSTANTS_OFFLINE"] = saved
+
+
 class DownloadTest(unittest.TestCase):
     """download() writes all of a release or nothing (spec §4.3.2; review PK14)."""
 
