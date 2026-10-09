@@ -1000,9 +1000,13 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         otc__err_set(err, OTC_E_IO, path, "cannot open %s", path);
         return OTC_E_IO;
     }
-    if (!otc__ends_with(path, ".jsonl")) {
-        otc__err_set(err, OTC_E_INVALID_ARGUMENT, path, "the C library opens OTC_{D}.jsonl files: %s", path);
-        return OTC_E_INVALID_ARGUMENT;
+    {   /* the name is OTC_<D>.jsonl (spec 4.2, CR D18) */
+        size_t nl = strlen(jsonl_name);
+        if (!otc__ends_with(path, ".jsonl") || nl < 4 + 8 + 6 || strncmp(jsonl_name, "OTC_", 4) != 0
+            || !otc__valid_datestamp(jsonl_name + 4, nl - 10)) {
+            otc__err_set(err, OTC_E_INVALID_ARGUMENT, path, "the C library opens OTC_{D}.jsonl files: %s", path);
+            return OTC_E_INVALID_ARGUMENT;
+        }
     }
     base = otc__strndup(path, strlen(path) - 6);
     dir = otc__strndup(path, (size_t)(jsonl_name - path));

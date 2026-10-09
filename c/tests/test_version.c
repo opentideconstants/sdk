@@ -47,5 +47,28 @@ int main(void)
     }
     CHECK_STATUS(open_with("\"1.0\"", "2"), OTC_E_INVALID_RELEASE);
     CHECK_STATUS(open_with("\"1.0\"", "\"2\""), OTC_E_INVALID_RELEASE);
+    /* D18: a file name that is not OTC_<D>.jsonl is invalid_argument */
+    {
+        static const char *const bad_names[] = {"release.jsonl", "OTC_2099.jsonl", "OTC_20990101.01.jsonl",
+                                                "OTC_20990101.1234567890.jsonl", "otc_20990101.jsonl", NULL};
+        char *dir = test_tmpdir();
+        size_t k;
+        for (k = 0; bad_names[k]; k++) {
+            char base[64], meta[80], *path;
+            otc_release *rel = NULL;
+            otc_status st;
+            snprintf(base, sizeof base, "%.*s", (int)(strlen(bad_names[k]) - 6), bad_names[k]);
+            snprintf(meta, sizeof meta, "%s.meta.json", base);
+            test_write(dir, meta, TEST_META("20990101"));
+            test_write(dir, bad_names[k], TEST_STATION("OTC-X-1", "One") "\n");
+            path = test_join(dir, bad_names[k]);
+            st = otc_open_file(path, NULL, &rel);
+            if (st != OTC_E_INVALID_ARGUMENT) fprintf(stderr, "%s: %s\n", bad_names[k], otc_status_code(st));
+            CHECK(st == OTC_E_INVALID_ARGUMENT);
+            otc_close(rel);
+            free(path);
+        }
+        free(dir);
+    }
     return test_done("test_version");
 }

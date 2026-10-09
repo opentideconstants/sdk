@@ -611,18 +611,7 @@ static void ctx_free(fctx *c)
 #define NAME_CAP (4 + DS_MAX + sizeof ".meta.json")   /* "OTC_" + D + the longest suffix */
 static int valid_datestamp(const char *s)
 {
-    size_t i, n;
-    if (!s) return 0;
-    n = strlen(s);
-    if (n < 8 || n > DS_MAX) return 0;
-    for (i = 0; i < 8; i++)
-        if (s[i] < '0' || s[i] > '9') return 0;
-    if (n == 8) return 1;
-    if (s[8] != '.' || n < 10) return 0;
-    for (i = 9; i < n; i++)
-        if (s[i] < '0' || s[i] > '9') return 0;
-    if (n == 10) return s[9] >= '2';
-    return s[9] != '0';
+    return s && otc__valid_datestamp(s, strlen(s));
 }
 
 /* the date, then the counter; no counter = counter 1 */

@@ -786,6 +786,22 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     return st;
 }
 
+/* ------------------------------------------------------------- datestamps */
+
+int otc__valid_datestamp(const char *s, size_t n)
+{
+    size_t i;
+    if (n < 8 || n > 18) return 0;   /* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$ (spec 4.2, CR D18) */
+    for (i = 0; i < 8; i++)
+        if (s[i] < '0' || s[i] > '9') return 0;
+    if (n == 8) return 1;
+    if (s[8] != '.' || n < 10) return 0;
+    for (i = 9; i < n; i++)
+        if (s[i] < '0' || s[i] > '9') return 0;
+    if (n == 10) return s[9] >= '2';
+    return s[9] != '0';
+}
+
 /* ------------------------------------------------------------------- times */
 
 static int digits_at(const char *s, int n, int *v)

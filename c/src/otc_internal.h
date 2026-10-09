@@ -65,6 +65,9 @@ otc_status otc__file_open(const char *path, otc__file **out);
 int otc__file_pread(otc__file *f, void *buf, size_t n, uint64_t off);
 int64_t otc__file_size(otc__file *f);
 void otc__file_close(otc__file *f);
+/* 1 when the n bytes at s are a datestamp: ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$
+ * (spec 4.2; the counter has at most 9 digits, CR D18). */
+int otc__valid_datestamp(const char *s, size_t n);
 /* An HTTP-date (IMF-fixdate, RFC 9110 5.6.7) as seconds since 1970, or -1. */
 int64_t otc__http_date(const char *s);
 /* An RFC 3339 time as UTC "YYYY-MM-DDTHH:MM:SSZ" (whole seconds); 0 when s is not one. */
