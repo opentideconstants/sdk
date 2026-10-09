@@ -1550,6 +1550,16 @@ def group_rules():
             out.append(case(f"rules/{pk}/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open", "4.8, 6.1, 7.4",
                             [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
                             requires=["fs"] + req))
+    # CR2 PK-R2-04 (DR6): a created or record_span time with impossible calendar fields, hour 24, a leap second, or out
+    # of range in UTC is invalid_release in every load path; no SDK rolls it over into another date
+    for root in ["created-impossible", "created-leap-second", "created-out-of-range",
+                 "record-span-feb-31", "record-span-feb-29", "record-span-hour-24"]:
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"rules/r2-pk04/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open (DR6)", "4.6, 7.3",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
     MJ = f"{SRV}/major/"
     out.append(case("rules/pk03/check-for-update-only-newer-major", "check_for_update when every release on the server has a newer major (bad/format-major): unsupported_format, and newer_format_major is 2 all the same (D10)", "7.4",
                     [step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{FIX}/good/OTC_{d2}.jsonl",
