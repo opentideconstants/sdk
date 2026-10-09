@@ -1472,6 +1472,42 @@ static cJSON *take_strings(char **v, size_t n, int basenames, int sort)
     return arr;
 }
 
+/*
+ * The list calls of the fetch module hand over the entries they filled even when they fail (BUFFER_TOO_SMALL, and
+ * prune's OTC_E_CACHE). The runner's arrays start zeroed, and every entry it was given is freed, so nothing leaks.
+ */
+static void free_strings(char **v, size_t cap)
+{
+    size_t i;
+    for (i = 0; v && i < cap; i++)
+        if (v[i]) { otc_free(v[i]); v[i] = NULL; }
+}
+
+static void free_infos(otc_release_info **v, size_t cap)
+{
+    size_t i;
+    for (i = 0; v && i < cap; i++)
+        if (v[i]) { otc_release_info_free(v[i]); v[i] = NULL; }
+}
+
+/* A read-only string list (cached_releases): BUFFER_TOO_SMALL is the runner's buffer, so it asks again with room for
+ * *count entries. *v (malloc'd, cap *cap) holds the entries; the caller frees it. */
+static otc_status list_strings(const otc_fetch_options *fo, char ***v, size_t *cap, size_t *count)
+{
+    otc_status rc;
+    *cap = 256;
+    for (;;) {
+        *v = (char **)calloc(*cap, sizeof **v);
+        if (!*v) return OTC_E_NOMEM;
+        *count = 0;
+        rc = otc_fetch_cached_releases(fo, *v, *cap, count);
+        if (rc != OTC_E_BUFFER_TOO_SMALL || *count <= *cap) return rc;
+        free_strings(*v, *cap);
+        free(*v);
+        *cap = *count;
+    }
+}
+
 /* Swaps the current release for datestamp ds (a Release held from before stays open). */
 static otc_status swap_to(const char *ds, otc_error *err)
 {
@@ -1548,15 +1584,30 @@ static void op_fetch(request *q, reply *r)
         return;
     }
     if (!strcmp(q->op, "releases")) {
-        otc_release_info *v[256];
+        /* read-only: BUFFER_TOO_SMALL is the runner's buffer, never the SDK's answer, so it asks again with room for
+         * every release; the entries handed over with BUFFER_TOO_SMALL are freed first */
+        otc_release_info **v = NULL;
         cJSON *arr = cJSON_CreateArray();
-        size_t i;
-        rc = otc_fetch_releases(&fo, v, 256, &count);
-        for (i = 0; rc == OTC_OK && i < count; i++) {
-            cJSON_AddItemToArray(arr, enc_release_info(v[i], &bad));
-            otc_release_info_free(v[i]);
+        size_t i, cap = 256;
+        for (;;) {
+            v = (otc_release_info **)calloc(cap, sizeof *v);
+            if (!v) { rc = OTC_E_NOMEM; break; }
+            count = 0;
+            rc = otc_fetch_releases(&fo, v, cap, &count);
+            if (rc != OTC_E_BUFFER_TOO_SMALL || count <= cap) break;
+            free_infos(v, cap);
+            free(v);
+            v = NULL;
+            cap = count;
         }
+        for (i = 0; rc == OTC_OK && i < count; i++) cJSON_AddItemToArray(arr, enc_release_info(v[i], &bad));
+        free_infos(v, cap);
+        free(v);
         cJSON_AddItemToObject(r->result, "releases", arr);
+        if (rc == OTC_E_NOMEM || rc == OTC_E_BUFFER_TOO_SMALL) {   /* no memory, or a too-small answer that fits */
+            set_error(r, rc == OTC_E_NOMEM ? "uncaught:NoMemory" : "uncaught:BufferProtocol", "releases: the list call");
+            return;
+        }
     } else if (!strcmp(q->op, "latest") || !strcmp(q->op, "check_for_update")) {
         otc_release_info *ri = NULL;
         bool found = true;
@@ -1584,7 +1635,7 @@ static void op_fetch(request *q, reply *r)
         /* absent or null: OTC_FORMATS_DEFAULT; a list, [] included, goes to the library as its bits, so [] is 0 and the
          * library judges it (CR 4c) */
         unsigned formats = OTC_FORMATS_DEFAULT;
-        char *paths[16];
+        char *paths[16] = {0};
         bool overwrite = arg_bool(&q->a, "overwrite", false);
         if (fmts && !cJSON_IsNull(fmts)) {
             formats = 0;
@@ -1600,12 +1651,24 @@ static void op_fetch(request *q, reply *r)
         if (q->a.bad) { set_error(r, "invalid_argument", "download: an argument has the wrong type"); return; }
         rc = otc_fetch_to_dir(&fo, release, to, formats, overwrite, paths, 16, &count);
         if (rc == OTC_OK) cJSON_AddItemToObject(r->result, "paths", take_strings(paths, count, 1, 1));
+        else free_strings(paths, 16);
+        if (rc == OTC_E_BUFFER_TOO_SMALL) {   /* the files are written and the call cannot be repeated: a runner failure */
+            set_error(r, "uncaught:ListTooSmall", "download: the runner's list of 16 paths is too small");
+            return;
+        }
     } else if (!strcmp(q->op, "cached_releases")) {
-        char *v[256];
-        rc = otc_fetch_cached_releases(&fo, v, 256, &count);
+        char **v = NULL;
+        size_t cap = 0;
+        rc = list_strings(&fo, &v, &cap, &count);
         if (rc == OTC_OK) cJSON_AddItemToObject(r->result, "datestamps", take_strings(v, count, 0, 0));
+        else free_strings(v, cap);
+        free(v);
+        if (rc == OTC_E_NOMEM || rc == OTC_E_BUFFER_TOO_SMALL) {
+            set_error(r, rc == OTC_E_NOMEM ? "uncaught:NoMemory" : "uncaught:BufferProtocol", "cached_releases: the list call");
+            return;
+        }
     } else {
-        char *v[256];
+        char *v[256] = {0};
         double keep = arg_num(&q->a, "keep", 3);
         if (q->a.bad || keep < 0 || keep != floor(keep)) {
             /* size_t keep cannot be negative or fractional: the type is wrong for C (README, Argument rules) */
@@ -1614,6 +1677,11 @@ static void op_fetch(request *q, reply *r)
         }
         rc = otc_fetch_prune(&fo, (size_t)keep, ds[0] ? ds : NULL, v, 256, &count);
         if (rc == OTC_OK) cJSON_AddItemToObject(r->result, "removed", take_strings(v, count, 0, 0));
+        else free_strings(v, 256);
+        if (rc == OTC_E_BUFFER_TOO_SMALL) {   /* the releases are removed and the call cannot be repeated */
+            set_error(r, "uncaught:ListTooSmall", "prune: the runner's list of 256 datestamps is too small");
+            return;
+        }
     }
     if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
     if (bad) set_error(r, "uncaught:BufferProtocol", "an accessor broke the buffer or list rules");
