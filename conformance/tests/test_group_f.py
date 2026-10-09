@@ -558,3 +558,25 @@ def test_failed_restart_stops_the_case(tmp_path):
     assert doc["steps"]["steps_compared"] == 0, doc["steps"]       # step 1 did not run
     r = run_driver("--runner", f"{sys.executable} {p}", "--cases", str(cases), "--report", str(report), "--all-steps")
     assert json.loads(report.read_text())["steps"]["steps_compared"] == 1, r.stdout[-500:]   # --all-steps goes on
+
+
+# --- R2-166: restore_writable fixes a directory under one the owner cannot list (chmod 000), so the tmp dir is removed
+
+def test_restore_writable_reaches_under_an_unlistable_directory(tmp_path):
+    import shutil
+    root = tmp_path / "otc-conf-x"
+    (root / "a" / "b").mkdir(parents=True)
+    (root / "a" / "b" / "f").write_text("x")
+    (root / "a" / "b").chmod(0o555)
+    (root / "a").chmod(0o000)
+    try:
+        driver.restore_writable(root)
+        shutil.rmtree(root, ignore_errors=True)
+        assert not root.exists(), "the case's tmp directory was left behind"
+    finally:
+        if root.exists():
+            for p in [root, root / "a", root / "a" / "b"]:
+                try:
+                    p.chmod(0o700)
+                except OSError:
+                    pass

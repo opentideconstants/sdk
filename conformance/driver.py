@@ -934,13 +934,18 @@ def act_assert_tree(a):
 
 
 def restore_writable(root):
-    """Give the owner write and search permission again under root (after chmod steps), so it can be removed."""
-    for p in [Path(root), *Path(root).rglob("*")]:
-        try:
-            if not p.is_symlink():
-                p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
-        except OSError:
-            pass
+    """Give the owner write and search permission again under root (after chmod steps), so it can be removed. Top
+    down: each directory is fixed before it is listed, so a directory under one with no read bit (000) is reached."""
+    p = Path(root)
+    try:
+        if p.is_symlink():
+            return
+        p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
+        children = list(p.iterdir()) if p.is_dir() else []
+    except OSError:
+        return
+    for c in children:
+        restore_writable(c)
 
 
 def run_action(st, ctx, srv, proxy):
