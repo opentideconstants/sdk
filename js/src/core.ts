@@ -1,14 +1,15 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
-import { compareDatestamps, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
+import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
-    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, ReleaseNotFoundError, UnsupportedFormatError,
+    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, ReleaseNotFoundError,
+    UnsupportedFormatError,
 } from "./errors.js";
 import { isObject } from "./json.js";
 import {
     checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl,
     type LineReader, type StreamIndex,
 } from "./loader.js";
-import type { CacheStore, HttpResponse, Platform } from "./platform.js";
+import type { CacheStore, HttpResponse, Platform, Unlock } from "./platform.js";
 import { storedIndex, usableIndex, type Release } from "./release.js";
 import type { FileInfo, Logger, Mode, OnNetworkError } from "./types.js";
 
@@ -53,7 +54,11 @@ export interface Verified {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-export const relDir = (d: string) => `releases/${d}`;
+/** The cache directory of release D (spec 5.4). D is checked again here, so no path leaves `<root>/v1/releases`. */
+export function relDir(d: string): string {
+    if (!isDatestamp(d)) throw new InvalidReleaseError(`bad datestamp ${JSON.stringify(d)}`);
+    return `releases/${d}`;
+}
 
 export function log(ctx: Ctx, level: "debug" | "info" | "warn", message: string): void {
     try {
@@ -78,7 +83,8 @@ function retryAfter(res: HttpResponse): number | null {
  */
 export async function httpGet(ctx: Ctx, url: string, etag: string | null = null): Promise<HttpResponse> {
     const headers: Record<string, string> = { "User-Agent": ctx.userAgent };
-    if (!url.endsWith(".gz")) headers["Accept-Encoding"] = "gzip";
+    // a .gz file is fetched as it is: no transfer encoding on top (spec 5.7)
+    headers["Accept-Encoding"] = new URL(url).pathname.endsWith(".gz") ? "identity" : "gzip";
     if (etag) headers["If-None-Match"] = etag;
     const backoff = [1, 2];
     let last: NetworkError | null = null;
@@ -103,17 +109,34 @@ export async function httpGet(ctx: Ctx, url: string, etag: string | null = null)
     throw last ?? new NetworkError(`request failed: ${url}`, { url });
 }
 
-function parseEntry(v: unknown, pointerUrl: string): PointerEntry {
+/**
+ * Check one latest-pointer or index entry from the server (spec 4.2, 5.2). A datestamp that is not one (`../x`,
+ * `2026-10-08`, a counter `.01` or longer than 9 digits) is invalid_release: it names a cache directory (spec 5.4).
+ * `what` names the file in the message ("the pointer" or "OTC_index.json").
+ */
+function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry {
     if (!isObject(v) || typeof v["datestamp"] !== "string" || typeof v["format_version"] !== "string") {
-        throw new InvalidReleaseError(`the pointer ${pointerUrl} has no datestamp or format_version`);
+        throw new InvalidReleaseError(`${what} ${url}: an entry has no datestamp or format_version`);
     }
+    const d = v["datestamp"];
+    checkVersion(v["format_version"], `${what} ${url}: format_version of ${d}`);
+    checkVersion(v["min_reader_version"], `${what} ${url}: min_reader_version of ${d}`);
+    if (!isDatestamp(d)) throw new InvalidReleaseError(`${what} ${url}: bad datestamp ${JSON.stringify(d)}`);
+    const rawFiles = v["files"] ?? [];
+    if (!Array.isArray(rawFiles)) throw new InvalidReleaseError(`${what} ${url}: files of ${d} is not a list`);
     const files: FileInfo[] = [];
-    for (const f of Array.isArray(v["files"]) ? v["files"] : []) {
-        if (!isObject(f) || typeof f["name"] !== "string") continue;
+    for (const f of rawFiles) {
+        if (!isObject(f) || typeof f["name"] !== "string") throw new InvalidReleaseError(`${what} ${url}: a file of ${d} has no name`);
         const u = typeof f["url"] === "string" ? f["url"] : f["name"];
+        let href: string;
+        try {
+            href = new URL(u, url).href;
+        } catch (e) {
+            throw new InvalidReleaseError(`${what} ${url}: the url of ${f["name"]} is not a URL`, { cause: e });
+        }
         files.push({
             name: f["name"],
-            url: new URL(u, pointerUrl).href,
+            url: href,
             size: typeof f["size"] === "number" ? f["size"] : null,
             sha256: typeof f["sha256"] === "string" ? f["sha256"].toLowerCase() : null,
         });
@@ -121,7 +144,7 @@ function parseEntry(v: unknown, pointerUrl: string): PointerEntry {
     files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     const s = (k: string) => (typeof v[k] === "string" ? (v[k] as string) : null);
     return {
-        datestamp: v["datestamp"], format_version: v["format_version"], min_reader_version: s("min_reader_version"),
+        datestamp: d, format_version: v["format_version"], min_reader_version: s("min_reader_version"),
         concept_doi: s("concept_doi"), zenodo_version_doi: s("zenodo_version_doi"), content_sha256: s("content_sha256"), files,
     };
 }
@@ -131,29 +154,63 @@ export function readable(e: { format_version: string | null; min_reader_version?
     return (e.format_version === null || supportedFormat(e.format_version)) && readerReads(e.min_reader_version ?? null);
 }
 
-/** A GET of a changing file with If-None-Match and the stored ETag; 304 reads the stored copy. Null on 404. */
-async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Array; url: string } | null> {
+/**
+ * A GET of a changing file (the pointer or OTC_index.json) with If-None-Match and the stored ETag; 304 reads the
+ * stored copy. Null on 404. The body must be JSON before it is stored: a 200 that is not JSON (a captive portal, a
+ * proxy error page) is a network error (spec 5.2 step 5, CR D8), and the good stored copy stays. The body and its
+ * ETag are written under pointer/.lock, the ETag removed first and written last, so no body is paired with
+ * another body's ETag (spec 5.4). A failure to store them is logged, not raised (CR D8).
+ */
+async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Array; url: string; doc: unknown } | null> {
     const url = new URL(name, ctx.baseUrl).href;
     const rel = `pointer/${name}`;
     const store = ctx.store;
-    const cached = store ? await store.read(rel) : null;
-    const etagBytes = store && cached ? await store.read(`${rel}.etag`) : null;
-    const etag = etagBytes ? dec.decode(etagBytes).trim() : null;
+    const readEtag = async () => {
+        const b = store ? await store.read(`${rel}.etag`) : null;
+        return b ? dec.decode(b).trim() : null;
+    };
+    let etag = await readEtag();
+    let cached = store ? await store.read(rel) : null;
+    let cachedDoc: unknown = undefined;
+    if (cached) {
+        try {
+            cachedDoc = JSON.parse(dec.decode(cached));
+        } catch {
+            cached = null; // a broken stored copy is the same as none: no If-None-Match, so the server sends a 200
+        }
+    }
+    // the ETag is read before and after the body; a writer in between means they may not pair, so send none
+    if (!cached || (await readEtag()) !== etag) etag = null;
     const res = await httpGet(ctx, url, etag);
     if (res.status === 404) return null;
     if (res.status === 304 && cached) {
         log(ctx, "debug", `pointer ${name}: 304, the stored copy is current`);
-        return { body: cached, url };
+        return { body: cached, url, doc: cachedDoc };
     }
-    if (res.status === 304) throw new NetworkError(`unexpected 304: ${url}`, { url, status: 304 });
+    if (res.status === 304) throw new NetworkError(`unexpected 304 with no stored copy: ${url}`, { url, status: 304 });
+    let doc: unknown;
+    try {
+        doc = JSON.parse(dec.decode(res.body));
+    } catch (e) {
+        throw new NetworkError(`${url}: the 200 response is not JSON (a captive portal or a proxy page?)`, { url, status: res.status, cause: e });
+    }
     if (store) {
-        await store.write(rel, res.body);
-        const tag = res.header("etag");
-        if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
-        else await store.remove(`${rel}.etag`);
+        try {
+            const unlock = await store.lock("pointer");
+            try {
+                await store.remove(`${rel}.etag`);
+                await store.write(rel, res.body);
+                const tag = res.header("etag");
+                if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
+            } finally {
+                await releaseLock(ctx, unlock);
+            }
+        } catch (e) {
+            log(ctx, "warn", `cannot store ${name} in the cache: ${e instanceof Error ? e.message : String(e)}`);
+        }
     }
     log(ctx, "debug", `pointer ${name}: 200`);
-    return { body: res.body, url };
+    return { body: res.body, url, doc };
 }
 
 function newestReadable(entries: PointerEntry[]): PointerEntry | null {
@@ -164,13 +221,17 @@ function newestReadable(entries: PointerEntry[]): PointerEntry | null {
 export async function getIndex(ctx: Ctx): Promise<PointerEntry[]> {
     const r = await getConditional(ctx, "OTC_index.json");
     if (!r) throw new ReleaseNotFoundError(`no release index at ${new URL("OTC_index.json", ctx.baseUrl).href}`);
-    return parseIndex(r.body, r.url);
+    return indexEntries(r.doc, r.url);
 }
 
 export function parseIndex(body: Uint8Array, url: string): PointerEntry[] {
-    const doc = parseJson(body, "OTC_index.json");
-    const rels = isObject(doc) && Array.isArray(doc["releases"]) ? doc["releases"] : [];
-    return rels.map((e) => parseEntry(e, url)).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
+    return indexEntries(parseJson(body, "OTC_index.json"), url);
+}
+
+function indexEntries(doc: unknown, url: string): PointerEntry[] {
+    const rels = isObject(doc) ? doc["releases"] : undefined;
+    if (!Array.isArray(rels)) throw new InvalidReleaseError(`OTC_index.json ${url}: releases is missing or not a list`);
+    return rels.map((e) => parseEntry(e, url, "OTC_index.json")).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
 }
 
 /** The cached index, for releases() offline. */
@@ -201,11 +262,11 @@ export async function readPointer(ctx: Ctx): Promise<PointerRead> {
         r = await getConditional(ctx, "OTC_latest.json");
     }
     if (!r) throw new ReleaseNotFoundError(`no latest pointer at ${ctx.baseUrl}`);
-    const entry = parseEntry(parseJson(r.body, "the latest pointer"), r.url);
+    const entry = parseEntry(r.doc, r.url);
     const out = (e: PointerEntry): PointerRead => ({ entry: e, generic: generic ? entry : null });
     if (readable(entry)) return out(entry);
     if (!supportedFormat(entry.format_version)) {
-        log(ctx, "warn", `a newer format (${formatMajorOf(entry.format_version)}) exists; upgrade opentideconstants to read it`);
+        log(ctx, "warn", `a newer format (${formatMajor(entry.format_version)}) exists; upgrade opentideconstants to read it`);
     } else {
         log(ctx, "warn", `release ${entry.datestamp} needs a reader for format ${entry.min_reader_version}; looking for the newest release this SDK reads`);
     }
@@ -227,25 +288,56 @@ export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
 export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
     const r = await getConditional(ctx, "OTC_latest.json");
     if (!r) return null;
-    const major = formatMajorOf(parseEntry(parseJson(r.body, "OTC_latest.json"), r.url).format_version);
+    const major = formatMajor(parseEntry(r.doc, r.url, "OTC_latest.json").format_version);
     return Number.isNaN(major) ? null : major;
 }
 
-function formatMajorOf(v: string): number {
-    const m = /^([0-9]+)\.[0-9]+$/.exec(v);
-    return m ? Number(m[1]) : NaN;
-}
-
+/**
+ * The `.verified` record of release D, checked key by key (spec 5.4, CR D26; PK10 T81): a record that is not JSON or
+ * has no `files` object is the same as none (the release is verified again). A key with the wrong type is the same
+ * as an absent key, and an absent datestamp is D. A version string that is present but not MAJOR.MINOR is
+ * invalid_release (CR D9).
+ */
 export async function readVerified(store: CacheStore, d: string): Promise<Verified | null> {
     const b = await store.read(`${relDir(d)}/.verified`);
-    if (!b) return null;
+    return b ? parseVerified(b, d) : null;
+}
+
+/** The checked `.verified` record from its bytes (see readVerified). */
+export function parseVerified(b: Uint8Array, d: string): Verified | null {
+    let v: unknown;
     try {
-        const v: unknown = JSON.parse(dec.decode(b));
-        if (isObject(v) && isObject(v["files"])) return v as unknown as Verified;
+        v = JSON.parse(dec.decode(b));
     } catch {
-        /* a broken .verified is the same as none */
+        return null;
     }
-    return null;
+    if (!isObject(v) || !isObject(v["files"])) return null;
+    const files: Verified["files"] = {};
+    for (const [name, f] of Object.entries(v["files"])) {
+        if (!isObject(f)) return null;
+        const sha = f["sha256"];
+        const size = f["size"];
+        const url = f["url"];
+        files[name] = {
+            sha256: typeof sha === "string" && /^[0-9a-fA-F]{64}$/.test(sha) ? sha.toLowerCase() : null,
+            size: typeof size === "number" && Number.isInteger(size) && size >= 0 ? size : null,
+            url: typeof url === "string" ? url : null,
+        };
+    }
+    const s = (k: string): string | null | undefined => {
+        const x = v[k];
+        return typeof x === "string" ? x : x === null ? null : undefined;
+    };
+    checkVersion(v["format_version"], `${relDir(d)}/.verified: format_version`);
+    checkVersion(v["min_reader_version"], `${relDir(d)}/.verified: min_reader_version`);
+    const out: Verified = {
+        files, verified_at: s("verified_at") ?? "", by: s("by") ?? "", datestamp: d, format_version: s("format_version") ?? null,
+    };
+    const mrv = s("min_reader_version");
+    if (mrv !== undefined) out.min_reader_version = mrv;
+    const doi = s("zenodo_version_doi");
+    if (doi !== undefined) out.zenodo_version_doi = doi;
+    return out;
 }
 
 const names = (d: string) => ({
@@ -269,6 +361,7 @@ export async function cachedDatestamps(ctx: Ctx): Promise<string[]> {
     let index: Map<string, PointerEntry> | null = null;
     const out: string[] = [];
     for (const d of await store.list("releases")) {
+        if (!isDatestamp(d)) continue;
         const v = await readVerified(store, d);
         if (!v) continue;
         if (!readable({ format_version: v.format_version ?? null, min_reader_version: v.min_reader_version ?? null })) continue;
@@ -307,14 +400,25 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
     const res = await httpGet(ctx, url);
     if (res.status === 404) throw new ReleaseNotFoundError(`release ${d} not found at ${ctx.baseUrl}`);
     if (res.status !== 200) throw new NetworkError(`HTTP ${res.status}: ${url}`, { url, status: res.status });
+    if (entry) {
+        // OTC_{D}.sha256 is itself listed in the pointer: check it first (spec 5.2 step 4.1, PK11 T78)
+        const own = entry.files.find((f) => f.name === n.sha);
+        if (own) checkBytes(n.sha, await ctx.platform.sha256(res.body), res.body.length, own.sha256, own.size);
+    }
     const rows = parseSha256(dec.decode(res.body));
     if (rows.size === 0) throw new InvalidReleaseError(`${n.sha} lists no files`);
     if (entry) {
+        // the pointer and OTC_{D}.sha256 list the same files with the same digests (spec 5.2 step 4.1)
         for (const f of entry.files) {
+            if (f.name === n.sha) continue;
             const listed = rows.get(f.name);
             if (f.sha256 && listed && f.sha256 !== listed) {
                 throw new ChecksumError(`the pointer and ${n.sha} disagree on ${f.name}`, { file: f.name, expected: f.sha256, actual: listed });
             }
+        }
+        const named = new Set(entry.files.map((f) => f.name));
+        for (const [name, sha] of rows) {
+            if (!named.has(name)) throw new ChecksumError(`${n.sha} lists ${name}, which the pointer does not`, { file: name, expected: null, actual: sha });
         }
     }
     return { bytes: res.body, rows };
@@ -347,12 +451,15 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     }
     if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
     await store.mkdirs(dir);
-    const unlock = await store.lock(dir);
+    // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
+    const unlock = await store.lock(dir, {
+        done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
+    });
     try {
         const now = new Set(await store.list(dir));
         verified = await readVerified(store, d);
         if (verified && usable(ctx.mode, d, now)) {
-            await syncZenodo(ctx, verified, entry);
+            await syncZenodo(ctx, verified, entry, true);
             return "cache";
         }
         const n = names(d);
@@ -367,6 +474,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
             try {
                 json = await ctx.platform.gunzip(gz);
             } catch (e) {
+                if (e instanceof OpenTideConstantsError) throw e; // for example, no DecompressionStream (PK10 T31)
                 throw new ChecksumError(`${n.gz} does not decompress`, { file: n.gz, expected: rows.get(n.gz) ?? null, actual: null, cause: e });
             }
             const size = entry?.files.find((x) => x.name === n.json)?.size ?? null;
@@ -400,7 +508,16 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         await store.write(`${dir}/.verified`, enc.encode(JSON.stringify(v)));
         return "download";
     } finally {
-        await unlock();
+        await releaseLock(ctx, unlock);
+    }
+}
+
+/** Release a lock; a failure leaves a stale lock that a later waiter removes, so it is logged, not raised. */
+async function releaseLock(ctx: Ctx, unlock: Unlock | null): Promise<void> {
+    try {
+        await unlock?.();
+    } catch (e) {
+        log(ctx, "warn", e instanceof Error ? e.message : String(e));
     }
 }
 
@@ -422,16 +539,35 @@ function formatOf(writes: [string, Uint8Array][], n: ReturnType<typeof names>): 
 
 /**
  * Store the version DOI of an entry the SDK read for a cached release in its `.verified`, when it changed
- * (spec 4.3: the newest pointer or index entry for that datestamp). A failed write is logged, not raised.
+ * (spec 4.3: the newest pointer or index entry for that datestamp). The write is a read-modify-write of `.verified`,
+ * so it runs under the release lock and re-reads `.verified` there; `held` says the caller holds the lock already.
+ * When another process holds the lock, or a write fails, it is skipped and logged: the next read syncs it.
  */
-export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null): Promise<void> {
+export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null, held = false): Promise<void> {
     const store = ctx.store;
-    if (!store || !entry || entry.datestamp !== verified.datestamp) return;
-    if ((verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+    if (!store || !entry) return;
+    const d = entry.datestamp;
+    if ((verified.datestamp ?? d) !== d || (verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+    let unlock: Unlock | null = null;
     try {
-        await store.write(`${relDir(entry.datestamp)}/.verified`, enc.encode(JSON.stringify({ ...verified, zenodo_version_doi: entry.zenodo_version_doi })));
+        if (!held) {
+            unlock = await store.lock(relDir(d), { wait: false });
+            if (!unlock) {
+                log(ctx, "debug", `the .verified of ${d} is locked; its version DOI is updated next time`);
+                return;
+            }
+        }
+        const now = await readVerified(store, d);
+        if (!now || (now.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+        // change only this key; keys this SDK does not know (another SDK wrote them) stay as they are
+        const raw = await store.read(`${relDir(d)}/.verified`);
+        const doc: unknown = raw ? JSON.parse(dec.decode(raw)) : null;
+        if (!isObject(doc)) return;
+        await store.write(`${relDir(d)}/.verified`, enc.encode(JSON.stringify({ ...doc, zenodo_version_doi: entry.zenodo_version_doi })));
     } catch (e) {
-        log(ctx, "warn", `cannot update the .verified of ${entry.datestamp}: ${e instanceof Error ? e.message : String(e)}`);
+        log(ctx, "warn", `cannot update the .verified of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+        await releaseLock(ctx, unlock);
     }
 }
 
@@ -441,10 +577,12 @@ export interface SyncDir {
     size(name: string): number | null;
     lineReader(name: string): { read: LineReader; close: () => void } | null;
     writeIndex(bytes: Uint8Array): void;
+    /** Delete index-v1.json (a line did not match it). Throws when it cannot; the caller logs that. */
+    removeIndex(): void;
 }
 
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
-export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode): Release {
+export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
     const files: FileInfo[] = Object.entries(verified.files)
@@ -491,14 +629,28 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         // .verified gives the .jsonl digest the index records; without it there is no index to write
         if (jsonlSha !== null) dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
     }
+    const dropIndex = () => {
+        try {
+            dir.removeIndex();
+        } catch (e) {
+            warn(`cannot delete index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
     const lr = dir.lineReader(n.jsonl);
-    if (lr) return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo });
+    if (lr) {
+        try {
+            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex });
+        } catch (e) {
+            lr.close();
+            throw e;
+        }
+    }
     const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo });
+    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex });
 }
 
 /** Read a cache directory into a SyncDir (the browser, where storage is async). */
-export async function prefetchDir(store: CacheStore, d: string): Promise<SyncDir> {
+export async function prefetchDir(store: CacheStore, d: string, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
     const dir = relDir(d);
     const files = new Map<string, Uint8Array>();
     for (const name of await store.list(dir)) {
@@ -510,25 +662,43 @@ export async function prefetchDir(store: CacheStore, d: string): Promise<SyncDir
         size: (name) => files.get(name)?.length ?? null,
         lineReader: () => null,
         writeIndex: (bytes) => void store.write(`${dir}/index-v1.json`, bytes).catch(() => undefined),
+        removeIndex: () => void store.remove(`${dir}/index-v1.json`).catch((e: unknown) => warn(`cannot delete index-v1.json of ${d}: ${String(e)}`)),
     };
 }
 
-/** Re-hash the cached files of release D against .verified (spec 4.3 verify). */
+/**
+ * Hash the cached files of release D again, in full, and compare them with the cached OTC_{D}.sha256 (spec 4.3
+ * verify). The files this mode loads must be there; every listed data file that is there is hashed. A file that
+ * does not match is deleted from the cache (spec 4.8 checksum_mismatch), so the next open downloads it again.
+ */
 export async function verifyCached(ctx: Ctx, d: string): Promise<true> {
     const store = ctx.store;
     if (!store) throw new OfflineError("no cache");
-    const v = await readVerified(store, d);
-    if (!v) throw new ChecksumError(`release ${d} has no .verified`, { file: `${relDir(d)}/.verified`, expected: null, actual: null });
-    const present = new Set(await store.list(relDir(d)));
-    for (const [name, f] of Object.entries(v.files)) {
-        if (!present.has(name) || name.endsWith(".sha256")) continue;
-        const b = await store.read(`${relDir(d)}/${name}`);
-        if (!b) continue;
-        const actual = await ctx.platform.sha256(b);
-        if (f.sha256 && actual !== f.sha256) {
-            throw new ChecksumError(`${name}: SHA-256 ${actual}, expected ${f.sha256}`, { file: store.describe(`${relDir(d)}/${name}`), expected: f.sha256, actual });
+    const dir = relDir(d);
+    const n = names(d);
+    const shaBytes = await store.read(`${dir}/${n.sha}`);
+    if (!shaBytes) throw new ChecksumError(`${n.sha} is missing from the cache`, { file: store.describe(`${dir}/${n.sha}`), expected: null, actual: null });
+    const rows = parseSha256(dec.decode(shaBytes));
+    const present = new Set(await store.list(dir));
+    const needed = ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json];
+    let checked = 0;
+    for (const name of [...new Set([...needed, ...rows.keys()])]) {
+        if (name === n.sha) continue;
+        const file = store.describe(`${dir}/${name}`);
+        const expected = rows.get(name) ?? null;
+        const b = present.has(name) ? await store.read(`${dir}/${name}`) : null;
+        if (!b) {
+            if (needed.includes(name)) throw new ChecksumError(`${name} is missing from the cache`, { file, expected, actual: null });
+            continue;
         }
+        const actual = await ctx.platform.sha256(b);
+        if (actual !== expected) {
+            await store.remove(`${dir}/${name}`).catch((e: unknown) => log(ctx, "warn", `cannot delete ${file}: ${String(e)}`));
+            throw new ChecksumError(`${name}: SHA-256 ${actual}, expected ${expected ?? "(not listed)"}`, { file, expected, actual });
+        }
+        checked++;
     }
+    if (checked === 0) throw new ChecksumError(`no file of release ${d} was checked`, { file: store.describe(dir), expected: null, actual: null });
     return true;
 }
 

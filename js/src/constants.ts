@@ -1,4 +1,4 @@
-import { InvalidArgumentError } from "./errors.js";
+import { InvalidArgumentError, InvalidReleaseError } from "./errors.js";
 import { FOLD_TABLE } from "./fold-table.js";
 
 /** The SDK version. Its MAJOR.MINOR is the conformance suite version it passes (spec 7.2). */
@@ -17,7 +17,8 @@ export const USER_AGENT = `opentideconstants-js/${VERSION} (+https://opentidecon
 /** @internal */
 export const SDK_ID = `opentideconstants-js/${VERSION}`;
 
-const DATESTAMP_RE = /^[0-9]{8}(\.[2-9]|\.[1-9][0-9]+)?$/;
+/** A datestamp: the date, then an optional counter of 2 or more with at most 9 digits (spec 4.2, CR D18). */
+const DATESTAMP_RE = /^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$/;
 
 /** @internal Throws invalid_argument unless `d` is a datestamp. */
 export function checkDatestamp(d: unknown, what = "release"): string {
@@ -28,8 +29,8 @@ export function checkDatestamp(d: unknown, what = "release"): string {
 }
 
 /** @internal True if `d` is a datestamp. */
-export function isDatestamp(d: string): boolean {
-    return DATESTAMP_RE.test(d);
+export function isDatestamp(d: unknown): d is string {
+    return typeof d === "string" && DATESTAMP_RE.test(d);
 }
 
 /** @internal Datestamp order: the date, then the counter (no counter = 1). Spec 4.3.1. */
@@ -40,11 +41,19 @@ export function compareDatestamps(a: string, b: string): number {
     return (ca ? Number(ca) : 1) - (cb ? Number(cb) : 1);
 }
 
+/** MAJOR.MINOR: two non-negative integers with no leading zeros, joined by one dot (spec 7.4, CR D9). */
+const VERSION_RE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
+/** @internal [major, minor] of a "MAJOR.MINOR" version, or null when it is not one. The only version parser. */
+export function majorMinor(v: unknown): [number, number] | null {
+    if (typeof v !== "string") return null;
+    const m = VERSION_RE.exec(v);
+    return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
 /** @internal The major of a "MAJOR.MINOR" format version, or NaN. */
 export function formatMajor(v: unknown): number {
-    if (typeof v !== "string") return NaN;
-    const m = /^([0-9]+)\.[0-9]+$/.exec(v);
-    return m ? Number(m[1]) : NaN;
+    return majorMinor(v)?.[0] ?? NaN;
 }
 
 /** @internal True if this SDK reads the format version's major. */
@@ -52,18 +61,22 @@ export function supportedFormat(v: unknown): boolean {
     return SUPPORTED_FORMAT_MAJORS.includes(formatMajor(v));
 }
 
-/** @internal [major, minor] of a "MAJOR.MINOR" version, or null. */
-function majorMinor(v: unknown): [number, number] | null {
-    if (typeof v !== "string") return null;
-    const m = /^([0-9]+)\.([0-9]+)$/.exec(v);
-    return m ? [Number(m[1]), Number(m[2])] : null;
+/**
+ * @internal Throws invalid_release when a version string is present (not null or absent) but not MAJOR.MINOR
+ * (spec 7.4, CR D9: the SDK fails closed and never guesses a version). `what` names it in the message.
+ */
+export function checkVersion(v: unknown, what: string): void {
+    if (v !== undefined && v !== null && majorMinor(v) === null) {
+        throw new InvalidReleaseError(`${what} ${JSON.stringify(v)} is not MAJOR.MINOR`);
+    }
 }
 
 /**
- * @internal True if this SDK reads a release with this `min_reader_version` (spec 7.4): it is not newer than
- * SUPPORTED_FORMAT_VERSION. A missing or malformed value does not block the read (spec 7.3).
+ * @internal True if this SDK reads a release with this `min_reader_version` (spec 7.4): it is absent, or not
+ * newer than SUPPORTED_FORMAT_VERSION. A malformed value is invalid_release (CR D9).
  */
 export function readerReads(minReaderVersion: unknown): boolean {
+    checkVersion(minReaderVersion, "min_reader_version");
     const want = majorMinor(minReaderVersion);
     const have = majorMinor(SUPPORTED_FORMAT_VERSION) as [number, number];
     if (want === null) return true;

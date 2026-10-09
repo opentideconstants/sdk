@@ -2,7 +2,8 @@
 import { workerData } from "node:worker_threads";
 import type { MessagePort } from "node:worker_threads";
 import { ensureRelease, getPointer, type Ctx } from "./core.js";
-import { nodePlatform } from "./node.js";
+import { CacheError, ChecksumError, FileError, NetworkError, OpenTideConstantsError } from "./errors.js";
+import { nodePlatform, type BlockingResult } from "./node.js";
 import type { Mode } from "./types.js";
 
 interface Data {
@@ -16,9 +17,8 @@ interface Data {
     offline: boolean;
 }
 
-const { port, sab, data } = workerData as { port: MessagePort; sab: SharedArrayBuffer; data: Data };
-const flag = new Int32Array(sab);
-let result: { ok: boolean; datestamp?: string; how?: string; message?: string };
+const { port, data } = workerData as { port: MessagePort; data: Data };
+let result: BlockingResult;
 try {
     const platform = nodePlatform();
     const ctx: Ctx = {
@@ -26,12 +26,18 @@ try {
         timeout: data.timeout, proxy: data.proxy, caFile: data.caFile, userAgent: data.userAgent,
         onNetworkError: "raise", logger: null, mode: data.mode,
     };
+    if (ctx.offline) throw new Error("offline: the automatic update check does not run");
     const entry = await getPointer(ctx);
     const how = await ensureRelease(ctx, entry.datestamp, entry);
     result = { ok: true, datestamp: entry.datestamp, how };
 } catch (e) {
     result = { ok: false, message: e instanceof Error ? e.message : String(e) };
+    if (e instanceof OpenTideConstantsError) {
+        result.code = e.code;
+        if (e instanceof NetworkError) Object.assign(result, { url: e.url, status: e.status });
+        if (e instanceof CacheError || e instanceof FileError) result.path = e.path;
+        if (e instanceof ChecksumError) result.path = e.file;
+    }
 }
+// the bootstrap (node.runBlocking) wakes the caller when this module has finished
 port.postMessage(result);
-Atomics.store(flag, 0, 1);
-Atomics.notify(flag, 0);

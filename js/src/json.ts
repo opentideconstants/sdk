@@ -53,9 +53,17 @@ export function en<T extends string>(v: Json | undefined, allowed: readonly T[])
     return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : "other";
 }
 
-/** @internal An ISO 8601 time as a Date, or null. */
+/** An RFC 3339 date-time: a full date, a time with seconds, an optional fraction, and Z or an offset. */
+const RFC3339 = /^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?)([Zz]|[+-][0-9]{2}:[0-9]{2})$/;
+
+/**
+ * @internal An RFC 3339 time as a Date, or null. A string without a zone offset is not read as local time, so the
+ * result never depends on the host's time zone (PK07 T20).
+ */
 export function time(v: Json | undefined): Date | null {
     if (typeof v !== "string") return null;
-    const d = new Date(v);
+    const m = RFC3339.exec(v);
+    if (!m) return null;
+    const d = new Date(`${m[1]}T${m[2]}${(m[3] ?? "").toUpperCase()}`);
     return Number.isNaN(d.getTime()) ? null : d;
 }

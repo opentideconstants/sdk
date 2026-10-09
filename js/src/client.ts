@@ -1,14 +1,14 @@
 import {
-    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
+    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
-    loadCached, log, newestCached, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
-    checkBytes, type Ctx, type PointerEntry, type SyncDir, type Verified,
+    loadCached, log, newestCached, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, verifyCached,
+    checkBytes, type Ctx, type PointerEntry, type SyncDir,
 } from "./core.js";
 import {
-    ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
-    OpenTideConstantsError, PinnedReleaseError, ReleaseNotFoundError, UnsupportedError,
+    CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
+    OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
 import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
 import { isNode, type Platform } from "./platform.js";
@@ -19,6 +19,12 @@ import type {
 } from "./types.js";
 
 type NodeMod = typeof import("./node.js");
+type BlockingResult = import("./node.js").BlockingResult;
+
+/** Releases the file handle of a swapped-out release that nobody holds any more. */
+const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
+    try { close(); } catch { /* the handle is gone with the process */ }
+});
 
 const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
 const dec = new TextDecoder();
@@ -37,10 +43,21 @@ function optBool(v: unknown, name: string): boolean | null {
     return v;
 }
 
-function optNum(v: unknown, name: string): number | null {
+/** A positive, finite number of seconds, or null when absent (spec 4.2: 0 would mean "no time at all"). */
+function optSeconds(v: unknown, name: string): number | null {
     if (v === undefined || v === null) return null;
-    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) throw new InvalidArgumentError(`${name} must be a non-negative number`);
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) throw new InvalidArgumentError(`${name} must be a number of seconds greater than 0; got ${JSON.stringify(v)}`);
     return v;
+}
+
+/** True for an absolute http or https URL with a host. */
+function isHttpUrl(v: string): boolean {
+    try {
+        const u = new URL(v);
+        return (u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "";
+    } catch {
+        return false;
+    }
 }
 
 function optStr(v: unknown, name: string): string | null {
@@ -55,6 +72,24 @@ interface FileSource {
     shaPath: string | null;
 }
 
+/** The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). */
+function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
+    const m = r.message ?? "the automatic update check failed";
+    switch (r.code) {
+        case "release_not_found": return new ReleaseNotFoundError(m);
+        case "offline_unavailable": return new OfflineError(m);
+        case "unsupported_format": return new UnsupportedFormatError(m);
+        case "reader_too_old": return new ReaderTooOldError(m);
+        case "invalid_release": return new InvalidReleaseError(m);
+        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: null, actual: null });
+        case "cache": return new CacheError(m, { path: r.path ?? null });
+        case "io": return new FileError(m, { path: r.path ?? "" });
+        case "invalid_argument": return new InvalidArgumentError(m);
+        // network, and a worker that did not finish or failed outside the SDK: the check could not reach the data
+        default: return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null });
+    }
+}
+
 /** A Node SyncDir over a cache release directory. */
 function nodeDir(node: NodeMod, dir: string): SyncDir {
     const p = (name: string) => node.nodePath.join(dir, name);
@@ -65,6 +100,7 @@ function nodeDir(node: NodeMod, dir: string): SyncDir {
         writeIndex: (bytes) => {
             try { node.writeAtomicSync(p("index-v1.json"), bytes); } catch { /* the index is rebuilt next time */ }
         },
+        removeIndex: () => node.removeFileSync(p("index-v1.json")),
     };
 }
 
@@ -88,7 +124,9 @@ export class OpenTideConstants {
     #autoUpdate: boolean;
     #interval: number;
     #lastCheck: number;
-    #all: Release[];
+    /** Every release this client loaded, weakly: a swapped-out one stays valid while the caller holds it (T4). */
+    #all: WeakRef<Release>[];
+    #closed = false;
     #newerFormatMajor: number | null = null;
 
     private constructor(ctx: Ctx, node: NodeMod | null, release: Release, loadedFrom: LoadedFrom, extra: {
@@ -106,7 +144,7 @@ export class OpenTideConstants {
         this.#autoUpdate = extra.autoUpdate;
         this.#interval = extra.interval;
         this.#lastCheck = Date.now();
-        this.#all = [release];
+        this.#all = [new WeakRef(release)];
     }
 
     /** Open a release: the latest (default), a pinned datestamp, or a local file (Node). Spec 4.2, 5.2. */
@@ -118,9 +156,9 @@ export class OpenTideConstants {
         if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
         const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
         if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
-        const timeout = optNum(options.timeout, "timeout");
+        const timeout = optSeconds(options.timeout, "timeout");
         const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
-        const interval = optNum(options.updateInterval, "updateInterval") ?? 86_400;
+        const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
         const file = optStr(options.file, "file");
         const suffix = optStr(options.userAgent, "userAgent");
@@ -129,15 +167,23 @@ export class OpenTideConstants {
         const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
         if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
         if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
-        const offline = optBool(options.offline, "offline") ?? platform.env("OPENTIDECONSTANTS_OFFLINE") === "1";
+        // the environment variable forces offline with 1, true, yes or on, in any case, trimmed (spec 4.2, CR D15)
+        const envOffline = ["1", "true", "yes", "on"].includes((platform.env("OPENTIDECONSTANTS_OFFLINE") ?? "").trim().toLowerCase());
+        const offline = envOffline || (optBool(options.offline, "offline") ?? false);
         let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
         if (!baseUrl.endsWith("/")) baseUrl += "/";
+        // network settings are checked here, before any network access (spec 4.2, CR D19)
+        if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
+        const proxy = optStr(options.proxy, "proxy");
+        if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+        const caFile = optStr(options.caFile, "caFile");
+        if (caFile !== null && node) node.checkReadable(caFile);
         const cacheDir = optStr(options.cacheDir, "cacheDir");
         // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
         const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
         const ctx: Ctx = {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
-            proxy: optStr(options.proxy, "proxy"), caFile: optStr(options.caFile, "caFile"),
+            proxy, caFile,
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
             onNetworkError, logger: options.logger ?? null, mode,
         };
@@ -168,7 +214,15 @@ export class OpenTideConstants {
                 from = await ensureRelease(ctx, entry.datestamp, entry);
                 d = entry.datestamp;
             } catch (e) {
-                const c = e instanceof NetworkError && onNetworkError === "use_cache" ? await newestCached(ctx) : null;
+                let c: string | null = null;
+                if (e instanceof NetworkError && onNetworkError === "use_cache") {
+                    try {
+                        c = await newestCached(ctx);
+                    } catch (fallback) {
+                        // the caller gets the network error; the failed fallback is logged (PK10 T35)
+                        log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                    }
+                }
                 if (!c) throw e;
                 log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using cached release ${c}`);
                 d = c;
@@ -176,8 +230,25 @@ export class OpenTideConstants {
                 extra.lastError = e as NetworkError;
             }
         }
-        const rel = await OpenTideConstants.#loadStored(ctx, node, d);
-        if (verifyOnOpen) await verifyCached(ctx, d);
+        let rel = await OpenTideConstants.#loadStored(ctx, node, d);
+        if (verifyOnOpen) {
+            try {
+                await verifyCached(ctx, d);
+            } catch (e) {
+                // the bad file was deleted from the cache; online, download it again and check once more (spec 5.3)
+                rel._close();
+                if (!(e instanceof ChecksumError) || offline) throw e;
+                log(ctx, "warn", `${e.message}; downloading release ${d} again`);
+                from = await ensureRelease(ctx, d, null);
+                rel = await OpenTideConstants.#loadStored(ctx, node, d);
+                try {
+                    await verifyCached(ctx, d);
+                } catch (again) {
+                    rel._close();
+                    throw again;
+                }
+            }
+        }
         return new OpenTideConstants(ctx, node, rel, from, extra);
     }
 
@@ -186,8 +257,9 @@ export class OpenTideConstants {
         if (!store) throw new OfflineError("no cache");
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
-        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d);
-        return loadCached(dir, v, d, ctx.mode);
+        const warn = (m: string) => log(ctx, "warn", m);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
+        return loadCached(dir, v, d, ctx.mode, warn);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
@@ -197,15 +269,16 @@ export class OpenTideConstants {
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
         const dir = path.dirname(full);
         const name = path.basename(full);
-        const kind = name.endsWith(".json.gz") ? "json.gz" : name.endsWith(".jsonl") ? "jsonl" : name.endsWith(".json") ? "json" : null;
-        if (!kind) throw new InvalidArgumentError(`file must be a .json, .json.gz or .jsonl file; got ${name}`);
-        const stem = name.slice(0, name.length - (kind === "json.gz" ? 8 : kind === "jsonl" ? 6 : 5));
-        const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
+        // the name must be OTC_<D><ext> with a valid datestamp (spec 4.2, CR D18)
         const parts = splitReleaseName(name);
-        const shaPath = parts ? path.join(dir, `OTC_${parts.datestamp}.sha256`) : null;
+        const kind = parts && (parts.ext === "json" || parts.ext === "json.gz" || parts.ext === "jsonl") ? parts.ext : null;
+        if (!parts || !kind) throw new InvalidArgumentError(`file must be named OTC_<datestamp>.json, .json.gz or .jsonl; got ${name}`);
+        const stem = `OTC_${parts.datestamp}`;
+        const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
+        const shaPath = path.join(dir, `${stem}.sha256`);
         const bytes = new Map<string, Uint8Array>();
         for (const n of dataNames) bytes.set(n, node.readFileOrIo(path.join(dir, n)));
-        const shaBytes = shaPath ? node.readIfExists(shaPath) : null;
+        const shaBytes = node.readIfExists(shaPath);
         let files;
         let from: LoadedFrom;
         if (shaBytes) {
@@ -250,7 +323,9 @@ export class OpenTideConstants {
     // ------------------------------------------------------------------ automatic update (spec 5.6)
 
     #current(): Release {
-        if (this.#autoUpdate && !this.#pinned && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
+        this.#check();
+        // offline, and after close,, the automatic check does not run at all (spec 5.6, CR D6)
+        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
             this.#lastCheck = Date.now();
             this.#autoUpdateNow(this.#node);
         }
@@ -263,31 +338,45 @@ export class OpenTideConstants {
             baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
             userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
         });
+        // a failed check keeps the current release, logs, and records the error as lastError (spec 4.3, 5.6; T29)
         if (!res.ok || typeof res.datestamp !== "string") {
+            this.#lastError = errorFromWorker(res);
             log(ctx, "warn", `automatic update check failed: ${res.message ?? "unknown error"}`);
             return;
         }
         const from = this.#release.datestamp;
-        if (compareDatestamps(res.datestamp, from) <= 0) return;
+        if (compareDatestamps(res.datestamp, from) <= 0) {
+            log(ctx, "debug", `automatic update check: ${from} is current`);
+            return;
+        }
         const store = ctx.store;
         if (!store) return;
         try {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
-            if (!vb) return;
-            const v = JSON.parse(dec.decode(vb)) as Verified;
-            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode);
+            const v = vb ? parseVerified(vb, res.datestamp) : null;
+            if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
+            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m));
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
+            if (e instanceof OpenTideConstantsError) this.#lastError = e;
             log(ctx, "warn", `automatic update failed: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
 
     #swap(rel: Release, from: LoadedFrom): void {
+        const old = this.#release;
         this.#release = rel;
         this.#loadedFrom = from;
         this.#lastError = null;
-        this.#all.push(rel);
+        // the old release keeps its file handle while someone holds it, and loses it when it is collected (T4)
+        CLOSE_ON_COLLECT.register(old, old._closer());
+        this.#all = [...this.#all.filter((r) => r.deref() !== undefined), new WeakRef(rel)];
+    }
+
+    /** After close, every query and release-management call is io (spec 4.2, CR D21). */
+    #check(): void {
+        if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
     }
 
     // ------------------------------------------------------------------ release management (spec 4.3)
@@ -309,13 +398,30 @@ export class OpenTideConstants {
 
     /** Every release from OTC_index.json, newest first. */
     async releases(): Promise<readonly ReleaseInfo[]> {
+        this.#check();
         const ctx = this.#ctx;
         if (ctx.offline) {
             const idx = await cachedIndex(ctx);
             if (!idx) throw new OfflineError("offline and the release index is not cached");
             return Object.freeze(idx.map(toInfo));
         }
-        const idx = await getIndex(ctx);
+        let idx: PointerEntry[];
+        try {
+            idx = await getIndex(ctx);
+        } catch (e) {
+            // a network error with use_cache gives the cached index (spec 5.2 step 5); lastError is not touched
+            let cached: PointerEntry[] | null = null;
+            if (e instanceof NetworkError && ctx.onNetworkError === "use_cache") {
+                try {
+                    cached = await cachedIndex(ctx);
+                } catch (fallback) {
+                    log(ctx, "warn", `cannot read the cached release index: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                }
+            }
+            if (!cached) throw e;
+            log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
+            return Object.freeze(cached.map(toInfo));
+        }
         if (ctx.store) {
             // a cached release keeps the version DOI of the newest entry read for it (spec 4.3)
             for (const e of idx) {
@@ -326,8 +432,13 @@ export class OpenTideConstants {
         return Object.freeze(idx.map(toInfo));
     }
 
-    /** The latest release (one conditional GET of the pointer). It does not switch to it. */
+    /**
+     * The latest release this SDK reads: a conditional GET of the latest pointer (OTC_latest-f{MAJOR}.json, or
+     * OTC_latest.json after a 404), and of OTC_index.json too when the pointer's release is not readable (spec 5.2
+     * steps 2 and 2a, CR D23). It does not switch to it.
+     */
     async latest(): Promise<ReleaseInfo> {
+        this.#check();
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
         return toInfo(await getPointer(this.#ctx));
     }
@@ -337,14 +448,23 @@ export class OpenTideConstants {
      * reads OTC_latest.json and sets `newerFormatMajor` when that names a format major newer than this SDK reads.
      */
     async checkForUpdate(): Promise<ReleaseInfo | null> {
+        this.#check();
         const ctx = this.#ctx;
         if (ctx.offline) throw new OfflineError("offline: checkForUpdate needs the network");
-        const { entry, generic } = await readPointer(ctx);
+        // newerFormatMajor is set before an unsupported_format or reader_too_old is raised, and keeps its old value
+        // when OTC_latest.json cannot be read (spec 7.4, CR D10)
+        let read: { entry: PointerEntry; generic: PointerEntry | null } | null = null;
+        let tooNew: OpenTideConstantsError | null = null;
+        try {
+            read = await readPointer(ctx);
+        } catch (e) {
+            if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
+            tooNew = e;
+        }
         let major: number | null = null;
         let known = true;
-        if (generic) {
-            const m = /^([0-9]+)\./.exec(generic.format_version);
-            major = m ? Number(m[1]) : null;
+        if (read?.generic) {
+            major = Number.isNaN(formatMajor(read.generic.format_version)) ? null : formatMajor(read.generic.format_version);
         } else {
             try {
                 major = await genericPointerMajor(ctx);
@@ -359,6 +479,8 @@ export class OpenTideConstants {
             if (newer !== null) log(ctx, "warn", `a newer format (${newer}) exists; upgrade opentideconstants to read it`);
             this.#newerFormatMajor = newer;
         }
+        if (tooNew || !read) throw tooNew ?? new UnsupportedFormatError("no readable release");
+        const entry = read.entry;
         return compareDatestamps(entry.datestamp, this.#release.datestamp) > 0 ? toInfo(entry) : null;
     }
 
@@ -372,7 +494,10 @@ export class OpenTideConstants {
 
     /** Download and switch to a newer release. A Release held from before keeps showing the old one. */
     async update(): Promise<UpdateResult> {
+        this.#check();
         if (this.#pinned) throw new PinnedReleaseError(this.#file ? "the client was opened on a file" : "the client was opened on a pinned release");
+        // offline: no socket, the same as latest and checkForUpdate (spec 5.5, CR D6)
+        if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
@@ -384,6 +509,7 @@ export class OpenTideConstants {
 
     /** Write a release into a folder the caller chooses (Node only; spec 4.3.2). Returns the paths written. */
     async download(options: DownloadOptions): Promise<readonly string[]> {
+        this.#check();
         const node = this.#node;
         if (!node) throw new UnsupportedError("download needs a file system (Node)");
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("download needs an options object with to");
@@ -392,8 +518,8 @@ export class OpenTideConstants {
         const release = options.release ?? "latest";
         if (release !== "latest") checkDatestamp(release);
         const formats = options.formats ?? ["jsonl"];
-        if (!Array.isArray(formats) || formats.some((f) => !FORMATS.includes(f))) {
-            throw new InvalidArgumentError(`formats must be a list of ${FORMATS.join(", ")}`);
+        if (!Array.isArray(formats) || formats.length === 0 || formats.some((f) => !FORMATS.includes(f))) {
+            throw new InvalidArgumentError(`formats must be a non-empty list of ${FORMATS.join(", ")}`);
         }
         const overwrite = optBool(options.overwrite, "overwrite") ?? false;
         const ctx = this.#ctx;
@@ -455,6 +581,7 @@ export class OpenTideConstants {
 
     /** Hash the release files again and compare them with OTC_{D}.sha256 (spec 4.3). */
     async verify(): Promise<true> {
+        this.#check();
         const f = this.#file;
         if (f && this.#node) {
             const node = this.#node;
@@ -470,20 +597,32 @@ export class OpenTideConstants {
         return verifyCached(this.#ctx, this.#release.datestamp);
     }
 
-    /** The cached, verified datestamps, newest first (Node only). */
+    /**
+     * The cached, verified datestamps, newest first (Node only). A cache operation: on a client opened with `file`
+     * it lists the configured cache (`cacheDir` or the default), never the file's folder (spec 4.3, CR D33).
+     */
     cachedReleases(): readonly string[] {
+        this.#check();
         const node = this.#node;
         const store = this.#ctx.store;
         if (!node || !store) throw new UnsupportedError("cachedReleases needs a file system (Node)");
         const dir = store.describe("releases");
         return Object.freeze(node.listDir(dir)
-            .filter((d) => node.exists(node.nodePath.join(dir, d, ".verified")))
+            .filter((d) => isDatestamp(d) && node.exists(node.nodePath.join(dir, d, ".verified")))
             .sort((a, b) => compareDatestamps(b, a)));
     }
 
-    /** Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. */
+    /**
+     * Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. A release
+     * directory that cannot be removed fails with `cache`. Like cachedReleases, it works on the configured cache
+     * also on a client opened with `file` (CR D33).
+     */
     prune(options: PruneOptions = {}): readonly string[] {
-        const keep = options.keep ?? 3;
+        this.#check();
+        // a JavaScript caller can pass null or a non-object; neither is a raw TypeError
+        const o: unknown = options;
+        if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
+        const keep = (o === null || o === undefined ? undefined : options.keep) ?? 3;
         if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 0) throw new InvalidArgumentError("keep must be a non-negative integer");
         const node = this.#node;
         const store = this.#ctx.store;
@@ -491,13 +630,34 @@ export class OpenTideConstants {
         const all = this.cachedReleases();
         const loaded = this.#file ? null : this.#release.datestamp;
         const removed = all.slice(keep).filter((d) => d !== loaded);
-        for (const d of removed) node.removeDirSync(store.describe(relDir(d)));
-        return Object.freeze(removed);
+        // a directory that cannot be removed is a cache error; the result lists only what was removed (spec 4.3)
+        const done: string[] = [];
+        for (const d of removed) {
+            const p = store.describe(relDir(d));
+            try {
+                node.removeDirSync(p);
+            } catch (e) {
+                throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, cause: e });
+            }
+            done.push(d);
+        }
+        return Object.freeze(done);
     }
 
     /** Close the client and every release it loaded (stream mode holds a file handle). */
     close(): void {
-        for (const r of this.#all) r._close();
+        // close every release, also when one fails; the first failure is raised after (PK13 T14)
+        this.#closed = true;
+        let first: unknown = null;
+        for (const ref of this.#all) {
+            try {
+                ref.deref()?._close();
+            } catch (e) {
+                first ??= e;
+            }
+        }
+        this.#all = [];
+        if (first !== null) throw first;
     }
 
     [Symbol.dispose](): void {

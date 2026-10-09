@@ -1,6 +1,6 @@
 import { compareDatestamps, foldName } from "./constants.js";
 import {
-    InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
+    FileError, InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
 } from "./errors.js";
 import { arr, deepFreeze, en, isObject, num, obj, str, time, val, type Json, type JsonObject } from "./json.js";
 import type {
@@ -103,12 +103,65 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     const conventions = doc["conventions"];
     const licences = doc["licences"];
     if (!Array.isArray(conventions) || !Array.isArray(licences)) throw new InvalidReleaseError("conventions or licences is missing");
+    const created = release["created"];
+    if (created !== undefined && created !== null && typeof created !== "string") throw new InvalidReleaseError("release.created is not a string");
+    if (!shapeOk(release["source_versions"], "object")) throw new InvalidReleaseError("release.source_versions is not an object");
+    if (!conventions.every(isObject) || !licences.every(isObject)) throw new InvalidReleaseError("a convention or licence is not a JSON object");
     const cs = conventions.filter(isObject);
     const ls = licences.filter(isObject);
     if (cs.some((c) => typeof c["convention_id"] !== "string") || ls.some((l) => typeof l["licence_id"] !== "string")) {
         throw new InvalidReleaseError("a convention or licence has no id");
     }
+    for (const [list, key] of [[cs, "convention_id"], [ls, "licence_id"]] as const) {
+        const seen = new Set<string>();
+        for (const x of list) {
+            const id = String(x[key]);
+            if (seen.has(id)) throw new InvalidReleaseError(`${key} ${id} appears twice (CR D5)`);
+            seen.add(id);
+        }
+    }
     return deepFreeze({ format_version: fv, release, conventions: cs, licences: ls });
+}
+
+type Shape = "object" | "array";
+/** The structured fields of a station and of a set: present and not null means this JSON type (spec 7.3, PK07). */
+const STATION_SHAPE: Record<string, Shape> = {
+    aliases: "object", constant_sets: "array", validation: "array", subordinate_offsets: "object", current_offsets: "array",
+};
+const SET_SHAPE: Record<string, Shape> = {
+    constituents: "array", dropped_constituents: "array", qc_flags: "array", record_span: "object", datum: "object",
+    time_base: "object", provenance: "object", current_bins: "array",
+};
+
+function shapeOk(v: Json | undefined, want: Shape): boolean {
+    return v === undefined || v === null || (want === "array" ? Array.isArray(v) : isObject(v));
+}
+
+/**
+ * Tolerant is not lax (spec 7.3): a known field with the wrong JSON type is invalid_release at load, in every path,
+ * instead of a field that is silently dropped or a raw TypeError at query time.
+ */
+function checkShape(doc: JsonObject, id: string): void {
+    const bad = (what: string) => new InvalidReleaseError(`station ${id}: ${what} has the wrong type`);
+    for (const [k, want] of Object.entries(STATION_SHAPE)) if (!shapeOk(doc[k], want)) throw bad(k);
+    const a = doc["aliases"];
+    if (isObject(a)) {
+        for (const [system, ids] of Object.entries(a)) {
+            if (!(typeof ids === "string" || (Array.isArray(ids) && ids.every((x) => typeof x === "string")))) throw bad(`aliases.${system}`);
+        }
+    }
+    for (const k of ["constant_sets", "validation"]) {
+        const list = doc[k];
+        if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k}`);
+    }
+    for (const cs of arr(doc, "constant_sets").filter(isObject)) {
+        const sid = typeof cs["set_id"] === "string" ? cs["set_id"] : "?";
+        for (const [k, want] of Object.entries(SET_SHAPE)) if (!shapeOk(cs[k], want)) throw bad(`${k} of set ${sid}`);
+        for (const k of ["constituents", "dropped_constituents", "qc_flags"]) {
+            const list = cs[k];
+            if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k} of set ${sid}`);
+        }
+    }
 }
 
 function aliasMap(doc: JsonObject): Record<string, string[]> {
@@ -133,6 +186,7 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     const status = doc["status"];
     if (typeof id !== "string" || typeof status !== "string") throw new InvalidReleaseError("a station has no station_id or status");
     void header;
+    checkShape(doc, id);
     const sets = arr(doc, "constant_sets").filter(isObject);
     const recId = str(doc, "recommended_set_id");
     let rec: JsonObject | null = null;
@@ -150,11 +204,8 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     }
     const off = obj(doc, "subordinate_offsets");
     const offLic = off ? str(off, "licence_id") : null;
-    let kind: string | null = null;
-    if (rec) {
-        const q = str(rec, "quantity");
-        kind = q === "water_level" ? "tide" : q === "current" ? "current" : "other";
-    }
+    if (offLic !== null && !licences.has(offLic)) throw new InvalidReleaseError(`station ${id}: subordinate_offsets.licence_id ${offLic} does not resolve`);
+    const kind = rec ? kindOfQuantity(str(rec, "quantity")) : null;
     const name = str(doc, "name");
     return entryFromStored({
         offset, length, station_id: id, status,
@@ -191,7 +242,7 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
         usable_sources: [...new Set(usable.map((cs) => cs.source).filter((x): x is string => x !== null))],
         set_sources: usable.map((cs) => cs.source).filter((x): x is string => x !== null),
         set_qc_statuses: s.sets.map((cs) => en(cs.qc_status, QC_STATUSES)).filter((x): x is QcStatus | Other => x !== null),
-        constituent_names: [...names].sort(),
+        constituent_names: [...names].sort(cmp),
     };
 }
 
@@ -205,8 +256,10 @@ export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha25
 
 /**
  * @internal The entries of a fresh index-v1.json, or null when it is stale or cannot be used (spec 6.2).
- * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed and every
- * reference resolving.
+ * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed, every entry in
+ * bounds (length > 0, offset + length <= jsonl_size, offsets increasing; CR D4), and every reference resolving
+ * exactly as a pass over the lines would check it (indexDoc). The derived values (name_folded, kind) must be the
+ * ones this SDK computes, so an index another writer got wrong is rebuilt, not trusted.
  */
 export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string | null, jsonlSize: number | null,
     conventions: Set<string>, licences: Set<string>): IndexEntry[] | null {
@@ -216,11 +269,18 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
     if (!Array.isArray(stations)) return null;
     const strOrNull = (x: unknown) => x === null || typeof x === "string";
     const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
-    const isInt = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0;
+    const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0;
     const out: IndexEntry[] = [];
+    let lastOffset = -1;
     for (const e of stations) {
         if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
+        const offset = e["offset"];
+        const length = e["length"];
+        if (length <= 0 || offset + length > jsonlSize || offset <= lastOffset) return null;
+        lastOffset = offset;
         if (!ENTRY_STR.every((k) => k in e && strOrNull(e[k])) || !("lat" in e) || !("lon" in e) || !numOrNull(e["lat"]) || !numOrNull(e["lon"])) return null;
+        const name = e["name"];
+        if (e["name_folded"] !== (typeof name === "string" ? foldName(name) : null)) return null;
         const aliases = e["aliases"];
         if (!isObject(aliases) || !Object.values(aliases).every((ids) => Array.isArray(ids) && ids.every((x) => typeof x === "string"))) return null;
         const sets = e["sets"];
@@ -229,17 +289,63 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
             if (!isObject(cs) || !SET_KEYS.every((k) => k in cs && strOrNull(cs[k]))) return null;
             const cons = cs["constituents"];
             if (!Array.isArray(cons) || !cons.every((x) => typeof x === "string")) return null;
-            if (e["status"] === "active" && (!conventions.has(cs["convention_id"] as string) || !licences.has(cs["licence_id"] as string))) return null;
+            // the same checks as indexDoc, for every status
+            if (typeof cs["set_id"] !== "string" || !conventions.has(cs["convention_id"] as string) || !licences.has(cs["licence_id"] as string)) return null;
         }
+        if (e["offsets_licence_id"] !== null && !licences.has(e["offsets_licence_id"] as string)) return null;
         if (e["status"] === "active") {
-            if (e["offsets_licence_id"] !== null && !licences.has(e["offsets_licence_id"] as string)) return null;
             if (e["recommended_set_id"] !== null && !sets.some((cs) => isObject(cs) && cs["set_id"] === e["recommended_set_id"])) return null;
             if (e["lat"] === null || e["lon"] === null) return null;
         }
         const stored = e as unknown as StoredEntry;
-        out.push(entryFromStored({ ...stored, kind: stored.kind }));
+        const rec = stored.recommended_set_id === null ? undefined : stored.sets.find((cs) => cs.set_id === stored.recommended_set_id);
+        // kind is derived, not trusted: from the recommended set here, and from the reference station below
+        out.push(entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null }));
     }
+    checkLinks(out);
+    resolveKinds(out);
+    const given = stations as unknown as StoredEntry[];
+    if (out.some((x, i) => x.status === "active" && x.kind !== (given[i]?.kind ?? null))) return null;
     return out;
+}
+
+/** @internal The station kind of a recommended set's quantity (spec 6.2 `kind`). */
+export function kindOfQuantity(q: string | null): string | null {
+    return q === "water_level" ? "tide" : q === "current" ? "current" : "other";
+}
+
+/**
+ * @internal The links between stations, checked at load in every path (spec 6.1, CR D5): a station_id appears once
+ * across the active stations and the tombstones; a (system, alias id) pair once; a set_id once among the active
+ * stations' sets; and an active subordinate's reference_station_id names an active station. Throws invalid_release.
+ */
+export function checkLinks(entries: readonly IndexEntry[]): void {
+    const ids = new Set<string>();
+    const active = new Set<string>();
+    for (const e of entries) {
+        if (ids.has(e.station_id)) throw new InvalidReleaseError(`station_id ${e.station_id} appears twice`);
+        ids.add(e.station_id);
+        if (e.status === "active") active.add(e.station_id);
+    }
+    const aliases = new Set<string>();
+    const sets = new Set<string>();
+    for (const e of entries) {
+        if (e.status !== "active") continue;
+        for (const [system, list] of Object.entries(e.aliases)) {
+            for (const id of list) {
+                const k = JSON.stringify([system, id]);
+                if (aliases.has(k)) throw new InvalidReleaseError(`the ${system} alias ${id} appears twice (at ${e.station_id})`);
+                aliases.add(k);
+            }
+        }
+        for (const cs of e.stored.sets) {
+            const id = cs.set_id ?? "";
+            if (sets.has(id)) throw new InvalidReleaseError(`set_id ${id} appears twice`);
+            sets.add(id);
+        }
+        const ref = e.stored.reference_station_id;
+        if (ref !== null && !active.has(ref)) throw new InvalidReleaseError(`station ${e.station_id}: reference_station_id ${ref} does not resolve`);
+    }
 }
 
 /** @internal Resolve the kind of subordinate stations with offsets only (from their reference station). */
@@ -437,10 +543,12 @@ export class Station {
     readonly #recommended: ConstantSet | null;
     readonly #validation: readonly Validation[];
     readonly #offsets: SubordinateOffsets | null;
+    readonly #release: Release;
 
     /** @internal */
     constructor(raw: JsonObject, entry: IndexEntry, release: Release) {
         this.raw = raw;
+        this.#release = release;
         this.station_id = entry.station_id;
         this.name = str(raw, "name") ?? "";
         this.country = str(raw, "country");
@@ -458,8 +566,11 @@ export class Station {
             const rows = this.#validation.filter((v) => v.set_id === setId)
                 .map((v, i) => [v, i] as const)
                 .sort((a, b) => cmp(a[0].window ?? "", b[0].window ?? "") || a[1] - b[1]).map((x) => x[0]);
-            return new ConstantSet(cs, setId === recId, release.convention(str(cs, "convention_id") ?? "") as Convention,
-                release.licence(str(cs, "licence_id") ?? "") as Licence, Object.freeze(rows));
+            const conv = release.convention(str(cs, "convention_id") ?? "");
+            const lic = release.licence(str(cs, "licence_id") ?? "");
+            // load checked both links (indexDoc); a miss here is a broken release, not a null to hide
+            if (!conv || !lic) throw new InvalidReleaseError(`set ${String(setId)} of ${entry.station_id}: a convention or licence does not resolve`);
+            return new ConstantSet(cs, recId !== null && setId === recId, conv, lic, Object.freeze(rows));
         }));
         this.#recommended = this.#sets.find((s) => s.isRecommended) ?? null;
         const off = obj(raw, "subordinate_offsets");
@@ -471,6 +582,11 @@ export class Station {
             licence_id: str(off, "licence_id"),
         });
         Object.freeze(this);
+    }
+
+    /** @internal True if this station was read from release `r`. */
+    _from(r: Release): boolean {
+        return this.#release === r;
     }
 
     get isReference(): boolean {
@@ -524,9 +640,21 @@ export class Station {
     }
 }
 
+/** Order by Unicode code point (as Python, Ruby and C compare), not by UTF-16 code unit (PK08 T82). */
 function cmp(a: string, b: string): number {
-    return a < b ? -1 : a > b ? 1 : 0;
+    if (a === b) return 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+        const x = a.codePointAt(i) as number;
+        const y = b.codePointAt(i) as number;
+        if (x !== y) return x < y ? -1 : 1;
+        if (x > 0xffff) i++;
+    }
+    return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }
+
+/** @internal */
+export { cmp as compareCodePoints };
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const p1 = lat1 * DEG;
@@ -544,9 +672,10 @@ function checkNumber(v: unknown, what: string, lo: number, hi: number): number {
     return v;
 }
 
+/** `limit` is an integer of 1 or more, or absent / null for no limit (spec 4.4, CR D36). */
 function checkLimit(v: unknown): number | null {
     if (v === undefined || v === null) return null;
-    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw new InvalidArgumentError(`limit must be a non-negative integer; got ${JSON.stringify(v)}`);
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) throw new InvalidArgumentError(`limit must be an integer of 1 or more, or null; got ${JSON.stringify(v)}`);
     return v;
 }
 
@@ -678,7 +807,7 @@ export class Release {
         Object.freeze(this);
     }
 
-    /** @internal Release the file handle (stream mode). */
+    /** @internal Release the file handle (stream mode). After it every query fails with io (spec 4.2, CR D21). */
     _close(): void {
         if (!this.#closed) {
             this.#closed = true;
@@ -686,50 +815,80 @@ export class Release {
         }
     }
 
+    /** @internal A function that releases the file handle without holding this Release (for a FinalizationRegistry). */
+    _closer(): () => void {
+        const source = this.#source;
+        return () => source.close();
+    }
+
+    /** Every query on a closed release fails with io, the same in eager and stream mode (CR D21). */
+    #open(): void {
+        if (this.#closed) throw new FileError("the release is closed", { path: `release ${this.datestamp}` });
+    }
+
+    /** The station LRU (stream mode, spec 6.2): a hit becomes the newest entry; past the size, the oldest goes. */
+    #cached(key: string): Station | Tombstone | undefined {
+        const hit = this.#cache.get(key);
+        if (hit !== undefined) {
+            this.#cache.delete(key);
+            this.#cache.set(key, hit);
+        }
+        return hit;
+    }
+
+    #remember(key: string, v: Station | Tombstone): void {
+        this.#cache.set(key, v);
+        while (this.#cache.size > this.#lru) {
+            const first = this.#cache.keys().next().value;
+            if (first === undefined) break;
+            this.#cache.delete(first);
+        }
+    }
+
     #doc(e: IndexEntry): JsonObject {
-        return this.#source.doc(e, this.#pos.get(e) ?? 0);
+        const i = this.#pos.get(e);
+        if (i === undefined) throw new InvalidReleaseError(`station ${e.station_id} is not an entry of release ${this.datestamp}`);
+        return this.#source.doc(e, i);
     }
 
     #station(e: IndexEntry): Station {
-        const hit = this.#cache.get(e.station_id);
-        if (hit instanceof Station) {
-            this.#cache.delete(e.station_id);
-            this.#cache.set(e.station_id, hit);
-            return hit;
-        }
+        const hit = this.#cached(e.station_id);
+        if (hit instanceof Station) return hit;
         const s = new Station(this.#doc(e), e, this);
-        this.#cache.set(e.station_id, s);
-        if (this.#cache.size > this.#lru) {
-            const first = this.#cache.keys().next().value;
-            if (first !== undefined) this.#cache.delete(first);
-        }
+        this.#remember(e.station_id, s);
         return s;
     }
 
     get conventions(): readonly Convention[] {
+        this.#open();
         return this.#conventions;
     }
 
     convention(conventionId: string): Convention | null {
+        this.#open();
         return this.#conventions.find((c) => c.convention_id === conventionId) ?? null;
     }
 
     get licences(): readonly Licence[] {
+        this.#open();
         return this.#licences;
     }
 
     licence(licenceId: string): Licence | null {
+        this.#open();
         return this.#licences.find((l) => l.licence_id === licenceId) ?? null;
     }
 
     /** The constituent names used by any set, sorted. */
     get constituentNames(): readonly string[] {
+        this.#open();
         const names = new Set<string>();
         for (const e of this.#active) for (const n of e.constituent_names) names.add(n);
         return Object.freeze([...names].sort(cmp));
     }
 
     get stats(): Stats {
+        this.#open();
         const a = this.#active;
         return Object.freeze({
             type: countBy(a.map((e) => e.type)), kind: countBy(a.map((e) => e.kind)), country: countBy(a.map((e) => e.country)),
@@ -739,10 +898,12 @@ export class Release {
 
     /** The number of active stations. */
     get stationCount(): number {
+        this.#open();
         return this.#active.length;
     }
 
     get tombstoneCount(): number {
+        this.#open();
         return this.#tombById.size;
     }
 
@@ -759,24 +920,28 @@ export class Release {
 
     /** An active station by its OTC id, or null. */
     station(stationId: string): Station | null {
+        this.#open();
         const e = this.#byId.get(stationId);
         return e ? this.#station(e) : null;
     }
 
     /** An active station by its OTC id; station_not_found or station_removed otherwise. */
     requireStation(stationId: string): Station {
+        this.#open();
         const s = this.station(stationId);
         if (s) return s;
         const t = this.tombstone(stationId);
-        if (t) throw new StationRemovedError(stationId, t, t.removed_reason);
+        // the message names the reason as the file gives it, not the enum value ("other" for an unknown one)
+        if (t) throw new StationRemovedError(stationId, t, str(t.raw, "removed_reason"));
         throw new StationNotFoundError(stationId);
     }
 
     /** The tombstone of a removed station, or null. */
     tombstone(stationId: string): Tombstone | null {
+        this.#open();
         const e = this.#tombById.get(stationId);
         if (!e) return null;
-        const hit = this.#cache.get(`tomb:${stationId}`);
+        const hit = this.#cached(`tomb:${stationId}`);
         if (hit && !(hit instanceof Station)) return hit;
         const raw = this.#doc(e);
         const t: Tombstone = Object.freeze({
@@ -786,29 +951,37 @@ export class Release {
             removed_reason: en(raw["removed_reason"], ["merged", "duplicate"] as const),
             merged_into: str(raw, "merged_into"), detail: str(raw, "detail"), raw,
         });
-        this.#cache.set(`tomb:${stationId}`, t);
+        this.#remember(`tomb:${stationId}`, t);
         return t;
     }
 
     /** A station by an id in another system (noaa, gesla, ticon, xtide, kartverket, slackwater, webcaltides, ...). */
     stationByAlias(system: string, aliasId: string): Station | null {
+        this.#open();
         const e = this.#alias.get(system)?.get(aliasId);
         return e ? this.#station(e) : null;
     }
 
     /** Active stations ordered by station_id. */
     stations(filters: StationFilters = {}): readonly Station[] {
+        this.#open();
         return Object.freeze([...this.iterStations(filters)]);
     }
 
-    /** Iterate active stations ordered by station_id. */
-    *iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
+    /** Iterate active stations ordered by station_id. Bad filters fail here, not at the first next(). */
+    iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
+        this.#open();
         const f = checkFilters(filters);
-        for (const e of this.#active) if (matches(e, f)) yield this.#station(e);
+        const active = this.#active;
+        const station = (e: IndexEntry) => this.#station(e);
+        return (function* () {
+            for (const e of active) if (matches(e, f)) yield station(e);
+        })();
     }
 
     /** Name search, accent-insensitive and ranked (spec 4.4.1). */
     search(options: SearchOptions): readonly Station[] {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("search needs an options object with name");
         const f = checkFilters(options);
         const limit = checkLimit(options.limit);
@@ -849,6 +1022,7 @@ export class Release {
 
     /** Stations within radiusKm (great-circle), nearest first. */
     near(options: NearOptions): readonly Nearby<Station>[] {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("near needs an options object");
         const lat = checkNumber(options.lat, "lat", -90, 90);
         const lon = checkNumber(options.lon, "lon", -180, 180);
@@ -862,6 +1036,7 @@ export class Release {
 
     /** The nearest station, within maxKm if given, or null. */
     nearest(options: NearestOptions): Nearby<Station> | null {
+        this.#open();
         if (options === null || typeof options !== "object") throw new InvalidArgumentError("nearest needs an options object");
         const lat = checkNumber(options.lat, "lat", -90, 90);
         const lon = checkNumber(options.lon, "lon", -180, 180);
@@ -873,6 +1048,7 @@ export class Release {
 
     /** The reference station of a subordinate station, or null. */
     referenceStation(station: Station): Station | null {
+        this.#open();
         const e = station ? this.#byId.get(station.station_id) : undefined;
         if (!e || !e.reference_station_id) return null;
         return this.station(e.reference_station_id);
@@ -880,25 +1056,36 @@ export class Release {
 
     /** The subordinate stations of a reference station, ordered by station_id. */
     subordinatesOf(station: Station): readonly Station[] {
+        this.#open();
         const l = station ? this.#subs.get(station.station_id) ?? [] : [];
         return Object.freeze([...l].sort((a, b) => cmp(a.station_id, b.station_id)).map((e) => this.#station(e)));
     }
 
-    /** The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). */
+    /**
+     * The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). An empty list is the
+     * whole release. A station that is not an active Station of this release (null, unknown, removed, from another
+     * release) is invalid_argument, never skipped (CR D2).
+     */
     attribution(stations?: readonly (Station | null)[] | null): string {
+        this.#open();
         let ids: Set<string>;
-        if (stations === undefined || stations === null) {
+        if (stations === undefined || stations === null || (Array.isArray(stations) && stations.length === 0)) {
             ids = new Set(this.#licences.map((l) => l.licence_id));
         } else {
             if (!Array.isArray(stations)) throw new InvalidArgumentError("stations must be a list of Station objects");
             ids = new Set();
             for (const s of stations) {
-                const e = s ? this.#byId.get(s.station_id) : undefined;
-                if (!e) continue;
+                if (!(s instanceof Station) || !s._from(this)) {
+                    throw new InvalidArgumentError(`attribution needs Stations of release ${this.datestamp}; got ${s instanceof Station ? `${s.station_id} from another release` : JSON.stringify(s)}`);
+                }
+                const e = this.#byId.get(s.station_id);
+                if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
                 if (e.recommended_licence_id) ids.add(e.recommended_licence_id);
-                if (e.type === "subordinate" && e.reference_station_id !== null) {
+                if (e.type === "subordinate") {
+                    // a subordinate's tides come from its offsets and its reference station (spec 4.6), also with
+                    // offsets only
                     if (e.offsets_licence_id) ids.add(e.offsets_licence_id);
-                    const ref = this.#byId.get(e.reference_station_id);
+                    const ref = e.reference_station_id === null ? undefined : this.#byId.get(e.reference_station_id);
                     if (ref && ref.recommended_licence_id) ids.add(ref.recommended_licence_id);
                 }
             }
@@ -907,9 +1094,15 @@ export class Release {
         const seen = new Set<string>();
         for (const id of [...ids].sort(cmp)) {
             const l = this.licence(id);
-            if (!l || seen.has(l.provider ?? "")) continue;
-            seen.add(l.provider ?? "");
-            parts.push(`${l.provider ?? ""}: ${l.attribution ?? ""}`);
+            if (!l) continue; // cannot happen: every licence reference is checked at load
+            if (l.provider === null) {
+                // no provider: the attribution alone, never merged with another entry (CR D2)
+                parts.push(l.attribution ?? "");
+                continue;
+            }
+            if (seen.has(l.provider)) continue;
+            seen.add(l.provider);
+            parts.push(`${l.provider}: ${l.attribution ?? ""}`);
         }
         const ident = this.concept_doi ? `doi:${this.concept_doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
         return `Tidal constants: OpenTideConstants ${this.datestamp}, ${ident}, CC BY 4.0. Sources: ${parts.join("; ")}`;
@@ -921,6 +1114,7 @@ export function indexStations(header: ReleaseHeader, docs: readonly Json[]): Ind
     const convs = new Set(header.conventions.map((c) => str(c, "convention_id") ?? ""));
     const lics = new Set(header.licences.map((l) => str(l, "licence_id") ?? ""));
     const entries = docs.map((d, i) => indexDoc(d, header, i, 0, convs, lics));
+    checkLinks(entries);
     resolveKinds(entries);
     return entries;
 }
