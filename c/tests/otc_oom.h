@@ -9,6 +9,7 @@
 #ifndef OTC_OOM_H
 #define OTC_OOM_H
 
+#include <errno.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -54,6 +55,7 @@ static int oom_should_fail(void)
     if (!oom_fail_at) return 0;
     if (++oom_count != oom_fail_at) return 0;
     oom_failed = 1;
+    errno = ENOMEM;   /* as a real malloc does: the C library's own callers (opendir, fopen) read it */
     return 1;
 }
 

@@ -44,6 +44,14 @@ int main(void)
     mkrel(cache, "20990102");
     mkrel(cache, "20990103");
     (void)otc_fetch_cached_releases(&fo, NULL, 0, &(size_t){0});   /* one-time init outside the counts */
+    {   /* and one prune, so the C library's own lazy state (glibc reads the time zone once,
+         * for the lock's owner.json) is in place before the counts start */
+        char *w[4] = {0};
+        size_t wn = 0, wi;
+        mkrel(cache, "20980101");
+        (void)otc_fetch_prune(&fo, 3, NULL, w, 4, &wn);
+        for (wi = 0; wi < 4; wi++) otc_free(w[wi]);
+    }
 
     for (k = 1; ; k++) {
         char *out[8];
