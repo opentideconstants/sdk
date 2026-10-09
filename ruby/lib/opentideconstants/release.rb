@@ -648,9 +648,12 @@ class OpenTideConstants
               "provenance" => PROVENANCE_TYPES }.each do |k, table|
                 check_types!(cs[k], table, "#{what}: #{k}") if cs[k]
             end
+            names = Set.new
             Array(cs["constituents"]).each do |c|
                 raise InvalidReleaseError, "#{what}: a constituent has no name" unless c["name"].is_a?(String)
                 check_types!(c, CONSTITUENT_TYPES, "#{what}: constituents")
+                # spec §6.1 (CR2 DR22): a name once per set
+                raise InvalidReleaseError, "#{what}: constituent #{c['name']} appears twice" unless names.add?(c["name"])
             end
             Array(cs["dropped_constituents"]).each { |x| check_types!(x, DROPPED_TYPES, "#{what}: dropped_constituents") }
             Array(cs["qc_flags"]).each do |f|

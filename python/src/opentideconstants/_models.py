@@ -562,6 +562,9 @@ def build_station(d, conventions, licences, kind):
                 raise InvalidReleaseError(f"{cs.get('set_id')}: licence_id {cs.get('licence_id')!r} does not resolve")
             if not all(isinstance(c, dict) and isinstance(c.get("name"), str) for c in cs.get("constituents") or ()):
                 raise InvalidReleaseError(f"{cs.get('set_id')}: a constituent has no name")
+            names = [c["name"] for c in cs.get("constituents") or ()]
+            if len(set(names)) != len(names):   # spec 6.1 (CR2 DR22)
+                raise InvalidReleaseError(f"{cs.get('set_id')}: a constituent name appears twice")
             span = cs.get("record_span")
             datum = cs.get("datum")
             set_id = cs["set_id"]

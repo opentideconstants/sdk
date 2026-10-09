@@ -225,7 +225,14 @@ function checkShape(doc: JsonObject, id: string): void {
         }
         const named = obj(obj(cs, "datum"), "named");
         if (named && !Object.values(named).every(finite)) throw new InvalidReleaseError(`station ${id}: ${where}datum.named has a value that is not a number`);
-        for (const c of objects(cs, "constituents")) check(c, CONSTITUENT_TYPES, `${where}constituents.`);
+        const names = new Set<string>();
+        for (const c of objects(cs, "constituents")) {
+            check(c, CONSTITUENT_TYPES, `${where}constituents.`);
+            const name = c["name"];
+            if (typeof name !== "string") continue;   // a missing name is reported where the set is indexed
+            if (names.has(name)) throw new InvalidReleaseError(`station ${id}: ${where}constituent ${name} appears twice (CR2 DR22)`);
+            names.add(name);
+        }
         for (const x of objects(cs, "dropped_constituents")) check(x, DROPPED_TYPES, `${where}dropped_constituents.`);
         for (const f of objects(cs, "qc_flags")) {
             check(f, QC_FLAG_TYPES, `${where}qc_flags.`);

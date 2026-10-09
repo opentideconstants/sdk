@@ -426,6 +426,26 @@ static otc_status check_station_types(builder *b, const cJSON *root)
     return OTC_OK;
 }
 
+static int str_ptr_cmp(const void *a, const void *b);
+
+/* spec 6.1 (CR2 DR22): a constituent name appears once in a set. Sorted, so a
+ * set of n constituents costs n log n, not n * n. */
+static otc_status names_once(builder *b, const cJSON *cons)
+{
+    const cJSON *c;
+    const char **names;
+    size_t n = 0, i;
+    int twice = 0;
+    if (!cons || cJSON_GetArraySize(cons) < 2) return OTC_OK;
+    names = (const char **)malloc((size_t)cJSON_GetArraySize(cons) * sizeof *names);
+    if (!names) return OTC_E_NOMEM;
+    cJSON_ArrayForEach(c, cons) names[n++] = otc__jstr(c, "name");
+    qsort(names, n, sizeof *names, str_ptr_cmp);
+    for (i = 1; i < n && !twice; i++) twice = !strcmp(names[i - 1], names[i]);
+    free(names);
+    return twice ? bad_line(b, "a constituent name appears twice in a set") : OTC_OK;
+}
+
 /* Checks one constant set and adds what the index needs from it. */
 static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const char *rec_id)
 {
@@ -447,6 +467,7 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
         if (!name) return bad_line(b, "a constituent has no name");
         if ((st = add_cname(b, name)) != OTC_OK) return st;
     }
+    if ((st = names_once(b, cons)) != OTC_OK) return st;
     /* spec 4.3: qc_status counts every set (a value format 1.0 does not have is
      * "other", 7.3); source counts, and the source filter sees, only sets with
      * constants (ok or flagged) */
