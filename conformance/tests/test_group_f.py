@@ -56,3 +56,18 @@ def test_tripwire_accept_errors_fail_the_case(tmp_path, monkeypatch):
         srv.shutdown()
         proxy.shutdown()
     assert failures and stats["harness_errors"] == 1, (failures, stats)
+
+
+# --- K6: an OSError in a driver action (a case-file error) is a harness error, not a runner failure
+
+@pytest.mark.parametrize("step", [
+    {"driver": "delete", "path": "${tmp}/no-such-file"},
+    {"driver": "copy", "files": ["${tmp}/no-such-file"], "to": "${tmp}/x"},
+    {"driver": "assert_sha256", "path": "${tmp}/f", "equals": "${tmp}/no-such-file"},
+])
+def test_driver_action_oserror_is_a_harness_error(tmp_path, step):
+    steps = [{"driver": "write", "path": "${tmp}/f", "text": "x"}, step, OK_STEP]
+    cases = write_cases(tmp_path, [{"id": "a", "steps": steps}, {"id": "b", "steps": [OK_STEP]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert "FAIL  a  [step 1" in r.stdout and "harness error" in r.stdout and "PASS  b" in r.stdout, r.stdout[-800:]
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])

@@ -672,7 +672,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
         for i, st in enumerate(case["steps"]):
             cur = {"step": i, "driver": st["driver"]} if "driver" in st else {"step": i, "op": st.get("op")}
             if "driver" in st:
-                problems, restart_env = run_action(st, ctx, srv, proxy)
+                try:
+                    problems, restart_env = run_action(st, ctx, srv, proxy)
+                except OSError as e:  # a file the case names is missing, or the server cannot stop: not the SDK
+                    raise CaseError(f"driver action {st['driver']}: {type(e).__name__}: {e}") from e
                 if restart_env is not None:
                     live["main"].close()
                     env_extra.update(restart_env)
