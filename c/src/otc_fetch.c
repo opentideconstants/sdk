@@ -587,6 +587,14 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
         if (!f) return fail(c, OTC_E_IO, v, "cannot read SSL_CERT_FILE %s", v);
         fclose(f);
     }
+    if (o && o->user_agent) {
+        /* the suffix goes into a header: no control character, C0, DEL or a UTF-8 C1
+         * (U+0080-U+009F) (spec 4.2, 5.7, CR2 DR20) */
+        const unsigned char *u = (const unsigned char *)o->user_agent;
+        for (; *u; u++)
+            if (*u < 0x20 || *u == 0x7F || (u[0] == 0xC2 && u[1] >= 0x80 && u[1] <= 0x9F))
+                return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "user_agent has a control character (byte %u)", (unsigned)*u);
+    }
     c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
     /* formats: OTC_FORMATS_DEFAULT is jsonl; 0 names no format (CR 4c) */
     c->formats = (!o || o->formats == OTC_FORMATS_DEFAULT) ? (unsigned)OTC_FORMAT_JSONL : o->formats;
