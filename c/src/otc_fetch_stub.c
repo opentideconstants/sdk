@@ -15,26 +15,43 @@ void otc_fetch_options_init(otc_fetch_options *opts)
     opts->on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
 }
 
+/* opts->error, or NULL when the caller's struct (an older, shorter layout) ends before it:
+ * a field that struct_size does not cover is never read. */
+static otc_error *opts_error(const otc_fetch_options *opts)
+{
+    if (!opts || opts->struct_size < offsetof(otc_fetch_options, error) + sizeof opts->error) return NULL;
+    return opts->error;
+}
+
 static otc_status not_built(const otc_fetch_options *opts, const char *fn)
 {
-    if (opts && opts->struct_size >= offsetof(otc_fetch_options, error) + sizeof opts->error && opts->error) {
-        otc__err_reset(opts->error);
-        otc__err_set(opts->error, OTC_E_NOT_BUILT, NULL,
+    otc_error *err = opts_error(opts);
+    if (err) {
+        otc__err_reset(err);
+        otc__err_set(err, OTC_E_NOT_BUILT, NULL,
                      "%s: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)", fn);
     }
     return OTC_E_NOT_BUILT;
 }
 
+/* A failed call leaves no path and no size behind. */
+static void no_path(char *path, size_t len, size_t *needed)
+{
+    if (path && len) path[0] = '\0';
+    if (needed) *needed = 0;
+}
+
 otc_status otc_fetch_latest(const otc_fetch_options *opts, char *path, size_t len, size_t *needed)
 {
-    (void)path; (void)len; (void)needed;
+    no_path(path, len, needed);
     return not_built(opts, "otc_fetch_latest");
 }
 
 otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestamp, char *path, size_t len,
                              size_t *needed)
 {
-    (void)datestamp; (void)path; (void)len; (void)needed;
+    (void)datestamp;
+    no_path(path, len, needed);
     return not_built(opts, "otc_fetch_release");
 }
 
@@ -43,7 +60,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
 {
     (void)release;
     if (out) *out = NULL;
-    if (oopts && oopts->struct_size >= sizeof *oopts && oopts->error && (!fopts || oopts->error != fopts->error)) {
+    if (oopts && oopts->struct_size >= sizeof *oopts && oopts->error && oopts->error != opts_error(fopts)) {
         otc__err_reset(oopts->error);
         otc__err_set(oopts->error, OTC_E_NOT_BUILT, NULL,
                      "otc_fetch_open: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)");
@@ -82,8 +99,8 @@ otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *majo
 otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                             size_t *needed, bool *updated)
 {
-    (void)current; (void)path; (void)len;
-    if (needed) *needed = 0;
+    (void)current;
+    no_path(path, len, needed);
     if (updated) *updated = false;
     return not_built(opts, "otc_fetch_update");
 }

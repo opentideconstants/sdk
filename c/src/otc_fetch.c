@@ -2273,7 +2273,10 @@ static otc_status fetch_path(const otc_fetch_options *opts, const char *release,
     otc_release *rel = NULL;
     otc_loaded_from lf;
     char *ds = NULL, msg[512], *p;
-    otc_status st = ctx_init(&c, opts), last;
+    otc_status st, last;
+    if (path && len) path[0] = '\0';   /* a failed call leaves no path and no size behind */
+    if (needed) *needed = 0;
+    st = ctx_init(&c, opts);
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
     otc_close(rel);
     if (st == OTC_OK) {
@@ -2308,7 +2311,10 @@ otc_status otc_fetch_release(const otc_fetch_options *opts, const char *datestam
 {
     if (!datestamp) {
         fctx c;
-        otc_status st = ctx_init(&c, opts);
+        otc_status st;
+        if (path && len) path[0] = '\0';
+        if (needed) *needed = 0;
+        st = ctx_init(&c, opts);
         if (st == OTC_OK) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "datestamp is NULL");
         ctx_free(&c);
         return st;
