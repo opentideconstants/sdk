@@ -243,8 +243,16 @@ install(TARGETS opentideconstants EXPORT opentideconstantsTargets
 # find_package(opentideconstants) gives opentideconstants::opentideconstants
 # (R2-321). Before 1.0 a new minor version may change the API, so a request
 # for 0.1 accepts only 0.1.x; from 1.0 the major version decides.
+# The config goes beside the library, except with an absolute LIBDIR: an
+# export with an absolute destination writes the configured prefix into the
+# include folder, which is wrong after `cmake --install --prefix X`, so it
+# goes to the prefix's share/cmake (a find_package search folder too).
 include(CMakePackageConfigHelpers)
-set(OTC_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/opentideconstants)
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}" AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_DATADIR}")
+    set(OTC_CMAKE_DIR ${CMAKE_INSTALL_DATADIR}/cmake/opentideconstants)
+else()
+    set(OTC_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/opentideconstants)
+endif()
 if(BUILD_SHARED_LIBS)
     set(OTC_CONFIG_SHARED TRUE)
 else()
