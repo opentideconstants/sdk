@@ -3120,6 +3120,79 @@
    ]
   },
   {
+   "id": "stations/alias-linz",
+   "title": "station_by_alias in two systems that format 1.0 added: linz and dmi (DR29: 16 alias systems)",
+   "spec": "4.4",
+   "matrix": {
+    "root": "aliases",
+    "release": "20991231.2"
+   },
+   "steps": [
+    {
+     "op": "station_by_alias",
+     "args": {
+      "system": "linz",
+      "alias_id": "077NELSON"
+     },
+     "expect": {
+      "station_id": "OTC-T-0171"
+     }
+    },
+    {
+     "op": "station_by_alias",
+     "args": {
+      "system": "dmi",
+      "alias_id": "30017"
+     },
+     "expect": {
+      "station_id": "OTC-T-0171"
+     }
+    },
+    {
+     "op": "station_by_alias",
+     "args": {
+      "system": "linz",
+      "alias_id": "999NOWHERE"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0171"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0171",
+       "name": "Nelson",
+       "country": "NZL",
+       "lat": -41.26,
+       "lon": 173.28,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Pacific/Auckland",
+       "aliases": {
+        "dmi": [
+         "30017"
+        ],
+        "linz": [
+         "077NELSON"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0171/gesla-fit"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "stations/list-all",
    "title": "stations and iter_stations with filters {}",
    "spec": "4.4",

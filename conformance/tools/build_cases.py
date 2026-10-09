@@ -549,6 +549,14 @@ def group_stations(R2, R1):
                     step("station_by_alias", {"station_id": None}, system="no-such-system", alias_id="9900001"),
                     step("station_by_alias", {"station_id": None}, system="ticon", alias_id="9900001")]
     out.append(mcase("stations/aliases", "station_by_alias in every system, each id of a list alias, and misses", "4.4", alias_steps))
+    A = Rel("aliases", "20991231.2")
+    sa = A.by_id["OTC-T-0171"]
+    out.append(mcase("stations/alias-linz", "station_by_alias in two systems that format 1.0 added: linz and dmi (DR29: 16 alias systems)", "4.4",
+                     [step("station_by_alias", {"station_id": "OTC-T-0171"}, system="linz", alias_id=sa["aliases"]["linz"]),
+                      step("station_by_alias", {"station_id": "OTC-T-0171"}, system="dmi", alias_id=sa["aliases"]["dmi"]),
+                      step("station_by_alias", {"station_id": None}, system="linz", alias_id="999NOWHERE"),
+                      step("station", {"station": enc_station(A, sa)}, station_id="OTC-T-0171")],
+                     root="aliases", release="20991231.2"))
     # listing and filters
     filter_sets = [{}, {"country": "GBR"}, {"country": "NOR"}, {"type": "subordinate"}, {"type": "reference", "country": "USA"},
                    {"kind": "current"}, {"kind": "tide", "country": "USA"}, {"source": "gesla-fit"}, {"source": "noaa"},
