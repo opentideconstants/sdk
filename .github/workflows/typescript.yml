@@ -38,6 +38,9 @@ jobs:
         include:
           - os: ubuntu-latest
             node: "22"
+          # The floor in package.json engines and the README.
+          - os: ubuntu-latest
+            node: "22.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -101,9 +104,15 @@ jobs:
           if-no-files-found: ignore
 
   package:
-    name: npm pack in node:lts-slim
+    name: npm pack in ${{ matrix.image }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12 is the floor in package.json engines; require() of the ESM
+        # package without a flag starts there.
+        image: ["node:22.12-slim", "node:24-slim"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -129,7 +138,7 @@ jobs:
             sleep 0.5
           done
           curl -s -o /dev/null http://127.0.0.1:18765/ || { echo "the fixture server is not ready after 60 s"; exit 1; }
-          docker run --rm -i --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim bash -eo pipefail -s <<'SCRIPT'
+          docker run --rm -i --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" "${{ matrix.image }}" bash -eo pipefail -s <<'SCRIPT'
           node --version
           mkdir /app && cd /app && npm init -y >/dev/null
           npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
