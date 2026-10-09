@@ -451,3 +451,40 @@ test("R2-118: a .gz that redirects to a URL with no suffix, sent with Content-En
         srv.close();
     }
 });
+
+test("R2-119: the automatic update interval runs on a monotonic clock, so a wall clock stepped back does not stop checks", async () => {
+    // the check blocks this thread (Atomics.wait), so the server runs in another process
+    const { spawn } = await import("node:child_process");
+    const server = `
+        const http = require("node:http"), fs = require("node:fs"), path = require("node:path");
+        let pointer = 0;
+        const srv = http.createServer((req, res) => {
+            const name = path.basename(new URL(req.url, "http://x").pathname);
+            if (name === "count") return res.end(String(pointer));
+            if (name.startsWith("OTC_latest")) pointer++;
+            fs.readFile(path.join(${JSON.stringify(GOOD)}, name), (err, data) => {
+                if (err) { res.statusCode = 404; res.end(); } else res.end(data);
+            });
+        });
+        srv.listen(0, "127.0.0.1", () => console.log(srv.address().port));`;
+    const child = spawn(process.execPath, ["-e", server], { stdio: ["ignore", "pipe", "inherit"] });
+    const realNow = Date.now;
+    let c = null;
+    try {
+        const port = await new Promise((r) => child.stdout.once("data", (d) => r(String(d).trim())));
+        const base = `http://127.0.0.1:${port}/`;
+        const count = async () => Number(await (await fetch(`${base}count`)).text());
+        c = await otc.OpenTideConstants.open({ baseUrl: base, cacheDir: tmpdir(), autoUpdate: true, updateInterval: 0.2 });
+        const before = await count();
+        const stepped = realNow() - 3_600_000;   // the wall clock is stepped back one hour (NTP, a VM resume)
+        Date.now = () => stepped;
+        await new Promise((r) => setTimeout(r, 300));
+        c.station("OTC-T-0001");   // a query after the interval runs the check
+        const after = await count();
+        assert.ok(after > before, `no update check after the interval (pointer requests ${before} -> ${after})`);
+    } finally {
+        Date.now = realNow;
+        c?.close();
+        child.kill();
+    }
+});

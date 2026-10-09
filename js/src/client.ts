@@ -157,7 +157,8 @@ export class OpenTideConstants {
         this.#cacheRoot = extra.cacheRoot;
         this.#autoUpdate = extra.autoUpdate;
         this.#interval = extra.interval;
-        this.#lastCheck = Date.now();
+        // a monotonic clock, as in Python and Ruby: a wall clock stepped back must not stop the checks (CR2 R2-119)
+        this.#lastCheck = performance.now();
         this.#all = [new WeakRef(release)];
     }
 
@@ -348,8 +349,8 @@ export class OpenTideConstants {
     #current(): Release {
         this.#check();
         // offline, and after close,, the automatic check does not run at all (spec 5.6, CR D6)
-        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
-            this.#lastCheck = Date.now();
+        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && performance.now() - this.#lastCheck >= this.#interval * 1000) {
+            this.#lastCheck = performance.now();
             this.#autoUpdateNow(this.#node);
         }
         return this.#release;
