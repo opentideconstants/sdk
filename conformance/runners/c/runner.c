@@ -1472,7 +1472,9 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
         if (n > 10 && !strncmp(b, "OTC_", 4) && !strcmp(b + n - 6, ".jsonl")) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
     }
     if (!strcmp(to, from)) {
-        snprintf(err->message, sizeof err->message, "otc_fetch_update reported an update to %s, which names no newer release", path);
+        /* the path is cut to fit the message (gcc's -Wformat-truncation: path can be longer than the message) */
+        snprintf(err->message, sizeof err->message, "otc_fetch_update reported an update to %.256s, which names no newer release",
+                 path);
         *nomove = 1;
         return OTC_OK;
     }
