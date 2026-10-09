@@ -1205,12 +1205,35 @@ static void op_query(request *q, reply *r)
         with_station(q, r, &st, NULL);
         if (r->code) return;
         if (q->a.bad) { otc_station_free(st); set_error(r, "invalid_argument", "station_id"); return; }
+        int passed = 0;   /* the station goes to the library even when it is NULL or foreign (CR2 DR24) */
+        if (!strcmp(op, "reference_station") || !strcmp(op, "subordinates_of")) {
+            /* station_id null is passed as NULL, and station_on looks the station up in a held release */
+            const cJSON *sid = q->a.obj ? cJSON_GetObjectItemCaseSensitive(q->a.obj, "station_id") : NULL;
+            const char *on = arg_str(&q->a, "station_on");
+            passed = (sid && cJSON_IsNull(sid)) || on;
+            if (on) {
+                size_t k;
+                const char *id = arg_str(&q->a, "station_id");
+                otc_station_free(st);
+                st = NULL;
+                for (k = 0; k < g_n_held; k++) {
+                    if (!strcmp(g_held[k].name, on)) {
+                        rc = id ? otc_station(g_held[k].rel, id, &st) : OTC_OK;
+                        if (rc != OTC_OK && rc != OTC_E_NOT_FOUND) { set_status(r, rc, "otc_station"); return; }
+                    }
+                }
+            }
+        }
         if (!strcmp(op, "reference_station")) {
             otc_station_t *ref = NULL;
-            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref);
+            rc = (!st && !passed) ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref);
             if (rc == OTC_OK) {
                 cJSON_AddItemToObject(o, "station_id", j_take(s_st_id(ref, &bad)));
                 otc_station_free(ref);
+            } else if (rc == OTC_E_INVALID_ARGUMENT) {
+                otc_station_free(st);
+                set_status(r, rc, "otc_reference_station");
+                return;
             } else {
                 if (rc != OTC_E_NOT_FOUND) bad = 1;
                 cJSON_AddNullToObject(o, "station_id");
@@ -1218,7 +1241,7 @@ static void op_query(request *q, reply *r)
         } else if (!strcmp(op, "subordinates_of")) {
             const char **ids = NULL;
             size_t count = 0;
-            if (st) {
+            if (st || passed) {
                 LIST_CALL(rc, const char *, ids, count, otc_subordinates_of(R, st, NULL, 0, &count),
                           otc_subordinates_of(R, st, ids, cap_, &count));
                 if (rc != OTC_OK) {   /* ids may be NULL with a count: never read them */
@@ -1228,7 +1251,7 @@ static void op_query(request *q, reply *r)
                     return;
                 }
             }
-            cJSON_AddItemToObject(o, "station_ids", st ? ids_array(ids, count) : cJSON_CreateNull());
+            cJSON_AddItemToObject(o, "station_ids", (st || passed) ? ids_array(ids, count) : cJSON_CreateNull());
             free((void *)ids);
         } else if (!strcmp(op, "station_validation")) {
             cJSON *arr = st ? cJSON_CreateArray() : cJSON_CreateNull();

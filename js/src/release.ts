@@ -1062,18 +1062,28 @@ export class Release {
         return h ? Object.freeze({ station: this.#station(h[1]), distance_km: h[0] }) : null;
     }
 
+    /** The entry of an active Station of this release; null, an unknown station or another release's Station is
+     * invalid_argument, as for attribution (CR D2 a, CR2 DR24). */
+    #ownEntry(station: unknown, what: string): IndexEntry {
+        const e = station instanceof Station && station._from(this) ? this.#byId.get(station.station_id) : undefined;
+        if (!e) {
+            throw new InvalidArgumentError(`${what} needs a Station of release ${this.datestamp}; got ${station instanceof Station ? `${station.station_id}, which is not one` : JSON.stringify(station)}`);
+        }
+        return e;
+    }
+
     /** The reference station of a subordinate station, or null. */
     referenceStation(station: Station): Station | null {
         this.#open();
-        const e = station ? this.#byId.get(station.station_id) : undefined;
-        if (!e || !e.reference_station_id) return null;
+        const e = this.#ownEntry(station, "referenceStation");
+        if (!e.reference_station_id) return null;
         return this.station(e.reference_station_id);
     }
 
     /** The subordinate stations of a reference station, ordered by station_id. */
     subordinatesOf(station: Station): readonly Station[] {
         this.#open();
-        const l = station ? this.#subs.get(station.station_id) ?? [] : [];
+        const l = this.#subs.get(this.#ownEntry(station, "subordinatesOf").station_id) ?? [];
         return Object.freeze([...l].sort((a, b) => cmp(a.station_id, b.station_id)).map((e) => this.#station(e)));
     }
 

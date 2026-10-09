@@ -284,13 +284,18 @@ class Runner:
             kw = {k: a[k] for k in ("lat", "lon", "max_km") if k in a}
             h = self.target(req).nearest(**kw, **filters)
             return {"station_id": None if h is None else h.station.station_id, "distance_km": None if h is None else h.distance_km}
-        if op == "reference_station":
-            st = self.station(req, a)
-            ref = None if st is None else self.target(req).reference_station(st)
-            return {"station_id": None if ref is None else ref.station_id}
-        if op == "subordinates_of":
-            st = self.station(req, a)
-            return {"station_ids": None if st is None else [s.station_id for s in self.target(req).subordinates_of(st)]}
+        if op in ("reference_station", "subordinates_of"):
+            # station_id null goes to the SDK as None, and station_on looks the station up in a held release (a
+            # foreign Station): both must be invalid_argument (CR2 DR24)
+            passed = a.get("station_id") is None or "station_on" in a
+            st = None if a.get("station_id") is None else \
+                (self.held[a["station_on"]] if "station_on" in a else self.target(req)).station(a["station_id"])
+            if st is None and not passed:
+                return {"station_id": None} if op == "reference_station" else {"station_ids": None}
+            if op == "reference_station":
+                ref = self.target(req).reference_station(st)
+                return {"station_id": None if ref is None else ref.station_id}
+            return {"station_ids": [s.station_id for s in self.target(req).subordinates_of(st)]}
         if op == "station_validation":
             st = self.station(req, a)
             return {"validation": None if st is None else enc_validation(st.validation)}

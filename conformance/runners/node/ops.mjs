@@ -277,14 +277,20 @@ export function makeRunner(sdk) {
             const h = target(msg).nearest(opts(a, ["lat", "lon", "max_km", ...FILTERS]));
             return h ? { station_id: h.station.station_id, distance_km: h.distance_km } : { station_id: null, distance_km: null };
         },
+        // station_id null goes to the SDK as null, and station_on looks the station up in a held release (a foreign
+        // Station): both must be invalid_argument (CR2 DR24)
         reference_station(a, msg) {
-            const st = lookStation(msg, a);
-            const ref = st ? target(msg).referenceStation(st) : null;
+            const passed = a.station_id === null || "station_on" in a;
+            const st = a.station_id === null ? null : ("station_on" in a ? state.held[a.station_on] : target(msg)).station(a.station_id);
+            if (!st && !passed) return { station_id: null };
+            const ref = target(msg).referenceStation(st);
             return { station_id: ref ? ref.station_id : null };
         },
         subordinates_of(a, msg) {
-            const st = lookStation(msg, a);
-            return { station_ids: st ? target(msg).subordinatesOf(st).map((s) => s.station_id) : null };
+            const passed = a.station_id === null || "station_on" in a;
+            const st = a.station_id === null ? null : ("station_on" in a ? state.held[a.station_on] : target(msg)).station(a.station_id);
+            if (!st && !passed) return { station_ids: null };
+            return { station_ids: target(msg).subordinatesOf(st).map((s) => s.station_id) };
         },
         station_validation(a, msg) {
             const st = lookStation(msg, a);

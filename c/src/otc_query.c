@@ -382,6 +382,8 @@ otc_status otc_reference_station(const otc_release *rel, const otc_station_t *st
     const char *ref;
     if (out) *out = NULL;
     if (!rel || !st || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_reference_station: NULL argument");
+    if (st->rel != rel || !otc__find_entry(rel, otc__jstr(st->root, "station_id")))   /* CR2 DR24 */
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_reference_station: the station is not one of this release");
     if (otc_station_type(st) != OTC_STATION_TYPE_SUBORDINATE) return OTC_E_NOT_FOUND;
     off = otc__jget(st->root, "subordinate_offsets");
     ref = otc__jstr(off, "reference_station_id");
@@ -397,6 +399,8 @@ otc_status otc_subordinates_of(const otc_release *rel, const otc_station_t *st, 
     if (!rel || !st || !count || (!ids && cap))
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_subordinates_of: bad argument");
     id = otc__jstr(st->root, "station_id");
+    if (st->rel != rel || !otc__find_entry(rel, id))   /* CR2 DR24: null, unknown or another release's station */
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_subordinates_of: the station is not one of this release");
     for (i = 0; i < rel->n_st; i++) {
         const otc__entry *e = &rel->st[i];
         if (e->type != OTC_STATION_TYPE_SUBORDINATE || !e->has_offsets || otc__strcmp_null(e->ref_id, id) != 0)

@@ -5607,6 +5607,139 @@
    ]
   },
   {
+   "id": "rules/r2-pk09/links-bad-station",
+   "title": "reference_station and subordinates_of with a null station, or a Station of another release that is not in this one: invalid_argument, as for attribution (CR2 DR24)",
+   "spec": "4.4, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_index.json",
+       "pointer": "/releases/1"
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "hold_release",
+     "args": {
+      "name": "r1"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "op": "update",
+     "expect": {
+      "updated": true,
+      "from": "20991231",
+      "to": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "reference_station",
+     "args": {
+      "station_id": "OTC-T-0003"
+     },
+     "expect": {
+      "station_id": "OTC-T-0001"
+     }
+    },
+    {
+     "op": "subordinates_of",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0003",
+       "OTC-T-0004"
+      ]
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
+     "on": "r1",
+     "expect": {
+      "station": {
+       "$type": "object"
+      }
+     }
+    },
+    {
+     "op": "reference_station",
+     "args": {
+      "station_id": null
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    },
+    {
+     "op": "reference_station",
+     "args": {
+      "station_id": "OTC-T-0021",
+      "station_on": "r1"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    },
+    {
+     "op": "subordinates_of",
+     "args": {
+      "station_id": null
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    },
+    {
+     "op": "subordinates_of",
+     "args": {
+      "station_id": "OTC-T-0021",
+      "station_on": "r1"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/r2-pk09/blank-lines-index",
    "title": "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)",
    "spec": "6.2",

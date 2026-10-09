@@ -285,13 +285,13 @@ class OpenTideConstants
         end
 
         def reference_station(station)
-            raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
+            own_station!(station, "reference_station")
             off = station.subordinate_offsets
             off && off.reference_station_id && station(off.reference_station_id)
         end
 
         def subordinates_of(station)
-            raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
+            own_station!(station, "subordinates_of")
             (@subordinates[station.station_id] || []).map { |e| materialize(e) }.freeze
         end
 
@@ -332,6 +332,15 @@ class OpenTideConstants
 
         def default_url
             "https://data.opentideconstants.org/OTC_#{@datestamp}.json"
+        end
+
+        # A Station that is an active station of this release, as attribution
+        # checks it (CR D2 a); nil, an unknown station or another release's
+        # Station is invalid_argument (CR2 DR24).
+        def own_station!(station, what)
+            raise InvalidArgumentError, "#{what}: station must be a Station" unless station.is_a?(Station)
+            return if @by_id.key?(station.station_id) && station.instance_variable_get(:@origin).equal?(self)
+            raise InvalidArgumentError, "#{what}: station #{station.station_id} is not a station of release #{@datestamp}"
         end
 
         def check_id!(id)

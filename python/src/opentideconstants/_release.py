@@ -670,17 +670,25 @@ class Release:
                                                       source_type=source_type))
         return Nearby(self._station_from_entry(hits[0][2]), hits[0][0]) if hits else None
 
-    def reference_station(self, station: Station) -> Optional[Station]:
+    def _own_station(self, station, what):
+        """station, checked as attribution checks it (CR D2 a): a Station that is an active station of this
+        release; None, an unknown station or another release's Station is invalid_argument (CR2 DR24)."""
         if not isinstance(station, Station):
-            raise InvalidArgumentError("station must be a Station")
+            raise InvalidArgumentError(f"{what}: station must be a Station")
+        own = self.station(station.station_id)
+        if own is None or (own is not station and own.raw != station.raw):
+            raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
+                                       f"{self.datestamp}")
+
+    def reference_station(self, station: Station) -> Optional[Station]:
+        self._own_station(station, "reference_station")
         off = station.subordinate_offsets
         if not station.is_subordinate or off is None or off.reference_station_id is None:
             return None
         return self.station(off.reference_station_id)
 
     def subordinates_of(self, station: Station) -> Tuple[Station, ...]:
-        if not isinstance(station, Station):
-            raise InvalidArgumentError("station must be a Station")
+        self._own_station(station, "subordinates_of")
         return tuple(self.station(s) for s in sorted(self._subs.get(station.station_id, ())))
 
     def attribution(self, stations: Optional[Sequence[Station]] = None) -> str:

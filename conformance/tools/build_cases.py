@@ -1883,6 +1883,28 @@ def rules_r2_pk09():
                      step("close"),
                      drv("assert_index", path=f"{ndir}/index-v1.json", jsonl=f"{ndir}/OTC_20991231.jsonl", datestamp="20991231")],
                     requires=["fs", "stream"]))
+    # CR2 DR24: reference_station and subordinates_of with null, an unknown station or a foreign Station are
+    # invalid_argument. The runner passes station_id null as null, and with station_on looks the station up in a held
+    # release. The held release is good R1 (update keeps it open); its OTC-T-0021 is removed in R2, so it is a Station
+    # of another release that is not in this one.
+    R2 = Rel("good", "20991231.2")
+    G = f"{SRV}/good/"
+    subs = sorted(s["station_id"] for s in R2.active if s["type"] == "subordinate"
+                  and (s.get("subordinate_offsets") or {}).get("reference_station_id") == "OTC-T-0001")
+    link_steps = []
+    for op in ("reference_station", "subordinates_of"):
+        link_steps += [step(op, err("invalid_argument"), station_id=None),
+                       step(op, err("invalid_argument"), station_id="OTC-T-0021", station_on="r1")]
+    out.append(case("rules/r2-pk09/links-bad-station", "reference_station and subordinates_of with a null station, or a Station of another release that is not in this one: invalid_argument, as for attribution (CR2 DR24)", "4.4, 4.8",
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}]),
+                     net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, base_url=G, cache_dir="${cache}", mode="stream")),
+                     step("hold_release", None, name="r1"),
+                     drv("server_rules", rules=[]),
+                     net(step("update", {"updated": True, "from": "20991231", "to": "20991231.2"})),
+                     step("reference_station", {"station_id": "OTC-T-0001"}, station_id="OTC-T-0003"),
+                     step("subordinates_of", {"station_ids": subs}, station_id="OTC-T-0001"),
+                     step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0021", on="r1")] + link_steps,
+                    requires=["fs", "stream"]))
     bdir = "${cache}/v1/releases/20991231"
     out.append(case("rules/r2-pk09/blank-lines-index", "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)", "6.2",
                     [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/blank-lines/",

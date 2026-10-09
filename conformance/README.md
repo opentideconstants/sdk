@@ -102,6 +102,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 - An argument that is absent from `args` is not passed (the SDK's default applies). An argument given as JSON `null` is passed as nil / None / null.
 - Values are passed through with their JSON type, so a case can pass a wrong type (for example `country: 5`) to test `invalid_argument`. C, where the type cannot be wrong, reports `invalid_argument` for such a step without calling the SDK.
 - Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with `null` as the op's value, also for an op whose value is a list (`subordinates_of`, `station_validation`, `constant_sets`, `constituents`, `set_validation`): an empty list would hide a lookup that fails.
+- `reference_station` and `subordinates_of` (CR2 DR24): `station_id: null` is passed to the SDK as nil / None / null (C: `NULL`), not looked up; with `station_on` (the name of a held release) the runner looks the station up in that release and passes it to this one (a foreign Station). The lookup-fails-gives-null rule above applies only to a plain lookup.
 - Times in arguments do not occur in suite 1.0.
 - `open` with `file` and any of `release` (other than `latest`), `offline: true` or `on_network_error` (other than `use_cache`) is `invalid_argument` (spec §4.2, CR D31). C has no client object (`otc_open_file` takes no fetch options), so the C runner applies this rule itself.
 
@@ -140,8 +141,8 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `search` | `name`, `limit`, `match`, filters | R | `{station_ids: [...]}` |
 | `near` | `lat`, `lon`, `radius_km`, `limit`, filters | R | `{station_ids: [...], distance_km: [...]}` |
 | `nearest` | `lat`, `lon`, `max_km`, filters | R | `{station_id, distance_km}` (both null if none) |
-| `reference_station` | `station_id` | R | `{station_id}` (null if none) |
-| `subordinates_of` | `station_id` | R | `{station_ids: [...]}` |
+| `reference_station` | `station_id`, `station_on` | R | `{station_id}` (null if none) |
+| `subordinates_of` | `station_id`, `station_on` | R | `{station_ids: [...]}` |
 | `station_validation` | `station_id` | `station.validation` | `{validation: [Validation]}` in file order |
 | `subordinate_offsets` | `station_id` | `station.subordinate_offsets` | `{offsets: SubordinateOffsets or null}` |
 | `recommended_set` | `station_id` | `station.recommended_set` | `{set_id}` (null if none) |
