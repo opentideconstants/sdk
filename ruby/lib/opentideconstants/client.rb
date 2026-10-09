@@ -649,7 +649,9 @@ class OpenTideConstants
     def load_from_entry(entry, url)
         d = entry["datestamp"]
         raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
-        if (rel = load_cached_unless_corrupt(d))
+        # The entry's version DOI is the newest one read for d: the session has it even when .verified does not yet
+        # (a pinned writer cached d with none, or the note below is skipped under a busy lock) (CR2 DR11).
+        if (rel = load_cached_unless_corrupt(d, doi: entry["zenodo_version_doi"]))
             note_version_doi(entry)
             return [rel, :cache]
         end
@@ -660,9 +662,9 @@ class OpenTideConstants
     # fails its size or SHA-256 check or does not parse is healed, and then,
     # when online, nil, so the caller downloads it again (spec §4.8, §5.2
     # step 6). Offline, the error is raised.
-    def load_cached_unless_corrupt(d)
+    def load_cached_unless_corrupt(d, doi: nil)
         return nil unless present_cached?(d)
-        load_cached(d)
+        load_cached(d, doi: doi)
     rescue ChecksumError, InvalidReleaseError => e
         heal(d, e)
         raise if @offline
@@ -732,8 +734,9 @@ class OpenTideConstants
     end
 
     # Loads cached release d, or nil when it is no longer usable (another
-    # process removed it after the caller checked it).
-    def load_cached(d)
+    # process removed it after the caller checked it). doi: a version DOI
+    # newer than .verified's (a pointer entry); anything but a String keeps .verified's.
+    def load_cached(d, doi: nil)
         ver = cache.verified(d)
         dir = cache.release_dir(d)
         names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(dir, n)) } }
@@ -749,7 +752,7 @@ class OpenTideConstants
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
-        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open,
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open,
                  logger: @logger }
         return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
