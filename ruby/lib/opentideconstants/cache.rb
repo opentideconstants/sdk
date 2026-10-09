@@ -16,6 +16,9 @@ class OpenTideConstants
     class Cache
         LOCK_POLL_S = 0.5
         LOCK_STALE_S = 120
+        # How old the lock itself must be to be stale (spec §5.4, CR2 DR3).
+        LOCK_STALE_AGE_S = 120
+        STARTED_AT_RE = /\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)\z/
 
         # A stale lock that cannot be removed this many times is a cache error (CR D3).
         LOCK_REMOVE_ATTEMPTS = 3
@@ -56,13 +59,16 @@ class OpenTideConstants
         end
 
         # logger: where lock and cleanup problems that are not raised are
-        # logged. lock_stale_s and lock_poll_s are the §5.4 lock times.
-        def initialize(root, logger: nil, lock_stale_s: LOCK_STALE_S, lock_poll_s: LOCK_POLL_S)
+        # logged. lock_stale_s, lock_stale_age_s and lock_poll_s are the §5.4
+        # lock times.
+        def initialize(root, logger: nil, lock_stale_s: LOCK_STALE_S, lock_poll_s: LOCK_POLL_S,
+                       lock_stale_age_s: LOCK_STALE_AGE_S)
             @root = File.expand_path(root)
             @base = File.join(@root, CACHE_LAYOUT_VERSION)
             @logger = logger
             @lock_stale_s = lock_stale_s
             @lock_poll_s = lock_poll_s
+            @lock_stale_age_s = lock_stale_age_s
         end
 
         def pointer_dir
@@ -206,12 +212,21 @@ class OpenTideConstants
         end
 
         # Stores the version DOI of a pointer or index entry in the .verified
-        # of a cached release, when it differs (spec §4.3). Best effort.
+        # of a cached release, when it differs (spec §4.3). Best effort. The
+        # read-modify-write runs under the release lock, taken without waiting
+        # (spec §5.4, CR2 DR3): while another process holds a young lock (a
+        # download writes .verified), the note is skipped.
         def note_version_doi(datestamp, doi)
-            ver = verified(datestamp)
-            return if ver.nil? || (ver.key?("zenodo_version_doi") && ver["zenodo_version_doi"] == doi)
-            ver["zenodo_version_doi"] = doi
-            write_atomic(File.join(release_dir(datestamp), ".verified"), JSON.pretty_generate(ver) + "\n")
+            same = ->(v) { v.nil? || (v.key?("zenodo_version_doi") && v["zenodo_version_doi"] == doi) }
+            return if same.call(verified(datestamp))
+            dir = release_dir(datestamp)
+            taken = try_lock(dir) do
+                ver = verified(datestamp) # again, now under the lock
+                next if same.call(ver)
+                ver["zenodo_version_doi"] = doi
+                write_atomic(File.join(dir, ".verified"), JSON.pretty_generate(ver) + "\n")
+            end
+            log(:debug, "#{dir} is locked by another process; its version DOI is noted later") unless taken
         rescue CacheError, FileError => e
             log(:warn, "cannot note the version DOI of #{datestamp}: #{e.message}")
         end
@@ -266,8 +281,10 @@ class OpenTideConstants
 
         # Runs the block while holding <dir>/.lock. Returns early (without the
         # block) with :done when done.call becomes true while waiting. A lock
-        # held for longer than the stale time is removed and taken; a stale
-        # lock that cannot be removed 3 times is a CacheError (CR D3).
+        # is stale when this waiter has waited the stale time and the lock
+        # itself is at least lock_stale_age_s old (CR2 DR3); a stale lock is
+        # removed and taken, and the wait starts again. A stale lock that
+        # cannot be removed 3 times is a CacheError (CR D3).
         def with_lock(dir, done: -> { false })
             ensure_dir(dir)
             lock = File.join(dir, ".lock")
@@ -279,7 +296,7 @@ class OpenTideConstants
                     break
                 rescue Errno::EEXIST
                     return :done if done.call
-                    if waited >= @lock_stale_s
+                    if waited >= @lock_stale_s && lock_stale?(lock) # the age is read just before the removal
                         if remove_stale_lock(lock)
                             waited = 0.0
                             next
@@ -296,19 +313,48 @@ class OpenTideConstants
             hold(lock) { yield }
         end
 
-        # Takes <dir>/.lock only if it is free, runs the block and returns
-        # true; returns false (without the block) when the lock is held.
+        # Takes <dir>/.lock without waiting, runs the block and returns true;
+        # returns false (without the block) when another process holds a lock
+        # younger than lock_stale_age_s. An older lock is stale: it is removed
+        # and taken (spec §5.4 non-blocking takes, CR2 DR3). A stale lock that
+        # cannot be removed is a CacheError.
         def try_lock(dir)
             lock = File.join(dir, ".lock")
+            attempt = 0
             begin
                 Dir.mkdir(lock)
             rescue Errno::EEXIST
-                return false
+                return false if attempt.positive? || !lock_stale?(lock)
+                raise CacheError, "cannot remove the stale lock #{lock}" unless remove_stale_lock(lock)
+                attempt += 1
+                retry # once: a process that takes it now holds a young lock
             rescue SystemCallError => e
                 raise CacheError, "cannot take the lock #{lock}: #{e.message}"
             end
             hold(lock) { yield }
             true
+        end
+
+        # Seconds since the lock was taken (spec §5.4, CR2 DR3): from
+        # owner.json started_at, or from the mtime of the lock directory when
+        # owner.json is missing or cannot be read. nil when the lock is gone
+        # or its age cannot be read: such a lock is never stale.
+        def lock_age(lock)
+            started = begin
+                owner = JSON.parse(File.read(File.join(lock, "owner.json")))
+                at = owner.is_a?(Hash) ? owner["started_at"] : nil
+                at.is_a?(String) && at.match?(STARTED_AT_RE) ? Time.iso8601(at) : nil
+            rescue JSON::ParserError, SystemCallError, IOError, ArgumentError, EncodingError
+                nil
+            end
+            Time.now - (started || File.mtime(lock))
+        rescue SystemCallError
+            nil
+        end
+
+        def lock_stale?(lock)
+            age = lock_age(lock)
+            !age.nil? && age >= @lock_stale_age_s
         end
 
         private
