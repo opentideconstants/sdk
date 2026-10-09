@@ -956,15 +956,6 @@
    "reason": "step 0 open: expected a result, got error 'release_not_found' (no latest pointer under http://127.0.0.1:51308/good)"
   },
   {
-   "case": "rules/pk08/created-normalised@jsonl-stream",
-   "runners": [
-    "c",
-    "c-fetch"
-   ],
-   "package": "PK08",
-   "reason": "step 1 release_metadata: result.created: expected \"2099-12-31T00:00:00Z\", got \"2099-12-31T02:00:00.5+02:00\""
-  },
-  {
    "case": "rules/pk08/fold-d12@json",
    "runners": [
     "python",

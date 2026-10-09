@@ -740,6 +740,84 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     return st;
 }
 
+/* ------------------------------------------------------------------- times */
+
+static int digits_at(const char *s, int n, int *v)
+{
+    int i;
+    *v = 0;
+    for (i = 0; i < n; i++) {
+        if (s[i] < '0' || s[i] > '9') return 0;
+        *v = *v * 10 + (s[i] - '0');
+    }
+    return 1;
+}
+
+/* Days since 1970-01-01 of a proleptic Gregorian date (H. Hinnant's days_from_civil). */
+static long long days_from_civil(long long y, int m, int d)
+{
+    long long era, yoe, doy, doe;
+    y -= m <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+
+static void civil_from_days(long long z, long long *y, int *m, int *d)
+{
+    long long era, doe, yoe, doy, mp;
+    z += 719468;
+    era = (z >= 0 ? z : z - 146096) / 146097;
+    doe = z - era * 146097;
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    *y = yoe + era * 400;
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp = (5 * doy + 2) / 153;
+    *d = (int)(doy - (153 * mp + 2) / 5 + 1);
+    *m = (int)(mp < 10 ? mp + 3 : mp - 9);
+    *y += *m <= 2;
+}
+
+int otc__utc_time(const char *s, char out[21])
+{
+    int Y, M, D, h, mi, sec, oh = 0, om = 0, sign = 0;
+    long long t, days;
+    long long y;
+    const char *p;
+    if (!s || strlen(s) < 19 || !digits_at(s, 4, &Y) || s[4] != '-' || !digits_at(s + 5, 2, &M) || s[7] != '-'
+        || !digits_at(s + 8, 2, &D) || (s[10] != 'T' && s[10] != 't' && s[10] != ' ') || !digits_at(s + 11, 2, &h)
+        || s[13] != ':' || !digits_at(s + 14, 2, &mi) || s[16] != ':' || !digits_at(s + 17, 2, &sec))
+        return 0;
+    if (M < 1 || M > 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return 0;
+    p = s + 19;
+    if (*p == '.') {   /* a fraction: whole seconds are kept (RFC 3339 §5.6) */
+        if (p[1] < '0' || p[1] > '9') return 0;
+        for (p++; *p >= '0' && *p <= '9'; p++) {}
+    }
+    if (*p == 'Z' || *p == 'z') {
+        p++;
+    } else if (*p == '+' || *p == '-') {
+        sign = *p == '-' ? -1 : 1;
+        if (!digits_at(p + 1, 2, &oh) || p[3] != ':' || !digits_at(p + 4, 2, &om) || oh > 23 || om > 59) return 0;
+        p += 6;
+    } else if (*p == '\0') {
+        sign = 0;   /* no offset: UTC, as the other SDKs read it */
+    } else {
+        return 0;
+    }
+    if (*p != '\0') return 0;
+    if (sec == 60) sec = 59;   /* a leap second is the last second of its minute */
+    t = days_from_civil(Y, M, D) * 86400LL + h * 3600LL + mi * 60LL + sec - (long long)sign * (oh * 3600LL + om * 60LL);
+    days = t >= 0 ? t / 86400 : -((-t + 86399) / 86400);
+    t -= days * 86400;
+    civil_from_days(days, &y, &M, &D);
+    if (y < 0 || y > 9999) return 0;
+    snprintf(out, 21, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, M, D, (int)(t / 3600), (int)(t / 60 % 60), (int)(t % 60));
+    return 1;
+}
+
 /* ------------------------------------------- strings with a NUL inside */
 
 /* cJSON ends a decoded string at its first NUL, so a JSON string with \u0000 in

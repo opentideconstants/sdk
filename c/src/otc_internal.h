@@ -61,6 +61,8 @@ otc_status otc__file_open(const char *path, otc__file **out);
 int otc__file_pread(otc__file *f, void *buf, size_t n, uint64_t off);
 int64_t otc__file_size(otc__file *f);
 void otc__file_close(otc__file *f);
+/* An RFC 3339 time as UTC "YYYY-MM-DDTHH:MM:SSZ" (whole seconds); 0 when s is not one. */
+int otc__utc_time(const char *s, char out[21]);
 /* The size of a file, or -1 if it does not exist or is not a regular file. */
 int64_t otc__path_size(const char *path);
 /* Removes a file; 0 on success. */
@@ -239,6 +241,7 @@ struct otc_release {
     otc_file_info  *files;
     size_t          n_files;
     char           *zenodo_version_doi; /* set by otc_fetch_open from .verified (spec 4.3) */
+    char            created[21];        /* release.created in UTC (spec 4.3); "" when absent or not a time */
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
     otc__kvlist     source_counts;

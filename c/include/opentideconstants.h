@@ -248,6 +248,7 @@ OTC_API otc_status otc_verify_file(const char *path, const char *sha256_path, ot
 
 OTC_API otc_loaded_from otc_release_loaded_from(const otc_release *rel);
 OTC_API otc_status otc_release_datestamp(const otc_release *rel, char *buf, size_t len, size_t *needed);
+/* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ" (whole seconds), as the other SDKs give it. */
 OTC_API otc_status otc_release_created(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_release_format_version(const otc_release *rel, char *buf, size_t len, size_t *needed);
 /* The all-versions (concept) DOI, from the release document; OTC_E_NOT_FOUND when null. */

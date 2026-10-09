@@ -868,6 +868,7 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s has no release.datestamp", meta_path);
         return OTC_E_INVALID_RELEASE;
     }
+    if (!otc__utc_time(otc__jstr(r->release_obj, "created"), r->created)) r->created[0] = '\0';
     {   /* spec 4.8, 7.3: a field of the wrong type is invalid_release at open, in every SDK */
         const cJSON *created = otc__jget(r->release_obj, "created"), *sv = otc__jget(r->release_obj, "source_versions");
         if ((created && !cJSON_IsString(created)) || (sv && !cJSON_IsObject(sv))) {
@@ -1167,7 +1168,9 @@ otc_loaded_from otc_release_loaded_from(const otc_release *rel)
     }
 
 REL_STR(otc_release_datestamp, otc__jstr(rel->release_obj, "datestamp"))
-REL_STR(otc_release_created, otc__jstr(rel->release_obj, "created"))
+/* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ", as the other SDKs give it (spec 4.3); a value that
+ * is not an RFC 3339 time is returned as the file has it */
+REL_STR(otc_release_created, rel->created[0] ? rel->created : otc__jstr(rel->release_obj, "created"))
 REL_STR(otc_release_format_version, otc__jstr(rel->meta, "format_version"))
 REL_STR(otc_release_concept_doi, otc__jstr(rel->release_obj, "concept_doi"))
 REL_STR(otc_release_zenodo_version_doi, rel->zenodo_version_doi)
