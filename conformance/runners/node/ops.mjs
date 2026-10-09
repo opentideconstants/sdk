@@ -115,16 +115,29 @@ function encBuild(b) {
 }
 
 
+const EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"];
+
+// Encode what the SDK returns: a plain object with its own keys (a missing key is not filled in), or a typed
+// object field by field, each through need().
+function asReturned(v, fields) {
+    if (v == null) return null;
+    const proto = Object.getPrototypeOf(v);
+    if (proto === Object.prototype || proto === null) return { ...v };
+    const out = {};
+    for (const f of fields) out[f] = need(v, f);
+    return out;
+}
+
 // TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects.
 function encTimeBase(t) {
     if (t == null) return null;
     const corr = need(t, "correction");
     return {
         code: need(t, "code"), reason: need(t, "reason"), declared: need(t, "declared"), published: need(t, "published"),
-        correction: corr == null ? null : { ...corr },
+        correction: asReturned(corr, ["from", "to"]),
         months_dropped: [...need(t, "months_dropped")], decided_in: need(t, "decided_in"),
         decided_build_commit: need(t, "decided_build_commit"),
-        evidence: [...need(t, "evidence")].map((e) => ({ ...e })),
+        evidence: [...need(t, "evidence")].map((e) => asReturned(e, EVIDENCE)),
     };
 }
 
@@ -311,7 +324,12 @@ export function makeRunner(sdk) {
             if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
                 const fields = {};
                 for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
-                if (e.tombstone != null) fields.tombstone = pick(e.tombstone, TOMBSTONE);
+                if (e.tombstone != null) {
+                    // a tombstone the runner cannot encode fails the step instead of crashing the runner
+                    try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
+                        fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
+                    }
+                }
                 return { ok: false, error: { code: e.code, message: String(e.message), fields } };
             }
             const name = e && e.constructor ? e.constructor.name : typeof e;

@@ -241,7 +241,14 @@ class Runner
         %i[url status file expected actual path].each do |f|
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
-        fields["tombstone"] = tombstone(e.tombstone) if e.respond_to?(:tombstone) && e.tombstone
+        if e.respond_to?(:tombstone) && e.tombstone
+            # a tombstone the runner cannot encode fails the step instead of crashing the runner
+            fields["tombstone"] = begin
+                tombstone(e.tombstone)
+            rescue StandardError, ScriptError => te
+                "uncaught:#{te.class}"
+            end
+        end
         { "code" => e.code.to_s, "message" => e.message.to_s, "fields" => fields }
     end
 
