@@ -1,6 +1,6 @@
 # SDK conformance suite
 
-The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pass (SDK spec §7.1). Suite version **0.1** (it tests format major 0).
+The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pass (SDK spec §7.1). Suite version **1.0** (it tests format 1.0, the first published format).
 
 | Path | What it is |
 |---|---|
@@ -13,7 +13,7 @@ The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pa
 | `server.py` | The fixture HTTP server, the recording proxy and the tripwire. |
 | `driver.py` | Runs the cases against one runner and reports PASS / FAIL / SKIP. |
 | `runners/<lang>/` | One runner per SDK. `runners/null/` is the null runner. |
-| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`; 0.5 for an SDK that does not declare one yet). |
+| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`; 0.5 for an SDK that does not declare one yet, which reads only the format 0.x drafts). |
 
 All Python here uses the standard library only (Python 3.10 or later).
 
@@ -133,14 +133,12 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `station_validation` | `station_id` | `station.validation` | `{validation: [Validation]}` in file order |
 | `subordinate_offsets` | `station_id` | `station.subordinate_offsets` | `{offsets: SubordinateOffsets or null}` |
 | `recommended_set` | `station_id` | `station.recommended_set` | `{set_id}` (null if none) |
-| `constant_sets` | `station_id`, `include_excluded` | `station.constant_sets` | `{set_ids: [...]}` |
+| `constant_sets` | `station_id`, `include_no_constants` | `station.constant_sets` | `{set_ids: [...]}` |
 | `constant_set` | `station_id`, `set_id` | `station.constant_set` | `{set: ConstantSet or null}` |
 | `constituents` | `station_id`, `set_id` | `set.constituents` | `{constituents: [Constituent]}` in file order |
 | `constituent` | `station_id`, `set_id`, `name` | `set.constituent` | `{constituent: Constituent or null}` |
 | `provenance` | `station_id`, `set_id` | `set.provenance` | `{provenance: Provenance, raw: <provenance raw>}` |
-| `provenance_build` | `station_id`, `set_id` | `set.provenance.build` | `{build: ProvenanceBuild or null}` |
-| `carried_from_release` | `station_id`, `set_id` | `set.provenance.carried_from_release` | `{carried_from_release}` (null if none) |
-| `time_base` | `station_id`, `set_id` | `set.time_base` | `{time_base: TimeBase or null}` |
+| `newer_format_major` | | `client.newer_format_major` (set by `check_for_update`) | `{newer_format_major}` (an integer or null) |
 | `set_validation` | `station_id`, `set_id` | `set.validation` | `{validation: [Validation]}` by `window` |
 | `raw` | `object` (`station`, `tombstone`, `set`, `constituent`, `convention`, `licence`) and its ids | the object's `raw` | `{raw}` |
 
@@ -154,11 +152,11 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 |---|---|
 | Station | `station_id`, `name`, `country`, `lat`, `lon`, `type`, `kind`, `timezone`, `aliases` (`{system: [ids]}`, `{}` if none), `status`, `is_reference`, `is_subordinate`, `is_tide`, `is_current`, `recommended_set_id` (the `set_id` of `recommended_set`, or null) |
 | Tombstone | `station_id`, `name`, `status`, `removed_in`, `removed_reason` |
-| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, verdict, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
+| ConstantSet | `set_id`, `source`, `source_type`, `quantity`, `source_record_id`, `source_version`, `record_span` (`{start, end, good_samples}` or null), `datum` (`{msl_offset_m, named}`, `named` `{}` if absent; or null), `qc_status`, `qc_flags` (`[{flag, verdict, values}]`, `[]` if none), `dropped_constituents` (`[{name, dropped_reason, detail}]`, `[]` if none), `time_base` (TimeBase or null), `is_recommended`, `convention_id` (of `set.convention`), `licence_id` (of `set.licence`), `constituent_count` |
 | Constituent | `name`, `source_name`, `doodson`, `speed_deg_per_hour`, `amplitude_m`, `phase_deg`, `amp_uncertainty_m`, `phase_uncertainty_deg`, `kept_reason` |
 | Convention | `convention_id`, `phase_reference`, `utc_offset_hours`, `v0_model`, `nodal_handling`, `nodal_formula_ids` (object), `constituent_table_version`, `tables_sha256`, `canary` (object) |
 | Licence | `licence_id`, `spdx`, `provider`, `citation`, `attribution`, `url` |
-| Provenance | `build_commit` (the deprecated top-level value, or `build.build_commit`), `adapter_version`, `input_sha256`, `time_base` (object; the 0.5 free text), `selection_reason`, `decision` (object) |
+| Provenance | `build` (ProvenanceBuild or null), `adapter_version`, `input_sha256`, `selection_reason`, `decision` (object), `carried_from_release` |
 | ProvenanceBuild | `build_commit`, `built_at`, `fetched_at` (times), `run_id`, `tool_versions` (object or null) |
 | TimeBase | `code`, `reason`, `declared`, `published`, `correction` (`{from, to}` or null), `months_dropped` (`[]` if none), `decided_in`, `decided_build_commit`, `evidence` (`[{comparator_kind, comparator_id, distance_km, lag_min, detail}]`, `[]` if none) |
 | Validation | `set_id`, `reference_source`, `reference_station`, `reference_distance_km`, `window`, `time_mae_min`, `time_p95_min`, `time_bias_min`, `height_mae_m`, `range_error_m`, `missed_events`, `extra_events`, `previous_release` (null, or `{time_mae_min, time_p95_min, time_bias_min, height_mae_m, range_error_m, missed_events, extra_events}`) |
@@ -220,9 +218,8 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | `update` | `update` (pinned, file, swap with a held release, no update), `auto_update` |
 | `cache` | `cached_releases`, `prune`, `verify`, the `cache` error, `release.files` from `.verified` |
 | `download` | the §7.1 download cases: then-open, identical, mismatch, from-cache, bad checksum, browser (`expect_if_missing.fs`), plus formats and errors |
-| `v06` | format 0.6 data (`fixtures/v06`): `qc_status` `ok`, `flagged` and `no_constants`; `no_constants` sets left out of `constant_sets()` and of the `source` filter, and never recommended; carried-over sets (`carried_from_release`), the deprecated `accepted` and `fallback`; `time_base` annotations; `provenance.build`; a `merged` tombstone; `stats`, metadata, attribution |
-| `v05` | format 0.5 data (`fixtures/v05`) still loads; `provenance.build` falls back to the top-level `build_commit` |
-| `format` | `release.min_reader_version` (§4.8, §5.2 step 2a, §7.4): `format/reader-too-old` (§7.1), `latest`, `check_for_update`, `update` and `download` skip a release too new for the SDK with one GET of `OTC_index.json`, only in that case; offline with a cached index; errors |
+| `v1` | the format 1.0 annotations (`fixtures/v1`): `qc_status` `ok`, `flagged` and `no_constants`; `no_constants` sets left out of `constant_sets()` unless `include_no_constants`, left out of the `source` filter and of `stats.source`, and never recommended; a carried-over set (`carried_from_release`); the `time_base` codes; `provenance.build`; a `merged` tombstone; `stats`, attribution |
+| `format` | format versions (§4.8, §5.2 step 2a, §7.4): `format/reader-too-old` (§7.1); `latest`, `check_for_update`, `update` and `download` skip a release whose `min_reader_version` is too new with one GET of `OTC_index.json`, only in that case; offline with a cached index; a newer major on the server (`format/latest-newer-major`, `format/check-for-update-newer-major`: `newer_format_major`); errors |
 
 ### Cross-SDK cases
 
@@ -243,19 +240,17 @@ These are written into the cases. Change them here and in `tools/build_cases.py`
 - Word-start rank (§4.4.1): the match starts right after a space in the normalised name. A query that is empty after trimming (`"   "`) is `invalid_argument`.
 - `release.conventions` and `release.licences` are in file order. `station.validation` is in file order. `cached_releases` and `prune` return datestamps newest first.
 - `update` with nothing newer returns `{updated: false, from: D, to: D}`.
-- `attribution` with a null concept DOI: `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{concept_doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
+- `attribution` with a null concept DOI (`good/` release `20991231`): `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{concept_doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
 - `zenodo_version_doi` is null for a file and for a pinned download (which reads no pointer), and after a download of `latest` it is the value of the entry the SDK used: the pointer's, or the index entry that step 2a chose. A cached release keeps it (`.verified`).
-- A pointer or index entry written before the 0.6 index schema has `doi` and no `zenodo_version_doi` or `content_sha256` (the `good/` and `order/` fixtures). For such an entry `zenodo_version_doi` may be null or the old `doi`; `content_sha256` is null.
-- Sets with no usable constants: `qc_status` `excluded` (format 0.5 and before) and `no_constants` (format 0.6). `constant_sets()` leaves both out by default and `include_excluded: true` lists both; the `source` filter does not count them; `stats` counts every set.
-- A deprecated `qc_status` in 0.6 data (`accepted`, `fallback`): the SDK may give it as it is or as 0.6 reads it (`accepted` is `ok`, or `flagged` with a flag; `fallback` is a carried-over, `flagged` set). Both are accepted, in `constant_set` and in `stats`.
-- `provenance.build` when the data has neither a `build` object nor the top-level `build_commit`: null or an object of nulls (the spec leaves it open).
-- The `time_base` op encodes the 0.6 annotation `constant_set.time_base`. `correction` and the `evidence` entries are plain objects. Data before 0.6 has none (null); its free-text `provenance.time_base` stays in the `provenance` op.
-- `reader_too_old`: the message must contain `0.99` (the fixtures' `min_reader_version`) and one other `0.x` version (the SDK's own `SUPPORTED_FORMAT_VERSION`).
-- QcFlag stays `{flag, verdict, values}`, and Tombstone stays as it was: the 0.6 `qc_flags[].reason`, `record_span.good_hours`, `merged_into` and the other annotation fields are read through `raw` (the spec lists no typed field for them).
+- `no_constants` sets: `constant_sets()` leaves them out by default and `include_no_constants: true` lists them; the `source` filter and `stats.source` do not count them; `stats.qc_status` counts every set.
+- `provenance.build` is required in format 1.0, so every fixture set has it; the suite has no case for a missing one.
+- `ConstantSet.time_base` is the set's annotation, or null (the model and official sets of the fixtures have none). `correction` is `{from, to}`; each `evidence` entry has its five keys, null when absent.
+- `reader_too_old`: the message must contain `1.99` (the fixtures' `min_reader_version`) and one other `1.x` version (the SDK's own `SUPPORTED_FORMAT_VERSION`).
+- QcFlag is `{flag, verdict, values}` as the spec lists it; format 1.0 has no `verdict` (it is always null) and its `reason` is read through `raw`. Tombstone keeps its five keys; `merged_into` and `detail` are in `raw`.
 - `user_agent` is added after one space: `opentideconstants-{lang}/{version} (+https://opentideconstants.org) {suffix}`.
 - A body shorter than its `Content-Length` is a `network` error. A consistent but short response is `checksum_mismatch`.
 - A reference that does not resolve is `invalid_release` at open time in stream mode too.
-- The latest pointer is `OTC_latest-f0.json`; the SDK falls back to `OTC_latest.json` only on a 404.
+- The latest pointer is `OTC_latest-f1.json`; the SDK falls back to `OTC_latest.json` only on a 404.
 - `timeout` is one number of seconds for both the connect and the read timeout.
 - `subordinates_of` returns the subordinate stations ordered by `station_id` (§4.4 gives no order for it).
 - A network failure is the `network` error, also with `on_network_error: raise` and an empty cache. `offline_unavailable` is only for offline use (`offline: true` or `OPENTIDECONSTANTS_OFFLINE`) with no usable cached release, and for `releases()` offline with no cached index. This follows §5.2 step 1 and step 5 and §4.3; the `offline_unavailable` row of §4.8 (and its `when` text in `api.json`) also names "a network failure with `:raise`", which the suite does not follow.

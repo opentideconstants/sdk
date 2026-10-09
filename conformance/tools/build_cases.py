@@ -34,7 +34,7 @@ FIXTURES = ROOT / "fixtures"
 CASES = ROOT / "cases"
 CROSS = ROOT / "cross"
 FOLD = ROOT / "name_fold.json"
-SUITE_VERSION = "0.1"
+SUITE_VERSION = "1.0"
 EARTH_R_KM = 6371.0088
 TOL = 1e-6
 
@@ -140,6 +140,7 @@ def enc_set(rel, s, cs):
         "qc_status": cs["qc_status"],
         "qc_flags": [{"flag": f["flag"], "verdict": f.get("verdict"), "values": f.get("values")} for f in cs.get("qc_flags") or []],
         "dropped_constituents": [{"name": d["name"], "dropped_reason": d["dropped_reason"], "detail": d.get("detail")} for d in cs.get("dropped_constituents") or []],
+        "time_base": enc_time_base(cs.get("time_base")),
         "is_recommended": cs["set_id"] == s.get("recommended_set_id"),
         "convention_id": cs["convention_id"], "licence_id": cs["licence_id"],
         "constituent_count": len(cs.get("constituents") or []),
@@ -151,7 +152,7 @@ CONSTITUENT_FIELDS = ["name", "source_name", "doodson", "speed_deg_per_hour", "a
 CONVENTION_FIELDS = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
                      "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"]
 LICENCE_FIELDS = ["licence_id", "spdx", "provider", "citation", "attribution", "url"]
-PROVENANCE_FIELDS = ["build_commit", "adapter_version", "input_sha256", "time_base", "selection_reason", "decision"]
+PROVENANCE_FIELDS = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"]
 VALIDATION_FIELDS = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
                      "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m",
                      "missed_events", "extra_events", "previous_release"]
@@ -165,26 +166,15 @@ def pick(d, fields):
     return {f: (d.get(f) if d is not None else None) for f in fields}
 
 
-def enc_provenance(p):
-    """Provenance (spec 4.6): build_commit is the deprecated top-level value, or build.build_commit (format 0.6)."""
-    out = pick(p, PROVENANCE_FIELDS)
-    if out["build_commit"] is None:
-        out["build_commit"] = (p.get("build") or {}).get("build_commit")
-    return out
-
-
 BUILD_FIELDS = ["build_commit", "built_at", "fetched_at", "run_id", "tool_versions"]
 
 
-def enc_build(p):
-    """ProvenanceBuild (spec 4.6): provenance.build, or for data with no build object (format 0.5 and before) the
-    deprecated top-level build_commit with every other field null. With neither, the spec does not say whether
-    build is null or an object of nulls, so either is accepted."""
-    if p.get("build") is not None:
-        return pick(p["build"], BUILD_FIELDS)
-    if p.get("build_commit") is not None:
-        return {**{f: None for f in BUILD_FIELDS}, "build_commit": p["build_commit"]}
-    return {"$any_of": [None, {f: None for f in BUILD_FIELDS}]}
+def enc_provenance(p):
+    """Provenance (spec 4.6): build (ProvenanceBuild; format 1.0 requires it, so it is null only for malformed
+    input), adapter_version, input_sha256, selection_reason, decision and carried_from_release (spec 7.4)."""
+    out = pick(p, PROVENANCE_FIELDS)
+    out["build"] = None if p.get("build") is None else pick(p["build"], BUILD_FIELDS)
+    return out
 
 
 TIME_BASE_FIELDS = ["code", "reason", "declared", "published", "correction", "months_dropped", "decided_in",
@@ -193,7 +183,7 @@ EVIDENCE_FIELDS = ["comparator_kind", "comparator_id", "distance_km", "lag_min",
 
 
 def enc_time_base(t):
-    """TimeBase: the 0.6 time-base annotation of a set (constant_set.time_base), or null."""
+    """TimeBase (spec 4.5): the set's time-base annotation, or null when the set has none."""
     if t is None:
         return None
     out = pick(t, TIME_BASE_FIELDS)
@@ -229,12 +219,10 @@ def pointer_entry(root, datestamp):
 
 
 def enc_release_info(root, datestamp, base):
-    """ReleaseInfo (spec 3). An entry written before the 0.6 index schema has no zenodo_version_doi (only the old
-    doi key) and no content_sha256; the spec does not say whether an SDK reads the old key, so either is accepted."""
+    """ReleaseInfo (spec 3)."""
     e = pointer_entry(root, datestamp)
-    vdoi = e["zenodo_version_doi"] if "zenodo_version_doi" in e else {"$any_of": [None, e.get("doi")]}
-    return {"datestamp": e["datestamp"], "format_version": e["format_version"], "concept_doi": e.get("concept_doi"),
-            "zenodo_version_doi": vdoi, "content_sha256": e.get("content_sha256"),
+    return {"datestamp": e["datestamp"], "format_version": e["format_version"], "concept_doi": e["concept_doi"],
+            "zenodo_version_doi": e["zenodo_version_doi"], "content_sha256": e["content_sha256"],
             "files": sorted([{"name": f["name"], "url": base + f["url"], "size": f["size"], "sha256": f["sha256"]}
                              for f in e["files"]], key=lambda f: f["name"])}
 
@@ -254,9 +242,9 @@ def fold(name):
     return re.sub(r"[ \t\n\r\f\v]+", " ", folded).strip(" ")
 
 
-# Sets that a caller must not use by mistake: qc_status excluded (format 0.5 and before) and no_constants
-# (format 0.6). The default constant_sets() leaves them out; include_excluded: true lists them (spec 4.5, 7.4).
-NOT_USABLE = ("excluded", "no_constants")
+# Sets with no fitted constants (qc_status no_constants): constant_sets() leaves them out by default and
+# include_no_constants: true lists them; the source filter and stats.source do not count them (spec 4.3, 4.4, 4.5).
+NOT_USABLE = ("no_constants",)
 
 
 def usable_sources(s):
@@ -387,13 +375,14 @@ def stats(rel):
         return dict(sorted(out.items()))
     sets = [cs for s in rel.active for cs in s.get("constant_sets", [])]
     return {"type": count(s["type"] for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
-            "country": count(s["country"] for s in rel.active), "source": count(cs["source"] for cs in sets),
+            "country": count(s["country"] for s in rel.active),
+            "source": count(cs["source"] for cs in sets if cs["qc_status"] not in NOT_USABLE),
             "qc_status": count(cs["qc_status"] for cs in sets)}
 
 
-def sets_in_order(s, include_excluded=False):
+def sets_in_order(s, include_no_constants=False):
     rid = s.get("recommended_set_id")
-    sets = [cs for cs in s.get("constant_sets", []) if include_excluded or cs["qc_status"] not in NOT_USABLE]
+    sets = [cs for cs in s.get("constant_sets", []) if include_no_constants or cs["qc_status"] not in NOT_USABLE]
     rec = [cs for cs in sets if cs["set_id"] == rid]
     rest = sorted([cs for cs in sets if cs["set_id"] != rid], key=lambda c: c["set_id"])
     return rec + rest
@@ -478,31 +467,23 @@ def group_release(R2, R1):
     for cr in (R2, R1):
         out.append(mcase(f"release/citation-exact-{cr.datestamp}", f"citation of {cr.datestamp}, exact text (concept DOI {'set' if cr.doc['release'].get('concept_doi') else 'null'}, no version DOI)", "4.6",
                          [step("citation", {"citation": citation(cr)})], release=cr.datestamp))
-    # The DOIs of a 0.6 release (spec 4.3, 4.6): the concept DOI is in the release document; the version DOI only
-    # in the pointer and index entries, so the SDK has it after a download of latest (and keeps it in .verified).
-    v6 = Rel("v06", "20991231.3")
-    rc = Rel("v06", "20991230")
-    V6 = f"{SRV}/v06/"
-    vdoi = "10.5072/zenodo.3"
-    open_v6 = net(step("open", {"loaded_from": "download", "datestamp": v6.datestamp}, base_url=V6, cache_dir="${cache}"))
-    out.append(case("release/citation-exact-version-doi", "citation after a download of latest whose index entry has a version DOI: concept DOI link plus (version DOI: ...)", "4.6",
-                    [open_v6, step("citation", {"citation": citation(v6, vdoi)})], requires=["fs"]))
-    out.append(case("release/doi-fields-latest", "concept_doi from the release, zenodo_version_doi from the pointer; the attribution uses only the concept DOI; ReleaseInfo carries both and content_sha256", "3, 4.3, 4.6",
-                    [open_v6,
-                     step("release_metadata", enc_release_meta(v6, vdoi)),
-                     step("attribution", {"attribution": attribution(v6)}),
-                     net(step("latest", {"release": enc_release_info("v06", v6.datestamp, V6)})),
-                     net(step("releases", {"releases": [enc_release_info("v06", d, V6) for d in (v6.datestamp, rc.datestamp)]})),
+    # The version DOI (spec 4.3, 4.6) is only in the pointer and index entries, so the SDK has it after a download
+    # of latest (and keeps it in .verified); the concept DOI is in the release document.
+    G = f"{SRV}/good/"
+    vdoi = pointer_entry("good", R2.datestamp)["zenodo_version_doi"]
+    open_g = net(step("open", {"loaded_from": "download", "datestamp": R2.datestamp}, base_url=G, cache_dir="${cache}"))
+    out.append(case("release/citation-exact-version-doi", "citation after a download of latest whose pointer has a version DOI: concept DOI link plus (version DOI: ...)", "4.6",
+                    [open_g, step("citation", {"citation": citation(R2, vdoi)})], requires=["fs"]))
+    out.append(case("release/doi-fields-latest", "concept_doi from the release, zenodo_version_doi from the pointer and kept in the cache; the attribution uses only the concept DOI; ReleaseInfo carries both and content_sha256", "3, 4.3, 4.6",
+                    [open_g,
+                     step("release_metadata", enc_release_meta(R2, vdoi)),
+                     step("attribution", {"attribution": attribution(R2)}),
+                     net(step("latest", {"release": enc_release_info("good", R2.datestamp, G)})),
                      drv("restart_runner"), drv("server_stop"),
-                     net(step("open", {"loaded_from": "cache", "datestamp": v6.datestamp}, release=v6.datestamp, base_url=V6, cache_dir="${cache}")),
-                     step("release_metadata", {"zenodo_version_doi": vdoi, "concept_doi": "10.5072/zenodo.1"}),
-                     step("citation", {"citation": citation(v6, vdoi)})],
+                     net(step("open", {"loaded_from": "cache", "datestamp": R2.datestamp}, release=R2.datestamp, base_url=G, cache_dir="${cache}")),
+                     step("release_metadata", {"zenodo_version_doi": vdoi, "concept_doi": R2.doc["release"]["concept_doi"]}),
+                     step("citation", {"citation": citation(R2, vdoi)})],
                     requires=["fs"]))
-    out.append(mcase("release/citation-exact-rc", "citation of a release candidate (concept_doi null, no version DOI): the release URL", "4.6",
-                     [step("citation", {"citation": citation(rc)}), step("release_metadata", enc_release_meta(rc))],
-                     root="v06", release=rc.datestamp))
-    out.append(mcase("release/attribution-rc", "attribution of a release candidate (concept_doi null): the release URL replaces doi:", "4.6",
-                     [step("attribution", {"attribution": attribution(rc)})], root="v06", release=rc.datestamp))
     for label, ids in [("one-station", ["OTC-T-0006"]),
                        ("ordered-by-licence-id", ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"]),
                        ("offsets-only-subordinate", ["OTC-T-0003"]),
@@ -522,7 +503,7 @@ def group_stations(R2, R1):
                  step("require_station", {"station": enc_station(rel, s)}, station_id=sid),
                  step("recommended_set", {"set_id": rel.rec_set(s)["set_id"] if rel.rec_set(s) else None}, station_id=sid),
                  step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s)]}, station_id=sid),
-                 step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s, True)]}, station_id=sid, include_excluded=True),
+                 step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s, True)]}, station_id=sid, include_no_constants=True),
                  step("subordinate_offsets", {"offsets": pick(s["subordinate_offsets"], OFFSET_FIELDS) if s.get("subordinate_offsets") else None}, station_id=sid),
                  step("station_validation", {"validation": [enc_validation(v) for v in s.get("validation") or []]}, station_id=sid)]
         ref = None
@@ -582,7 +563,7 @@ def group_sets(R2):
                      step("provenance", {"provenance": enc_provenance(cs.get("provenance") or {}), "raw": cs.get("provenance") or {}}, station_id=sid, set_id=setid),
                      step("set_validation", {"validation": [enc_validation(v) for v in sorted(
                          [v for v in s.get("validation") or [] if v["set_id"] == setid], key=lambda v: v["window"])]}, station_id=sid, set_id=setid)]
-            if sid == "OTC-T-0001" or cs["qc_status"] != "accepted" or sid in ("OTC-T-0006", "OTC-T-0019", "OTC-T-0020"):
+            if cs["constituents"] and (sid == "OTC-T-0001" or cs["qc_status"] != "ok" or sid in ("OTC-T-0006", "OTC-T-0020")):
                 first = cs["constituents"][0]
                 steps += [step("constituent", {"constituent": pick(first, CONSTITUENT_FIELDS)}, station_id=sid, set_id=setid, name=first["name"]),
                           step("constituent", {"constituent": None}, station_id=sid, set_id=setid, name=first["name"].lower()),
@@ -664,7 +645,7 @@ def group_tolerant():
     cs = s["constant_sets"][0]
     con = rel.conventions[rel.doc["conventions"][0]["convention_id"]]
     lic = rel.doc["licences"][0]
-    steps = [step("release_metadata", {"format_version": "0.3", "datestamp": "20991231"}),
+    steps = [step("release_metadata", {"format_version": "1.1", "datestamp": "20991231"}),
              step("station", {"station": enc_station(rel, s)}, station_id="OTC-T-0001"),
              step("raw", {"raw": s}, object="station", station_id="OTC-T-0001"),
              step("raw", {"raw": cs}, object="set", station_id="OTC-T-0001", set_id=cs["set_id"]),
@@ -674,7 +655,7 @@ def group_tolerant():
              step("station_by_alias", {"station_id": "OTC-T-0001"}, system="future_system", alias_id="FS-0001"),
              step("constant_set", {"set": enc_set(rel, s, cs)}, station_id="OTC-T-0001", set_id=cs["set_id"])]
     out = [mcase("tolerant/format-minor", "a higher format minor loads; unknown fields stay in raw; an unknown alias system works", "7.3",
-                 steps, root="bad/format-minor", release="20991231", open_expect={"format_version": "0.3"})]
+                 steps, root="bad/format-minor", release="20991231", open_expect={"format_version": "1.1"})]
     good = Rel("good", "20991231.2")
     gs = good.by_id["OTC-T-0020"]
     out.append(mcase("tolerant/raw-good", "raw is the object as the file gives it", "3",
@@ -683,45 +664,24 @@ def group_tolerant():
     return out
 
 
-# --------------------------------------------------------------------------- formats 0.5 and 0.6
+# --------------------------------------------------------------------------- format 1.0 annotations and versions
 
-V06, V06_RC = "20991231.3", "20991230"
-R_OLD, R_OK, R_NEW = "20991231.2", "20991231.3", "20991231.4"   # fixtures/reader: R_NEW has min_reader_version 0.99
-TOO_NEW = "0.99"
+V1 = "20991231.3"
+R_OLD, R_OK, R_NEW = "20991231.2", "20991231.3", "20991231.4"   # fixtures/reader: R_NEW has min_reader_version 1.99
+M_OK, M_NEW = "20991231.2", "20991231.3"                        # fixtures/major: M_NEW has format 2.0
+TOO_NEW = "1.99"
 # reader_too_old names both versions (spec 4.8): the release's min_reader_version and the SDK's own
-# SUPPORTED_FORMAT_VERSION, which differs per SDK, so the case asks for 0.99 and one other 0.x version.
-TOO_OLD_MESSAGE = {"$all": [{"$contains": TOO_NEW}, {"$regex": r"(^|[^0-9.])0\.(?!99([^0-9]|$))[0-9]+([^0-9]|$)"}]}
-
-
-def read_06(cs):
-    """How schema 0.6 reads a deprecated qc_status: accepted is ok (flagged when it has a flag); fallback is a
-    carry-over, which 0.6 writes as flagged with the carried_over flag."""
-    q = cs["qc_status"]
-    if q == "accepted":
-        return "flagged" if cs.get("qc_flags") else "ok"
-    return "flagged" if q == "fallback" else q
-
-
-def qc_any(value, cs, fmt):
-    """In 0.6 data an SDK may give a deprecated qc_status as it is or as 0.6 reads it (spec 7.4 "Reading 0.6"
-    does not say which), so both are accepted there."""
-    if fmt != "0.6" or read_06(cs) == cs["qc_status"]:
-        return value
-    return {"$any_of": [value, read_06(cs)]}
+# SUPPORTED_FORMAT_VERSION, so the case asks for 1.99 and one other 1.x version.
+TOO_OLD_MESSAGE = {"$all": [{"$contains": TOO_NEW}, {"$regex": r"(^|[^0-9.])1\.(?!99([^0-9]|$))[0-9]+([^0-9]|$)"}]}
 
 
 def set_steps(rel, s, cs):
-    """Every runner step that reads one constant set, the 0.6 annotations included."""
+    """Every runner step that reads one constant set."""
     sid, setid = s["station_id"], cs["set_id"]
     prov = cs.get("provenance") or {}
-    enc = enc_set(rel, s, cs)
-    enc["qc_status"] = qc_any(enc["qc_status"], cs, rel.doc["format_version"])
-    return [step("constant_set", {"set": enc}, station_id=sid, set_id=setid),
+    return [step("constant_set", {"set": enc_set(rel, s, cs)}, station_id=sid, set_id=setid),
             step("constituents", {"constituents": [pick(c, CONSTITUENT_FIELDS) for c in cs.get("constituents", [])]}, station_id=sid, set_id=setid),
-            step("provenance", {"provenance": enc_provenance(prov), "raw": prov}, station_id=sid, set_id=setid),
-            step("provenance_build", {"build": enc_build(prov)}, station_id=sid, set_id=setid),
-            step("carried_from_release", {"carried_from_release": prov.get("carried_from_release")}, station_id=sid, set_id=setid),
-            step("time_base", {"time_base": enc_time_base(cs.get("time_base"))}, station_id=sid, set_id=setid)]
+            step("provenance", {"provenance": enc_provenance(prov), "raw": prov}, station_id=sid, set_id=setid)]
 
 
 def station_steps(rel, s):
@@ -730,61 +690,36 @@ def station_steps(rel, s):
     return [step("station", {"station": enc_station(rel, s)}, station_id=sid),
             step("recommended_set", {"set_id": rs["set_id"] if rs else None}, station_id=sid),
             step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s)]}, station_id=sid),
-            step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s, True)]}, station_id=sid, include_excluded=True)]
+            step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s, True)]}, station_id=sid, include_no_constants=True)]
 
 
-def group_v06():
-    """Format 0.6 data (fixtures/v06): qc_status ok, flagged and no_constants, carried-over sets, the deprecated
-    accepted and fallback, time_base annotations and provenance.build (spec 4.5, 4.6, 7.4 "Reading 0.6")."""
-    rel = Rel("v06", V06)
+def group_v1():
+    """The format 1.0 annotations (fixtures/v1): qc_status ok, flagged and no_constants, a station with only
+    no_constants sets, a carried-over set, the time_base codes, provenance.build (spec 4.3, 4.5, 4.6, 7.4)."""
+    rel = Rel("v1", V1)
     out = []
     for s in rel.active:
-        out.append(mcase(f"v06/stations/{s['station_id']}", f"0.6 station {s['station_id']} ({s['name']}): fields, recommended set, sets with and without the no_constants ones", "4.5, 7.4",
-                         station_steps(rel, s), root="v06", release=V06))
+        out.append(mcase(f"v1/stations/{s['station_id']}", f"station {s['station_id']} ({s['name']}): fields, recommended set, constant_sets with and without include_no_constants", "4.5, 7.4",
+                         station_steps(rel, s), root="v1", release=V1))
         for cs in s["constant_sets"]:
-            out.append(mcase(f"v06/sets/{cs['set_id']}", f"0.6 set {cs['set_id']} (qc_status {cs['qc_status']}): fields, provenance, provenance.build, carried_from_release, time_base", "4.5, 4.6, 7.4",
-                             set_steps(rel, s, cs), root="v06", release=V06))
-    filters = [{"source": "gesla-fit"}, {"source": "noaa"}, {"source": "eot20"}, {"kind": "tide"}, {"source_type": "gauge"}, {}]
-    for f in filters:
+            out.append(mcase(f"v1/sets/{cs['set_id']}", f"set {cs['set_id']} (qc_status {cs['qc_status']}): fields, time_base, provenance with build and carried_from_release", "4.5, 4.6, 7.4",
+                             set_steps(rel, s, cs), root="v1", release=V1))
+    for f in [{"source": "gesla-fit"}, {"source": "noaa"}, {"kind": "tide"}, {"source_type": "gauge"}, {}]:
         ids = [s["station_id"] for s in apply_filters(rel, rel.active, f)]
         label = "-".join(f"{k}-{v}" for k, v in f.items()) or "all"
-        out.append(mcase(f"v06/list-{label}", f"0.6 stations with filters {json.dumps(f)}: a source counts only through a set with constants", "4.4, 7.4",
-                         [step("stations", {"station_ids": ids}, **f), step("iter_stations", {"station_ids": ids}, **f)], root="v06", release=V06))
-    raw_stats = stats(rel)
-    read = {}
-    for x in (cs for st in rel.active for cs in st.get("constant_sets", [])):
-        read[read_06(x)] = read.get(read_06(x), 0) + 1
-    out.append(mcase("v06/stats", "0.6 stats: qc_status and source count every constant set, no_constants ones included", "4.3",
-                     [step("stats", {"stats": {"$any_of": [raw_stats, {**raw_stats, "qc_status": dict(sorted(read.items()))}]}}), step("station_count", {"station_count": len(rel.active)}),
-                      step("tombstone_count", {"tombstone_count": len(rel.tombs)})], root="v06", release=V06))
-    out.append(mcase("v06/tombstone-merged", "a 0.6 tombstone (removed_reason merged) and require_station on it", "4.4",
+        out.append(mcase(f"v1/list-{label}", f"stations with filters {json.dumps(f)}: a source counts only through a set with constants", "4.4, 7.4",
+                         [step("stations", {"station_ids": ids}, **f), step("iter_stations", {"station_ids": ids}, **f)], root="v1", release=V1))
+    out.append(mcase("v1/stats", "stats: qc_status counts every set (no_constants under its own key); source counts only ok and flagged sets", "4.3",
+                     [step("stats", {"stats": stats(rel)}), step("station_count", {"station_count": len(rel.active)}),
+                      step("tombstone_count", {"tombstone_count": len(rel.tombs)})], root="v1", release=V1))
+    out.append(mcase("v1/tombstone-merged", "a tombstone with removed_reason merged; require_station on it", "4.4",
                      [step("tombstone", {"tombstone": enc_tombstone(rel.tomb_by_id["OTC-T-0108"])}, station_id="OTC-T-0108"),
                       step("station", {"station": None}, station_id="OTC-T-0108"),
-                      step("require_station", err("station_removed"), station_id="OTC-T-0108")], root="v06", release=V06))
-    out.append(mcase("v06/metadata", "0.6 release metadata: concept_doi from the release, zenodo_version_doi null for a file or a pinned download; release.doi is not read", "4.3, 4.6",
-                     [step("release_metadata", enc_release_meta(rel))], root="v06", release=V06, open_expect={"format_version": "0.6"}))
+                      step("require_station", err("station_removed"), station_id="OTC-T-0108")], root="v1", release=V1))
     ids = ["OTC-T-0104", "OTC-T-0105", "OTC-T-0101"]
-    out.append(mcase("v06/attribution", "0.6 attribution: doi:{concept_doi}; a station with no recommended set adds no licence", "4.6",
+    out.append(mcase("v1/attribution", "attribution: a station with no recommended set adds no licence", "4.6",
                      [step("attribution", {"attribution": attribution(rel)}),
-                      step("attribution", {"attribution": attribution(rel, ids)}, station_ids=ids)], root="v06", release=V06))
-    return out
-
-
-def group_v05():
-    """Format 0.5 data (fixtures/v05) still loads and reads as before 0.6 (backward compatibility)."""
-    rel = Rel("v05", "20991231")
-    out = [mcase("v05/load", "a format 0.5 release loads: counts, the excluded set left out by default, the source filter", "7.3, 7.4",
-                 [step("station_count", {"station_count": len(rel.active)}),
-                  step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(rel.by_id["OTC-T-0002"])]}, station_id="OTC-T-0002"),
-                  step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(rel.by_id["OTC-T-0002"], True)]}, station_id="OTC-T-0002", include_excluded=True),
-                  step("stations", {"station_ids": [s["station_id"] for s in apply_filters(rel, rel.active, {"source": "gesla-fit"})]}, source="gesla-fit"),
-                  step("release_metadata", enc_release_meta(rel))],
-                 root="v05", release="20991231", open_expect={"format_version": "0.5"})]
-    for sid in ("OTC-T-0001", "OTC-T-0002"):
-        s = rel.by_id[sid]
-        for cs in s["constant_sets"]:
-            out.append(mcase(f"v05/sets/{cs['set_id']}", f"0.5 set {cs['set_id']}: provenance.build falls back to the top-level build_commit; no time_base annotation; no carried_from_release", "4.6, 7.4",
-                             set_steps(rel, s, cs), root="v05", release="20991231"))
+                      step("attribution", {"attribution": attribution(rel, ids)}, station_ids=ids)], root="v1", release=V1))
     return out
 
 
@@ -792,7 +727,8 @@ def group_format():
     """release.min_reader_version (spec 4.8 reader_too_old, 5.2 steps 1 and 2a, 7.1 format/reader-too-old, 7.4)."""
     out = []
     RD = f"{SRV}/reader/"
-    V6 = f"{SRV}/v06/"
+    V1R = f"{SRV}/v1/"
+    MJ = f"{SRV}/major/"
     RF = f"{FIX}/reader"
     ok_info = enc_release_info("reader", R_OK, RD)
     too_old = err("reader_too_old")
@@ -808,7 +744,7 @@ def group_format():
                     [step("open", too_old, file=f"{RF}/OTC_{R_NEW}.jsonl"),
                      net(step("open", too_old, release=R_NEW, base_url=RD, cache_dir="${cache}")),
                      drv("clear_log"),
-                     latest({"loaded_from": "download", "datestamp": R_OK, "format_version": "0.6"}),
+                     latest({"loaded_from": "download", "datestamp": R_OK, "format_version": "1.0"}),
                      index_once],
                     requires=["fs"]))
     for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
@@ -826,18 +762,32 @@ def group_format():
     out.append(case("format/latest-skips-too-new", "latest: the pointer names a release too new for the SDK, so one GET of OTC_index.json picks the newest readable one; its files and version DOI come from that entry", "5.2, 4.3.1, 7.4",
                     [latest({"loaded_from": "download", "datestamp": R_OK}),
                      index_once, no_new,
-                     drv("assert_requests", match=r"/reader/OTC_latest-f0\.json$", min=1),
+                     drv("assert_requests", match=r"/reader/OTC_latest-f1\.json$", min=1),
                      step("release_files", {"files": ok_info["files"]}),
-                     step("release_metadata", {"datestamp": R_OK, "format_version": "0.6", "zenodo_version_doi": "10.5072/zenodo.3"}),
+                     step("release_metadata", {"datestamp": R_OK, "format_version": "1.0", "zenodo_version_doi": "10.5072/zenodo.3"}),
                      step("station_count", {"station_count": len(R_ok.active)})],
                     requires=["fs"]))
     out.append(case("format/latest-readable-no-index", "latest when the pointer's release is readable: no GET of OTC_index.json (the extra GET is only for a release too new)", "5.2, 7.4",
-                    [latest({"loaded_from": "download", "datestamp": V06, "format_version": "0.6"}, base=V6),
+                    [latest({"loaded_from": "download", "datestamp": V1, "format_version": "1.0"}, base=V1R),
                      drv("assert_requests", match=r"OTC_index\.json$", count=0)],
                     requires=["fs"]))
-    out.append(case("format/latest-v05-no-min-reader", "latest from a 0.5 root (no min_reader_version anywhere): read under the major rules, no GET of OTC_index.json", "7.4",
-                    [latest({"loaded_from": "download", "datestamp": "20991231", "format_version": "0.5"}, base=f"{SRV}/v05/"),
-                     drv("assert_requests", match=r"OTC_index\.json$", count=0)],
+    out.append(case("format/latest-newer-major", "OTC_latest.json names a format 2.0 release: latest follows OTC_latest-f1.json to the newest 1.x release", "7.4",
+                    [latest({"loaded_from": "download", "datestamp": M_OK, "format_version": "1.0"}, base=MJ),
+                     drv("assert_requests", match=r"/major/OTC_latest-f1\.json$", min=1),
+                     drv("assert_requests", match=r"OTC_20991231\.3\.", count=0)],
+                    requires=["fs"]))
+    out.append(case("format/check-for-update-newer-major", "check_for_update with a newer major on the server: no update in major 1, newer_format_major 2 (case check-for-update-newer-major)", "7.4",
+                    [latest({"loaded_from": "download", "datestamp": M_OK}, base=MJ),
+                     drv("clear_log"),
+                     net(step("check_for_update", {"release": None})),
+                     drv("assert_requests", match=r"/major/OTC_latest\.json$", min=1),
+                     net(step("newer_format_major", {"newer_format_major": 2})),
+                     drv("assert_requests", match=r"OTC_20991231\.3\.", count=0)],
+                    requires=["fs"]))
+    out.append(case("format/check-for-update-no-newer-major", "check_for_update when every release has a supported major: newer_format_major null", "7.4",
+                    [latest({"loaded_from": "download", "datestamp": R_OK}),
+                     net(step("check_for_update", {"release": None})),
+                     net(step("newer_format_major", {"newer_format_major": None}))],
                     requires=["fs"]))
     out.append(case("format/latest-offline-cached-index", "offline latest with a cached index that lists a release too new: the newest cached readable release, no request", "5.2, 5.5, 7.4",
                     [latest({"loaded_from": "download", "datestamp": R_OK}),
@@ -847,7 +797,7 @@ def group_format():
                     requires=["fs"]))
     out.append(case("format/latest-use-cache-after-error", "the pointer fails and the cache holds only a readable release: loaded_from cache_after_error on it", "5.2, 7.4",
                     [latest({"loaded_from": "download", "datestamp": R_OK}), drv("restart_runner"),
-                     drv("server_rules", rules=[{"match": r"/reader/OTC_latest(-f0)?\.json$", "action": "status", "status": 500}]),
+                     drv("server_rules", rules=[{"match": r"/reader/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]),
                      latest({"loaded_from": "cache_after_error", "datestamp": R_OK}),
                      step("last_error", {"code": "network"})],
                     requires=["fs"], timeout_s=90))
@@ -855,7 +805,7 @@ def group_format():
                     [drv("server_rules", rules=[{"match": r"/reader/OTC_index\.json$", "action": "status", "status": 500}]),
                      latest(err("network")), no_new],
                     requires=["fs"], timeout_s=90))
-    old_pointer = [{"match": r"/reader/OTC_latest(-f0)?\.json$", "action": "json", "file": "reader/OTC_index.json", "pointer": "/releases/2"}]
+    old_pointer = [{"match": r"/reader/OTC_latest(-f1)?\.json$", "action": "json", "file": "reader/OTC_index.json", "pointer": "/releases/2"}]
     out.append(case("format/check-for-update-skips-too-new", "check_for_update and update skip a release too new for the SDK and move to the newest readable one", "4.3, 5.2, 7.4",
                     [drv("server_rules", rules=old_pointer),
                      latest({"loaded_from": "download", "datestamp": R_OLD}),
@@ -920,7 +870,7 @@ def group_load():
             out.append(case(f"load/bad-{root}{ext.replace('.', '-')}", f"bad/{root} opened as {ext}: {code}", "4.8, 5.3, 7.4",
                             [step("open", err(code), file=f"{FIX}/bad/{root}/OTC_20991231{ext}")], requires=["fs"] + req))
     out.append(case("load/format-minor-loads", "bad/format-minor (format 0.3) loads from a file", "7.3",
-                    [step("open", {"loaded_from": "file", "datestamp": "20991231", "format_version": "0.3"}, file=f"{FIX}/bad/format-minor/OTC_20991231.jsonl"),
+                    [step("open", {"loaded_from": "file", "datestamp": "20991231", "format_version": "1.1"}, file=f"{FIX}/bad/format-minor/OTC_20991231.jsonl"),
                      step("station_count", {"station_count": len(Rel("bad/format-minor", "20991231").active)})], requires=["fs"]))
     out.append(case("load/verify-file", "verify passes on an intact file and fails with checksum_mismatch after one byte changes", "4.3, 5.3",
                     [drv("copy", files=[f"{G}/OTC_{d}.jsonl", f"{G}/OTC_{d}.meta.json", f"{G}/OTC_{d}.sha256"], to="${tmp}/rel"),
@@ -949,23 +899,23 @@ def group_network():
     def open_latest(expect=None, **kw):
         args = {"base_url": G, "cache_dir": "${cache}"}
         args.update(kw)
-        return net(step("open", expect if expect is not None else {"loaded_from": "download", "datestamp": d2, "format_version": "0.2"}, **args))
+        return net(step("open", expect if expect is not None else {"loaded_from": "download", "datestamp": d2, "format_version": "1.0"}, **args))
 
     out.append(case("net/latest-download", "open latest: pointer, .sha256, data file; loaded_from download; files from the pointer", "4.2, 4.3.1, 5.2",
                     [open_latest(),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", min=1),
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", min=1),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.sha256$", count=1),
                      drv("assert_requests", has_query=True, count=0),
                      drv("assert_requests", header={"user-agent": UA}, min=1, all=True),
                      step("release_files", {"files": info2["files"]}),
                      step("station_count", {"station_count": 20}),
                      drv("assert_files", dir="${cache}/v1/releases/20991231.2", present=[".verified", "OTC_20991231.2.sha256"], absent=[".lock"], no_tmp=True),
-                     drv("assert_files", dir="${cache}/v1/pointer", present=["OTC_latest-f0.json", "OTC_latest-f0.json.etag"], no_tmp=True)],
+                     drv("assert_files", dir="${cache}/v1/pointer", present=["OTC_latest-f1.json", "OTC_latest-f1.json.etag"], no_tmp=True)],
                     requires=["fs"]))
     out.append(case("net/latest-stream", "stream mode downloads .jsonl and .meta.json with Accept-Encoding gzip and builds index-v1.json", "5.2, 5.7, 6.2",
                     [open_latest(mode="stream"),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.jsonl$", min=1, header={"accept-encoding": "gzip"}),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", min=1, header={"accept-encoding": "gzip"}),
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", min=1, header={"accept-encoding": "gzip"}),
                      drv("assert_files", dir="${cache}/v1/releases/20991231.2",
                          present=[".verified", "OTC_20991231.2.jsonl", "OTC_20991231.2.meta.json", "index-v1.json"], no_tmp=True),
                      drv("assert_sha256", path="${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl", equals=f"{FIX}/good/OTC_20991231.2.jsonl"),
@@ -980,7 +930,7 @@ def group_network():
     out.append(case("net/second-open-uses-cache", "a second client: conditional GET of the pointer (304), no data request, loaded_from cache", "5.2, 5.3, 4.3.1",
                     [open_latest(), drv("restart_runner"), drv("clear_log"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", min=1, status=304, header={"if-none-match": '^"[0-9a-f]{64}"$'}),
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", min=1, status=304, header={"if-none-match": '^"[0-9a-f]{64}"$'}),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.", count=0),
                      step("release_files", {"files": info2["files"]})],
                     requires=["fs"]))
@@ -1011,22 +961,22 @@ def group_network():
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.sha256$", count=2)],
                     requires=["fs"]))
     out.append(case("net/retry-429-retry-after", "a 429 with Retry-After: 2, then a 200: the SDK waits at least 2 s and loads", "5.7",
-                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest-f0\.json$", "action": "status", "status": 429, "headers": {"Retry-After": "2"}, "times": 1}]),
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest-f1\.json$", "action": "status", "status": 429, "headers": {"Retry-After": "2"}, "times": 1}]),
                      open_latest(),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", count=2, min_gap_s=1.9)],
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", count=2, min_gap_s=1.9)],
                     requires=["fs"]))
     out.append(case("net/500-raise", "the pointer always answers 500, on_network_error raise: network error with status 500 after 3 attempts", "4.8, 5.2, 5.7",
-                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f0)?\.json$", "action": "status", "status": 500}]),
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]),
                      open_latest(err("network", status=500), on_network_error="raise"),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", count=3)],
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", count=3)],
                     requires=["fs"], timeout_s=90))
     out.append(case("net/500-no-cache", "the pointer always answers 500 and the cache is empty: network error even with use_cache", "5.2",
-                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f0)?\.json$", "action": "status", "status": 500}]),
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]),
                      open_latest(err("network"))],
                     requires=["fs"], timeout_s=90))
     out.append(case("net/500-use-cache", "a network error with a cached release: loaded_from cache_after_error and last_error", "4.3, 5.2",
                     [open_latest(), drv("restart_runner"),
-                     drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f0)?\.json$", "action": "status", "status": 500}]),
+                     drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]),
                      open_latest({"loaded_from": "cache_after_error", "datestamp": d2}),
                      step("last_error", {"code": "network"}),
                      step("release_files", {"files": info2["files"]})],
@@ -1063,7 +1013,7 @@ def group_network():
                      open_latest({"loaded_from": "cache", "datestamp": D10}, base_url=O, offline=True)],
                     requires=["fs"]))
     out.append(case("net/releases-counter-order", "releases(): 20991231.10 before 20991231.2 (newest first by counter)", "4.3, 4.3.1",
-                    [open_latest({"loaded_from": "download", "datestamp": D10, "format_version": "0.2"}, base_url=O),
+                    [open_latest({"loaded_from": "download", "datestamp": D10, "format_version": "1.0"}, base_url=O),
                      net(step("releases", {"releases": [enc_release_info("order", D10, O), enc_release_info("order", d2, O)]}))],
                     requires=["fs"]))
     out.append(case("net/env-base-url", "OPENTIDECONSTANTS_BASE_URL sets the server", "4.2",
@@ -1077,7 +1027,7 @@ def group_network():
                      drv("assert_files", dir="${tmp}/envcache/v1/releases/20991231.2", present=[".verified"], no_tmp=True)],
                     requires=["fs"]))
     out.append(case("net/pointer-fallback", "no per-major pointer (404): the SDK reads OTC_latest.json", "5.2",
-                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest-f0\.json$", "action": "status", "status": 404}]),
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest-f1\.json$", "action": "status", "status": 404}]),
                      open_latest(), drv("assert_requests", match=r"/good/OTC_latest\.json$", min=1)],
                     requires=["fs"]))
     for root, code, exp_d in [("wrong-sha256", "checksum_mismatch", d1), ("truncated", "checksum_mismatch", d1),
@@ -1100,7 +1050,7 @@ def group_network():
                               release=d1, base_url=f"{SRV}/bad/wrong-sha256/", cache_dir="${cache}"))],
                     requires=["fs"]))
     out.append(case("net/format-minor-latest", "latest from bad/format-minor (0.3) loads", "7.3",
-                    [net(step("open", {"loaded_from": "download", "datestamp": d1, "format_version": "0.3"}, base_url=f"{SRV}/bad/format-minor/", cache_dir="${cache}"))],
+                    [net(step("open", {"loaded_from": "download", "datestamp": d1, "format_version": "1.1"}, base_url=f"{SRV}/bad/format-minor/", cache_dir="${cache}"))],
                     requires=["fs"]))
     out.append(case("net/short-body", "a body shorter than its Content-Length (connection closed): network error", "5.7",
                     [drv("server_rules", rules=[{"match": r"\.(json\.gz|jsonl|json)$", "action": "short_body", "delta": 100}]),
@@ -1154,7 +1104,7 @@ def group_network():
                      net(step("check_for_update", {"release": info2})),
                      open_latest(), net(step("check_for_update", {"release": None})),
                      drv("clear_log"), net(step("check_for_update", {"release": None})),
-                     drv("assert_requests", match=r"/good/OTC_latest-f0\.json$", count=1, status=304)], requires=["fs"]))
+                     drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", count=1, status=304)], requires=["fs"]))
     return out
 
 
@@ -1162,7 +1112,7 @@ def group_update():
     out = []
     G = f"{SRV}/good/"
     d2, d1 = "20991231.2", "20991231"
-    old_pointer = [{"match": r"/good/OTC_latest(-f0)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}]
+    old_pointer = [{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}]
     R1 = Rel("good", d1)
     out.append(case("update/pinned", "update on a pinned client: pinned_release", "4.3, 4.8",
                     [net(step("open", {"datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
@@ -1407,8 +1357,7 @@ GROUPS = {
     "update": lambda R2, R1: group_update(),
     "cache": lambda R2, R1: group_cache(),
     "download": lambda R2, R1: group_download(),
-    "v05": lambda R2, R1: group_v05(),
-    "v06": lambda R2, R1: group_v06(),
+    "v1": lambda R2, R1: group_v1(),
     "format": lambda R2, R1: group_format(),
 }
 
