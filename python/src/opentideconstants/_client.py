@@ -61,6 +61,26 @@ def _flag(v) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _auto_update_error(e: Exception) -> OpenTideConstantsError:
+    """The last_error of an automatic update that failed (spec §5.6, CR2 DR5): an SDK error as it is; any other failure
+    as an SDK error with the original as its cause: network for a transport failure, io for anything else (no new
+    error code)."""
+    if isinstance(e, OpenTideConstantsError):
+        return e
+    import http.client
+    import socket
+    import ssl
+    import urllib.error
+    msg = f"automatic update failed: {type(e).__name__}: {e}"
+    if isinstance(e, (ConnectionError, TimeoutError, socket.gaierror, socket.herror, http.client.HTTPException,
+                      ssl.SSLError, urllib.error.URLError)):
+        err: OpenTideConstantsError = NetworkError(msg)
+    else:
+        err = FileError(msg, cause=e)
+    err.__cause__ = e
+    return err
+
+
 class OpenTideConstants:
     """An OpenTideConstants client: ``OpenTideConstants()`` opens the latest release.
 
@@ -752,12 +772,10 @@ class OpenTideConstants:
             self._last_check = now
             try:
                 self._update()
-            except OpenTideConstantsError as e:
-                # keep the current release; record and log the failure (spec §5.6)
-                self._last_error = e
-                self._log.warning("automatic update failed: %s", e)
             except Exception as e:  # noqa: BLE001 - an automatic update never breaks the caller's query
-                self._log.warning("automatic update failed: %s: %s", type(e).__name__, e)
+                # keep the current release; log the failure with its stack and record it (spec §5.6, CR2 DR5)
+                self._last_error = _auto_update_error(e)
+                self._log.warning("automatic update failed: %s", self._last_error, exc_info=e)
 
     def verify(self) -> bool:
         """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A

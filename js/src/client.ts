@@ -342,10 +342,17 @@ export class OpenTideConstants {
 
     #autoUpdateNow(node: NodeMod): void {
         const ctx = this.#ctx;
-        const res = node.runBlocking(new URL("./auto-update-worker.js", import.meta.url), {
-            baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
-            userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
-        });
+        let res: BlockingResult;
+        try {
+            res = node.runBlocking(new URL("./auto-update-worker.js", import.meta.url), {
+                baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
+                userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
+            });
+        } catch (e) {
+            // the worker could not start (no Worker, SharedArrayBuffer or Atomics.wait): never escapes the query (R2-125)
+            this.#autoUpdateFailed(e);
+            return;
+        }
         // a failed check keeps the current release, logs, and records the error as lastError (spec 4.3, 5.6; T29)
         if (!res.ok || typeof res.datestamp !== "string") {
             this.#lastError = errorFromWorker(res);
@@ -368,9 +375,22 @@ export class OpenTideConstants {
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
-            if (e instanceof OpenTideConstantsError) this.#lastError = e;
-            log(ctx, "warn", `automatic update failed: ${e instanceof Error ? e.message : String(e)}`);
+            this.#autoUpdateFailed(e);
         }
+    }
+
+    /**
+     * An automatic update that failed keeps the current release, logs the failure with its stack, and records it as
+     * lastError: an SDK error as it is, anything else as io with the original as its cause (spec 5.6, CR2 DR5). A
+     * failure here is local (the worker did the network part), so it is never network.
+     */
+    #autoUpdateFailed(e: unknown): void {
+        const err = e instanceof OpenTideConstantsError ? e
+            : new FileError(`automatic update failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
+                { path: this.#cacheRoot ?? "", cause: e });
+        this.#lastError = err;
+        const stack = e instanceof Error && e.stack ? e.stack : String(e);
+        log(this.#ctx, "warn", `automatic update failed: ${err.message}\n${stack}`);
     }
 
     #swap(rel: Release, from: LoadedFrom): void {

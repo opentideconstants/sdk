@@ -403,3 +403,43 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
+
+/** A local server for conformance/fixtures/good; over maps a file name to [status, body]. */
+async function serveGood(over = {}) {
+    const srv = http.createServer((req, res) => {
+        const name = decodeURIComponent(new URL(req.url, "http://x").pathname.slice(1));
+        if (name in over) {
+            res.writeHead(over[name][0]);
+            res.end(over[name][1]);
+            return;
+        }
+        let body = null;
+        try { body = fs.readFileSync(path.join(GOOD, name)); } catch { /* 404 */ }
+        res.writeHead(body ? 200 : 404);
+        res.end(body ?? "");
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    return { srv, url: `http://127.0.0.1:${srv.address().port}/` };
+}
+
+const olderPointer = () => JSON.stringify(JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8")).releases.find((e) => e.datestamp === "20991231"));
+
+test("R2-125/CR2 DR5: an update worker that cannot start never escapes a query: lastError is io with the cause, logged with its stack", async () => {
+    const { srv, url } = await serveGood();
+    const lines = [];
+    const logger = { debug() {}, info() {}, warn: (m) => lines.push(m) };
+    const c = await otc.OpenTideConstants.open({ baseUrl: url, cacheDir: tmpdir(), autoUpdate: true, updateInterval: 0.001, logger });
+    const saved = globalThis.SharedArrayBuffer;
+    try {
+        await new Promise((r) => setTimeout(r, 20));
+        globalThis.SharedArrayBuffer = class { constructor() { throw new TypeError("no SharedArrayBuffer here"); } };
+        assert.equal(c.station("OTC-T-0001").station_id, "OTC-T-0001");
+        assert.ok(c.lastError instanceof otc.FileError, String(c.lastError));
+        assert.equal(c.lastError.cause?.message, "no SharedArrayBuffer here");
+        assert.ok(lines.some((l) => l.includes("no SharedArrayBuffer here") && /\n\s+at /.test(l)), lines.join("\n---\n"));
+    } finally {
+        globalThis.SharedArrayBuffer = saved;
+        c.close();
+        srv.close();
+    }
+});

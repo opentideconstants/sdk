@@ -337,14 +337,31 @@ class OpenTideConstants
         return if monotonic - @last_check < @update_interval
         begin
             update!
-        rescue Error => e
-            @last_check = monotonic
-            @last_error = e
-            log(:warn, "automatic update failed: #{e.message}")
         rescue StandardError => e
             @last_check = monotonic
-            @last_error = Error.new("automatic update failed: #{e.class}: #{e.message}")
-            log(:warn, @last_error.message)
+            @last_error = auto_update_error(e)
+            log(:warn, "automatic update failed: #{@last_error.message}\n#{Array(e.backtrace).join("\n")}")
+        end
+    end
+
+    # Transport failures that a non-SDK exception in the automatic update can
+    # be (the HTTP layer wraps them; this is the safety net).
+    TRANSPORT_ERRORS = [SocketError, Timeout::Error, EOFError, Errno::ECONNREFUSED, Errno::ECONNRESET,
+                        Errno::ECONNABORTED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT, Errno::EPIPE,
+                        OpenSSL::SSL::SSLError, Net::ProtocolError, Net::HTTPBadResponse].freeze
+    private_constant :TRANSPORT_ERRORS
+
+    # The last_error of an automatic update that failed (spec §5.6, CR2
+    # DR5): an SDK error as it is; any other failure as an SDK error whose
+    # cause is the original: network for a transport failure, else io.
+    def auto_update_error(e)
+        return e if e.is_a?(Error)
+        msg = "automatic update failed: #{e.class}: #{e.message}"
+        begin
+            # raised here, inside the rescue of e, so Ruby sets its #cause to e
+            raise(TRANSPORT_ERRORS.any? { |k| e.is_a?(k) } ? NetworkError.new(msg) : FileError.new(msg))
+        rescue Error => wrapped
+            wrapped
         end
     end
 

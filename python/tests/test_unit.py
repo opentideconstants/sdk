@@ -781,6 +781,53 @@ class LifecycleTest(unittest.TestCase):
         c._maybe_auto_update()
 
 
+class AutoUpdateFailureTest(unittest.TestCase):
+    """A failure in an automatic update never escapes the query; it is logged with its stack and kept in last_error
+    as an SDK error with the original as its cause: network for a transport failure, else io (spec §5.6, CR2 DR5)."""
+
+    def _client(self, exc):
+        import time
+        c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"))
+        c._file = None  # behave as a latest client for the automatic update
+        c._auto_update, c._update_interval = True, 0.001
+
+        def boom():
+            raise exc
+        c._update = boom
+        time.sleep(0.01)
+        return c
+
+    def _check(self, exc, cls):
+        c = self._client(exc)
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs:
+                self.assertEqual(c.station("OTC-T-0001").station_id, "OTC-T-0001")
+            err = c.last_error
+            self.assertIsInstance(err, cls)
+            self.assertIs(err.__cause__, exc)
+            self.assertTrue(any("Traceback" in line and type(exc).__name__ in line for line in logs.output),
+                            "the failure is logged without its stack")
+        finally:
+            c.close()
+
+    def test_a_non_sdk_failure_is_io_with_its_cause(self):
+        self._check(RuntimeError("not an SDK error"), otc.FileError)
+
+    def test_a_raw_transport_failure_is_network_with_its_cause(self):
+        self._check(ConnectionResetError("reset by peer"), otc.NetworkError)
+
+    def test_an_sdk_failure_is_kept_as_it_is_and_logged_with_its_stack(self):
+        exc = otc.ReleaseNotFoundError("no pointer")
+        c = self._client(exc)
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs:
+                c.station("OTC-T-0001")
+            self.assertIs(c.last_error, exc)
+            self.assertTrue(any("Traceback" in line for line in logs.output))
+        finally:
+            c.close()
+
+
 class OfflineEnvTest(unittest.TestCase):
     """OPENTIDECONSTANTS_OFFLINE: 1, true, yes, on in any case after a trim, and it wins over offline=False (CR D15)."""
 

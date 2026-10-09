@@ -55,4 +55,40 @@ class LifecycleTest < Minitest::Test
             end
         end
     end
+
+    # CR2 DR5: a failure in an automatic update is logged with its backtrace
+    # and kept in last_error as an SDK error with the original as its cause:
+    # network for a transport failure, else io.
+    def auto_update_failing_with(exc)
+        log = Log.new
+        c = OTC.new(file: fixture("good", "OTC_20991231.2.jsonl"), logger: log)
+        c.instance_variable_set(:@file, nil) # behave as a latest client for the automatic update
+        c.instance_variable_set(:@auto_update, true)
+        c.instance_variable_set(:@update_interval, 0.001)
+        c.define_singleton_method(:update!) { raise exc }
+        sleep 0.01
+        refute_nil c.station("OTC-T-0001")
+        [c, log]
+    end
+
+    def test_auto_update_non_sdk_failure_is_io_with_cause_and_backtrace
+        exc = NoMethodError.new("boom")
+        c, log = auto_update_failing_with(exc)
+        assert_kind_of OTC::FileError, c.last_error
+        assert_same exc, c.last_error.cause
+        line = log.lines.find { |lvl, _| lvl == :warn }&.last.to_s
+        assert_includes line, "NoMethodError"
+        assert_includes line, __FILE__, "the backtrace is not logged"
+    ensure
+        c&.close
+    end
+
+    def test_auto_update_transport_failure_is_network_with_cause
+        exc = Errno::ECONNRESET.new("reset by peer")
+        c, = auto_update_failing_with(exc)
+        assert_kind_of OTC::NetworkError, c.last_error
+        assert_same exc, c.last_error.cause
+    ensure
+        c&.close
+    end
 end
