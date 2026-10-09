@@ -168,13 +168,15 @@ class OpenTideConstants
         # The parsed .verified of a release, or nil when the directory is not
         # trusted: no .verified, or one that is not a JSON object whose files
         # rows are objects with a string or null sha256 and url and an integer
-        # or null size (R2-088). A .verified that cannot be read is cache.
+        # or null size (R2-088); a size written as 1024.0 is the integer 1024
+        # (CR2 DR10). A .verified that cannot be read is cache.
         def verified(datestamp)
             text = read_file(File.join(release_dir(datestamp), ".verified"))
             return nil unless text
             doc = JSON.parse(text.force_encoding(Encoding::UTF_8))
             return nil unless doc.is_a?(Hash) && doc["files"].is_a?(Hash)
             doc["files"].each_value { |row| return nil unless verified_row?(row) }
+            doc["files"].each_value { |row| row["size"] = Reader.integral(row["size"]) unless row["size"].nil? }
             doc
         rescue JSON::ParserError, EncodingError
             nil
@@ -182,7 +184,7 @@ class OpenTideConstants
 
         def verified_row?(row)
             row.is_a?(Hash) && [row["sha256"], row["url"]].all? { |v| v.nil? || v.is_a?(String) } &&
-                (row["size"].nil? || row["size"].is_a?(Integer))
+                (row["size"].nil? || Reader.integral(row["size"]).is_a?(Integer))
         end
 
         # True when name is in the release directory, listed in .verified and
