@@ -14,7 +14,9 @@ class OpenTideConstants
     attr_reader :release
     # Where the release came from: :download, :cache, :cache_after_error, :file or :file_unverified.
     attr_reader :loaded_from
-    # The error behind loaded_from :cache_after_error, or nil.
+    # The error behind loaded_from :cache_after_error, or the error of the
+    # last automatic update that failed (spec §5.6); nil after an update
+    # succeeds, or when there is none.
     attr_reader :last_error
     # The format major of a release on the server that this SDK cannot read
     # (newer than every supported major), as check_for_update last saw it; or nil.
@@ -71,6 +73,7 @@ class OpenTideConstants
         @logger = logger
         @http = HTTP.new(timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, logger: logger)
         @lock = Monitor.new
+        @closed = false
         @last_error = nil
         @newer_format_major = nil
         @file = file
@@ -91,6 +94,7 @@ class OpenTideConstants
 
     # Every release, newest first, from OTC_index.json.
     def releases
+        check_open!
         list = index_entries(fetch_pointer_doc("OTC_index.json", missing: :offline))
         list.each { |e| note_version_doi(e) }
         list.map { |e| release_info(e, @base_url + "OTC_index.json") }
@@ -100,6 +104,7 @@ class OpenTideConstants
     # The latest release (one conditional GET of the pointer). It does not
     # switch to it.
     def latest
+        check_open!
         raise OfflineError, "offline: the latest pointer is not available" if @offline
         entry, url = fetch_latest_pointer
         release_info(entry, url)
@@ -110,6 +115,7 @@ class OpenTideConstants
     # sets newer_format_major when the server has a release of a newer major,
     # also when it then raises because only such releases exist (CR D10).
     def check_for_update
+        check_open!
         raise OfflineError, "offline: the latest pointer is not available" if @offline
         begin
             entry, url = resolve_latest
@@ -125,6 +131,7 @@ class OpenTideConstants
     # Downloads and checks the latest release and swaps it in atomically. A
     # Release held from before stays valid.
     def update!
+        check_open!
         raise PinnedReleaseError, "the client was opened on a file" if @file
         raise PinnedReleaseError, "the client was opened on release #{@requested}" unless @requested == :latest
         # update is defined against the pointer, so offline it cannot run, and
@@ -151,6 +158,7 @@ class OpenTideConstants
     # Writes a release into a folder the caller chooses (spec §4.3.2). Returns
     # the paths written.
     def download(release = :latest, to:, formats: [:jsonl], overwrite: false)
+        check_open!
         want = check_release_arg(release)
         raise InvalidArgumentError, "to must be a String path" unless to.is_a?(String) && !to.empty?
         raise InvalidArgumentError, "formats must be an Array" unless formats.is_a?(Array) && !formats.empty?
@@ -163,6 +171,7 @@ class OpenTideConstants
     # A client on a file with no .sha256 next to it has nothing to compare
     # with: checksum_mismatch (CR D20).
     def verify
+        check_open!
         if @loaded_from == :file_unverified
             raise ChecksumError.new("no OTC_#{@release.datestamp}.sha256 next to the file", file: @file, expected: nil, actual: nil)
         end
@@ -171,6 +180,7 @@ class OpenTideConstants
 
     # Datestamps in the cache, newest first.
     def cached_releases
+        check_open!
         cache.cached_releases
     end
 
@@ -181,6 +191,7 @@ class OpenTideConstants
     # a .verified (failed downloads) and that no one holds. Returns the
     # datestamps removed, newest first; CacheError when one cannot be removed.
     def prune(keep: 3)
+        check_open!
         raise InvalidArgumentError, "keep must be an Integer >= 0" unless keep.is_a?(Integer) && keep >= 0
         protect = held_datestamps
         removed = cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.select do |d|
@@ -193,8 +204,15 @@ class OpenTideConstants
         removed
     end
 
+    # Closes the client and every Release it loaded (stream mode holds a file
+    # handle per release). After close every query and call is io "the
+    # release is closed" (CR D21). A second close does nothing.
     def close
-        @release&.send(:close)
+        @lock.synchronize do
+            return nil if @closed
+            @closed = true
+            ([@release] + @loaded.keys).compact.uniq.each { |r| r.send(:close) }
+        end
         nil
     end
 
@@ -203,6 +221,7 @@ class OpenTideConstants
     %i[station require_station tombstone station_by_alias stations iter_stations each_station search near nearest
        reference_station subordinates_of attribution].each do |name|
         define_method(name) do |*args, **kw, &blk|
+            check_open!
             maybe_auto_update
             @release.public_send(name, *args, **kw, &blk)
         end
@@ -298,14 +317,26 @@ class OpenTideConstants
         ([@release] + @loaded.keys).compact.map(&:datestamp).uniq
     end
 
+    def check_open!
+        raise FileError.new("the release is closed", path: @file) if @closed
+    end
+
+    # The automatic update (spec §5.6): at most once per update_interval, in
+    # the first query after it. A failure keeps the current release, is
+    # logged and is kept in last_error; it never breaks the query.
     def maybe_auto_update
-        return unless @auto_update && @requested == :latest && @file.nil? && !@offline
+        return unless @auto_update && @requested == :latest && @file.nil? && !@offline && !@closed
         return if monotonic - @last_check < @update_interval
         begin
             update!
         rescue Error => e
             @last_check = monotonic
+            @last_error = e
             log(:warn, "automatic update failed: #{e.message}")
+        rescue StandardError => e
+            @last_check = monotonic
+            @last_error = Error.new("automatic update failed: #{e.class}: #{e.message}")
+            log(:warn, @last_error.message)
         end
     end
 
