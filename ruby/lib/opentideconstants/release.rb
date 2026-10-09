@@ -149,17 +149,23 @@ class OpenTideConstants
             "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{link}#{version}"
         end
 
-        # The CC BY 4.0 attribution text for what an app shows (spec §4.6).
+        # The CC BY 4.0 attribution text for what an app shows (spec §4.6). With
+        # no stations, or an empty list, every licence in the release. A
+        # Station that is not one of this release's is invalid_argument, never
+        # skipped (CR D2). A licence with no provider prints its attribution
+        # alone and is never merged with another.
         def attribution(stations = nil)
-            ids = if stations.nil?
+            raise InvalidArgumentError, "stations must be an Array of Station" unless stations.nil? || stations.is_a?(Array)
+            ids = if stations.nil? || stations.empty?
                       @licences.map(&:licence_id)
                   else
-                      raise InvalidArgumentError, "stations must be an Array of Station" unless stations.is_a?(Array)
                       out = Set.new
                       stations.each do |st|
                           raise InvalidArgumentError, "stations must be an Array of Station" unless st.is_a?(Station)
                           e = @by_id[st.station_id]
-                          next unless e
+                          unless e && st.instance_variable_get(:@origin).equal?(self)
+                              raise InvalidArgumentError, "station #{st.station_id} is not a station of release #{@datestamp}"
+                          end
                           out << e.rec_licence_id if e.rec_licence_id
                           if e.type == :subordinate
                               out << e.offsets_licence_id if e.offsets_licence_id
@@ -173,7 +179,12 @@ class OpenTideConstants
             parts = []
             ids.uniq.sort.each do |lid|
                 lic = @licence_by_id[lid]
-                next if lic.nil? || seen.include?(lic.provider)
+                next if lic.nil?
+                if lic.provider.nil?
+                    parts << lic.attribution.to_s
+                    next
+                end
+                next if seen.include?(lic.provider)
                 seen << lic.provider
                 parts << "#{lic.provider}: #{lic.attribution}"
             end
@@ -439,7 +450,7 @@ class OpenTideConstants
                                     licence: @licence_by_id.fetch(cs["licence_id"]),
                                     validation: set_validation, recommended: !rec_id.nil? && cs["set_id"] == rec_id)
             end
-            Station.new(raw, sets: sets, kind: kind, validation: all_validation)
+            Station.new(raw, sets: sets, kind: kind, validation: all_validation, origin: self)
         end
 
         # Checks every station and builds the indexes. In stream mode no

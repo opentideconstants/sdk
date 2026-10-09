@@ -333,8 +333,11 @@ class OpenTideConstants
         attr_reader :station_id, :name, :country, :lat, :lon, :type, :kind, :timezone, :aliases, :status,
                     :recommended_set, :subordinate_offsets, :validation, :raw
 
-        def initialize(raw, sets:, kind:, validation:)
+        # origin: the Release that built it (attribution checks that a Station
+        # is from its own release, spec §4.6).
+        def initialize(raw, sets:, kind:, validation:, origin: nil)
             @raw = Util.deep_freeze(raw)
+            @origin = origin
             @station_id = raw["station_id"]
             @name = raw["name"]
             @country = raw["country"]

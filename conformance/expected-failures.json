@@ -1191,7 +1191,6 @@
    "case": "rules/pk15/attribution-empty-list@json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1201,7 +1200,6 @@
    "case": "rules/pk15/attribution-empty-list@json.gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1211,7 +1209,6 @@
    "case": "rules/pk15/attribution-empty-list@jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1223,7 +1220,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1233,7 +1229,6 @@
    "case": "rules/pk15/attribution-empty-list@server",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
