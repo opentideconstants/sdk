@@ -445,7 +445,8 @@ class OpenTideConstants
     # check_for_update: a conditional GET of OTC_latest.json; a release there
     # with a major newer than every supported one sets newer_format_major,
     # else it is nil (spec §7.4). When the check fails (a network error, a
-    # malformed entry), the value from before stays (CR D10).
+    # malformed entry, an unreadable cached copy), the value from before
+    # stays (CR D10).
     def check_newer_major
         entry = fetch_pointer_doc("OTC_latest.json", missing: :nil)
         if entry.nil?
@@ -460,7 +461,9 @@ class OpenTideConstants
         else
             @newer_format_major = nil
         end
-    rescue NetworkError, InvalidReleaseError => e
+    rescue Error => e
+        # any failure (network, a malformed entry, a cached copy that cannot be read) keeps the value from
+        # before, and never replaces the error or the result of the check that called this (CR D10)
         log(:warn, "cannot check OTC_latest.json for a newer format: #{e.message}")
     end
 
