@@ -502,29 +502,56 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             return
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection", "connection", "keep-alive")}
+        conn = None
         try:
-            host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
-            conn = http.client.HTTPConnection(host, parts.port or 80, timeout=120)
-            conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
-            resp = conn.getresponse()
-            data = resp.read()
-        except (OSError, http.client.HTTPException) as e:
-            self._record(502, target, error=f"{type(e).__name__}: {e}")
             try:
-                self.send_error(502)
-            except OSError:
-                pass
-            return
-        self._record(resp.status, target)
+                host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
+                conn = http.client.HTTPConnection(host, parts.port or 80, timeout=120)
+                conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
+                resp = conn.getresponse()
+            except (OSError, ValueError, http.client.HTTPException) as e:
+                self._record(502, target, error=f"{type(e).__name__}: {e}")
+                try:
+                    self.send_error(502)
+                except OSError:
+                    pass
+                return
+            self._record(resp.status, target)
+            self._stream(resp)
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def _stream(self, resp):
+        """Relay the upstream response as it comes: its status, its headers (its own Content-Length, also for HEAD),
+        then the body in chunks. A body that ends early (short_body) ends early here too: the proxy closes the
+        connection after the bytes it got, so the client sees the same short body as without the proxy."""
         self.send_response(resp.status)
+        length = None
         for k, v in resp.getheaders():
-            if k.lower() in ("transfer-encoding", "connection", "content-length"):
+            if k.lower() in ("transfer-encoding", "connection", "keep-alive"):
                 continue
+            if k.lower() == "content-length":
+                length = v
             self.send_header(k, v)
-        self.send_header("Content-Length", str(len(data)))
+        if length is None:
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(data)
+        self.wfile.flush()
+        if self.command == "HEAD" or resp.status in (204, 304):
+            return
+        try:
+            while True:
+                chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (OSError, http.client.HTTPException):
+            pass
+        if resp.length:  # upstream closed before Content-Length bytes: end the client connection the same way
+            self.close_connection = True
 
     do_GET = _relay
     do_HEAD = _relay
