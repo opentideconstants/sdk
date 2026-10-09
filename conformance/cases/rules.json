@@ -4405,6 +4405,43 @@
    ]
   },
   {
+   "id": "rules/pk15/attribution-null-provider",
+   "title": "a licence with a null provider prints {attribution} alone, with no prefix, and is never merged with another such licence (CR D2 b)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "bad/licence-provider-null",
+    "release": "20991231"
+   },
+   "steps": [
+    {
+     "op": "attribution",
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Anonymous synthetic test data.; Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": []
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Anonymous synthetic test data.; Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    },
+    {
+     "op": "attribution",
+     "args": {
+      "station_ids": [
+       "OTC-T-0004"
+      ]
+     },
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Example tide model, interpolated by OpenTideConstants tests.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk15/bad-licence-attribution-null-json",
    "title": "bad/licence-attribution-null opened as .json (eager): invalid_release at open (CR2 DR2)",
    "spec": "4.6, 4.8",

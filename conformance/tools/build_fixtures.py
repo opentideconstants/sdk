@@ -693,6 +693,12 @@ def _licence(doc, lid):
     return next(x for x in doc["licences"] if x["licence_id"] == lid)
 
 
+def _null_providers(doc):
+    _licence(doc, "eot20")["provider"] = None
+    doc["licences"].append({"licence_id": "anon", "spdx": "CC-BY-4.0", "provider": None,
+                            "attribution": "Anonymous synthetic test data.", "commercial_use": True})
+
+
 def index_honest(files, sums, entry, reuse):
     """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
     entry = copy.deepcopy(entry)
@@ -809,6 +815,9 @@ BAD = [
      changed_doc(lambda d: _licence(d, "eot20").update(attribution=5)), None),
     ("licence-provider-not-string", "invalid_release", "the eot20 licence's provider is the number 7 (CR2 DR2)",
      changed_doc(lambda d: _licence(d, "eot20").update(provider=7)), None),
+    # CR D2 b: a licence with a null provider (schema-invalid) loads; the attribution prints its text alone, unmerged
+    ("licence-provider-null", "load", "the eot20 licence and a new licence anon have a null provider (malformed 1.0); it must load (CR D2 b)",
+     changed_doc(_null_providers), None),
     ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
      _too_new_broken, None, {"valid_as_1_0": False}),
 ]
@@ -1337,6 +1346,15 @@ def open_release(root, datestamp, schemas):
     return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
 
 
+def _restore_provider(doc):
+    """The repair that makes a null licence provider valid again (CR D2 b): a copy with the provider a string."""
+    doc = copy.deepcopy(doc)
+    for x in doc.get("licences") or ():
+        if isinstance(x, dict) and "provider" in x and x["provider"] is None:
+            x["provider"] = "(null provider)"
+    return doc
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1356,6 +1374,12 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
         doc = restore_build(doc)
         meta = restore_build(meta)
         lines = [restore_station_build(l) for l in lines]
+    # CR D2 b: a licence with a null provider is malformed, but the SDK loads it (the attribution prints its text
+    # alone). The release is checked with a provider put back, so it is the only defect, and the tolerance is listed.
+    nulls = [x.get("licence_id") for x in doc.get("licences") or () if isinstance(x, dict) and "provider" in x and x["provider"] is None]
+    if nulls:
+        tolerated += [f"licence {n}: provider null" for n in nulls]
+        doc, meta = _restore_provider(doc), _restore_provider(meta)
     exact = next((v for k, v in known if k == version), None)
     dropped = []
     if exact is not None:

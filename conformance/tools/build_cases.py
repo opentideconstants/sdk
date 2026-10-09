@@ -339,7 +339,7 @@ def nearest(rel, lat, lon, max_km=None, **f):
 
 def attribution(rel, station_ids=None):
     r = rel.doc["release"]
-    if station_ids is None:
+    if not station_ids:   # None or an empty list: every licence in the release (CR D2 c)
         lic_ids = set(rel.licences)
     else:
         lic_ids = set()
@@ -369,6 +369,9 @@ def attribution(rel, station_ids=None):
     parts, seen = [], set()
     for lid in sorted(lic_ids):
         lic = rel.licences[lid]
+        if lic.get("provider") is None:   # the attribution alone, never merged (CR D2 b)
+            parts.append(lic["attribution"])
+            continue
         if lic["provider"] in seen:
             continue
         seen.add(lic["provider"])
@@ -1756,7 +1759,7 @@ def group_rules():
     out.append(mcase("rules/pk15/attribution-unknown-station", "attribution with an unknown station: invalid_argument (D2 a)", "4.6",
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
-                     [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+                     [step("attribution", {"attribution": attribution(R2, [])}, station_ids=[])]))
     # PK-R2-01 (CR2 DR1): the attribution follows the reference chain, not one link
     CH = Rel("chain", "20991231.2")
     chain_steps = [step("attribution", {"attribution": attribution(CH, ids)}, station_ids=ids)
@@ -1764,6 +1767,13 @@ def group_rules():
                                ["OTC-T-0176", "OTC-T-0174"])]
     out.append(mcase("rules/pk15/attribution-chain", "attribution of subordinate stations 1, 2 and 3 links from their reference station: every offsets licence on the path and the first recommended set's licence, where the walk stops (CR2 DR1)", "4.6",
                      chain_steps, root="chain", release="20991231.2"))
+    # PK-R2-01 (R2-367, CR D2 b): a licence with a null provider prints its attribution alone, never merged
+    NP = Rel("bad/licence-provider-null", "20991231")
+    out.append(mcase("rules/pk15/attribution-null-provider", "a licence with a null provider prints {attribution} alone, with no prefix, and is never merged with another such licence (CR D2 b)", "4.6",
+                     [step("attribution", {"attribution": attribution(NP)}),
+                      step("attribution", {"attribution": attribution(NP, [])}, station_ids=[]),
+                      step("attribution", {"attribution": attribution(NP, ["OTC-T-0004"])}, station_ids=["OTC-T-0004"])],
+                     root="bad/licence-provider-null", release="20991231"))
     # PK-R2-01 (CR2 DR2): a licence attribution that is not a string, or a provider that is neither a string nor
     # null, is invalid_release at load, in every load path
     for root in ["licence-attribution-null", "licence-attribution-not-string", "licence-provider-not-string"]:

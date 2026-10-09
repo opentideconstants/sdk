@@ -552,6 +552,15 @@
    "root": "bad/licence-provider-not-string"
   },
   {
+   "defect": "the eot20 licence and a new licence anon have a null provider (malformed 1.0); it must load (CR D2 b)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-provider-null"
+  },
+  {
    "defect": "min_reader_version 1.99, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
    "expect": {
     "error": "reader_too_old"
