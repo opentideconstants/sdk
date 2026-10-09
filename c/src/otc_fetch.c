@@ -881,8 +881,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         }
         errbuf[0] = '\0';
         bad_opt = curl_easy_setopt(h, CURLOPT_URL, url) != CURLE_OK;
-        curl_easy_setopt(h, CURLOPT_USERAGENT, ua);
-        curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
+        /* every option is checked: a timeout or callback that libcurl did not take would send a request with
+         * no limit or with no place for the body (CR2 R2-120) */
+        bad_opt |= curl_easy_setopt(h, CURLOPT_USERAGENT, ua) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L) != CURLE_OK;
         /* redirects (spec 5.7, CR D1): at most 5, only http and https, and never from
          * https to http */
         bad_opt |= curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK;
@@ -895,21 +897,21 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS,
                                     https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
 #endif
-        curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0));
-        curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
-        curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999));
-        curl_easy_setopt(h, CURLOPT_ERRORBUFFER, errbuf);
-        curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, on_body);
-        curl_easy_setopt(h, CURLOPT_WRITEDATA, r);
-        curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header);
-        curl_easy_setopt(h, CURLOPT_HEADERDATA, r);
-        if (accept_gzip) curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip");
+        bad_opt |= curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)(c->read_s + 0.999)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_ERRORBUFFER, errbuf) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, on_body) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_WRITEDATA, r) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_HEADERFUNCTION, on_header) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_HEADERDATA, r) != CURLE_OK;
+        if (accept_gzip) bad_opt |= curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "gzip") != CURLE_OK;
         else no_mem |= !add_header(&hdrs, "Accept-Encoding: identity");
         if (if_none_match && if_none_match[0]) {
             snprintf(inm, sizeof inm, "If-None-Match: %s", if_none_match);
             no_mem |= !add_header(&hdrs, inm);
         }
-        if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
+        if (hdrs) bad_opt |= curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs) != CURLE_OK;
         if (proxy) {
             bad_opt |= curl_easy_setopt(h, CURLOPT_PROXY, proxy) != CURLE_OK;
             bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;
