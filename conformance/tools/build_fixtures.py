@@ -904,19 +904,27 @@ def cross_ref_errors(doc):
         rec = s["recommended_set_id"]
         if rec is not None and rec not in own:
             errs.append(f"{sid}: recommended_set_id {rec} does not resolve")
+        # The schema's rules (active_station if/then/else): a reference station with a set that has constants names
+        # a recommended set; a subordinate has subordinate_offsets, current_offsets or a set, and may have no
+        # recommended set (a subordinate current station has only current_offsets, like the site's example.json).
         all_no_constants = bool(s["constant_sets"]) and all(cs["qc_status"] == "no_constants" for cs in s["constant_sets"])
-        if rec is None and not (s["type"] == "subordinate" and "subordinate_offsets" in s) and not all_no_constants:
-            errs.append(f"{sid}: recommended_set_id is null but the station is not a subordinate with offsets")
+        if rec is None and s["type"] == "reference" and not all_no_constants:
+            errs.append(f"{sid}: a reference station with usable sets has no recommended_set_id")
         if rec in own and next(cs for cs in s["constant_sets"] if cs["set_id"] == rec)["qc_status"] in ("no_constants", "excluded"):
             errs.append(f"{sid}: the recommended set {rec} has no usable constants")
-        if s["type"] == "subordinate" and "subordinate_offsets" not in s:
-            errs.append(f"{sid}: subordinate without subordinate_offsets")
+        if s["type"] == "subordinate" and not ("subordinate_offsets" in s or "current_offsets" in s or s["constant_sets"]):
+            errs.append(f"{sid}: subordinate with no subordinate_offsets, current_offsets or constant set")
         off = s.get("subordinate_offsets")
         if off:
             if off["reference_station_id"] not in active_ids:
                 errs.append(f"{sid}: reference_station_id {off['reference_station_id']} does not resolve")
             if "licence_id" in off and off["licence_id"] not in lic:
                 errs.append(f"{sid}: offsets licence_id {off['licence_id']} does not resolve")
+        for co in s.get("current_offsets", []):
+            if co["reference_station_id"] not in active_ids:
+                errs.append(f"{sid}: current_offsets reference_station_id {co['reference_station_id']} does not resolve")
+            if "licence_id" in co and co["licence_id"] not in lic:
+                errs.append(f"{sid}: current_offsets licence_id {co['licence_id']} does not resolve")
         for v in s.get("validation", []):
             if v["set_id"] not in own:
                 errs.append(f"{sid}: validation set_id {v['set_id']} does not resolve")

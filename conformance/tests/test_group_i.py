@@ -102,3 +102,34 @@ def test_missing_build_tolerated_in_any_root(tmp_path, schemas):
     root = _root(tmp_path, doc=bf.no_build_doc())
     got = bf.open_release(root, bf.BASE, schemas)
     assert any("no provenance.build" in x for x in got["unknown_fields"]), got
+
+
+# --- B2-8: a subordinate current station with only current_offsets is valid 1.0 (schema active_station else.anyOf)
+
+def current_sub_doc():
+    doc = bf.release_doc(bf.SECOND)
+    doc["stations"].append({
+        "station_id": "OTC-T-0023", "status": "active", "name": "Test Current Narrows", "country": "USA", "lat": 47.95,
+        "lon": -122.62, "timezone": "America/Los_Angeles", "type": "subordinate", "recommended_set_id": None,
+        "default_current_bin": 1, "constant_sets": [],
+        "current_offsets": [{"bin": 1, "depth_m": None, "depth_type": "unknown", "reference_station_id": "OTC-T-0019",
+                             "reference_bin": 1, "mean_flood_dir_deg": 210.0, "mean_ebb_dir_deg": 40.0,
+                             "time_adj_max_flood_min": -15, "time_adj_slack_before_ebb_min": 0, "time_adj_max_ebb_min": 10,
+                             "time_adj_slack_before_flood_min": None, "flood_amp_ratio": 1.2, "ebb_amp_ratio": 1.1,
+                             "licence_id": "noaa"}]})
+    return doc
+
+
+def test_current_offsets_subordinate_is_valid(schemas):
+    doc = current_sub_doc()
+    assert bf.cross_ref_errors(doc) == []
+    meta = {k: v for k, v in doc.items() if k != "stations"}
+    bf.validate_release(doc, meta, doc["stations"], schemas)
+
+
+def test_current_offsets_references_must_resolve():
+    doc = current_sub_doc()
+    doc["stations"][-1]["current_offsets"][0]["reference_station_id"] = "OTC-T-9999"
+    doc["stations"][-1]["current_offsets"][0]["licence_id"] = "no-such-licence"
+    errs = bf.cross_ref_errors(doc)
+    assert any("OTC-T-9999" in e for e in errs) and any("no-such-licence" in e for e in errs), errs
