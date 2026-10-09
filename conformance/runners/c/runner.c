@@ -1638,9 +1638,10 @@ static char *run_threaded(request *q, int n)
         pthread_join(th[i], NULL);
 #endif
     }
-    for (i = 0; i < started; i++) {
-        if (!first) first = jobs[i].out;
-        else if (!jobs[i].out || strcmp(first, jobs[i].out) != 0) same = 0;
+    for (i = 0; i < started; i++) {   /* every thread must give a reply, and all must be the same */
+        if (!jobs[i].out) same = 0;
+        else if (!first) first = jobs[i].out;
+        else if (strcmp(first, jobs[i].out) != 0) same = 0;
     }
     for (i = 0; i < started; i++)
         if (jobs[i].out != first) cJSON_free(jobs[i].out);
