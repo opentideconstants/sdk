@@ -692,7 +692,9 @@ OTC_API otc_status otc_fetch_cached_releases(const otc_fetch_options *opts, char
                                              size_t *count);
 /* Removes the cached releases after the newest keep, never current (the
  * datestamp of the release the app has open; NULL = none). removed gets the
- * datestamps removed, newest first. */
+ * datestamps removed, newest first. A release directory that cannot be removed
+ * is OTC_E_CACHE; *count and removed then name the releases removed before the
+ * failure. A symlink in the cache is removed, never followed. */
 OTC_API otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const char *current, char **removed,
                                    size_t cap, size_t *count);
 /* Frees a string that the library allocated (lists of the otc_fetch module). */

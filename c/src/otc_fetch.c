@@ -288,24 +288,49 @@ static char *path2(const char *a, const char *b)
     return p;
 }
 
-/* rm -r */
-static void fs_rm_rf(const char *path)
+/* 1 a real directory (not a symlink or junction to one), 2 anything else that
+ * exists, 0 nothing there. Unlike fs_kind it never follows a link. */
+static int fs_kind_nofollow(const char *path)
 {
-    if (fs_kind(path) == 1) {
+#ifdef _WIN32
+    wchar_t *w = widen(path);
+    DWORD a = w ? GetFileAttributesW(w) : INVALID_FILE_ATTRIBUTES;
+    free(w);
+    if (a == INVALID_FILE_ATTRIBUTES) return 0;
+    return (a & FILE_ATTRIBUTE_DIRECTORY) && !(a & FILE_ATTRIBUTE_REPARSE_POINT) ? 1 : 2;
+#else
+    struct stat sb;
+    if (lstat(path, &sb) != 0) return 0;
+    return S_ISDIR(sb.st_mode) ? 1 : 2;
+#endif
+}
+
+/* rm -r that never follows a symlink: a link is removed, not what it points
+ * to. 0 when nothing is left at path, -1 when something could not be removed. */
+static int fs_rm_rf(const char *path)
+{
+    int k = fs_kind_nofollow(path), bad = 0;
+    if (k == 0) return 0;
+    if (k == 1) {
         char **names = NULL;
         size_t n = 0, i;
-        if (fs_list(path, &names, &n) == OTC_OK) {
-            for (i = 0; i < n; i++) {
-                char *p = path2(path, names[i]);
-                if (p) fs_rm_rf(p);
-                free(p);
-            }
-            free_list(names, n);
+        if (fs_list(path, &names, &n) != OTC_OK) return -1;
+        for (i = 0; i < n; i++) {
+            char *p = path2(path, names[i]);
+            if (!p || fs_rm_rf(p) != 0) bad = 1;
+            free(p);
         }
-        fs_rmdir(path);
+        free_list(names, n);
+        if (fs_rmdir(path) != 0) bad = 1;
     } else {
-        fs_unlink(path);
+#ifdef _WIN32
+        /* a directory junction or symlink is removed with rmdir, a file with unlink */
+        if (fs_unlink(path) != 0 && fs_rmdir(path) != 0) bad = 1;
+#else
+        if (fs_unlink(path) != 0) bad = 1;
+#endif
     }
+    return bad || fs_kind_nofollow(path) != 0 ? -1 : 0;
 }
 
 /* mkdir -p; 0 when path is a directory afterwards */
@@ -2143,17 +2168,18 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
         d = rel_dir(&c, list[i]);
         v = d ? path2(d, ".verified") : NULL;
         if (!d || !v) { free(d); free(v); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); break; }
-        fs_unlink(v);              /* readers stop trusting it first */
-        fs_rm_rf(d);
+        /* readers stop trusting it first; a release whose .verified cannot be removed is left whole */
+        if ((fs_unlink(v) != 0 && fs_kind_nofollow(v) != 0) || fs_rm_rf(d) != 0) {
+            st = fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
+        } else {
+            logf_(&c, 1, "pruned %s", list[i]);
+            st = put_string(&c, removed, cap, k++, list[i]);
+        }
         free(d);
         free(v);
-        logf_(&c, 1, "pruned %s", list[i]);
-        st = put_string(&c, removed, cap, k++, list[i]);
     }
-    if (st == OTC_OK) {
-        *count = k;
-        if (k > cap) st = OTC_E_BUFFER_TOO_SMALL;
-    }
+    if (count) *count = k;   /* the releases removed; on a failure, those removed before it */
+    if (st == OTC_OK && k > cap) st = OTC_E_BUFFER_TOO_SMALL;
     free_list(list, n);
     ctx_free(&c);
     return st;
