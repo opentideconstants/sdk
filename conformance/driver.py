@@ -350,6 +350,44 @@ def case_timeout(case):
     return float(t)
 
 
+def structure_problems(c):
+    """The shape of one case, checked before anything else reads it: a malformed case is a case-file error (exit 2)."""
+    if not isinstance(c, dict):
+        return [f"a case must be an object, got {_type_name(c)}"]
+    cid = c.get("id")
+    if not isinstance(cid, str) or not cid:
+        return [f"{c.get('_file')}: a case needs a non-empty string id, got {cid!r}"]
+    steps = c.get("steps")
+    if not isinstance(steps, list):
+        return [f"{cid}: steps must be a list"]
+    out = []
+    for i, st in enumerate(steps):
+        where = f"{cid} step {i}"
+        if not isinstance(st, dict):
+            out.append(f"{where}: a step must be an object")
+            continue
+        if not isinstance(st.get("driver", st.get("op")), str):
+            out.append(f"{where}: a step needs a string op or driver")
+        if "args" in st and not isinstance(st["args"], dict):
+            out.append(f"{where}: args must be an object")
+        if st.get("expect") is not None and not isinstance(st["expect"], dict):
+            out.append(f"{where}: expect must be an object")
+        eim = st.get("expect_if_missing")
+        if eim is not None and not (isinstance(eim, dict) and all(isinstance(v, dict) for v in eim.values())):
+            out.append(f"{where}: expect_if_missing must be an object of expectations")
+        who = st.get("as")
+        if who is not None and not (isinstance(who, str) or (isinstance(who, list) and who and all(isinstance(r, str) for r in who))):
+            out.append(f"{where}: 'as' must be a role name or a list of role names")
+        if "on" in st and not isinstance(st["on"], str):
+            out.append(f"{where}: 'on' must be a string")
+    for k in ("requires",):
+        if k in c and not (isinstance(c[k], list) and all(isinstance(f, str) for f in c[k])):
+            out.append(f"{cid}: {k} must be a list of strings")
+    if "roles" in c and not (isinstance(c["roles"], dict) and all(isinstance(v, list) for v in c["roles"].values())):
+        out.append(f"{cid}: roles must be an object of feature lists")
+    return out
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -488,6 +526,8 @@ def parse_hello(line):
     if not isinstance(line, dict) or not isinstance(line.get("hello"), dict):
         raise RunnerError(f"first line is not a hello object: {json.dumps(line)[:200]}")
     hello = line["hello"]
+    if "runner" in hello and not isinstance(hello["runner"], str):
+        raise RunnerError(f"hello.runner is not a string: {json.dumps(hello)[:200]}")
     feats = hello.get("features")
     if not isinstance(feats, list) or not all(isinstance(f, str) for f in feats):
         raise RunnerError(f"hello.features is not a list of strings: {json.dumps(hello)[:200]}")
@@ -991,11 +1031,20 @@ def main():
     cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross and not a.check_cases else CASES_DIR)
     try:
         raw = load_cases(cases_dir)
-        cases = raw if a.cross else expand(raw)
-        if a.check_cases and not a.cases:
-            raw_cross = load_cases(CROSS_DIR)
+        raw_cross = load_cases(CROSS_DIR) if a.check_cases and not a.cases else []
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         print(f"case files in {cases_dir}: cannot load: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+    malformed = [p for c in raw + (raw_cross if a.check_cases and not a.cases else []) for p in structure_problems(c)]
+    if malformed:
+        for p in malformed:
+            print(("PROBLEM " if a.check_cases else "case file error: ") + p, file=sys.stdout if a.check_cases else sys.stderr)
+        print(f"case files in {cases_dir}: {len(malformed)} malformed case(s) (exit 2)", file=sys.stderr)
+        return 2
+    try:
+        cases = raw if a.cross else expand(raw)
+    except (KeyError, TypeError, AttributeError) as e:
+        print(f"case files in {cases_dir}: cannot expand a matrix case: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
     if a.only:
         try:
@@ -1036,7 +1085,10 @@ def main():
         ap.error("--cross needs two or more runners")
     hellos = {}
     for name, command in (named.items() if a.cross else [("main", a.runner)]):
-        cmd = shlex.split(command)
+        try:
+            cmd = shlex.split(command)
+        except ValueError as e:
+            ap.error(f"runner command {command!r}: {e}")
         hello, err = probe_runner(cmd)
         if err:
             print(f"runner {name if a.cross else ''} failed the handshake: {err}".replace("runner  ", "runner "), file=sys.stderr)

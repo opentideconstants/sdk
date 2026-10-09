@@ -169,3 +169,36 @@ def test_check_cases_with_cross_has_no_false_problems():
     assert plain.returncode == 0, plain.stdout[-400:]
     assert r.returncode == 0 and "PROBLEM" not in r.stdout, r.stdout[-600:]
     assert r.stdout.splitlines()[-1] == plain.stdout.splitlines()[-1], (r.stdout[-300:], plain.stdout[-300:])
+
+
+# --- K16, K69, K67, K15: malformed case content, a bad hello runner name and a bad command give exit 2, no traceback
+
+@pytest.mark.parametrize("cases", [
+    [{"id": "a", "steps": [{"op": "citation", "expect": "x"}]}],                                   # expect not an object
+    [{"id": "a", "steps": [{"op": "citation", "expect_if_missing": {"fs": ["x"]}}]}],              # not an object
+    [{"id": "a", "roles": {"w": ["fs"], "r": ["fs"]}, "steps": [{"op": "citation", "as": [{"x": 1}], "expect": {"citation": "c"}}]}],
+    [{"id": "a", "roles": {"w": ["fs"], "r": ["fs"]}, "steps": [{"op": "citation", "as": 5, "expect": {"citation": "c"}}]}],
+    [{"steps": [{"op": "citation", "expect": {"citation": "c"}}]}],                                # no id
+    [{"id": "a", "steps": "x"}],                                                                   # steps not a list
+    [{"id": "a", "steps": ["x"]}],                                                                 # a step not an object
+    [{"id": "a", "steps": [{"op": "citation", "args": ["x"], "expect": {"citation": "c"}}]}],     # args not an object
+])
+def test_malformed_case_content_exits_2(tmp_path, cases):
+    d = write_cases(tmp_path, cases)
+    r = run_driver("--check-cases", "--cases", str(d))
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-500:])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(d), env={"FAKE_REPLY": OK_REPLY})
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-500:])
+
+
+@pytest.mark.parametrize("hello", ['{"hello": {"runner": ["x"], "features": []}}', '{"hello": {"runner": {"a": 1}, "features": []}}'])
+def test_unhashable_hello_runner_exits_2(tmp_path, hello):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_HELLO": hello})
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])
+
+
+@pytest.mark.parametrize("args", [["--runner", "python 'unbalanced"], ["--cross", "a=python 'x", "--cross", "b=y"]])
+def test_unbalanced_quote_in_command_exits_2(args):
+    r = run_driver(*args)
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])
