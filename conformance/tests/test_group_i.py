@@ -206,3 +206,13 @@ def test_source_filter_and_stats_agree():
     rel = bc.Rel("bad/format-minor", "20991231")
     by_filter = {src for s in rel.active for src in bc.usable_sources(s)}
     assert by_filter == set(bc.stats(rel)["source"]), sorted(by_filter ^ set(bc.stats(rel)["source"]))
+
+
+# --- K25: duplicate ids among the cross cases (and between cross and plain cases) stop the build
+
+def test_duplicate_cross_case_id_stops_the_build(tmp_path, monkeypatch):
+    import build_cases as bc
+    real = bc.group_cross
+    monkeypatch.setattr(bc, "group_cross", lambda r2: real(r2) + real(r2)[:1])
+    with pytest.raises(SystemExit):
+        bc.build(tmp_path / "cases", tmp_path / "cross")
