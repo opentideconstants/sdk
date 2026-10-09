@@ -51,7 +51,8 @@ def test_case_runner_is_closed_when_hello_fails(tmp_path):
     finally:
         srv.shutdown()
         proxy.shutdown()
-    assert failures
+    # the bad hello, nothing else (R2-161: "assert failures" accepted any failure)
+    assert len(failures) == 1 and "first line is not a hello object" in failures[0]["problems"][0], failures
     pid = int(pidfile.read_text())
     for _ in range(50):
         try:
@@ -78,3 +79,40 @@ def test_runner_home_is_isolated(tmp_path):
     homes = [h for h in probe.read_text().splitlines()]
     assert len(homes) >= 2, homes  # the probe and the case runner
     assert all(h and h != os.environ.get("HOME") for h in homes), homes
+
+
+# --- R2-161: every per-user directory an SDK may default to is under the case's tmp, and the driver's environment
+# reaches no runner with OPENTIDECONSTANTS_* or a proxy variable (README "The runner protocol")
+
+LEAKY = {"OPENTIDECONSTANTS_CACHE_DIR": "/tmp/user-cache", "OPENTIDECONSTANTS_OFFLINE": "1",
+         "HTTP_PROXY": "http://127.0.0.1:9", "https_proxy": "http://127.0.0.1:9", "NO_PROXY": "x", "all_proxy": "http://127.0.0.1:9",
+         "XDG_CACHE_HOME": "/tmp/user-xdg", "LOCALAPPDATA": "/tmp/user-lad", "USERPROFILE": "/tmp/user-profile"}
+ISOLATED = ["HOME", "USERPROFILE", "XDG_CACHE_HOME", "LOCALAPPDATA"]
+SCRUBBED = {"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"}
+
+
+def test_runner_environment_is_isolated_and_scrubbed(tmp_path):
+    import json
+    probe = tmp_path / "envs"
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_ENV_PROBE": str(probe), **LEAKY})
+    assert r.returncode == 1 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])  # the fake reply fails the step
+    envs = [json.loads(x) for x in probe.read_text().splitlines()]
+    assert len(envs) == 2, len(envs)   # the probe and the case runner
+    for env in envs:
+        home = Path(env["HOME"])
+        tmp = home.parent   # isolated_env puts home under the case's (or the probe's) tmp
+        assert home.name == "home" and tmp.name.startswith(("otc-conf-", "otc-probe-")), env["HOME"]
+        for k in ISOLATED:
+            assert k in env and Path(env[k]).is_relative_to(tmp), (k, env.get(k))
+        leaked = sorted(k for k in env if k.upper().startswith("OPENTIDECONSTANTS_") or k.upper() in SCRUBBED)
+        assert not leaked, leaked
+
+
+def test_case_env_may_set_a_proxy_variable(tmp_path):
+    import json
+    probe = tmp_path / "envs"
+    cases = write_cases(tmp_path, [{"id": "a", "env": {"HTTP_PROXY": "${proxy}"}, "steps": [OK_STEP]}])
+    run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_ENV_PROBE": str(probe)})
+    envs = [json.loads(x) for x in probe.read_text().splitlines()]
+    assert envs[-1].get("HTTP_PROXY", "").startswith("http://127.0.0.1:"), envs[-1].get("HTTP_PROXY")
