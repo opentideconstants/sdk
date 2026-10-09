@@ -54,6 +54,9 @@ class OpenTideConstants
                 raise InvalidArgumentError, "file must be named OTC_<datestamp>.json, .json.gz or .jsonl, " \
                                             "not #{File.basename(path).inspect}"
             end
+            # A .json or .json.gz file has no lines to seek to: never load it
+            # eagerly in silence (CR T94, spec §4.2).
+            raise InvalidArgumentError, "stream mode needs .jsonl and .meta.json" if mode == :stream && ext != "jsonl"
             read = files_read(path)
             read.each { |p| raise FileError.new("no such file: #{p}", path: p) unless File.file?(p) }
             sha_path = File.join(File.dirname(path), "#{prefix}.sha256")

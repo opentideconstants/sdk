@@ -1575,6 +1575,12 @@ def group_rules():
         out.append(case(f"rules/pk07/{cid}", f"{title}: invalid_argument (D31)", "4.2",
                         [step("open", err("invalid_argument"), file=f"{FIX}/good/OTC_{d2}.jsonl", cache_dir="${cache}", **extra)],
                         requires=["fs"]))
+    # CR T94 (spec 4.2): stream mode reads lines of a .jsonl and its .meta.json; a .json or .json.gz file has no lines
+    # to seek to, so a stream client on one fails, and never loads it eagerly in silence
+    for cid, ext in (("file-stream-json", ".json"), ("file-stream-json-gz", ".json.gz")):
+        out.append(case(f"rules/pk07/{cid}", f"mode stream on a {ext} file: invalid_argument (stream mode needs .jsonl and .meta.json)", "4.2",
+                        [step("open", err("invalid_argument"), file=f"{FIX}/good/OTC_{d2}{ext}", mode="stream")],
+                        requires=["fs", "json", "stream"]))
     B = "${tmp}/bundle"
     out.append(case("rules/pk07/formats-empty", "download with formats []: invalid_argument", "4.3.2",
                     [open_latest_no_cache(G), net(step("download", err("invalid_argument"), release=d2, to=B, formats=[]), fs=True)], requires=[]))

@@ -278,6 +278,8 @@ export class OpenTideConstants {
         const parts = splitReleaseName(name);
         const kind = parts && (parts.ext === "json" || parts.ext === "json.gz" || parts.ext === "jsonl") ? parts.ext : null;
         if (!parts || !kind) throw new InvalidArgumentError(`file must be named OTC_<datestamp>.json, .json.gz or .jsonl; got ${name}`);
+        // a .json or .json.gz file has no lines to seek to: never load it eagerly in silence (CR T94, spec 4.2)
+        if (mode === "stream" && kind !== "jsonl") throw new InvalidArgumentError("stream mode needs .jsonl and .meta.json");
         const stem = `OTC_${parts.datestamp}`;
         const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
         const shaPath = path.join(dir, `${stem}.sha256`);

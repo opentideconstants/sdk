@@ -181,6 +181,9 @@ class OpenTideConstants:
         d, ext = _split_file_name(name)
         if ext is None:
             raise InvalidArgumentError(f"file must be named OTC_<datestamp>.json, .json.gz or .jsonl, not {name!r}")
+        if self._mode == "stream" and ext != ".jsonl":
+            # a .json or .json.gz file has no lines to seek to: never load it eagerly in silence (CR T94, spec §4.2)
+            raise InvalidArgumentError("stream mode needs .jsonl and .meta.json")
         if not path.exists():
             raise FileError(f"cannot open {path}: no such file", path=str(path))
         opened = [path] + ([meta_path_for(path)] if ext == ".jsonl" else [])
