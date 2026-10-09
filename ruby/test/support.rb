@@ -6,6 +6,8 @@ require "fileutils"
 require "json"
 require "digest"
 require "openssl"
+require "logger"
+require "stringio"
 
 module TestSupport
     ROOT = File.expand_path("../..", __dir__)

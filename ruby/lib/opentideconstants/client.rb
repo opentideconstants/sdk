@@ -541,9 +541,7 @@ class OpenTideConstants
     # spec §5.2
     def open_latest
         if @offline
-            d = newest_cached
-            raise OfflineError, "offline and no release is cached in #{cache.root}" unless d
-            @release = load_cached(d) or raise CacheError, "release #{d} left the cache while it was opened"
+            @release = load_newest_cached or raise OfflineError, "offline and no release is cached in #{cache.root}"
             @loaded_from = :cache
             return
         end
@@ -552,10 +550,10 @@ class OpenTideConstants
             entry, url = resolve_latest
             @release, @loaded_from = load_from_entry(entry, url)
         rescue NetworkError => e
-            d = @on_network_error == :use_cache ? newest_cached : nil
-            raise unless d
-            log(:warn, "#{e.message}; using the cached release #{d}")
-            @release = load_cached(d) or raise e
+            rel = @on_network_error == :use_cache ? load_newest_cached : nil
+            raise e unless rel
+            log(:warn, "#{e.message}; using the cached release #{rel.datestamp}")
+            @release = rel
             @loaded_from = :cache_after_error
             @last_error = e
         end
@@ -584,16 +582,58 @@ class OpenTideConstants
         [fetch_release(d, entry, url), :download]
     end
 
-    # The cached release d when it is usable, else nil. A cached file that
-    # fails verify_on_open is deleted (load_cached does it), and then, when
-    # online, nil, so the caller downloads it again (spec §4.8).
+    # The cached release d when it is usable, else nil. A cached release that
+    # fails its size or SHA-256 check or does not parse is healed, and then,
+    # when online, nil, so the caller downloads it again (spec §4.8, §5.2
+    # step 6). Offline, the error is raised.
     def load_cached_unless_corrupt(d)
-        return nil unless usable_cached?(d)
+        return nil unless present_cached?(d)
         load_cached(d)
-    rescue ChecksumError => e
+    rescue ChecksumError, InvalidReleaseError => e
+        heal(d, e)
         raise if @offline
-        log(:warn, "#{e.message}; downloading #{d} again")
+        log(:warn, "downloading #{d} again")
         nil
+    end
+
+    # The newest cached release this SDK reads, loaded (spec §5.2 steps 1, 5
+    # and 6). A candidate that fails its size or SHA-256 check or does not
+    # parse is healed and the next older one is tried; one whose format this
+    # SDK cannot read is skipped. nil when none loads: the caller raises its
+    # original error.
+    def load_newest_cached
+        index = cached_index
+        cache.cached_releases.each do |d|
+            next unless cached_readable?(d, cache.verified(d), index[d]) && present_cached?(d)
+            begin
+                rel = load_cached(d)
+                return rel if rel
+            rescue UnsupportedFormatError, ReaderTooOldError => e
+                log(:info, "the cached release #{d} is not readable: #{e.message}")
+            rescue ChecksumError, InvalidReleaseError => e
+                heal(d, e)
+            end
+        end
+        nil
+    end
+
+    # Removes a cached release that failed its check or does not parse (spec
+    # §5.2 step 6): .verified first, so it is no longer trusted, then the bad
+    # file (the one the error names, or the data files of this mode). A
+    # failure to delete is logged; it never hides the original error.
+    def heal(d, err)
+        log(:warn, "the cached release #{d} is corrupt (#{err.message}); removing it from the cache")
+        dir = cache.release_dir(d)
+        bad = if err.respond_to?(:file) && err.file
+                  [File.join(dir, File.basename(err.file.to_s))] # only ever a file of this release's directory
+              else
+                  (wanted_files(d).find { |ns| ns.all? { |n| File.file?(File.join(dir, n)) } } || []).map { |n| File.join(dir, n) }
+              end
+        [File.join(dir, ".verified"), *bad].each do |path|
+            cache.remove_file(path)
+        rescue CacheError => e
+            log(:warn, e.message)
+        end
     end
 
     # The data files a load in this mode reads, in order of preference.
@@ -609,14 +649,27 @@ class OpenTideConstants
         wanted_files(d).any? { |names| names.all? { |n| cache.file_ok?(d, n, ver) } }
     end
 
+    # A verified release whose data files for this mode are there and listed
+    # in .verified, whatever their size (load_cached checks the size).
+    def present_cached?(d)
+        ver = cache.verified(d)
+        return false unless ver
+        wanted_files(d).any? { |names| names.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(cache.release_dir(d), n)) } }
+    end
+
     # Loads cached release d, or nil when it is no longer usable (another
     # process removed it after the caller checked it).
     def load_cached(d)
         ver = cache.verified(d)
-        names = ver && wanted_files(d).find { |ns| ns.all? { |n| cache.file_ok?(d, n, ver) } }
-        return nil unless names
         dir = cache.release_dir(d)
+        names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(dir, n)) } }
+        return nil unless names
         paths = names.map { |n| File.join(dir, n) }
+        # spec §5.3: the size is compared with .verified on every open
+        names.zip(paths).each do |n, p|
+            next if cache.file_ok?(d, n, ver)
+            raise ChecksumError.new("#{n}: the size does not match .verified", file: p, expected: ver["files"][n]["sha256"], actual: nil)
+        end
         checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
@@ -636,11 +689,6 @@ class OpenTideConstants
         rel = Reader.load(paths.first, index_rows: rows, **opts)
         write_stream_index(d, rel, rows, ver, paths.first)
         rel
-    rescue ChecksumError => e
-        # A cached file that fails its check is deleted (spec §4.8 checksum_mismatch).
-        log(:warn, "#{e.message}; deleting the cached #{File.basename(e.file.to_s)}")
-        cache.remove_file(e.file) if e.file
-        raise
     end
 
     # The entries of index-v1.json when it is fresh for release d (spec §6.2), else nil.
