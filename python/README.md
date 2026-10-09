@@ -14,19 +14,31 @@ pip install opentideconstants
 from opentideconstants import OpenTideConstants
 
 with OpenTideConstants() as otc:                      # the latest release, cached on disk
-    st = otc.station_by_alias("noaa", "9414290")      # or otc.station("OTC-…"), otc.search(name="san fran")
-    m2 = st.recommended_set.constituent("M2")
-    print(st.name, m2.amplitude_m, m2.phase_deg)      # metres, degrees (Greenwich phase lag)
+    # station(), station_by_alias() and nearest() return None when nothing matches; search() returns a tuple
+    st = otc.station_by_alias("noaa", "9414290")
+    if st is None:
+        hits = otc.search(name="san fran", limit=1)
+        st = hits[0] if hits else None
+    if st is not None and st.recommended_set is not None:
+        cs = st.recommended_set
+        m2 = cs.constituent("M2")                     # None when the set has no M2
+        if m2 is not None:
+            # metres and degrees; the phase is a lag in the set's convention (cs.convention.phase_reference,
+            # for example greenwich_utc or local)
+            print(st.name, m2.amplitude_m, m2.phase_deg, cs.convention.phase_reference)
+        print(otc.attribution([st]))
     for hit in otc.near(lat=37.8, lon=-122.4, radius_km=25):
         print(hit.station.station_id, hit.distance_km)
-    print(otc.attribution([st]))
 ```
 
 In production, pin a release: `OpenTideConstants(release="20261008")`. Offline: `offline=True` (or
-`OPENTIDECONSTANTS_OFFLINE=1`). A bundled file: `OpenTideConstants(file="OTC_20261008.jsonl")`; make the
-bundle with `otc.download("20261008", to="data/")`. Low memory: `mode="stream"`.
+`OPENTIDECONSTANTS_OFFLINE=1`). A bundled file: make the bundle with `otc.download("20261008", to="data/")`,
+then open it with `OpenTideConstants(file="data/OTC_20261008.jsonl")`. Keep the files that `download` writes
+together: a `.jsonl` needs its `OTC_20261008.meta.json` next to it, and `OTC_20261008.sha256` next to it makes
+the SDK check the file (`loaded_from` is `file`; without it, `file_unverified`). Low memory: `mode="stream"`.
 
-Every error is a subclass of `OpenTideConstantsError` and has a stable `.code`.
+Every error the SDK raises is a subclass of `OpenTideConstantsError` and has a stable `.code`. A lookup that
+finds nothing returns `None` instead of raising, so check the result before you use it.
 
 The SDK passes the shared conformance suite in `conformance/` (see `conformance/README.md`):
 

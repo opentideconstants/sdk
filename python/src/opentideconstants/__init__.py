@@ -3,8 +3,9 @@
     from opentideconstants import OpenTideConstants
 
     with OpenTideConstants() as otc:
-        st = otc.station_by_alias("noaa", "9414290")
-        m2 = st.recommended_set.constituent("M2")
+        st = otc.station_by_alias("noaa", "9414290")     # None when no station has this alias
+        if st is not None and st.recommended_set is not None:
+            m2 = st.recommended_set.constituent("M2")   # None when the set has no M2
 
 See https://opentideconstants.org. Code licence: MIT. Data licence: CC BY 4.0.
 """

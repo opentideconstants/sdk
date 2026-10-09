@@ -50,14 +50,6 @@
    "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
   },
   {
-   "case": "cross/index-offset-past-eof[c>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-xje9y55d/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[c>ruby]",
    "runners": [
     "cross"
@@ -90,14 +82,6 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
-   "case": "cross/index-offset-past-eof[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-xmibidzu/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[ruby>typescript]",
    "runners": [
     "cross"
@@ -106,28 +90,12 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
-   "case": "cross/index-offset-past-eof[typescript>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-do9ntpdh/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[typescript>ruby]",
    "runners": [
     "cross"
    ],
    "package": "PK05",
    "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
-  },
-  {
-   "case": "cross/index-station-id-swapped[c>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
    "case": "cross/index-station-id-swapped[c>ruby]",
@@ -178,14 +146,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[ruby>typescript]",
    "runners": [
     "cross"
@@ -195,14 +155,6 @@
   },
   {
    "case": "cross/index-station-id-swapped[typescript>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
-   "case": "cross/index-station-id-swapped[typescript>python]",
    "runners": [
     "cross"
    ],
@@ -221,7 +173,6 @@
    "case": "rules/pk01/counter-too-long",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -231,7 +182,6 @@
   {
    "case": "rules/pk01/file-bad-name",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -241,7 +191,6 @@
   {
    "case": "rules/pk01/index-bad-datestamp",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -251,7 +200,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-counter01",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -260,7 +208,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dashed",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -269,7 +216,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dotdot",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -278,7 +224,6 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-newline",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK01",
@@ -288,7 +233,6 @@
    "case": "rules/pk02/pointer-200-not-json",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -299,42 +243,16 @@
    "case": "rules/pk02/releases-use-cache",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK02",
    "reason": "step 5 releases: expected a result, got error 'network' (HTTP 500 for http://127.0.0.1:51308/good/OTC_index.json)"
   },
   {
-   "case": "rules/pk03/bad-format-version-malformed-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
-   "case": "rules/pk03/bad-format-version-malformed-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
-   "case": "rules/pk03/bad-format-version-malformed-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
    "case": "rules/pk03/bad-format-version-malformed-jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "python"
+    "c-fetch"
    ],
    "package": "PK03",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
@@ -342,7 +260,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-json",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -351,7 +268,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-json-gz",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -360,7 +276,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-jsonl",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -371,7 +286,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -380,7 +294,6 @@
   {
    "case": "rules/pk03/check-for-update-only-newer-major",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -391,7 +304,6 @@
    "case": "rules/pk04/prune-reports-only-removed",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -401,7 +313,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -411,7 +322,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -421,7 +331,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -433,7 +342,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -443,7 +351,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -453,7 +360,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -463,7 +369,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -475,7 +380,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -485,7 +389,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -495,7 +398,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -505,7 +407,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -517,7 +418,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -527,7 +427,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -537,7 +436,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -547,7 +445,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -559,7 +456,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -569,7 +465,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -579,7 +474,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -589,7 +483,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -599,7 +492,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-jsonl-stream",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -652,7 +544,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -662,7 +553,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -672,7 +562,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -684,7 +573,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -728,22 +616,6 @@
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk07/bad-convention-without-id-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:KeyError' ('convention_id')"
-  },
-  {
-   "case": "rules/pk07/bad-convention-without-id-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:KeyError' ('convention_id')"
-  },
-  {
    "case": "rules/pk07/bad-created-not-string-json",
    "runners": [
     "ruby",
@@ -782,41 +654,8 @@
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk07/bad-lat-nan-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-nan-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
    "case": "rules/pk07/bad-lat-string-json",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -825,7 +664,6 @@
   {
    "case": "rules/pk07/bad-lat-string-json-gz",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -834,7 +672,6 @@
   {
    "case": "rules/pk07/bad-lat-string-jsonl",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -843,7 +680,6 @@
   {
    "case": "rules/pk07/bad-lat-string-jsonl-stream",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK07",
@@ -890,7 +726,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -900,7 +735,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json-gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -910,7 +744,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -922,44 +755,11 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
-  },
-  {
-   "case": "rules/pk07/bad-station-id-not-string-jsonl-stream",
-   "runners": [
-    "python"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' ('<' not supported between instances of 'str' and 'int')"
   },
   {
    "case": "rules/pk07/formats-empty",
@@ -973,7 +773,6 @@
   {
    "case": "rules/pk07/limit-zero@json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -983,7 +782,6 @@
   {
    "case": "rules/pk07/limit-zero@json.gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -993,7 +791,6 @@
   {
    "case": "rules/pk07/limit-zero@jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1005,7 +802,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1015,7 +811,6 @@
   {
    "case": "rules/pk07/limit-zero@server",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1026,7 +821,6 @@
    "case": "rules/pk07/timeout-zero",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK07",
@@ -1155,7 +949,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@json",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -1164,7 +957,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@json.gz",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -1173,7 +965,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -1182,7 +973,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@jsonl-stream",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -1191,7 +981,6 @@
   {
    "case": "rules/pk08/previous-release-non-number@server",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK08",
@@ -1227,7 +1016,6 @@
    "case": "rules/pk10/bad-ca-file-no-retry",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1237,7 +1025,6 @@
   {
    "case": "rules/pk10/readonly-to-is-io",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK10",
@@ -1255,7 +1042,6 @@
    "case": "rules/pk11/bad-sha256-file-differs-latest",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK11",
@@ -1265,7 +1051,6 @@
    "case": "rules/pk11/bad-sums-extra-file-latest",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1276,7 +1061,6 @@
    "case": "rules/pk11/corrupt-same-size-heals-online",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1302,8 +1086,7 @@
   {
    "case": "rules/pk11/sha256-absolute-url",
    "runners": [
-    "c-fetch",
-    "python"
+    "c-fetch"
    ],
    "package": "PK11",
    "reason": "step 1 open: expected a result, got error 'release_not_found' (release 20991231.2 not found (http://127.0.0.1:51308/abs/OTC_20991231.2.sha256))"
@@ -1311,19 +1094,10 @@
   {
    "case": "rules/pk11/verify-missing-data-file",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK11",
    "reason": "step 2 verify: expected error {'$any_of': ['checksum_mismatch', 'io']}, got a result {\"verified\": true}"
-  },
-  {
-   "case": "rules/pk11/verify-missing-verified",
-   "runners": [
-    "python"
-   ],
-   "package": "PK11",
-   "reason": "step 3 verify: expected error 'checksum_mismatch', got a result {\"verified\": true}"
   },
   {
    "case": "rules/pk11/verify-unverified-file",
@@ -1338,7 +1112,6 @@
   {
    "case": "rules/pk12/gz-with-content-encoding",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1349,7 +1122,6 @@
    "case": "rules/pk12/http-proxy-uppercase-cgi",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK12",
@@ -1358,7 +1130,6 @@
   {
    "case": "rules/pk12/redirect-five-hops",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1369,7 +1140,6 @@
    "case": "rules/pk13/auto-update-failure-sets-last-error",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1380,7 +1150,6 @@
    "case": "rules/pk14/network-fails-second-file-writes-nothing",
    "runners": [
     "c-fetch",
-    "python",
     "ruby"
    ],
    "package": "PK14",
@@ -1389,7 +1158,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@json",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1399,7 +1167,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@json.gz",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1409,7 +1176,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@jsonl",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1421,7 +1187,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -1431,7 +1196,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@server",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],

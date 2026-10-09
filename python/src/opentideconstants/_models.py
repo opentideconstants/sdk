@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import datetime as _dt
+import math
+import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping, Optional, Tuple
@@ -21,19 +23,42 @@ def freeze(v):
     return v
 
 
+_TIME_RE = re.compile(r"\A([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt ]([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?"
+                      r"([Zz]|[+-][0-9]{2}:?[0-9]{2})?\Z")
+
+
 def parse_time(v, what="time"):
+    """An RFC 3339 time (any number of fraction digits, upper- or lower-case T and Z, also +HHMM), the same on
+    every Python version. No offset means UTC. Anything else is InvalidReleaseError."""
     if v is None:
         return None
     if not isinstance(v, str):
         raise InvalidReleaseError(f"{what}: not a string: {v!r}")
-    s = v[:-1] + "+00:00" if v.endswith("Z") else v
+    m = _TIME_RE.match(v)
     try:
-        t = _dt.datetime.fromisoformat(s)
+        if m is None:
+            raise ValueError("not RFC 3339")
+        y, mo, d, h, mi, sec, frac, off = m.groups()
+        us = int((frac[1:] + "000000")[:6]) if frac else 0
+        tz = _dt.timezone.utc
+        if off and off not in ("Z", "z"):
+            sign = -1 if off[0] == "-" else 1
+            hh, mm = int(off[1:3]), int(off[-2:])
+            if hh > 23 or mm > 59:
+                raise ValueError("bad offset")
+            tz = _dt.timezone(sign * _dt.timedelta(hours=hh, minutes=mm))
+        t = _dt.datetime(int(y), int(mo), int(d), int(h), int(mi), int(sec), us, tzinfo=tz)
     except ValueError as e:
         raise InvalidReleaseError(f"{what}: not an ISO 8601 time: {v!r}") from e
-    if t.tzinfo is None:
-        t = t.replace(tzinfo=_dt.timezone.utc)
     return t.astimezone(_dt.timezone.utc)
+
+
+def _time_or_none(v, what):
+    """A build-only time (provenance.build): a malformed one is None, not a failed station (spec §4.6)."""
+    try:
+        return parse_time(v, what)
+    except InvalidReleaseError:
+        return None
 
 
 def _num(v):
@@ -79,6 +104,9 @@ class Convention:
     canary: Optional[Mapping[str, Any]]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
+    def __hash__(self):  # CR D16: hashable by id; == still compares the fields
+        return hash(self.convention_id)
+
     @classmethod
     def _parse(cls, d):
         return cls(d["convention_id"], E.enum_or_raw(E.PhaseReference, d.get("phase_reference")),
@@ -97,13 +125,16 @@ class Licence:
     url: Optional[str]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
+    def __hash__(self):  # CR D16: hashable by id; == still compares the fields
+        return hash(self.licence_id)
+
     @classmethod
     def _parse(cls, d):
         return cls(d["licence_id"], d.get("spdx"), d.get("provider"), d.get("citation"), d.get("attribution"),
                    d.get("url"), freeze(d))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Constituent:
     name: str
     source_name: Optional[str]
@@ -123,7 +154,7 @@ class Constituent:
                    freeze(d))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class QcFlag:
     flag: E.QcFlagName
     reason: Optional[str]
@@ -152,13 +183,13 @@ class RecordSpan:
     good_samples: Optional[int]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Datum:
     msl_offset_m: Optional[float]
     named: Mapping[str, float]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class ProvenanceBuild:
     """The build-only fields of a set's provenance (``provenance.build``)."""
     build_commit: Optional[str]
@@ -171,12 +202,12 @@ class ProvenanceBuild:
     def _parse(cls, d):
         if not isinstance(d, dict):
             return None  # format 1.0 requires it; a malformed set still loads (spec §7.3)
-        return cls(d.get("build_commit"), parse_time(d.get("built_at"), "provenance.build.built_at"),
-                   parse_time(d.get("fetched_at"), "provenance.build.fetched_at"), d.get("run_id"),
+        return cls(d.get("build_commit"), _time_or_none(d.get("built_at"), "provenance.build.built_at"),
+                   _time_or_none(d.get("fetched_at"), "provenance.build.fetched_at"), d.get("run_id"),
                    freeze(d.get("tool_versions")))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Provenance:
     build: Optional[ProvenanceBuild]
     adapter_version: Optional[str]
@@ -196,7 +227,7 @@ class Provenance:
 _EVIDENCE = ("comparator_kind", "comparator_id", "distance_km", "lag_min", "detail")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class TimeBase:
     """The time-base annotation of the record behind a set (spec §4.5)."""
     code: E.TimeBaseCode
@@ -220,8 +251,11 @@ class TimeBase:
             corr = None
         evidence = tuple(MappingProxyType({k: freeze(e.get(k)) for k in _EVIDENCE})
                          for e in d.get("evidence") or () if isinstance(e, dict))
+        months = d.get("months_dropped") or []
+        if not isinstance(months, list) or not all(isinstance(x, str) for x in months):
+            raise InvalidReleaseError(f"time_base.months_dropped is not a list of strings: {months!r}")
         return cls(E.enum_or_raw(E.TimeBaseCode, d.get("code")), d.get("reason"), d.get("declared"),
-                   d.get("published"), corr, tuple(d.get("months_dropped") or ()), d.get("decided_in"),
+                   d.get("published"), corr, tuple(months), d.get("decided_in"),
                    d.get("decided_build_commit"), evidence)
 
 
@@ -229,7 +263,7 @@ _PREVIOUS = ("time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "r
              "extra_events")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Validation:
     set_id: str
     reference_source: Optional[str]
@@ -248,8 +282,11 @@ class Validation:
     @classmethod
     def _parse(cls, d):
         prev = d.get("previous_release")
-        if prev is not None:
-            prev = MappingProxyType({k: prev.get(k) for k in _PREVIOUS})
+        if isinstance(prev, dict):
+            # a value that is not a number is null, as in the other SDKs (spec §4.6)
+            prev = MappingProxyType({k: (prev.get(k) if _finite(prev.get(k)) else None) for k in _PREVIOUS})
+        else:
+            prev = None
         return cls(d.get("set_id"), d.get("reference_source"), d.get("reference_station"),
                    d.get("reference_distance_km"), d.get("window"), d.get("time_mae_min"), d.get("time_p95_min"),
                    d.get("time_bias_min"), d.get("height_mae_m"), d.get("range_error_m"), d.get("missed_events"),
@@ -295,6 +332,9 @@ class ConstantSet:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _constituents: Any = field(default=None, repr=False, compare=False)
 
+    def __hash__(self):  # CR D16: hashable by id; == still compares the fields
+        return hash(self.set_id)
+
     @property
     def is_recommended(self) -> bool:
         return self._is_recommended
@@ -326,6 +366,9 @@ class Tombstone:
     detail: Optional[str]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
+    def __hash__(self):  # CR D16: hashable by id; == still compares the fields
+        return hash(self.station_id)
+
     @classmethod
     def _parse(cls, d):
         return cls(d["station_id"], d.get("name"), E.enum_or_raw(E.StationStatus, d.get("status")),
@@ -350,6 +393,9 @@ class Station:
     recommended_set: Optional[ConstantSet]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _sets: Tuple[ConstantSet, ...] = field(default=(), repr=False, compare=False)
+
+    def __hash__(self):  # CR D16: hashable by id; == still compares the fields
+        return hash(self.station_id)
 
     @property
     def is_reference(self) -> bool:
@@ -388,7 +434,7 @@ class Nearby:
     distance_km: float
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Stats:
     type: Mapping[str, int]
     kind: Mapping[str, int]
@@ -400,9 +446,14 @@ class Stats:
 # --------------------------------------------------------------------------- building a Station from its JSON
 
 
+def _finite(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def build_station(d, conventions, licences, kind):
-    """Build an active Station from its parsed JSON. conventions/licences: id -> object. Raises
-    InvalidReleaseError when a reference does not resolve."""
+    """Build a Station from the parsed JSON of a station line (the caller passes active lines only; the status
+    is not checked here). conventions/licences: id -> object. Raises InvalidReleaseError when a reference does
+    not resolve or a field is malformed."""
     try:
         sid = d["station_id"]
         rid = d.get("recommended_set_id")
@@ -415,6 +466,8 @@ def build_station(d, conventions, licences, kind):
             lic = licences.get(cs.get("licence_id"))
             if lic is None:
                 raise InvalidReleaseError(f"{cs.get('set_id')}: licence_id {cs.get('licence_id')!r} does not resolve")
+            if not all(isinstance(c, dict) and isinstance(c.get("name"), str) for c in cs.get("constituents") or ()):
+                raise InvalidReleaseError(f"{cs.get('set_id')}: a constituent has no name")
             span = cs.get("record_span")
             datum = cs.get("datum")
             set_id = cs["set_id"]
@@ -428,10 +481,10 @@ def build_station(d, conventions, licences, kind):
                 E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
                 tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
                 tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
-                TimeBase._parse(cs.get("time_base")), set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
+                TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
                 freeze(cs)))
-        rec = [s for s in sets if s.set_id == rid]
+        rec = [s for s in sets if rid is not None and s.set_id == rid]
         if rid is not None and not rec:
             raise InvalidReleaseError(f"{sid}: recommended_set_id {rid!r} does not resolve")
         ordered = tuple(rec + sorted((s for s in sets if s.set_id != rid), key=lambda s: s.set_id))
@@ -441,8 +494,11 @@ def build_station(d, conventions, licences, kind):
         aliases = {}
         for system, ids in (d.get("aliases") or {}).items():
             aliases[system] = tuple(ids) if isinstance(ids, list) else (ids,)
+        lat, lon = d.get("lat"), d.get("lon")
+        if not (_finite(lat) and -90 <= lat <= 90 and _finite(lon) and -180 <= lon <= 180):
+            raise InvalidReleaseError(f"{sid}: lat/lon must be numbers in range, not {lat!r}, {lon!r}")
         return Station(
-            sid, d.get("name"), d.get("country"), float(d["lat"]), float(d["lon"]),
+            sid, d.get("name"), d.get("country"), float(lat), float(lon),
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
             d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, d.get("status")),
             None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
