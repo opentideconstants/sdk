@@ -142,7 +142,9 @@ class OpenTideConstants
             names = []
             names << "OTC_#{d}.json" if @formats.include?("json")
             names << "OTC_#{d}.json.gz" if @formats.include?("json.gz")
-            names += ["OTC_#{d}.jsonl", "OTC_#{d}.meta.json"] if @formats.include?("jsonl")
+            names << "OTC_#{d}.jsonl" if @formats.include?("jsonl")
+            # OTC_{D}.meta.json is always written, whatever the formats (spec §4.3.2).
+            names << "OTC_#{d}.meta.json"
             sha_name = "OTC_#{d}.sha256"
             sha_digest = Digest::SHA256.hexdigest(sha_bytes)
             names.each do |n|

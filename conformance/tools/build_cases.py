@@ -1736,6 +1736,13 @@ def group_download():
                      dl({"paths": sorted([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"] + default_files)}, release=d2, to=B, formats=["json", "json.gz", "jsonl"]),
                      drv("assert_files", dir=B, exactly=sorted([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"] + default_files))] +
                     same([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"]), requires=[]))
+    # spec 4.3.2: OTC_{D}.meta.json is always written, also when the formats name no .jsonl
+    for fmt, ext in [("json", "json"), ("json.gz", "json.gz")]:
+        only = sorted([f"OTC_{d2}.{ext}", f"OTC_{d2}.meta.json", f"OTC_{d2}.sha256"])
+        out.append(case(f"download/{fmt.replace('.', '-')}-only-writes-meta", f"download of {fmt} only: writes the {fmt} file, OTC_{{D}}.meta.json and OTC_{{D}}.sha256", "4.3.2",
+                        [open_latest_no_cache(G),
+                         dl({"paths": only}, release=d2, to=B, formats=[fmt]),
+                         drv("assert_files", dir=B, exactly=only, no_tmp=True)] + same(only), requires=[]))
     out.append(case("download/invalid-format", "an unknown format: invalid_argument", "4.3.2",
                     [open_latest_no_cache(G), dl(err("invalid_argument"), release=d2, to=B, formats=["csv"])], requires=[]))
     out.append(case("download/invalid-release", "a bad datestamp: invalid_argument", "4.3.2",

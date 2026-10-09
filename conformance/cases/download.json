@@ -604,6 +604,152 @@
    ]
   },
   {
+   "id": "download/json-only-writes-meta",
+   "title": "download of json only: writes the json file, OTC_{D}.meta.json and OTC_{D}.sha256",
+   "spec": "4.3.2",
+   "requires": [],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle",
+      "formats": [
+       "json"
+      ]
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.json",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.json",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/json-gz-only-writes-meta",
+   "title": "download of json.gz only: writes the json.gz file, OTC_{D}.meta.json and OTC_{D}.sha256",
+   "spec": "4.3.2",
+   "requires": [],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle",
+      "formats": [
+       "json.gz"
+      ]
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.json.gz",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.json.gz",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.json.gz",
+     "equals": "${fixtures}/good/OTC_20991231.2.json.gz"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
    "id": "download/invalid-format",
    "title": "an unknown format: invalid_argument",
    "spec": "4.3.2",
