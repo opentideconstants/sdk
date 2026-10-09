@@ -1062,7 +1062,6 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK10",
@@ -1071,19 +1070,10 @@
   {
    "case": "rules/pk10/readonly-to-is-io",
    "runners": [
-    "python",
-    "ruby"
+    "python"
    ],
    "package": "PK10",
    "reason": "step 3 download: expected error 'io', got error 'uncaught:PermissionError' ([Errno 13] Permission denied: '/tmp/otc-conf-c7w1amaa/bundle/.tmp-39094-94e77aea7e8e')"
-  },
-  {
-   "case": "rules/pk10/unpublished-format-is-release-not-found",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK10",
-   "reason": "step 0 open: expected a result, got error 'release_not_found' (http://127.0.0.1:51342/nogz/OTC_20991231.2.json.gz: HTTP 404)"
   },
   {
    "case": "rules/pk11/bad-sha256-file-differs-latest",

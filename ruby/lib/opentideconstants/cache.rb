@@ -27,15 +27,27 @@ class OpenTideConstants
                 return dir
             end
             if Gem.win_platform?
-                base = ENV["LOCALAPPDATA"] || File.join(Dir.home, "AppData", "Local")
+                base = ENV["LOCALAPPDATA"]
+                base = File.join(home, "AppData", "Local") if base.nil? || base.empty?
                 File.join(base, "opentideconstants", "Cache")
             elsif RUBY_PLATFORM.include?("darwin")
-                File.join(Dir.home, "Library", "Caches", "opentideconstants")
+                File.join(home, "Library", "Caches", "opentideconstants")
             else
                 base = ENV["XDG_CACHE_HOME"]
-                base = File.join(Dir.home, ".cache") if base.nil? || base.empty?
+                base = File.join(home, ".cache") if base.nil? || base.empty?
                 File.join(base, "opentideconstants")
             end
+        end
+
+        # The home directory for the default cache root, or CacheError when
+        # there is none that can be used.
+        def self.home
+            dir = Dir.home
+            raise ArgumentError, "it is #{dir.inspect}" unless dir.is_a?(String) && !dir.empty? && File.absolute_path?(dir)
+            dir
+        rescue ArgumentError => e
+            raise CacheError, "cannot find the home directory for the default cache (#{e.message}); " \
+                              "pass cache_dir or set OPENTIDECONSTANTS_CACHE_DIR"
         end
 
         def self.datestamp_key(d)
@@ -102,15 +114,24 @@ class OpenTideConstants
 
         # ---- pointer files
 
+        # [body, etag] of a cached pointer or index file, or nil when it is not
+        # cached. A file that exists but cannot be read is io (spec §4.8).
         def read_pointer(name)
             path = File.join(pointer_dir, name)
-            return nil unless File.file?(path)
-            etag_path = "#{path}.etag"
-            body = File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)
-            etag = File.file?(etag_path) ? File.read(etag_path).strip : nil
-            [body, etag]
-        rescue SystemCallError, IOError
+            body = read_file(path)
+            return nil unless body
+            etag = read_file("#{path}.etag")
+            [body.force_encoding(Encoding::UTF_8), etag&.strip]
+        end
+
+        # The bytes of a cache file, nil when it is not there, FileError when
+        # it cannot be read.
+        def read_file(path)
+            File.binread(path)
+        rescue Errno::ENOENT, Errno::ENOTDIR
             nil
+        rescue SystemCallError, IOError => e
+            raise FileError.new("cannot read #{path}: #{e.message}", path: path)
         end
 
         # Writes a pointer or index file and its ETag as a pair, under
@@ -139,12 +160,15 @@ class OpenTideConstants
 
         # The parsed .verified of a release, or nil when the directory is not
         # trusted.
+        # The parsed .verified of a release, or nil when the directory is not
+        # trusted (no .verified, or one that is not a JSON object with files).
+        # A .verified that cannot be read is io (spec §4.8).
         def verified(datestamp)
-            path = File.join(release_dir(datestamp), ".verified")
-            return nil unless File.file?(path)
-            doc = JSON.parse(File.read(path))
+            text = read_file(File.join(release_dir(datestamp), ".verified"))
+            return nil unless text
+            doc = JSON.parse(text.force_encoding(Encoding::UTF_8))
             doc.is_a?(Hash) && doc["files"].is_a?(Hash) ? doc : nil
-        rescue JSON::ParserError, SystemCallError, IOError
+        rescue JSON::ParserError, EncodingError
             nil
         end
 
@@ -188,8 +212,8 @@ class OpenTideConstants
             return if ver.nil? || (ver.key?("zenodo_version_doi") && ver["zenodo_version_doi"] == doi)
             ver["zenodo_version_doi"] = doi
             write_atomic(File.join(release_dir(datestamp), ".verified"), JSON.pretty_generate(ver) + "\n")
-        rescue CacheError
-            nil
+        rescue CacheError, FileError => e
+            log(:warn, "cannot note the version DOI of #{datestamp}: #{e.message}")
         end
 
         # Datestamps of trusted release directories, newest first.

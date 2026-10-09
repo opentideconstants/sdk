@@ -47,12 +47,17 @@ class OpenTideConstants
         # Downloads url to a temporary file in dir and checks its size and
         # SHA-256; then renames it to final (or leaves it at keep_tmp).
         # Returns the size. A bad file is deleted.
-        def self.fetch_checked(client, url, dir, final, name, expected_sha, expected_size, keep_tmp: nil)
+        # error_class: CacheError for the cache, FileError for the caller's
+        # folder (spec §4.8): what a local write failure is.
+        def self.fetch_checked(client, url, dir, final, name, expected_sha, expected_size, keep_tmp: nil,
+                               error_class: CacheError)
             tmp = keep_tmp || Cache.tmp_path(dir)
             begin
                 res = client.send(:http).get_to_file(url, tmp)
                 if res.status == 404
-                    raise ReleaseNotFoundError, "#{url}: HTTP 404"
+                    # The release exists (its .sha256 lists the file): a server inconsistency (CR D32).
+                    raise NetworkError.new("#{url}: HTTP 404 for a file that OTC_#{name[/\AOTC_([^.]+(?:\.[0-9]+)?)\./, 1]}.sha256 " \
+                                           "lists; it is missing on the server", url: url, status: 404)
                 elsif res.status != 200
                     raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status)
                 end
@@ -66,13 +71,17 @@ class OpenTideConstants
                 FileUtils.rm_f(tmp)
                 raise
             end
-        rescue SystemCallError => e
-            raise CacheError, "cannot write #{final || tmp}: #{e.message}"
+        rescue SystemCallError, HTTP::SinkError => e
+            raise local_error(error_class, "cannot write #{final || tmp}: #{e.message}", final || tmp)
+        end
+
+        def self.local_error(error_class, msg, path)
+            error_class == FileError ? FileError.new(msg, path: path) : error_class.new(msg)
         end
 
         # Decompresses gz into a temporary file in dir, checks the SHA-256 of
         # the result and renames it to final. Returns its size.
-        def self.gunzip_checked(gz, dir, final, name, expected_sha)
+        def self.gunzip_checked(gz, dir, final, name, expected_sha, error_class: CacheError)
             tmp = Cache.tmp_path(dir)
             digest = Digest::SHA256.new
             size = 0
@@ -98,6 +107,9 @@ class OpenTideConstants
             rescue Zlib::Error => e
                 FileUtils.rm_f(tmp)
                 raise ChecksumError.new("#{name}: bad gzip data (#{e.message})", file: gz, expected: expected_sha, actual: nil)
+            rescue SystemCallError, IOError => e
+                FileUtils.rm_f(tmp)
+                raise local_error(error_class, "cannot decompress #{gz} into #{final}: #{e.message}", final)
             rescue Exception # rubocop:disable Lint/RescueException
                 FileUtils.rm_f(tmp)
                 raise
@@ -124,7 +136,8 @@ class OpenTideConstants
             sha_name = "OTC_#{d}.sha256"
             sha_digest = Digest::SHA256.hexdigest(sha_bytes)
             names.each do |n|
-                raise ChecksumError.new("#{n} is not listed in #{sha_name}", file: n, expected: nil, actual: nil) unless rows[n]
+                # A format that the release does not publish (spec §4.8 release_not_found).
+                raise ReleaseNotFoundError, "release #{d} does not publish #{n} (#{sha_name} does not list it)" unless rows[n]
             end
 
             # Check every existing file before writing any file.
@@ -153,7 +166,7 @@ class OpenTideConstants
                     raise OfflineError, "offline and #{n} is not cached" if @client.send(:offline)
                     pf = pointer_files[n]
                     url = pf && pf["url"] ? @client.send(:resolve, pointer_url, pf["url"]) : @client.send(:base_url) + n
-                    Downloader.fetch_checked(@client, url, @to, path, n, rows[n], pf && pf["size"])
+                    Downloader.fetch_checked(@client, url, @to, path, n, rows[n], pf && pf["size"], error_class: FileError)
                 end
                 if n == sha_name
                     write_bytes(path, sha_bytes)
@@ -210,8 +223,8 @@ class OpenTideConstants
         end
 
         def cached_sha_ok?(cache, d, n, sha)
-            row = cache.verified(d)["files"][n]
-            row && row["sha256"] == sha
+            row = cache.verified(d)&.dig("files", n)
+            row.is_a?(Hash) && row["sha256"] == sha
         end
 
         def write_bytes(path, bytes)
@@ -243,7 +256,7 @@ class OpenTideConstants
         end
 
         def gunzip_into(gz, dest, name, sha)
-            Downloader.gunzip_checked(gz, @to, dest, name, sha)
+            Downloader.gunzip_checked(gz, @to, dest, name, sha, error_class: FileError)
         end
     end
 end

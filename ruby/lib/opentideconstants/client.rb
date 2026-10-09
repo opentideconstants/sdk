@@ -64,6 +64,7 @@ class OpenTideConstants
         raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
         base_url ||= ENV["OPENTIDECONSTANTS_BASE_URL"]
         base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
+        HTTP.check_url!(base_url, "base_url")
         @base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
         raise InvalidArgumentError, "cache_dir must be a String" unless cache_dir.nil? || cache_dir.is_a?(String)
         @cache_dir = cache_dir
@@ -392,11 +393,13 @@ class OpenTideConstants
         {}
     end
 
+    # The cached .meta.json of release d ({} when it is not there or not a
+    # JSON object; FileError when it cannot be read).
     def cached_meta(d)
-        path = File.join(cache.release_dir(d), "OTC_#{d}.meta.json")
-        doc = File.file?(path) ? JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)) : {}
+        text = cache.read_file(File.join(cache.release_dir(d), "OTC_#{d}.meta.json"))
+        doc = text ? JSON.parse(text.force_encoding(Encoding::UTF_8)) : {}
         doc.is_a?(Hash) ? doc : {}
-    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+    rescue JSON::ParserError, EncodingError
         {}
     end
 
@@ -503,7 +506,7 @@ class OpenTideConstants
         if @offline
             d = newest_cached
             raise OfflineError, "offline and no release is cached in #{cache.root}" unless d
-            @release = load_cached(d)
+            @release = load_cached(d) or raise CacheError, "release #{d} left the cache while it was opened"
             @loaded_from = :cache
             return
         end
@@ -515,7 +518,7 @@ class OpenTideConstants
             d = @on_network_error == :use_cache ? newest_cached : nil
             raise unless d
             log(:warn, "#{e.message}; using the cached release #{d}")
-            @release = load_cached(d)
+            @release = load_cached(d) or raise e
             @loaded_from = :cache_after_error
             @last_error = e
         end
@@ -569,9 +572,12 @@ class OpenTideConstants
         wanted_files(d).any? { |names| names.all? { |n| cache.file_ok?(d, n, ver) } }
     end
 
+    # Loads cached release d, or nil when it is no longer usable (another
+    # process removed it after the caller checked it).
     def load_cached(d)
         ver = cache.verified(d)
-        names = wanted_files(d).find { |ns| ns.all? { |n| cache.file_ok?(d, n, ver) } }
+        names = ver && wanted_files(d).find { |ns| ns.all? { |n| cache.file_ok?(d, n, ver) } }
+        return nil unless names
         dir = cache.release_dir(d)
         paths = names.map { |n| File.join(dir, n) }
         checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
@@ -657,11 +663,10 @@ class OpenTideConstants
     def fetch_release(d, entry, pointer_url)
         dir = cache.ensure_dir(cache.release_dir(d))
         result = cache.with_lock(dir, done: -> { usable_cached?(d) }) do
-            return load_cached(d) if usable_cached?(d)
+            next if usable_cached?(d)
             download_into_cache(d, entry, pointer_url)
         end
-        return load_cached(d) if result == :done
-        load_cached(d)
+        load_cached(d) or raise CacheError, "release #{d} left the cache while it was opened"
     end
 
     def download_into_cache(d, entry, pointer_url)

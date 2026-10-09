@@ -22,10 +22,29 @@ class OpenTideConstants
         # file) the size and SHA-256 of the decoded body.
         Response = Struct.new(:status, :etag, :body, :size, :sha256, keyword_init: true)
 
+        # A local file that a body is written to cannot be written. It is not a
+        # network error: it is not retried, and the caller turns it into a
+        # cache or io error (spec §4.8). #cause is the system error.
+        class SinkError < StandardError; end
+
+        # An absolute http or https URL (spec §4.2 base_url, §5.7 proxy), or
+        # InvalidArgumentError (CR D19).
+        def self.check_url!(value, name)
+            uri = URI(value)
+            raise URI::InvalidURIError, "not absolute" unless %w[http https].include?(uri.scheme) && uri.host && !uri.host.empty?
+            uri
+        rescue URI::Error, ArgumentError => e
+            raise InvalidArgumentError, "#{name} must be an absolute http or https URL, not #{value.inspect} (#{e.message})"
+        end
+
         def initialize(timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, logger: nil, sleeper: nil)
             @open_timeout = timeout || CONNECT_TIMEOUT
             @read_timeout = timeout || READ_TIMEOUT
-            @proxy = proxy && URI(proxy)
+            @proxy = proxy && HTTP.check_url!(proxy, "proxy")
+            # A ca_file that does not exist or cannot be read is io, at construction (CR D19).
+            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
+                raise FileError.new("ca_file #{ca_file} does not exist or cannot be read", path: ca_file)
+            end
             @ca_file = ca_file || ENV["SSL_CERT_FILE"]
             @user_agent = user_agent ? "#{USER_AGENT} #{user_agent}" : USER_AGENT
             @logger = logger
@@ -49,20 +68,39 @@ class OpenTideConstants
             request(url) do |res|
                 digest = Digest::SHA256.new
                 size = 0
-                File.open(path, "wb") do |f|
+                # Only the file operations are local errors; a failure while the
+                # body is read stays a network error.
+                f = sink(path) { File.open(path, "wb") }
+                begin
                     res.read_body do |chunk|
-                        f.write(chunk)
+                        sink(path) { f.write(chunk) }
                         digest << chunk
                         size += chunk.bytesize
                     end
-                    f.flush
-                    f.fsync
+                    sink(path) do
+                        f.flush
+                        f.fsync
+                    end
+                ensure
+                    f.close unless f.closed?
                 end
                 Response.new(status: 200, etag: res["etag"], size: size, sha256: digest.hexdigest)
             end
         end
 
         private
+
+        # Runs one local file operation on path; a system error becomes SinkError.
+        def sink(path)
+            yield
+        rescue SystemCallError, IOError => e
+            raise SinkError, "cannot write #{path}: #{e.message}"
+        end
+
+        # A certificate that does not verify does not get better on a retry.
+        def tls_verify_failure?(e)
+            e.is_a?(OpenSSL::SSL::SSLError) && e.message.include?("certificate verify failed")
+        end
 
         def request(url, etag: nil, &on_ok)
             uri = URI(url)
@@ -78,9 +116,13 @@ class OpenTideConstants
                     err = NetworkError.new("GET #{url}: HTTP #{status}", url: url, status: status)
                     raise err unless status >= 500 || status == 429
                     wait = @retry_after
-                rescue NetworkError
+                rescue NetworkError, SinkError
                     raise
                 rescue *NETWORK_ERRORS => e
+                    if tls_verify_failure?(e)
+                        raise NetworkError.new("GET #{url}: the server's TLS certificate does not verify (#{e.message}); " \
+                                               "check ca_file or SSL_CERT_FILE", url: url, status: nil), cause: e
+                    end
                     err = NetworkError.new("GET #{url}: #{e.class}: #{e.message}", url: url, status: nil)
                     cause = e
                 end
