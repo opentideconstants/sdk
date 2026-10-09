@@ -259,3 +259,35 @@ def test_plain_missing_file_is_still_a_404(pair):
     srv, _ = pair
     r, _ = _get(srv, "/good/no-such-file.json")
     assert r.status == 404 and srv.errors == [], (r.status, srv.errors)
+
+
+# --- R2-144: the proxy records its own relay failures in errors (the driver fails the case with a harness error)
+
+def test_proxy_upstream_failure_goes_to_errors():
+    proxy = RecordingProxy().start()
+    try:
+        conn = http.client.HTTPConnection(proxy.host, proxy.port, timeout=10)
+        conn.request("GET", "http://127.0.0.1:1/x")
+        r = conn.getresponse()
+        r.read()
+        assert r.status == 502 and len(proxy.errors) == 1 and "127.0.0.1:1" in proxy.errors[0], (r.status, proxy.errors)
+        conn = http.client.HTTPConnection(proxy.host, proxy.port, timeout=10)
+        conn.request("CONNECT", "127.0.0.1:1")
+        r = conn.getresponse()
+        assert r.status == 502 and len(proxy.errors) == 2, (r.status, proxy.errors)
+    finally:
+        proxy.shutdown()
+
+
+def test_proxy_upstream_read_failure_goes_to_errors(pair, monkeypatch):
+    srv, proxy = pair
+
+    def boom(self, *a):
+        raise ConnectionResetError(54, "reset by the upstream (test)")
+    monkeypatch.setattr(http.client.HTTPResponse, "read1", boom)
+    conn, r = via_proxy(srv, proxy, "GET", "/good/OTC_latest.json")
+    with pytest.raises((http.client.IncompleteRead, OSError)):
+        r.read()
+    conn.close()
+    monkeypatch.undo()
+    assert len(proxy.errors) == 1 and "reset by the upstream" in proxy.errors[0], proxy.errors

@@ -43,7 +43,10 @@ What it does:
   a tripwire that cannot accept records nothing.
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays. Its aliases map a host name (one that
-  does not resolve) to the address it connects to instead.
+  does not resolve) to the address it connects to instead. A request it cannot
+  relay (the upstream refuses, or fails mid-body) gets a 502 or a cut body, a log
+  entry with an "error", and a line in errors; the driver fails the case with a
+  harness error.
 """
 from __future__ import annotations
 
@@ -533,6 +536,12 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
                                   headers={k.lower(): v for k, v in self.headers.items()}, status=status, rule=None,
                                   error=error)
 
+    def _relay_failed(self, target, msg):
+        """The proxy could not relay to the upstream: the harness is broken (the alias, the fixture server), not the
+        SDK. The driver fails the case with a harness error, so a 502 never passes as the SDK's network error."""
+        print(f"recording proxy: cannot relay {target}: {msg}", file=sys.stderr, flush=True)
+        self.server.proxy.errors.append(f"cannot relay {target}: {msg}")  # type: ignore[attr-defined]
+
     def do_CONNECT(self):
         self.close_connection = True  # after a tunnel the connection carries no more HTTP
         host, sep, port = self.path.rpartition(":")
@@ -546,6 +555,7 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             upstream = socket.create_connection((host, int(port)), timeout=10)
         except OSError as e:
             self._record(502, self.path, error=f"{type(e).__name__}: {e}")
+            self._relay_failed(self.path, f"{type(e).__name__}: {e}")
             self.send_error(502)
             return
         self._record(200, self.path)
@@ -597,18 +607,19 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
                 resp = conn.getresponse()
             except (OSError, ValueError, http.client.HTTPException) as e:
                 self._record(502, target, error=f"{type(e).__name__}: {e}")
+                self._relay_failed(target, f"{type(e).__name__}: {e}")
                 try:
                     self.send_error(502)
                 except OSError:
                     pass
                 return
             self._record(resp.status, target)
-            self._stream(resp)
+            self._stream(resp, target)
         finally:
             if conn is not None:
                 conn.close()
 
-    def _stream(self, resp):
+    def _stream(self, resp, target):
         """Relay the upstream response as it comes: its status, its headers (its own Content-Length, also for HEAD),
         then the body in chunks. A body that ends early (short_body) ends early here too: the proxy closes the
         connection after the bytes it got, so the client sees the same short body as without the proxy."""
@@ -627,15 +638,21 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.flush()
         if self.command == "HEAD" or resp.status in (204, 304):
             return
-        try:
-            while True:
+        while True:
+            try:
                 chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
-                if not chunk:
-                    break
+            except (OSError, http.client.HTTPException) as e:   # the upstream failed mid-body: a harness error
+                self._relay_failed(target, f"reading the body: {type(e).__name__}: {e}")
+                self.close_connection = True
+                return
+            if not chunk:
+                break
+            try:
                 self.wfile.write(chunk)
                 self.wfile.flush()
-        except (OSError, http.client.HTTPException):
-            pass
+            except OSError:   # the client went away (an SDK may stop reading): its own business, not a harness error
+                self.close_connection = True
+                return
         if resp.length:  # upstream closed before Content-Length bytes: end the client connection the same way
             self.close_connection = True
 
@@ -650,6 +667,8 @@ class RecordingProxy:
         self.port = port
         self.log = RequestLog()
         self.aliases = {}  # host name -> the address the proxy connects to instead
+        # Harness errors: a request the proxy could not relay (the driver fails the case when this is not empty)
+        self.errors = []
         self._httpd = None
 
     @property

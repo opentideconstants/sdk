@@ -1057,6 +1057,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     srv.errors.clear()
     srv.trip_errors.clear()
     proxy.log.clear()
+    proxy.errors.clear()
     failures = []
     live = {}
     step_timeout = 60.0
@@ -1155,6 +1156,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "server", "harness_error": True,
                              "problems": [f"harness error: fixture server: {e}" for e in srv.errors[:5]]})
+        if proxy.errors:  # the recording proxy could not relay: a 502 the SDK saw is the harness's fault
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "proxy", "harness_error": True,
+                             "problems": [f"harness error: recording proxy: {e}" for e in proxy.errors[:5]]})
         if srv.trip_errors:  # the tripwire could not accept: "no connection was made" checks would pass vacuously
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "tripwire", "harness_error": True,

@@ -446,3 +446,42 @@ def test_rule_with_a_missing_fixture_fails_the_case_as_a_harness_error(tmp_path)
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
     assert re.search(r"^FAIL  a  .*harness error", r.stdout, re.M) and "PASS  b" in r.stdout, r.stdout[-800:]
     assert r.returncode == 2, (r.returncode, r.stdout[-800:])
+
+
+# --- R2-144: a recording-proxy relay failure (the upstream cannot be reached) is a harness error, not a network error
+
+def test_proxy_relay_failure_is_a_harness_error(tmp_path, monkeypatch):
+    srv, proxy = FixtureServer().start(), RecordingProxy().start()
+    proxy.aliases[driver.SERVER_ALIAS] = srv.host
+    # the fake runner fetches through the proxy (http_proxy); port 1 refuses, so the proxy answers 502
+    case = {"id": "t", "env": {"http_proxy": "${proxy}"},
+            "steps": [{"op": "latest", "args": {"fetch_url": f"http://{driver.SERVER_ALIAS}:1/good/OTC_latest.json"},
+                       "expect": {"count": 1}}]}
+    stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
+    cmd = write_fake_runner(tmp_path).split()
+    monkeypatch.setenv("FAKE_REPLY", OK_REPLY)
+    try:
+        failures, _ = driver.run_case(case, {"main": (cmd, set(driver.FEATURES))}, srv, proxy, False, False, stats)
+    finally:
+        srv.shutdown()
+        proxy.shutdown()
+    assert [e["status"] for e in proxy.log.entries()] == [502], proxy.log.entries()
+    assert stats["harness_errors"] == 1 and any(f.get("driver") == "proxy" and f.get("harness_error") for f in failures), \
+        (failures, stats)
+
+
+def test_proxy_relay_success_is_not_a_harness_error(tmp_path, monkeypatch):
+    srv, proxy = FixtureServer().start(), RecordingProxy().start()
+    proxy.aliases[driver.SERVER_ALIAS] = srv.host
+    case = {"id": "t", "env": {"http_proxy": "${proxy}"},
+            "steps": [{"op": "latest", "args": {"fetch_url": "${server_alias}/good/OTC_latest.json"}, "expect": {"count": 1}}]}
+    stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
+    cmd = write_fake_runner(tmp_path).split()
+    monkeypatch.setenv("FAKE_REPLY", OK_REPLY)
+    try:
+        failures, _ = driver.run_case(case, {"main": (cmd, set(driver.FEATURES))}, srv, proxy, False, False, stats)
+    finally:
+        srv.shutdown()
+        proxy.shutdown()
+    assert [e["status"] for e in proxy.log.entries()] == [200], proxy.log.entries()
+    assert failures == [] and stats["harness_errors"] == 0, (failures, stats)
