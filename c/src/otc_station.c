@@ -33,22 +33,21 @@ static void fill_validation(otc_validation_t *v, const cJSON *row)
     }
 }
 
-static void copy_fixed(char *dst, size_t cap, const char *src)
+/* A string of the parsed line (borrowed from the station), or "" when absent. */
+static const char *borrowed(const cJSON *j, const char *key)
 {
-    size_t n = src ? strlen(src) : 0;
-    if (n >= cap) n = cap - 1; /* cannot happen: lengths are checked at open */
-    if (n) memcpy(dst, src, n);
-    dst[n] = '\0';
+    const char *v = otc__jstr(j, key);
+    return v ? v : "";
 }
 
 static void fill_constituent(otc_constituent_t *c, const cJSON *j)
 {
     memset(c, 0, sizeof *c);
     c->struct_size = sizeof *c;
-    copy_fixed(c->name, sizeof c->name, otc__jstr(j, "name"));
-    copy_fixed(c->source_name, sizeof c->source_name, otc__jstr(j, "source_name"));
-    copy_fixed(c->doodson, sizeof c->doodson, otc__jstr(j, "doodson"));
-    copy_fixed(c->kept_reason, sizeof c->kept_reason, otc__jstr(j, "kept_reason"));
+    c->name = borrowed(j, "name");
+    c->source_name = borrowed(j, "source_name");
+    c->doodson = borrowed(j, "doodson");
+    c->kept_reason = borrowed(j, "kept_reason");
     c->speed_deg_per_hour = otc__jnum(j, "speed_deg_per_hour");
     c->amplitude_m = otc__jnum(j, "amplitude_m");
     c->phase_deg = otc__jnum(j, "phase_deg");

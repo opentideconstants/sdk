@@ -268,11 +268,6 @@ static otc_status add_alias(builder *b, const char *system, const char *alias, c
     return OTC_OK;
 }
 
-static int fits(const char *s, size_t cap)
-{
-    return !s || strlen(s) < cap;
-}
-
 /* Checks one constant set and adds what the index needs from it. */
 static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const char *rec_id)
 {
@@ -292,9 +287,6 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     cJSON_ArrayForEach(c, cons) {
         const char *name = otc__jstr(c, "name");
         if (!name) return bad_line(b, "a constituent has no name");
-        if (!fits(name, 16) || !fits(otc__jstr(c, "source_name"), 32) || !fits(otc__jstr(c, "doodson"), 8)
-            || !fits(otc__jstr(c, "kept_reason"), 32))
-            return bad_line(b, "a constituent string is longer than its schema maxLength");
         if ((st = add_cname(b, name)) != OTC_OK) return st;
     }
     /* spec 4.3: qc_status counts every set (a value format 1.0 does not have is

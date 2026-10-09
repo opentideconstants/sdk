@@ -593,18 +593,20 @@ OTC_API otc_status otc_provenance_build_tool_versions_json(const otc_provenance_
 OTC_API size_t otc_set_validation_count(const otc_set *set);
 OTC_API otc_status otc_set_validation_at(const otc_set *set, size_t i, const otc_validation_t **out);
 
-/* Constituents, in file order. Strings in fixed arrays: "" means absent. */
+/* Constituents, in file order. The strings are borrowed from the station and
+ * stay valid until it is freed; they have no length limit, and "" means absent
+ * (spec 4.5, 6.4, CR D13). */
 typedef struct otc_constituent_t {
-    size_t struct_size;
-    char   name[16];
-    char   source_name[32];
-    char   doodson[8];
-    double speed_deg_per_hour;    /* NaN if absent */
-    double amplitude_m;
-    double phase_deg;             /* Greenwich (or convention) phase lag, 0 <= g < 360 */
-    double amp_uncertainty_m;     /* NaN if absent */
-    double phase_uncertainty_deg; /* NaN if absent */
-    char   kept_reason[32];
+    size_t      struct_size;
+    const char *name;
+    const char *source_name;
+    const char *doodson;
+    double      speed_deg_per_hour;    /* NaN if absent */
+    double      amplitude_m;
+    double      phase_deg;             /* Greenwich (or convention) phase lag, 0 <= g < 360 */
+    double      amp_uncertainty_m;     /* NaN if absent */
+    double      phase_uncertainty_deg; /* NaN if absent */
+    const char *kept_reason;
 } otc_constituent_t;
 OTC_API size_t otc_set_constituent_count(const otc_set *set);
 OTC_API otc_status otc_set_constituent_at(const otc_set *set, size_t i, const otc_constituent_t **out);
