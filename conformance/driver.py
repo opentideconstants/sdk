@@ -388,6 +388,41 @@ def structure_problems(c):
     return out
 
 
+API = HERE / "api.json"
+# Error codes any fetch operation may give without being listed: a C build without otc_fetch answers not_built
+# (conformance/README.md "expect_if_missing").
+API_ANY_OP_ERRORS = {"not_built"}
+
+
+def api_errors(api_path):
+    """op name -> the error codes api.json lists for it, from the members of the objects a runner op calls."""
+    api = json.loads(Path(api_path).read_text(encoding="utf-8"))
+    out = {}
+    for obj in ("Client", "Release", "Station", "ConstantSet"):
+        for m in api["objects"][obj]["members"]:
+            if "errors" in m:
+                out.setdefault(m["name"], set()).update(m["errors"])
+    return out
+
+
+def api_error_problems(cases, errors_by_op):
+    """K77: every error a case expects from an op must be in that operation's api.json errors list."""
+    problems = []
+    for c in cases:
+        for i, st in enumerate(c.get("steps", [])):
+            op = st.get("op")
+            if op not in errors_by_op:
+                continue
+            exps = [st.get("expect")] + list((st.get("expect_if_missing") or {}).values())
+            for exp in exps:
+                if isinstance(exp, dict) and "error" in exp:
+                    code = exp["error"]
+                    if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
+                        problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
+                                        f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
+    return problems
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -1021,6 +1056,8 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--check-cases", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--api", default=str(API), help="the API manifest that --check-cases checks error codes against "
+                                                     "(default conformance/api.json)")
     a = ap.parse_args()
 
     if a.selftest:
@@ -1057,6 +1094,12 @@ def main():
     if a.check_cases:
         # non-matrix cases are the same before and after expansion: lint them once
         problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
+        try:
+            by_op = api_errors(a.api)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"--api {a.api}: cannot read the API manifest: {type(e).__name__}: {e}", file=sys.stderr)
+            return 2
+        problems += api_error_problems(raw + raw_cross, by_op)
         n_cross = 0
         if not a.cases:
             problems += check_cases(raw_cross)

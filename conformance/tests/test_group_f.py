@@ -164,11 +164,11 @@ def test_cross_case_requires_applies_to_every_role():
 # --- K1: --check-cases with --cross lints cases/ and cross/ once each, with no false problems
 
 def test_check_cases_with_cross_has_no_false_problems():
+    # the same problems with and without --cross (api.json gaps, if any, are K77's and show in both)
     plain = run_driver("--check-cases")
     r = run_driver("--check-cases", "--cross", "a=x", "--cross", "b=y")
-    assert plain.returncode == 0, plain.stdout[-400:]
-    assert r.returncode == 0 and "PROBLEM" not in r.stdout, r.stdout[-600:]
-    assert r.stdout.splitlines()[-1] == plain.stdout.splitlines()[-1], (r.stdout[-300:], plain.stdout[-300:])
+    assert "must not have roles" not in r.stdout and "Traceback" not in r.stderr, r.stdout[-600:]
+    assert r.returncode == plain.returncode and r.stdout == plain.stdout, (r.stdout[-300:], plain.stdout[-300:])
 
 
 # --- K16, K69, K67, K15: malformed case content, a bad hello runner name and a bad command give exit 2, no traceback
@@ -202,3 +202,35 @@ def test_unhashable_hello_runner_exits_2(tmp_path, hello):
 def test_unbalanced_quote_in_command_exits_2(args):
     r = run_driver(*args)
     assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])
+
+
+# --- K77: --check-cases flags an expected error code that the operation's api.json errors list does not have
+
+
+
+def _api_with(tmp_path, op, errors):
+    api = json.loads((CONF / "api.json").read_text(encoding="utf-8"))
+    for obj in api["objects"].values():
+        for m in obj.get("members", []):
+            if m["name"] == op:
+                m["errors"] = errors
+    p = tmp_path / "api.json"
+    p.write_text(json.dumps(api))
+    return p
+
+
+def test_check_cases_flags_error_not_in_api(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "check_for_update", "expect": {"error": "reader_too_old"}}]}])
+    api = _api_with(tmp_path, "check_for_update", ["network", "offline_unavailable"])
+    r = run_driver("--check-cases", "--cases", str(cases), "--api", str(api))
+    assert r.returncode == 2 and "reader_too_old" in r.stdout and "check_for_update" in r.stdout, (r.returncode, r.stdout[-400:], r.stderr[-300:])
+    api = _api_with(tmp_path, "check_for_update", ["network", "offline_unavailable", "reader_too_old"])
+    r = run_driver("--check-cases", "--cases", str(cases), "--api", str(api))
+    assert r.returncode == 0, (r.stdout[-400:], r.stderr[-300:])
+
+
+def test_check_cases_flags_error_in_expect_if_missing(tmp_path):
+    st = {"op": "verify", "expect": {"verified": True}, "expect_if_missing": {"fs": {"error": "file_exists"}}}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and "file_exists" in r.stdout, r.stdout[-400:]
