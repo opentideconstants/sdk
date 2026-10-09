@@ -62,12 +62,11 @@ otc_status otc_require_station(const otc_release *rel, const char *id, otc_stati
          * otc_tombstone(rel, id, &t) gives the object */
         otc_tombstone_t *t = NULL;
         const char *in = NULL, *reason = NULL, *into = NULL;
-        otc_status st2;
-        if (otc_tombstone(rel, id, &t) == OTC_OK) {
-            in = otc__jstr(t->root, "removed_in");
-            reason = otc__jstr(t->root, "removed_reason");
-            into = otc__jstr(t->root, "merged_into");
-        }
+        otc_status st2 = otc_tombstone(rel, id, &t);
+        if (st2 != OTC_OK) return st2;   /* the tombstone cannot be read: that failure (already recorded) */
+        in = otc__jstr(t->root, "removed_in");
+        reason = otc__jstr(t->root, "removed_reason");
+        into = otc__jstr(t->root, "merged_into");
         if (into)
             st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s), merged into %s", id,
                             in ? in : "?", reason ? reason : "?", into);
