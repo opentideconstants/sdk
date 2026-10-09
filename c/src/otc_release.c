@@ -628,26 +628,39 @@ typedef struct ix_ctx {
     otc_status         st;
 } ix_ctx;
 
-/* One entry of index-v1.json, from its line (spec 6.2). */
+/* Adds item to o under key (to the array o when key is NULL). On any failure
+ * (item NULL, no memory for the key) the item is deleted and *ok cleared. */
+static void put(cJSON *o, const char *key, cJSON *item, int *ok)
+{
+    if (!item || !o || !(key ? cJSON_AddItemToObject(o, key, item) : cJSON_AddItemToArray(o, item))) {
+        cJSON_Delete(item);
+        *ok = 0;
+    }
+}
+
+/* One entry of index-v1.json, from its line (spec 6.2). Any allocation that
+ * fails makes the whole index fail (OTC_E_NOMEM): a partial entry is never
+ * written. */
 static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint64_t offset)
 {
     ix_ctx *x = (ix_ctx *)ctx;
     cJSON *d = otc__json_parse(text, len), *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
     const char *rec, *name, *kind = NULL;
-    char *folded;
+    int ok = 1;
     if (!d) return OTC_E_INVALID_RELEASE;
     o = cJSON_CreateObject();
     sets = cJSON_CreateArray();
     al = cJSON_CreateObject();
+    if (!o || !sets || !al) ok = 0;
     offs = otc__jget(d, "subordinate_offsets");
     if (!cJSON_IsObject(offs)) offs = NULL;
     rec = otc__jstr(d, "recommended_set_id");
     name = otc__jstr(d, "name");
-    cJSON_AddNumberToObject(o, "offset", (double)offset);
-    cJSON_AddNumberToObject(o, "length", (double)len);
-    cJSON_AddItemToObject(o, "station_id", jstr_or_null(d, "station_id"));
-    cJSON_AddItemToObject(o, "status", jstr_or_null(d, "status"));
+    put(o, "offset", cJSON_CreateNumber((double)offset), &ok);
+    put(o, "length", cJSON_CreateNumber((double)len), &ok);
+    put(o, "station_id", jstr_or_null(d, "station_id"), &ok);
+    put(o, "status", jstr_or_null(d, "status"), &ok);
     if (name && otc__json_has_nul(text, len)) {
         /* a name with a NUL (schema-valid): written from the text, in full, as raw JSON */
         char *full = NULL, *fold = NULL, *jn = NULL, *jf = NULL;
@@ -658,34 +671,35 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
             jn = otc__json_escape_n(full, fl);
             jf = otc__json_escape_n(fold, ffl);
         }
-        cJSON_AddItemToObject(o, "name", jn ? cJSON_CreateRaw(jn) : jstr_or_null(d, "name"));
-        cJSON_AddItemToObject(o, "name_folded", jf ? cJSON_CreateRaw(jf) : cJSON_CreateNull());
-        if (r < 0 || (r > 0 && (!fold || !jn || !jf))) x->st = OTC_E_NOMEM;
+        if (r < 0 || (r > 0 && (!fold || !jn || !jf))) ok = 0;
+        put(o, "name", jn ? cJSON_CreateRaw(jn) : jstr_or_null(d, "name"), &ok);
+        put(o, "name_folded", jf ? cJSON_CreateRaw(jf) : cJSON_CreateNull(), &ok);
         free(full);
         free(fold);
         free(jn);
         free(jf);
     } else {
-        folded = name ? otc__fold(name) : NULL;
-        cJSON_AddItemToObject(o, "name", jstr_or_null(d, "name"));
-        cJSON_AddItemToObject(o, "name_folded", folded ? cJSON_CreateString(folded) : cJSON_CreateNull());
+        char *folded = name ? otc__fold(name) : NULL;
+        if (name && !folded) ok = 0;
+        put(o, "name", jstr_or_null(d, "name"), &ok);
+        put(o, "name_folded", folded ? cJSON_CreateString(folded) : cJSON_CreateNull(), &ok);
         free(folded);
     }
-    cJSON_AddItemToObject(o, "country", jstr_or_null(d, "country"));
-    cJSON_AddItemToObject(o, "type", jstr_or_null(d, "type"));
+    put(o, "country", jstr_or_null(d, "country"), &ok);
+    put(o, "type", jstr_or_null(d, "type"), &ok);
     v = otc__jget(d, "lat");
-    cJSON_AddItemToObject(o, "lat", cJSON_IsNumber(v) ? cJSON_CreateNumber(v->valuedouble) : cJSON_CreateNull());
+    put(o, "lat", cJSON_IsNumber(v) ? cJSON_CreateNumber(v->valuedouble) : cJSON_CreateNull(), &ok);
     v = otc__jget(d, "lon");
-    cJSON_AddItemToObject(o, "lon", cJSON_IsNumber(v) ? cJSON_CreateNumber(v->valuedouble) : cJSON_CreateNull());
+    put(o, "lon", cJSON_IsNumber(v) ? cJSON_CreateNumber(v->valuedouble) : cJSON_CreateNull(), &ok);
     cJSON_ArrayForEach(cs, otc__jget(d, "constant_sets")) {
         cJSON *s = cJSON_CreateObject(), *cons = cJSON_CreateArray();
         const cJSON *c;
         size_t k;
-        for (k = 0; SET_KEYS[k]; k++) cJSON_AddItemToObject(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]));
+        for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]), &ok);
         cJSON_ArrayForEach(c, otc__jget(cs, "constituents"))
-            if (otc__jstr(c, "name")) cJSON_AddItemToArray(cons, cJSON_CreateString(otc__jstr(c, "name")));
-        cJSON_AddItemToObject(s, "constituents", cons);
-        cJSON_AddItemToArray(sets, s);
+            if (otc__jstr(c, "name")) put(cons, NULL, cJSON_CreateString(otc__jstr(c, "name")), &ok);
+        put(s, "constituents", cons, &ok);
+        put(sets, NULL, s, &ok);
         if (rec && !otc__strcmp_null(otc__jstr(cs, "set_id"), rec)) {
             const char *q = otc__jstr(cs, "quantity");
             kind = q && !strcmp(q, "water_level") ? "tide" : q && !strcmp(q, "current") ? "current" : "other";
@@ -695,30 +709,36 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         const otc__entry *e = otc__find_entry(x->rel, otc__jstr(d, "station_id"));
         if (e) kind = e->kind == OTC_KIND_UNSET ? NULL : otc_kind_name(e->kind);
     }
-    cJSON_AddItemToObject(o, "kind", kind ? cJSON_CreateString(kind) : cJSON_CreateNull());
+    put(o, "kind", kind ? cJSON_CreateString(kind) : cJSON_CreateNull(), &ok);
     cJSON_ArrayForEach(a, otc__jget(d, "aliases")) {
         cJSON *list = cJSON_CreateArray();
         const cJSON *id;
-        if (cJSON_IsString(a)) cJSON_AddItemToArray(list, cJSON_CreateString(a->valuestring));
-        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) cJSON_AddItemToArray(list, cJSON_CreateString(id->valuestring));
-        cJSON_AddItemToObject(al, a->string, list);
+        if (cJSON_IsString(a)) put(list, NULL, cJSON_CreateString(a->valuestring), &ok);
+        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) put(list, NULL, cJSON_CreateString(id->valuestring), &ok);
+        put(al, a->string, list, &ok);
     }
-    cJSON_AddItemToObject(o, "aliases", al);
-    cJSON_AddItemToObject(o, "reference_station_id", jstr_or_null(offs, "reference_station_id"));
-    cJSON_AddItemToObject(o, "offsets_licence_id", jstr_or_null(offs, "licence_id"));
-    cJSON_AddItemToObject(o, "recommended_set_id", jstr_or_null(d, "recommended_set_id"));
-    cJSON_AddItemToObject(o, "sets", sets);
-    cJSON_AddItemToArray(x->arr, o);
+    put(o, "aliases", al, &ok);
+    put(o, "reference_station_id", jstr_or_null(offs, "reference_station_id"), &ok);
+    put(o, "offsets_licence_id", jstr_or_null(offs, "licence_id"), &ok);
+    put(o, "recommended_set_id", jstr_or_null(d, "recommended_set_id"), &ok);
+    put(o, "sets", sets, &ok);
     cJSON_Delete(d);
-    return OTC_OK;
+    if (!ok) {
+        cJSON_Delete(o);
+        return x->st = OTC_E_NOMEM;
+    }
+    put(x->arr, NULL, o, &ok);
+    return ok ? OTC_OK : (x->st = OTC_E_NOMEM);
 }
 
+/* The index-v1.json document; NULL when memory runs out or the file cannot be read. */
 cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by)
 {
     cJSON *doc, *arr;
     const char *ds;
     char jsonl[80];
     size_t line_no = 0;
+    int ok = 1;
     ix_ctx x;
     if (!rel || !rel->file || !jsonl_sha256) return NULL;
     ds = otc__jstr(rel->release_obj, "datestamp");
@@ -728,19 +748,23 @@ cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const ch
     x.rel = rel;
     x.arr = arr;
     x.st = OTC_OK;
-    if (scan_lines(rel->file, &line_no, stored_entry_cb, &x) != OTC_OK) {
+    if (scan_lines(rel->file, &line_no, stored_entry_cb, &x) != OTC_OK || x.st != OTC_OK) {
         cJSON_Delete(doc);
         cJSON_Delete(arr);
         return NULL;
     }
     snprintf(jsonl, sizeof jsonl, "OTC_%s.jsonl", ds);
-    cJSON_AddNumberToObject(doc, "index_version", 1);
-    cJSON_AddStringToObject(doc, "datestamp", ds);
-    cJSON_AddStringToObject(doc, "jsonl", jsonl);
-    cJSON_AddStringToObject(doc, "jsonl_sha256", jsonl_sha256);
-    cJSON_AddNumberToObject(doc, "jsonl_size", (double)otc__file_size(rel->file));
-    cJSON_AddStringToObject(doc, "by", by);
-    cJSON_AddItemToObject(doc, "stations", arr);
+    put(doc, "index_version", cJSON_CreateNumber(1), &ok);
+    put(doc, "datestamp", cJSON_CreateString(ds), &ok);
+    put(doc, "jsonl", cJSON_CreateString(jsonl), &ok);
+    put(doc, "jsonl_sha256", cJSON_CreateString(jsonl_sha256), &ok);
+    put(doc, "jsonl_size", cJSON_CreateNumber((double)otc__file_size(rel->file)), &ok);
+    put(doc, "by", cJSON_CreateString(by), &ok);
+    put(doc, "stations", arr, &ok);
+    if (!ok) {
+        cJSON_Delete(doc);
+        return NULL;
+    }
     return doc;
 }
 
