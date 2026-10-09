@@ -64,7 +64,13 @@ class PinnedReleaseError(OpenTideConstantsError):
 
 
 class CacheError(OpenTideConstantsError):
+    """The cache cannot be written. ``removed`` lists the datestamps that ``prune`` removed before the failure,
+    newest first; it is empty for every other operation (spec §4.3, CR2 DR18)."""
+
     code = "cache"
+
+    def __init__(self, message: str = "", *, removed: list[str] | None = None):
+        super().__init__(message, removed=list(removed or []))
 
 
 class FileExistsError(OpenTideConstantsError):  # noqa: A001 - the name is part of the API (spec §4.8)

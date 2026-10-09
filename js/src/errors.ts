@@ -132,10 +132,13 @@ export class PinnedReleaseError extends OpenTideConstantsError {
 /** The cache cannot be written (permissions, disk full, a failed rename). */
 export class CacheError extends OpenTideConstantsError {
     readonly path: string | null;
+    /** The datestamps that `prune` removed before the failure, newest first; empty for every other operation (spec 4.3, CR2 DR18). */
+    readonly removed: readonly string[];
 
-    constructor(message: string, detail: { path?: string | null } & CauseOption = {}) {
+    constructor(message: string, detail: { path?: string | null; removed?: readonly string[] } & CauseOption = {}) {
         super("cache", message, detail);
         this.path = detail.path ?? null;
+        this.removed = Object.freeze([...(detail.removed ?? [])]);
     }
 }
 

@@ -71,8 +71,17 @@ class OpenTideConstants
         CODE = "pinned_release".freeze
     end
 
+    # The cache cannot be written. #removed lists the datestamps that prune
+    # removed before the failure, newest first; it is empty for every other
+    # operation (spec §4.3, CR2 DR18).
     class CacheError < Error
         CODE = "cache".freeze
+        attr_reader :removed
+
+        def initialize(message = "cache error", removed: [])
+            super(message)
+            @removed = removed.dup.freeze
+        end
     end
 
     class FileExistsError < Error
