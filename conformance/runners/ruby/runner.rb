@@ -165,7 +165,8 @@ class Runner
         when "attribution"
             if args.key?("station_ids")
                 ids = args["station_ids"]
-                sts = ids.nil? ? nil : ids.map { |id| rel(target).station(id) }.compact
+                # an unknown or removed id gives nil, which goes to the SDK as it is (D2 a: invalid_argument)
+                sts = ids.nil? ? nil : ids.map { |id| rel(target).station(id) }
                 { "attribution" => q(target).attribution(sts) }
             else
                 { "attribution" => q(target).attribution }

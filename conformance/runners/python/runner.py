@@ -258,8 +258,9 @@ class Runner:
         if op == "attribution":
             t = self.target(req)
             if "station_ids" in a:
+                # an unknown or removed id gives None, which goes to the SDK as it is (D2 a: invalid_argument)
                 stations = [t.station(i) for i in a["station_ids"]]
-                return {"attribution": t.attribution([s for s in stations if s is not None])}
+                return {"attribution": t.attribution(stations)}
             return {"attribution": t.attribution()}
         if op in ("station", "require_station"):
             return {"station": enc_station(getattr(self.target(req), op)(a["station_id"]))}
