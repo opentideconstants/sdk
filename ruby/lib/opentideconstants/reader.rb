@@ -208,6 +208,12 @@ class OpenTideConstants
               "offsets_licence_id" => str.call(off, "licence_id"), "recommended_set_id" => rec_id, "sets" => sets }
         end
 
+        # v as an Integer when it is a JSON integer or a number with an
+        # integral value (12.0); any other value as it is (CR2 DR10).
+        def integral(v)
+            v.is_a?(Float) && v.finite? && v == v.floor ? v.to_i : v
+        end
+
         # True when e has every key of an index entry with the right type (spec §6.2).
         def index_entry_ok?(e)
             return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)

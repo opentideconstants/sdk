@@ -1433,6 +1433,32 @@ def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("reader", step("close")),
                         drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
                     roles=roles))
+    # DR10: an integer key written as a number with an integral value (12.0) is that integer. The index stays
+    # fresh: a marked entry shows in the reader's answers, a line is read through the float offset, and the
+    # file is not rewritten.
+    jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
+    pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
+    out.append(case("cross/index-float-ints", "index_version, jsonl_size and an entry's offset and length written as 1.0, 25846.0, ...: the index is fresh, so it is used and not rewritten (CR2 DR10)", "6.2",
+                    fill + [drv("json_set", path=idx, pointer="/index_version", value=1.0),
+                            drv("json_set", path=idx, pointer="/jsonl_size", value=float(jsize)),
+                            drv("json_set", path=idx, pointer="/stations/0/offset", value=float(a["offset"])),
+                            drv("json_set", path=idx, pointer="/stations/0/length", value=float(a["length"])),
+                            drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
+                        reader_open,
+                        as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
+                        as_("reader", step("station", {"station": enc_station(R2, R2.by_id[a["station_id"]])}, station_id=a["station_id"])),
+                        as_("reader", step("close")),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"), no_requests],
+                    roles=roles))
+    msize = (FIXTURES / "good" / f"OTC_{d}.meta.json").stat().st_size
+    out.append(case("cross/verified-float-size", "a .verified whose file sizes are written as 25846.0: the release is cached, and the reader opens it offline (CR2 DR10)", "5.4",
+                    fill + [drv("json_set", path=f"{rdir}/.verified", pointer=f"/files/OTC_{d}.jsonl/size", value=float(jsize)),
+                            drv("json_set", path=f"{rdir}/.verified", pointer=f"/files/OTC_{d}.meta.json/size", value=float(msize))] + offline + [
+                        reader_open,
+                        as_("reader", step("station_count", {"station_count": len(R2.active)})),
+                        as_("reader", step("cached_releases", {"datestamps": [d]})), no_requests],
+                    roles=roles))
     return out
 
 

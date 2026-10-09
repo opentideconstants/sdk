@@ -209,18 +209,30 @@ def _entry(d, offset=None, length=None):
     }
 
 
+def integral(v):
+    """v as an int when it is a JSON integer or a number with an integral value (12.0), else None (CR2 DR10)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and math.isfinite(v) and v.is_integer():
+        return int(v)
+    return None
+
+
 def _usable_index(idx, name, sha256, size, conv, lic):
-    """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2)."""
+    """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2). An integer
+    key may be written as a number with an integral value (CR2 DR10)."""
     def is_int(v):
-        return isinstance(v, int) and not isinstance(v, bool)
+        return integral(v) is not None
 
     def is_num(v):
         return v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
 
-    if not isinstance(idx, dict) or not is_int(idx.get("index_version")) or idx["index_version"] != INDEX_VERSION:
+    if not isinstance(idx, dict) or integral(idx.get("index_version")) != INDEX_VERSION:
         return None
     if idx.get("jsonl") != name or name != f"OTC_{idx.get('datestamp')}.jsonl" or idx.get("jsonl_sha256") != sha256 \
-            or not is_int(idx.get("jsonl_size")) or idx["jsonl_size"] != size or not isinstance(idx.get("stations"), list):
+            or not is_int(idx.get("jsonl_size")) or integral(idx["jsonl_size"]) != size or not isinstance(idx.get("stations"), list):
         return None
     out = []
     start = 0  # the least offset the next entry may have
@@ -231,6 +243,7 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
                 or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list):
             return None
+        e = {**e, "offset": integral(e["offset"]), "length": integral(e["length"])}
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
             return None
         # the bounds check (CR D4): a line inside the file, and after the line before it and its line end, so

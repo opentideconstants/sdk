@@ -1668,6 +1668,321 @@
      "count": 0
     }
    ]
+  },
+  {
+   "id": "cross/index-float-ints",
+   "title": "index_version, jsonl_size and an entry's offset and length written as 1.0, 25846.0, ...: the index is fresh, so it is used and not rewritten (CR2 DR10)",
+   "spec": "6.2",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/index_version",
+     "value": 1.0
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/jsonl_size",
+     "value": 25827.0
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/0/offset",
+     "value": 0.0
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/0/length",
+     "value": 5272.0
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/10/country",
+     "value": "ZZ"
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${cache}/v1/releases/20991231.2/index-v1.json"
+     ],
+     "to": "${tmp}/index-copy"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "stations",
+     "args": {
+      "country": "ZZ"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0011"
+      ]
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0001",
+       "name": "San Francisco",
+       "country": "USA",
+       "lat": 37.8063,
+       "lon": -122.4659,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "gesla": [
+         "test-gesla-0001a",
+         "test-gesla-0001b"
+        ],
+        "kartverket": [
+         "TSF"
+        ],
+        "noaa": [
+         "9900001"
+        ],
+        "slackwater": [
+         "sw-0001"
+        ],
+        "ticon": [
+         "test-ticon-0001"
+        ],
+        "webcaltides": [
+         "wct-0001"
+        ],
+        "xtide": [
+         "San Francisco (test), California"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0001/noaa"
+      }
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/verified-float-size",
+   "title": "a .verified whose file sizes are written as 25846.0: the release is cached, and the reader opens it offline (CR2 DR10)",
+   "spec": "5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.jsonl/size",
+     "value": 25827.0
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.meta.json/size",
+     "value": 3974.0
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "reader",
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2"
+      ]
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
   }
  ]
 }

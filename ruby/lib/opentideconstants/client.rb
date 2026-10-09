@@ -649,7 +649,15 @@ class OpenTideConstants
         return nil unless File.file?(path)
         idx = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
         jsonl = "OTC_#{d}.jsonl"
-        return nil unless idx.is_a?(Hash) && idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
+        return nil unless idx.is_a?(Hash)
+        # An integer key may be written as a number with an integral value, 12.0 (CR2 DR10).
+        %w[index_version jsonl_size].each { |k| idx[k] = Reader.integral(idx[k]) if idx.key?(k) }
+        if idx["stations"].is_a?(Array)
+            idx["stations"].each do |e|
+                %w[offset length].each { |k| e[k] = Reader.integral(e[k]) if e.is_a?(Hash) && e.key?(k) }
+            end
+        end
+        return nil unless idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
         return nil unless idx["datestamp"] == d && idx["jsonl"] == jsonl
         return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
         return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
