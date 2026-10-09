@@ -6,15 +6,30 @@ on:
       - "js/**"
       - "conformance/**"
       - ".github/workflows/typescript.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "js/**"
       - "conformance/**"
       - ".github/workflows/typescript.yml"
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   node:
@@ -29,14 +44,18 @@ jobs:
         include:
           - os: ubuntu-latest
             node: "22"
+          # The floor in package.json engines and the README.
+          - os: ubuntu-latest
+            node: "22.12"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: js/package-lock.json
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: Install dev dependencies
         working-directory: js
         run: npm ci
@@ -57,24 +76,25 @@ jobs:
         run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --report ts-node-report.json
       - name: Upload the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ts-node-report-${{ matrix.os }}-${{ matrix.node }}
           path: ts-node-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   browser:
     name: headless Chromium (CORS)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: js/package-lock.json
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: Install dev dependencies and Chromium
         working-directory: js
         run: |
@@ -85,22 +105,29 @@ jobs:
         run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --report ts-browser-report.json
       - name: Upload the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ts-browser-report
           path: ts-browser-report.json
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   package:
-    name: npm pack in node:lts-slim
+    name: npm pack in ${{ matrix.image }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12 is the floor in package.json engines; require() of the ESM
+        # package without a flag starts there.
+        image: ["node:22.12-slim", "node:24-slim"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: Pack
         working-directory: js
         run: |
@@ -110,16 +137,26 @@ jobs:
           cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
       - name: Install the tarball in a clean container and run the quickstart against the fixture server
         run: |
-          uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 &
-          sleep 3
-          docker run --rm --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" node:lts-slim sh -ec '
-            node --version
-            mkdir /app && cd /app && npm init -y >/dev/null
-            npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
-            test "$(npm ls --all --omit=dev --parseable | wc -l)" -eq 2
-            cp /pkg/quickstart.mjs .
-            OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:18765/good/ node quickstart.mjs 9900001 | tee out.txt
-            grep -q "OTC-T-0001 San Francisco: M2 amplitude 0.5 m" out.txt
-            OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | grep -q "(cache)"
-            node -e "const { OpenTideConstants } = require(\"opentideconstants\"); if (typeof OpenTideConstants.open !== \"function\") process.exit(1)"
-          '
+          uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 >"$RUNNER_TEMP/server.log" 2>&1 &
+          server=$!
+          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "--- fixture server log"; cat "$RUNNER_TEMP/server.log"; fi' EXIT
+          # Wait until the server answers (at most 60 s; uv may first fetch a Python).
+          for _ in $(seq 1 120); do
+            if curl -s -o /dev/null http://127.0.0.1:18765/ && curl -s -o /dev/null http://127.0.0.1:18766/; then break; fi
+            kill -0 "$server" 2>/dev/null || { echo "the fixture server exited before it was ready"; exit 1; }
+            sleep 0.5
+          done
+          curl -s -o /dev/null http://127.0.0.1:18765/ || { echo "the fixture server is not ready after 60 s"; exit 1; }
+          docker run --rm -i --network host -v "$RUNNER_TEMP/pkg:/pkg:ro" "${{ matrix.image }}" bash -eo pipefail -s <<'SCRIPT'
+          node --version
+          mkdir /app && cd /app && npm init -y >/dev/null
+          npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz
+          npm ls --all --omit=dev --parseable > deps.txt
+          test "$(wc -l < deps.txt)" -eq 2
+          cp /pkg/quickstart.mjs .
+          OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:18765/good/ node quickstart.mjs 9900001 | tee out.txt
+          grep -q "OTC-T-0001 San Francisco: M2 amplitude 0.5 m" out.txt
+          OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | tee offline.txt
+          grep -q "(cache)" offline.txt
+          node -e 'const { OpenTideConstants } = require("opentideconstants"); if (typeof OpenTideConstants.open !== "function") process.exit(1)'
+          SCRIPT

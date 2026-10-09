@@ -14,6 +14,7 @@ on:
       - "c/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "python/**"
@@ -22,12 +23,43 @@ on:
       - "c/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
+  # The suite's own checks: the fold table generator, the fold rules, and the
+  # driver and server self-tests (conformance/tests).
+  suite:
+    name: suite self-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: The fold table is a fresh generation (Unicode 16.0.0)
+        run: uv run conformance/tools/gen_fold_table.py --check
+      - name: The fold table gives the expected folded names
+        run: uv run conformance/tools/test_name_fold.py
+      - name: Driver and server self-tests
+        run: uv run --python 3.12 --with "pytest>=8,<9" python -m pytest conformance/tests -v -p no:cacheprovider
+
   cross:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -40,17 +72,18 @@ jobs:
           - { os: macos-14, c_runner: c/build/otc_runner }
           - { os: windows-2022, c_runner: c/build/Debug/otc_runner.exe }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with: { ruby-version: "3.3" }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: js/package-lock.json
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: Build the TypeScript SDK
         working-directory: js
         run: npm ci && npm run build
@@ -64,7 +97,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = Windows ]; then
-            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           else
             cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
           fi
@@ -88,7 +121,8 @@ jobs:
             --report cross-report.json
       - name: Upload the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cross-report-${{ matrix.os }}
           path: cross-report.json
+          if-no-files-found: error
