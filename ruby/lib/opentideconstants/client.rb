@@ -126,6 +126,9 @@ class OpenTideConstants
     def update!
         raise PinnedReleaseError, "the client was opened on a file" if @file
         raise PinnedReleaseError, "the client was opened on release #{@requested}" unless @requested == :latest
+        # update is defined against the pointer, so offline it cannot run, and
+        # it does not switch to a newer cached release either (CR D6).
+        raise OfflineError, "offline: update needs the latest pointer" if @offline
         @lock.synchronize do
             from = @release.datestamp
             entry, url = resolve_latest

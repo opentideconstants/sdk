@@ -1052,7 +1052,6 @@
   {
    "case": "rules/pk09/update-offline-no-socket",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK09",
