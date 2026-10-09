@@ -1071,7 +1071,7 @@
      ],
      "c": "otc_attribution",
      "forwarded_to_client": true,
-     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI)"
+     "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI); a station id or Station that is unknown, removed or from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT), never skipped; a licence whose provider is null prints {attribution} alone, with no '{provider}: ' prefix, and is never merged with another entry; an empty stations list gives the same text as none (every licence in the release)"
     }
    ]
   },
