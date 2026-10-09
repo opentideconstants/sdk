@@ -1746,6 +1746,46 @@ def group_rules():
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
                      [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+    out += rules_r2_pk05()
+    return out
+
+
+# Review round 2, PK-R2-05: malformed release content is invalid_release in every SDK and every load path (spec 7.3
+# "tolerant is not lax", 4.8, 6.1; CR D5, D17; CR2 DR22). One bad fixture per shape (build_fixtures.py BAD_R2_05).
+R2_PK05_BAD = ["recommended-set-id-number", "station-name-number", "station-timezone-number", "offsets-number-string",
+               "validation-number-string", "validation-count-fraction", "constituent-amplitude-string", "datum-msl-string",
+               "good-samples-string", "set-source-version-number", "time-base-correction-string",
+               "qc-flag-values-not-object", "qc-flag-value-string", "evidence-not-objects", "evidence-number-string",
+               "source-version-number", "source-version-null", "constant-sets-object", "constant-sets-not-objects",
+               "constant-sets-null-item", "lat-overflow-literal", "lon-overflow-literal", "lat-huge-int",
+               "constituent-amplitude-inf", "constituent-amplitude-huge-int", "invalid-utf8", "lone-surrogate",
+               "constituent-name-twice", "duplicate-licence-id", "tombstone-twice"]
+
+
+def rules_r2_pk05():
+    out = []
+    fixtures = {f["root"]: f for f in json.loads((FIXTURES / "fixtures.json").read_bytes())["fixtures"]}
+    for root in R2_PK05_BAD:
+        fx = fixtures[f"bad/{root}"]
+        if fx["expect"] != {"error": "invalid_release"}:
+            raise SystemExit(f"bad/{root}: fixtures.json expects {fx['expect']}, not invalid_release")
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"rules/r2-pk05/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open ({fx['defect']})",
+                            "4.8, 6.1, 7.3",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
+    P = Rel("bad/proto-keys", "20991231")
+    out.append(mcase("rules/r2-pk05/proto-keys", "JavaScript Object.prototype names as data (an alias system __proto__ and constructor, a source constructor): they load, are looked up and are counted like any other name", "4.4, 4.5, 7.3",
+                     [step("station_by_alias", {"station_id": "OTC-T-0001"}, system="__proto__", alias_id="PX-0001"),
+                      step("station_by_alias", {"station_id": "OTC-T-0002"}, system="constructor", alias_id="CX-0002"),
+                      step("station", {"station": enc_station(P, P.by_id["OTC-T-0001"])}, station_id="OTC-T-0001"),
+                      step("station", {"station": enc_station(P, P.by_id["OTC-T-0002"])}, station_id="OTC-T-0002"),
+                      step("stats", {"stats": stats(P)}),
+                      step("stations", {"station_ids": [x["station_id"] for x in apply_filters(P, P.active, {"source": "constructor"})]}, source="constructor"),
+                      step("stations", {"station_ids": []}, source="toString")],
+                     root="bad/proto-keys", release="20991231", open_expect={"format_version": "1.1"}))
     return out
 
 

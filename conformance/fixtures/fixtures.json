@@ -519,6 +519,345 @@
    ],
    "root": "bad/too-new-broken",
    "valid_as_1_0": false
+  },
+  {
+   "defect": "format 1.1: an alias system __proto__ and constructor, and a source constructor (JavaScript Object.prototype keys); it must load and keep them",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/proto-keys"
+  },
+  {
+   "defect": "OTC-T-0010's recommended_set_id is the number 5 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/recommended-set-id-number"
+  },
+  {
+   "defect": "OTC-T-0010's name is the number 7 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/station-name-number"
+  },
+  {
+   "defect": "OTC-T-0010's timezone is the number 1 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/station-timezone-number"
+  },
+  {
+   "defect": "OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/offsets-number-string"
+  },
+  {
+   "defect": "OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/validation-number-string"
+  },
+  {
+   "defect": "OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/validation-count-fraction"
+  },
+  {
+   "defect": "OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constituent-amplitude-string"
+  },
+  {
+   "defect": "OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/datum-msl-string"
+  },
+  {
+   "defect": "OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/good-samples-string"
+  },
+  {
+   "defect": "OTC-T-0010's set has source_version the number 4 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/set-source-version-number"
+  },
+  {
+   "defect": "OTC-T-0011's time_base.correction is a string (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/time-base-correction-string"
+  },
+  {
+   "defect": "OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/qc-flag-values-not-object"
+  },
+  {
+   "defect": "OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/qc-flag-value-string"
+  },
+  {
+   "defect": "OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/evidence-not-objects"
+  },
+  {
+   "defect": "OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/evidence-number-string"
+  },
+  {
+   "defect": "release.source_versions.gesla is the number 4.1 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/source-version-number"
+  },
+  {
+   "defect": "release.source_versions.gesla is null (malformed: each value is a string)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/source-version-null"
+  },
+  {
+   "defect": "OTC-T-0010's constant_sets is an object (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constant-sets-object"
+  },
+  {
+   "defect": "OTC-T-0010's constant_sets is [5] (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constant-sets-not-objects"
+  },
+  {
+   "defect": "OTC-T-0010's constant_sets is [null] (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constant-sets-null-item"
+  },
+  {
+   "defect": "OTC-T-0010's lat is the literal 1e400 (infinite as a double)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lat-overflow-literal"
+  },
+  {
+   "defect": "OTC-T-0010's lon is the literal -1e400 (infinite as a double)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lon-overflow-literal"
+  },
+  {
+   "defect": "OTC-T-0010's lat is an integer of 401 digits (infinite as a double)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lat-huge-int"
+  },
+  {
+   "defect": "OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constituent-amplitude-inf"
+  },
+  {
+   "defect": "OTC-T-0010's first constituent has amplitude_m an integer of 401 digits",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constituent-amplitude-huge-int"
+  },
+  {
+   "defect": "OTC-T-0010's name has the byte 0xFF (not UTF-8)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/invalid-utf8"
+  },
+  {
+   "defect": "OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lone-surrogate"
+  },
+  {
+   "defect": "OTC-T-0010's set lists the constituent M2 twice (CR2 DR22)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/constituent-name-twice"
+  },
+  {
+   "defect": "two licences with the licence_id eot20 (D5)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/duplicate-licence-id"
+  },
+  {
+   "defect": "the tombstone OTC-T-0005 appears twice (D5)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/tombstone-twice"
   }
  ],
  "reader_format_version": "1.0",

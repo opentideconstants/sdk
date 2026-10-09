@@ -4325,6 +4325,2764 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-recommended-set-id-number-json",
+   "title": "bad/recommended-set-id-number opened as .json (eager): invalid_release at open (OTC-T-0010's recommended_set_id is the number 5 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/recommended-set-id-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-recommended-set-id-number-json-gz",
+   "title": "bad/recommended-set-id-number opened as .json.gz (eager): invalid_release at open (OTC-T-0010's recommended_set_id is the number 5 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/recommended-set-id-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-recommended-set-id-number-jsonl",
+   "title": "bad/recommended-set-id-number opened as .jsonl (eager): invalid_release at open (OTC-T-0010's recommended_set_id is the number 5 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/recommended-set-id-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-recommended-set-id-number-jsonl-stream",
+   "title": "bad/recommended-set-id-number opened as .jsonl (stream): invalid_release at open (OTC-T-0010's recommended_set_id is the number 5 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/recommended-set-id-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-name-number-json",
+   "title": "bad/station-name-number opened as .json (eager): invalid_release at open (OTC-T-0010's name is the number 7 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-name-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-name-number-json-gz",
+   "title": "bad/station-name-number opened as .json.gz (eager): invalid_release at open (OTC-T-0010's name is the number 7 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-name-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-name-number-jsonl",
+   "title": "bad/station-name-number opened as .jsonl (eager): invalid_release at open (OTC-T-0010's name is the number 7 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-name-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-name-number-jsonl-stream",
+   "title": "bad/station-name-number opened as .jsonl (stream): invalid_release at open (OTC-T-0010's name is the number 7 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-name-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-timezone-number-json",
+   "title": "bad/station-timezone-number opened as .json (eager): invalid_release at open (OTC-T-0010's timezone is the number 1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-timezone-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-timezone-number-json-gz",
+   "title": "bad/station-timezone-number opened as .json.gz (eager): invalid_release at open (OTC-T-0010's timezone is the number 1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-timezone-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-timezone-number-jsonl",
+   "title": "bad/station-timezone-number opened as .jsonl (eager): invalid_release at open (OTC-T-0010's timezone is the number 1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-timezone-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-station-timezone-number-jsonl-stream",
+   "title": "bad/station-timezone-number opened as .jsonl (stream): invalid_release at open (OTC-T-0010's timezone is the number 1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/station-timezone-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-offsets-number-string-json",
+   "title": "bad/offsets-number-string opened as .json (eager): invalid_release at open (OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/offsets-number-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-offsets-number-string-json-gz",
+   "title": "bad/offsets-number-string opened as .json.gz (eager): invalid_release at open (OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/offsets-number-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-offsets-number-string-jsonl",
+   "title": "bad/offsets-number-string opened as .jsonl (eager): invalid_release at open (OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/offsets-number-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-offsets-number-string-jsonl-stream",
+   "title": "bad/offsets-number-string opened as .jsonl (stream): invalid_release at open (OTC-T-0003's subordinate_offsets.time_offset_high_min is the string \"12\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/offsets-number-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-number-string-json",
+   "title": "bad/validation-number-string opened as .json (eager): invalid_release at open (OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-number-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-number-string-json-gz",
+   "title": "bad/validation-number-string opened as .json.gz (eager): invalid_release at open (OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-number-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-number-string-jsonl",
+   "title": "bad/validation-number-string opened as .jsonl (eager): invalid_release at open (OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-number-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-number-string-jsonl-stream",
+   "title": "bad/validation-number-string opened as .jsonl (stream): invalid_release at open (OTC-T-0001's first validation row has time_mae_min \"fast\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-number-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-count-fraction-json",
+   "title": "bad/validation-count-fraction opened as .json (eager): invalid_release at open (OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-count-fraction/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-count-fraction-json-gz",
+   "title": "bad/validation-count-fraction opened as .json.gz (eager): invalid_release at open (OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-count-fraction/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-count-fraction-jsonl",
+   "title": "bad/validation-count-fraction opened as .jsonl (eager): invalid_release at open (OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-count-fraction/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-validation-count-fraction-jsonl-stream",
+   "title": "bad/validation-count-fraction opened as .jsonl (stream): invalid_release at open (OTC-T-0001's first validation row has missed_events 1.5, not an integer (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/validation-count-fraction/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-string-json",
+   "title": "bad/constituent-amplitude-string opened as .json (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-string-json-gz",
+   "title": "bad/constituent-amplitude-string opened as .json.gz (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-string-jsonl",
+   "title": "bad/constituent-amplitude-string opened as .jsonl (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-string-jsonl-stream",
+   "title": "bad/constituent-amplitude-string opened as .jsonl (stream): invalid_release at open (OTC-T-0010's first constituent has amplitude_m \"0.28\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-datum-msl-string-json",
+   "title": "bad/datum-msl-string opened as .json (eager): invalid_release at open (OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/datum-msl-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-datum-msl-string-json-gz",
+   "title": "bad/datum-msl-string opened as .json.gz (eager): invalid_release at open (OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/datum-msl-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-datum-msl-string-jsonl",
+   "title": "bad/datum-msl-string opened as .jsonl (eager): invalid_release at open (OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/datum-msl-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-datum-msl-string-jsonl-stream",
+   "title": "bad/datum-msl-string opened as .jsonl (stream): invalid_release at open (OTC-T-0001's noaa set has datum.msl_offset_m \"0.0\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/datum-msl-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-good-samples-string-json",
+   "title": "bad/good-samples-string opened as .json (eager): invalid_release at open (OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/good-samples-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-good-samples-string-json-gz",
+   "title": "bad/good-samples-string opened as .json.gz (eager): invalid_release at open (OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/good-samples-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-good-samples-string-jsonl",
+   "title": "bad/good-samples-string opened as .jsonl (eager): invalid_release at open (OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/good-samples-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-good-samples-string-jsonl-stream",
+   "title": "bad/good-samples-string opened as .jsonl (stream): invalid_release at open (OTC-T-0001's noaa set has record_span.good_samples \"166000\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/good-samples-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-set-source-version-number-json",
+   "title": "bad/set-source-version-number opened as .json (eager): invalid_release at open (OTC-T-0010's set has source_version the number 4 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-source-version-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-set-source-version-number-json-gz",
+   "title": "bad/set-source-version-number opened as .json.gz (eager): invalid_release at open (OTC-T-0010's set has source_version the number 4 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-source-version-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-set-source-version-number-jsonl",
+   "title": "bad/set-source-version-number opened as .jsonl (eager): invalid_release at open (OTC-T-0010's set has source_version the number 4 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-source-version-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-set-source-version-number-jsonl-stream",
+   "title": "bad/set-source-version-number opened as .jsonl (stream): invalid_release at open (OTC-T-0010's set has source_version the number 4 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/set-source-version-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-time-base-correction-string-json",
+   "title": "bad/time-base-correction-string opened as .json (eager): invalid_release at open (OTC-T-0011's time_base.correction is a string (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/time-base-correction-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-time-base-correction-string-json-gz",
+   "title": "bad/time-base-correction-string opened as .json.gz (eager): invalid_release at open (OTC-T-0011's time_base.correction is a string (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/time-base-correction-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-time-base-correction-string-jsonl",
+   "title": "bad/time-base-correction-string opened as .jsonl (eager): invalid_release at open (OTC-T-0011's time_base.correction is a string (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/time-base-correction-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-time-base-correction-string-jsonl-stream",
+   "title": "bad/time-base-correction-string opened as .jsonl (stream): invalid_release at open (OTC-T-0011's time_base.correction is a string (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/time-base-correction-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-values-not-object-json",
+   "title": "bad/qc-flag-values-not-object opened as .json (eager): invalid_release at open (OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-values-not-object/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-values-not-object-json-gz",
+   "title": "bad/qc-flag-values-not-object opened as .json.gz (eager): invalid_release at open (OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-values-not-object/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-values-not-object-jsonl",
+   "title": "bad/qc-flag-values-not-object opened as .jsonl (eager): invalid_release at open (OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-values-not-object/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-values-not-object-jsonl-stream",
+   "title": "bad/qc-flag-values-not-object opened as .jsonl (stream): invalid_release at open (OTC-T-0002's no_constants set has a qc_flags entry whose values is a list (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-values-not-object/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-value-string-json",
+   "title": "bad/qc-flag-value-string opened as .json (eager): invalid_release at open (OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-value-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-value-string-json-gz",
+   "title": "bad/qc-flag-value-string opened as .json.gz (eager): invalid_release at open (OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-value-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-value-string-jsonl",
+   "title": "bad/qc-flag-value-string opened as .jsonl (eager): invalid_release at open (OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-value-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-qc-flag-value-string-jsonl-stream",
+   "title": "bad/qc-flag-value-string opened as .jsonl (stream): invalid_release at open (OTC-T-0002's no_constants set has qc_flags values {\"step_m\": \"0.4\"} (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/qc-flag-value-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-not-objects-json",
+   "title": "bad/evidence-not-objects opened as .json (eager): invalid_release at open (OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-not-objects/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-not-objects-json-gz",
+   "title": "bad/evidence-not-objects opened as .json.gz (eager): invalid_release at open (OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-not-objects/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-not-objects-jsonl",
+   "title": "bad/evidence-not-objects opened as .jsonl (eager): invalid_release at open (OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-not-objects/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-not-objects-jsonl-stream",
+   "title": "bad/evidence-not-objects opened as .jsonl (stream): invalid_release at open (OTC-T-0010's time_base.evidence is [1, \"x\"] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-not-objects/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-number-string-json",
+   "title": "bad/evidence-number-string opened as .json (eager): invalid_release at open (OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-number-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-number-string-json-gz",
+   "title": "bad/evidence-number-string opened as .json.gz (eager): invalid_release at open (OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-number-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-number-string-jsonl",
+   "title": "bad/evidence-number-string opened as .jsonl (eager): invalid_release at open (OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-number-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-evidence-number-string-jsonl-stream",
+   "title": "bad/evidence-number-string opened as .jsonl (stream): invalid_release at open (OTC-T-0011's time_base evidence has lag_min \"-30\" (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/evidence-number-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-number-json",
+   "title": "bad/source-version-number opened as .json (eager): invalid_release at open (release.source_versions.gesla is the number 4.1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-number/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-number-json-gz",
+   "title": "bad/source-version-number opened as .json.gz (eager): invalid_release at open (release.source_versions.gesla is the number 4.1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-number/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-number-jsonl",
+   "title": "bad/source-version-number opened as .jsonl (eager): invalid_release at open (release.source_versions.gesla is the number 4.1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-number/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-number-jsonl-stream",
+   "title": "bad/source-version-number opened as .jsonl (stream): invalid_release at open (release.source_versions.gesla is the number 4.1 (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-number/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-null-json",
+   "title": "bad/source-version-null opened as .json (eager): invalid_release at open (release.source_versions.gesla is null (malformed: each value is a string))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-null/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-null-json-gz",
+   "title": "bad/source-version-null opened as .json.gz (eager): invalid_release at open (release.source_versions.gesla is null (malformed: each value is a string))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-null/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-null-jsonl",
+   "title": "bad/source-version-null opened as .jsonl (eager): invalid_release at open (release.source_versions.gesla is null (malformed: each value is a string))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-null/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-source-version-null-jsonl-stream",
+   "title": "bad/source-version-null opened as .jsonl (stream): invalid_release at open (release.source_versions.gesla is null (malformed: each value is a string))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/source-version-null/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-object-json",
+   "title": "bad/constant-sets-object opened as .json (eager): invalid_release at open (OTC-T-0010's constant_sets is an object (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-object/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-object-json-gz",
+   "title": "bad/constant-sets-object opened as .json.gz (eager): invalid_release at open (OTC-T-0010's constant_sets is an object (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-object/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-object-jsonl",
+   "title": "bad/constant-sets-object opened as .jsonl (eager): invalid_release at open (OTC-T-0010's constant_sets is an object (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-object/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-object-jsonl-stream",
+   "title": "bad/constant-sets-object opened as .jsonl (stream): invalid_release at open (OTC-T-0010's constant_sets is an object (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-object/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-not-objects-json",
+   "title": "bad/constant-sets-not-objects opened as .json (eager): invalid_release at open (OTC-T-0010's constant_sets is [5] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-not-objects/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-not-objects-json-gz",
+   "title": "bad/constant-sets-not-objects opened as .json.gz (eager): invalid_release at open (OTC-T-0010's constant_sets is [5] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-not-objects/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-not-objects-jsonl",
+   "title": "bad/constant-sets-not-objects opened as .jsonl (eager): invalid_release at open (OTC-T-0010's constant_sets is [5] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-not-objects/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-not-objects-jsonl-stream",
+   "title": "bad/constant-sets-not-objects opened as .jsonl (stream): invalid_release at open (OTC-T-0010's constant_sets is [5] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-not-objects/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-null-item-json",
+   "title": "bad/constant-sets-null-item opened as .json (eager): invalid_release at open (OTC-T-0010's constant_sets is [null] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-null-item/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-null-item-json-gz",
+   "title": "bad/constant-sets-null-item opened as .json.gz (eager): invalid_release at open (OTC-T-0010's constant_sets is [null] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-null-item/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-null-item-jsonl",
+   "title": "bad/constant-sets-null-item opened as .jsonl (eager): invalid_release at open (OTC-T-0010's constant_sets is [null] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-null-item/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constant-sets-null-item-jsonl-stream",
+   "title": "bad/constant-sets-null-item opened as .jsonl (stream): invalid_release at open (OTC-T-0010's constant_sets is [null] (malformed))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constant-sets-null-item/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-overflow-literal-json",
+   "title": "bad/lat-overflow-literal opened as .json (eager): invalid_release at open (OTC-T-0010's lat is the literal 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-overflow-literal/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-overflow-literal-json-gz",
+   "title": "bad/lat-overflow-literal opened as .json.gz (eager): invalid_release at open (OTC-T-0010's lat is the literal 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-overflow-literal/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-overflow-literal-jsonl",
+   "title": "bad/lat-overflow-literal opened as .jsonl (eager): invalid_release at open (OTC-T-0010's lat is the literal 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-overflow-literal/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-overflow-literal-jsonl-stream",
+   "title": "bad/lat-overflow-literal opened as .jsonl (stream): invalid_release at open (OTC-T-0010's lat is the literal 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-overflow-literal/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lon-overflow-literal-json",
+   "title": "bad/lon-overflow-literal opened as .json (eager): invalid_release at open (OTC-T-0010's lon is the literal -1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lon-overflow-literal/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lon-overflow-literal-json-gz",
+   "title": "bad/lon-overflow-literal opened as .json.gz (eager): invalid_release at open (OTC-T-0010's lon is the literal -1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lon-overflow-literal/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lon-overflow-literal-jsonl",
+   "title": "bad/lon-overflow-literal opened as .jsonl (eager): invalid_release at open (OTC-T-0010's lon is the literal -1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lon-overflow-literal/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lon-overflow-literal-jsonl-stream",
+   "title": "bad/lon-overflow-literal opened as .jsonl (stream): invalid_release at open (OTC-T-0010's lon is the literal -1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lon-overflow-literal/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-huge-int-json",
+   "title": "bad/lat-huge-int opened as .json (eager): invalid_release at open (OTC-T-0010's lat is an integer of 401 digits (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-huge-int/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-huge-int-json-gz",
+   "title": "bad/lat-huge-int opened as .json.gz (eager): invalid_release at open (OTC-T-0010's lat is an integer of 401 digits (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-huge-int/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-huge-int-jsonl",
+   "title": "bad/lat-huge-int opened as .jsonl (eager): invalid_release at open (OTC-T-0010's lat is an integer of 401 digits (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-huge-int/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lat-huge-int-jsonl-stream",
+   "title": "bad/lat-huge-int opened as .jsonl (stream): invalid_release at open (OTC-T-0010's lat is an integer of 401 digits (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lat-huge-int/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-inf-json",
+   "title": "bad/constituent-amplitude-inf opened as .json (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-inf/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-inf-json-gz",
+   "title": "bad/constituent-amplitude-inf opened as .json.gz (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-inf/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-inf-jsonl",
+   "title": "bad/constituent-amplitude-inf opened as .jsonl (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-inf/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-inf-jsonl-stream",
+   "title": "bad/constituent-amplitude-inf opened as .jsonl (stream): invalid_release at open (OTC-T-0010's first constituent has amplitude_m 1e400 (infinite as a double))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-inf/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-huge-int-json",
+   "title": "bad/constituent-amplitude-huge-int opened as .json (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m an integer of 401 digits)",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-huge-int/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-huge-int-json-gz",
+   "title": "bad/constituent-amplitude-huge-int opened as .json.gz (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m an integer of 401 digits)",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-huge-int/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-huge-int-jsonl",
+   "title": "bad/constituent-amplitude-huge-int opened as .jsonl (eager): invalid_release at open (OTC-T-0010's first constituent has amplitude_m an integer of 401 digits)",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-huge-int/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-amplitude-huge-int-jsonl-stream",
+   "title": "bad/constituent-amplitude-huge-int opened as .jsonl (stream): invalid_release at open (OTC-T-0010's first constituent has amplitude_m an integer of 401 digits)",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-amplitude-huge-int/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-invalid-utf8-json",
+   "title": "bad/invalid-utf8 opened as .json (eager): invalid_release at open (OTC-T-0010's name has the byte 0xFF (not UTF-8))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/invalid-utf8/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-invalid-utf8-json-gz",
+   "title": "bad/invalid-utf8 opened as .json.gz (eager): invalid_release at open (OTC-T-0010's name has the byte 0xFF (not UTF-8))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/invalid-utf8/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-invalid-utf8-jsonl",
+   "title": "bad/invalid-utf8 opened as .jsonl (eager): invalid_release at open (OTC-T-0010's name has the byte 0xFF (not UTF-8))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/invalid-utf8/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-invalid-utf8-jsonl-stream",
+   "title": "bad/invalid-utf8 opened as .jsonl (stream): invalid_release at open (OTC-T-0010's name has the byte 0xFF (not UTF-8))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/invalid-utf8/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lone-surrogate-json",
+   "title": "bad/lone-surrogate opened as .json (eager): invalid_release at open (OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lone-surrogate/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lone-surrogate-json-gz",
+   "title": "bad/lone-surrogate opened as .json.gz (eager): invalid_release at open (OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lone-surrogate/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lone-surrogate-jsonl",
+   "title": "bad/lone-surrogate opened as .jsonl (eager): invalid_release at open (OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lone-surrogate/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-lone-surrogate-jsonl-stream",
+   "title": "bad/lone-surrogate opened as .jsonl (stream): invalid_release at open (OTC-T-0010's name has the escape \\ud800, an unpaired surrogate (CR D17))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/lone-surrogate/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-name-twice-json",
+   "title": "bad/constituent-name-twice opened as .json (eager): invalid_release at open (OTC-T-0010's set lists the constituent M2 twice (CR2 DR22))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-name-twice/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-name-twice-json-gz",
+   "title": "bad/constituent-name-twice opened as .json.gz (eager): invalid_release at open (OTC-T-0010's set lists the constituent M2 twice (CR2 DR22))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-name-twice/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-name-twice-jsonl",
+   "title": "bad/constituent-name-twice opened as .jsonl (eager): invalid_release at open (OTC-T-0010's set lists the constituent M2 twice (CR2 DR22))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-name-twice/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-constituent-name-twice-jsonl-stream",
+   "title": "bad/constituent-name-twice opened as .jsonl (stream): invalid_release at open (OTC-T-0010's set lists the constituent M2 twice (CR2 DR22))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/constituent-name-twice/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-duplicate-licence-id-json",
+   "title": "bad/duplicate-licence-id opened as .json (eager): invalid_release at open (two licences with the licence_id eot20 (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/duplicate-licence-id/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-duplicate-licence-id-json-gz",
+   "title": "bad/duplicate-licence-id opened as .json.gz (eager): invalid_release at open (two licences with the licence_id eot20 (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/duplicate-licence-id/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-duplicate-licence-id-jsonl",
+   "title": "bad/duplicate-licence-id opened as .jsonl (eager): invalid_release at open (two licences with the licence_id eot20 (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/duplicate-licence-id/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-duplicate-licence-id-jsonl-stream",
+   "title": "bad/duplicate-licence-id opened as .jsonl (stream): invalid_release at open (two licences with the licence_id eot20 (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/duplicate-licence-id/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-tombstone-twice-json",
+   "title": "bad/tombstone-twice opened as .json (eager): invalid_release at open (the tombstone OTC-T-0005 appears twice (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/tombstone-twice/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-tombstone-twice-json-gz",
+   "title": "bad/tombstone-twice opened as .json.gz (eager): invalid_release at open (the tombstone OTC-T-0005 appears twice (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/tombstone-twice/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-tombstone-twice-jsonl",
+   "title": "bad/tombstone-twice opened as .jsonl (eager): invalid_release at open (the tombstone OTC-T-0005 appears twice (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/tombstone-twice/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/bad-tombstone-twice-jsonl-stream",
+   "title": "bad/tombstone-twice opened as .jsonl (stream): invalid_release at open (the tombstone OTC-T-0005 appears twice (D5))",
+   "spec": "4.8, 6.1, 7.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/tombstone-twice/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk05/proto-keys",
+   "title": "JavaScript Object.prototype names as data (an alias system __proto__ and constructor, a source constructor): they load, are looked up and are counted like any other name",
+   "spec": "4.4, 4.5, 7.3",
+   "matrix": {
+    "root": "bad/proto-keys",
+    "release": "20991231"
+   },
+   "open_expect": {
+    "format_version": "1.1"
+   },
+   "steps": [
+    {
+     "op": "station_by_alias",
+     "args": {
+      "system": "__proto__",
+      "alias_id": "PX-0001"
+     },
+     "expect": {
+      "station_id": "OTC-T-0001"
+     }
+    },
+    {
+     "op": "station_by_alias",
+     "args": {
+      "system": "constructor",
+      "alias_id": "CX-0002"
+     },
+     "expect": {
+      "station_id": "OTC-T-0002"
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0001",
+       "name": "San Francisco",
+       "country": "USA",
+       "lat": 37.8063,
+       "lon": -122.4659,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "__proto__": [
+         "PX-0001"
+        ],
+        "gesla": [
+         "test-gesla-0001a",
+         "test-gesla-0001b"
+        ],
+        "kartverket": [
+         "TSF"
+        ],
+        "noaa": [
+         "9900001"
+        ],
+        "slackwater": [
+         "sw-0001"
+        ],
+        "ticon": [
+         "test-ticon-0001"
+        ],
+        "webcaltides": [
+         "wct-0001"
+        ],
+        "xtide": [
+         "San Francisco (test), California"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0001/noaa"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0002"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0002",
+       "name": "South San Francisco",
+       "country": "USA",
+       "lat": 37.665,
+       "lon": -122.38,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "constructor": [
+         "CX-0002"
+        ],
+        "noaa": [
+         "9900002"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0002/fallback"
+      }
+     }
+    },
+    {
+     "op": "stats",
+     "expect": {
+      "stats": {
+       "type": {
+        "reference": 18,
+        "subordinate": 2
+       },
+       "kind": {
+        "current": 1,
+        "tide": 19
+       },
+       "country": {
+        "DEU": 1,
+        "FJI": 1,
+        "GAB": 1,
+        "GBR": 5,
+        "IRL": 1,
+        "KIR": 1,
+        "NOR": 2,
+        "POL": 1,
+        "SJM": 1,
+        "USA": 6
+       },
+       "source": {
+        "constructor": 2,
+        "eot20": 3,
+        "gesla-fit": 9,
+        "kartverket": 1,
+        "noaa": 4,
+        "ticon-fallback": 1
+       },
+       "qc_status": {
+        "flagged": 3,
+        "no_constants": 1,
+        "ok": 17
+       }
+      }
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "constructor"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0010",
+       "OTC-T-0013"
+      ]
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "toString"
+     },
+     "expect": {
+      "station_ids": []
+     }
+    }
+   ]
   }
  ]
 }
