@@ -642,7 +642,7 @@ otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***di
             name = q;
             while (name < e && (*name == ' ' || *name == '\t')) name++;
             if (name < e && *name == '*') name++;
-            while (e > name && (e[-1] == '\r' || e[-1] == ' ')) e--;
+            while (e > name && (e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
             if (e > name) {
                 if (n == cap) {
                     size_t nc = cap ? cap * 2 : 8;
