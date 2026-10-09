@@ -9,7 +9,7 @@
   "ruby": "methods and options snake_case; a predicate is_x is x?; an operation with mutating true ends in !; aliases.ruby are extra idiom names for the same operation",
   "python": "snake_case; a predicate is_x is a property; options are keyword-only",
   "typescript": "methods, predicates and options in camelCase: split the snake_case name on _, capitalise the first letter of each part after the first, join (station_by_alias -> stationByAlias, radius_km -> radiusKm, is_reference -> isReference getter); kind field members (data fields) keep snake_case; operations with typescript_async true return a Promise",
-  "c": "otc_ + snake_case; an operation's c gives its C function name(s) where the spec names them (a slash separates several functions); a field of an object with c type T is the accessor T_<field> (otc_station_lat), or a struct member when c_struct is true; enum values are OTC_<ENUM>_<VALUE> plus OTC_<ENUM>_OTHER; error codes map to otc_status values in errors[].c",
+  "c": "otc_ + snake_case; an operation's c gives its C function name(s) where the spec names them (a slash separates several functions); a c of the form f(p) names the parameter p of the function f (UpdateResult: the out-parameters of otc_fetch_update); a field of an object with c type T is the accessor T_<field> (otc_station_lat), or a struct member when c_struct is true; enum values are OTC_<ENUM>_<VALUE> plus OTC_<ENUM>_OTHER; error codes map to otc_status values in errors[].c",
   "kinds": {
    "method": "a call with args",
    "attribute": "a value with no args (Ruby method, Python property, TypeScript getter or property)",
@@ -2149,19 +2149,22 @@
      "name": "updated",
      "kind": "field",
      "type": "boolean",
-     "nullable": false
+     "nullable": false,
+     "c": "otc_fetch_update(updated)"
     },
     {
      "name": "from",
      "kind": "field",
      "type": "datestamp",
-     "nullable": true
+     "nullable": true,
+     "c": "otc_fetch_update(current)"
     },
     {
      "name": "to",
      "kind": "field",
      "type": "datestamp",
-     "nullable": true
+     "nullable": true,
+     "c": "otc_fetch_update(path)"
     }
    ]
   },
