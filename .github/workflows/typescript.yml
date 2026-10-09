@@ -71,9 +71,11 @@ jobs:
       - name: Unit tests
         working-directory: js
         run: npm run test:unit
+      # --profile: a runner that says hello under another name, or loses a
+      # feature, fails the run instead of skipping those cases (R2-247)
       - name: Conformance suite (Node)
         shell: bash
-        run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --report ts-node-report.json
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --profile typescript --report ts-node-report.json
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,7 +104,7 @@ jobs:
           npx playwright install --with-deps chromium
           npm run build
       - name: Conformance suite (profile typescript-browser)
-        run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --report ts-browser-report.json
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --profile typescript-browser --report ts-browser-report.json
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
