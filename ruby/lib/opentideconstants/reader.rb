@@ -5,7 +5,8 @@ class OpenTideConstants
     # Reads release files from disk: .json, .json.gz, or .jsonl with its
     # .meta.json sidecar (spec §4.2, §6).
     module Reader
-        NAME_RE = /\A(OTC_(\d{8}(?:\.\d+)?))\.(json\.gz|jsonl|json)\z/.freeze
+        # OTC_<D>.<ext>, with <D> a valid datestamp (DATESTAMP_RE).
+        NAME_RE = /\A(OTC_([0-9]{8}(?:\.[2-9]|\.[1-9][0-9]{1,8})?))\.(json\.gz|jsonl|json)\z/.freeze
 
         module_function
 
@@ -43,9 +44,10 @@ class OpenTideConstants
         def open_file(path, mode:)
             raise InvalidArgumentError, "file must be a String path" unless path.is_a?(String) && !path.empty?
             path = File.expand_path(path)
-            prefix, _, ext = parse_name(path)
-            unless %w[json json.gz jsonl].include?(ext)
-                raise InvalidArgumentError, "file must end in .json, .json.gz or .jsonl"
+            prefix, d, ext = parse_name(path)
+            unless d
+                raise InvalidArgumentError, "file must be named OTC_<datestamp>.json, .json.gz or .jsonl, " \
+                                            "not #{File.basename(path).inspect}"
             end
             read = files_read(path)
             read.each { |p| raise FileError.new("no such file: #{p}", path: p) unless File.file?(p) }

@@ -222,7 +222,6 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK01",
@@ -232,7 +231,6 @@
    "case": "rules/pk01/file-bad-name",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK01",
@@ -242,7 +240,6 @@
    "case": "rules/pk01/index-bad-datestamp",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK01",

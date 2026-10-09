@@ -133,3 +133,8 @@ class FormatOneTest < Minitest::Test
         c&.close
     end
 end
+
+# The other unit test files (CI runs this file only).
+Dir[File.join(__dir__, "test_*.rb")].sort.each do |f|
+    require f unless File.expand_path(f) == File.expand_path(__FILE__)
+end

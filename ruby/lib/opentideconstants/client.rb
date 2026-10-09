@@ -195,9 +195,7 @@ class OpenTideConstants
         names.each do |name|
             body = fetch_pointer_file(name, missing: :nil)
             next if body.nil?
-            entry = parse_pointer(body)
-            raise InvalidReleaseError, "#{name} is not a release entry" unless entry.is_a?(Hash) && entry["datestamp"].is_a?(String)
-            return [entry, @base_url + name]
+            return [check_entry!(parse_pointer(body), name), @base_url + name]
         end
         raise ReleaseNotFoundError, "no latest pointer at #{@base_url}"
     end
@@ -239,10 +237,12 @@ class OpenTideConstants
         ReleaseInfo.new(entry, files)
     end
 
+    # The absolute URL of a files[] url (spec §4.3.1). A url that is not a
+    # URL is invalid_release.
     def resolve(base, ref)
         URI.join(base, ref).to_s
-    rescue URI::Error
-        ref
+    rescue URI::Error, TypeError => e
+        raise InvalidReleaseError, "bad url #{ref.inspect} in a release entry: #{e.message}"
     end
 
     def log(level, msg)
@@ -295,9 +295,30 @@ class OpenTideConstants
         mrv.nil? || Release.readable_version?(mrv)
     end
 
+    # The checked entries of OTC_index.json; invalid_release when releases
+    # is missing or an entry is malformed.
     def index_entries(doc)
-        list = doc.is_a?(Hash) && doc["releases"].is_a?(Array) ? doc["releases"] : []
-        list.select { |e| e.is_a?(Hash) && e["datestamp"].is_a?(String) && e["datestamp"].match?(DATESTAMP_RE) }
+        raise InvalidReleaseError, "OTC_index.json has no releases list" unless doc.is_a?(Hash) && doc["releases"].is_a?(Array)
+        doc["releases"].map { |e| check_entry!(e, "OTC_index.json") }
+    end
+
+    # Checks a pointer or index entry from the server (spec §4.2, §5.2): an
+    # object with a valid datestamp, and files (if any) whose elements are
+    # objects with a String name and, if given, a String url and sha256 and
+    # an Integer size. Returns the entry.
+    def check_entry!(entry, source)
+        raise InvalidReleaseError, "#{source}: an entry is not an object" unless entry.is_a?(Hash)
+        d = entry["datestamp"]
+        raise InvalidReleaseError, "#{source}: bad datestamp #{d.inspect}" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
+        files = entry["files"]
+        return entry if files.nil?
+        raise InvalidReleaseError, "#{source}: files of #{d} is not a list" unless files.is_a?(Array)
+        files.each do |f|
+            next if f.is_a?(Hash) && f["name"].is_a?(String) && [f["url"], f["sha256"]].all? { |v| v.nil? || v.is_a?(String) } &&
+                    (f["size"].nil? || f["size"].is_a?(Integer))
+            raise InvalidReleaseError, "#{source}: a files entry of #{d} is malformed: #{f.inspect[0, 120]}"
+        end
+        entry
     end
 
     # The entries of the cached OTC_index.json by datestamp ({} if none).
@@ -305,7 +326,7 @@ class OpenTideConstants
         cached = cache.read_pointer("OTC_index.json")
         return {} unless cached
         index_entries(JSON.parse(cached[0])).to_h { |e| [e["datestamp"], e] }
-    rescue JSON::ParserError
+    rescue JSON::ParserError, InvalidReleaseError
         {}
     end
 
