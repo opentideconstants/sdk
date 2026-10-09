@@ -844,6 +844,22 @@ int otc__utc_time(const char *s, char out[21])
     return 1;
 }
 
+int64_t otc__http_date(const char *s)
+{
+    static const char *const MON[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    int D, Y, h, mi, sec, M;
+    /* IMF-fixdate: "Sun, 06 Nov 1994 08:49:37 GMT" (RFC 9110 5.6.7) */
+    if (!s || strlen(s) != 29 || s[3] != ',' || s[4] != ' ' || !digits_at(s + 5, 2, &D) || s[7] != ' '
+        || s[11] != ' ' || !digits_at(s + 12, 4, &Y) || s[16] != ' ' || !digits_at(s + 17, 2, &h) || s[19] != ':'
+        || !digits_at(s + 20, 2, &mi) || s[22] != ':' || !digits_at(s + 23, 2, &sec) || strcmp(s + 25, " GMT") != 0)
+        return -1;
+    for (M = 0; M < 12; M++)
+        if (!strncmp(s + 8, MON[M], 3)) break;
+    if (M == 12 || D < 1 || D > 31 || h > 23 || mi > 59 || sec > 60) return -1;
+    return days_from_civil(Y, M + 1, D) * 86400LL + h * 3600LL + mi * 60LL + sec;
+}
+
 /* ------------------------------------------- strings with a NUL inside */
 
 /* cJSON ends a decoded string at its first NUL, so a JSON string with \u0000 in

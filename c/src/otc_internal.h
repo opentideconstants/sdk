@@ -61,6 +61,8 @@ otc_status otc__file_open(const char *path, otc__file **out);
 int otc__file_pread(otc__file *f, void *buf, size_t n, uint64_t off);
 int64_t otc__file_size(otc__file *f);
 void otc__file_close(otc__file *f);
+/* An HTTP-date (IMF-fixdate, RFC 9110 5.6.7) as seconds since 1970, or -1. */
+int64_t otc__http_date(const char *s);
 /* An RFC 3339 time as UTC "YYYY-MM-DDTHH:MM:SSZ" (whole seconds); 0 when s is not one. */
 int otc__utc_time(const char *s, char out[21]);
 /* The size of a file, or -1 if it does not exist or is not a regular file. */

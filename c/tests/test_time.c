@@ -1,5 +1,7 @@
 /* PK08 / B2-4: release.created is returned in UTC, YYYY-MM-DDTHH:MM:SSZ
- * (otc__utc_time), the same as the other SDKs. */
+ * (otc__utc_time), the same as the other SDKs.
+ * PK12 / R75 (C part): a Retry-After that is an HTTP-date (RFC 9110 5.6.7,
+ * IMF-fixdate) is read (otc__http_date), not ignored. */
 #include "otc_test.h"
 #include "otc_internal.h"
 
@@ -28,6 +30,12 @@ int main(void)
     want("2099-12-31", NULL);
     want("2099-12-31T00:00:00+0200", NULL);
     want("not a time", NULL);
+    CHECK(otc__http_date("Sun, 06 Nov 1994 08:49:37 GMT") == 784111777LL);
+    CHECK(otc__http_date("Thu, 01 Jan 1970 00:00:00 GMT") == 0);
+    CHECK(otc__http_date("Wed, 31 Dec 2099 23:59:59 GMT") == 4102444799LL);
+    CHECK(otc__http_date("Sun, 06 Nov 1994 08:49:37 UTC") == -1);
+    CHECK(otc__http_date("120") == -1);
+    CHECK(otc__http_date("Sunday, 06-Nov-94 08:49:37 GMT") == -1);
     /* through the API */
     test_write(dir, "OTC_20990101.meta.json",
                "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"2099-12-31T02:00:00.5+02:00\"},"

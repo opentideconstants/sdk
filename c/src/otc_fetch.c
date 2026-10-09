@@ -734,7 +734,12 @@ static size_t on_header(char *line, size_t sz, size_t nm, void *user)
         memcpy(buf, v, vl);
         buf[vl] = '\0';
         d = strtod(buf, &end);
-        if (end != buf && d >= 0) r->retry_after = d;
+        if (end != buf && *end == '\0' && d >= 0) {
+            r->retry_after = d;
+        } else {   /* Retry-After may also be an HTTP-date (spec 5.7) */
+            int64_t at = otc__http_date(buf), now = (int64_t)time(NULL);
+            if (at >= 0) r->retry_after = at > now ? (double)(at - now) : 0.0;
+        }
     }
     return n;
 }
