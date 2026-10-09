@@ -5,7 +5,9 @@
  *    R2-071);
  *  - a lookup by the part before the NUL finds nothing (R2-071);
  *  - two set_ids that differ only after a NUL are two sets (R2-071);
- *  - a name under an escaped "name" key keeps its tail (R2-072). */
+ *  - a name under an escaped "name" key keeps its tail (R2-072);
+ *  - the stream index keeps the whole strings, and a fresh index with a NUL
+ *    is used as it is, not rebuilt (R2-067, R2-069). */
 #include "otc_test.h"
 #include "otc_internal.h"
 
@@ -113,8 +115,10 @@ static void check_release(int want_index)
 
 int main(void)
 {
-    char sums[512], hex_l[65], hex_m[65], *ixp, *mp;
+    char sums[512], hex_l[65], hex_m[65], *ixp, *mp, *txt = NULL;
     otc_release *rel = NULL;
+    cJSON *doc = NULL;
+    FILE *f;
     g_dir = test_tmpdir();
     test_write(g_dir, "OTC_20990101.meta.json", TEST_META("20990101"));
     test_write(g_dir, "OTC_20990101.jsonl", LINES);
@@ -128,6 +132,34 @@ int main(void)
 
     /* from the .jsonl */
     check_release(0);
+
+    /* the index keeps every string in full */
+    CHECK_STATUS(otc_open_file(g_jsonl, NULL, &rel), OTC_OK);
+    if (rel) doc = otc__index_doc(rel, hex_l, "test");
+    otc_close(rel);
+    CHECK(doc != NULL);
+    if (doc) txt = cJSON_PrintUnformatted(doc);
+    CHECK(txt != NULL);
+    if (txt) {
+        CHECK(strstr(txt, "\"name\":\"Me\\u0000da\"") != NULL);
+        CHECK(strstr(txt, "\"name\":\"Ab\\u0000cd\"") != NULL);
+        CHECK(strstr(txt, "\"xtide\":[\"San\\u0000Francisco\"]") != NULL);
+        CHECK(strstr(txt, "\"gesla\":[\"g\\u00001\",\"g2\"]") != NULL);
+        CHECK(strstr(txt, "\"set_id\":\"OTC-X-1/gesla\\u0000fit\"") != NULL);
+        CHECK(strstr(txt, "\"recommended_set_id\":\"OTC-X-1/no\\u0000aa\"") != NULL);
+        f = fopen(ixp, "wb");
+        CHECK(f != NULL);
+        if (f) {
+            fputs(txt, f);
+            fclose(f);
+        }
+    }
+    cJSON_free(txt);
+    cJSON_Delete(doc);
+
+    /* a fresh index with a NUL is used as it is (spec 6.2), and gives the same answers */
+    check_release(1);
+    check_release(1);
 
     {   /* set_ids that differ only after the NUL */
         char *dir2 = test_tmpdir(), *jl2;

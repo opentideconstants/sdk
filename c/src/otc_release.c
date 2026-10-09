@@ -569,7 +569,7 @@ static int entry_ok(const cJSON *e, int64_t size)
 static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as)
 {
     const cJSON *v = otc__jget(from, key);
-    if (v && !cJSON_IsNull(v)) cJSON_AddItemToObject(to, as, cJSON_Duplicate(v, 1));
+    if (v && !cJSON_IsNull(v)) cJSON_AddItemToObject(to, as, otc__json_dup(v));
 }
 
 /* The station document the index pass needs, from an index entry. */
@@ -589,7 +589,7 @@ static cJSON *line_from_entry(const cJSON *e)
         for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k]);
         cJSON_ArrayForEach(n, otc__jget(cs, "constituents")) {
             cJSON *c = cJSON_CreateObject();
-            cJSON_AddStringToObject(c, "name", n->valuestring);
+            cJSON_AddItemToObject(c, "name", otc__json_dup(n));   /* the copy keeps a NUL's full length */
             cJSON_AddItemToArray(cons, c);
         }
         cJSON_AddItemToObject(s, "constituents", cons);
@@ -621,9 +621,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     memcpy(ds, jsonl_name + 4, nl - 10);
     ds[nl - 10] = '\0';
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
-    /* a name with a NUL does not survive cJSON: such an index is read from the .jsonl instead */
-    if (otc__json_has_nul(text, len)) goto done;
-    doc = otc__json_parse(text, len);
+    doc = otc__json_parse(text, len);   /* strings with a NUL keep their full length (CR2 DR33) */
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
     if (otc__strcmp_null(otc__jstr(doc, "datestamp"), ds) || otc__strcmp_null(otc__jstr(doc, "jsonl"), jsonl_name)
@@ -655,10 +653,11 @@ done:
     return st;
 }
 
+/* The string member k in full (a raw literal when it holds a NUL, CR2 DR33), or null. */
 static cJSON *jstr_or_null(const cJSON *o, const char *k)
 {
-    const char *s = otc__jstr(o, k);
-    return s ? cJSON_CreateString(s) : cJSON_CreateNull();
+    const cJSON *s = otc__jstr_item(o, k);
+    return s ? otc__json_str_out(s) : cJSON_CreateNull();
 }
 
 typedef struct ix_ctx {
@@ -685,8 +684,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     ix_ctx *x = (ix_ctx *)ctx;
     cJSON *d = otc__json_parse(text, len), *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
-    const cJSON *name;
-    const char *rec, *kind = NULL;
+    const cJSON *rec, *name;
+    const char *kind = NULL;
     int ok = 1;
     if (!d) return OTC_E_INVALID_RELEASE;
     o = cJSON_CreateObject();
@@ -695,7 +694,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     if (!o || !sets || !al) ok = 0;
     offs = otc__jget(d, "subordinate_offsets");
     if (!cJSON_IsObject(offs)) offs = NULL;
-    rec = otc__jstr(d, "recommended_set_id");
+    rec = otc__jstr_item(d, "recommended_set_id");
     name = otc__jstr_item(d, "name");
     put(o, "offset", cJSON_CreateNumber((double)offset), &ok);
     put(o, "length", cJSON_CreateNumber((double)len), &ok);
@@ -723,10 +722,10 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         size_t k;
         for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]), &ok);
         cJSON_ArrayForEach(c, otc__jget(cs, "constituents"))
-            if (otc__jstr(c, "name")) put(cons, NULL, cJSON_CreateString(otc__jstr(c, "name")), &ok);
+            if (otc__jstr_item(c, "name")) put(cons, NULL, otc__json_str_out(otc__jstr_item(c, "name")), &ok);
         put(s, "constituents", cons, &ok);
         put(sets, NULL, s, &ok);
-        if (rec && !otc__strcmp_null(otc__jstr(cs, "set_id"), rec)) {
+        if (otc__jstr_same(otc__jstr_item(cs, "set_id"), rec)) {
             const char *q = otc__jstr(cs, "quantity");
             kind = !q ? NULL : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
         }
@@ -739,8 +738,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     cJSON_ArrayForEach(a, otc__jget(d, "aliases")) {
         cJSON *list = cJSON_CreateArray();
         const cJSON *id;
-        if (cJSON_IsString(a)) put(list, NULL, cJSON_CreateString(a->valuestring), &ok);
-        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) put(list, NULL, cJSON_CreateString(id->valuestring), &ok);
+        if (cJSON_IsString(a)) put(list, NULL, otc__json_str_out(a), &ok);
+        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) put(list, NULL, otc__json_str_out(id), &ok);
         put(al, a->string, list, &ok);
     }
     put(o, "aliases", al, &ok);

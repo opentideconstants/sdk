@@ -114,5 +114,6 @@ Roots for the cross-SDK value rules of review round 1 (each loads):
 | `values/` | `release.created` with an offset and a fraction (`2099-12-31T02:00:00.5+02:00`), a non-number in `validation.previous_release`, a station name with a NUL inside and one that ends in NUL |
 | `values-kept-reason/` | a constituent `kept_reason` of 48 bytes (the schema sets no maxLength) |
 | `values-source-name/` | a constituent `source_name` of 31 characters that are 62 UTF-8 bytes |
+| `values-nul/` | `good/`'s `20991231.2` with a NUL inside `OTC-T-0001`'s `xtide` alias, its first `gesla` alias and both set_ids (so its `recommended_set_id` and validation rows too); the part before each NUL is no value (review round 2, PK-R2-08) |
 | `fold/` | station names for the fold rules of D12 (final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP) |
 | `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |

@@ -1281,7 +1281,7 @@
   },
   {
    "id": "cross/index-nul-name",
-   "title": "a station name with a NUL inside: the writer's stream index keeps it, and the reader's search finds the station by its full name",
+   "title": "a station name with a NUL inside: the writer's stream index keeps it, and the reader's search finds the station by the part after the NUL",
    "spec": "6.2, 4.4.1",
    "roles": {
     "writer": [
@@ -1315,6 +1315,18 @@
      "op": "search",
      "args": {
       "name": "Me\u0000da"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0151"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "search",
+     "args": {
+      "name": "da"
      },
      "expect": {
       "station_ids": [
@@ -1363,6 +1375,673 @@
        "OTC-T-0151"
       ]
      }
+    },
+    {
+     "as": "reader",
+     "op": "search",
+     "args": {
+      "name": "da"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0151"
+      ]
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-nul-alias",
+   "title": "alias ids with a NUL inside: the station reads them in full, and the part before the NUL finds no station, from the .jsonl and from any SDK's stream index",
+   "spec": "6.2, 4.4, 6.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/values-nul/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0001",
+       "name": "San Francisco",
+       "country": "USA",
+       "lat": 37.8063,
+       "lon": -122.4659,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "gesla": [
+         "test-gesla\u00000001a",
+         "test-gesla-0001b"
+        ],
+        "kartverket": [
+         "TSF"
+        ],
+        "noaa": [
+         "9900001"
+        ],
+        "slackwater": [
+         "sw-0001"
+        ],
+        "ticon": [
+         "test-ticon-0001"
+        ],
+        "webcaltides": [
+         "wct-0001"
+        ],
+        "xtide": [
+         "San\u0000Francisco"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0001/no\u0000aa"
+      }
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "xtide",
+      "alias_id": "San"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla-0001b"
+     },
+     "expect": {
+      "station_id": "OTC-T-0001"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${cache}/v1/releases/20991231.2/index-v1.json"
+     ],
+     "to": "${tmp}/index-copy"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0001",
+       "name": "San Francisco",
+       "country": "USA",
+       "lat": 37.8063,
+       "lon": -122.4659,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "gesla": [
+         "test-gesla\u00000001a",
+         "test-gesla-0001b"
+        ],
+        "kartverket": [
+         "TSF"
+        ],
+        "noaa": [
+         "9900001"
+        ],
+        "slackwater": [
+         "sw-0001"
+        ],
+        "ticon": [
+         "test-ticon-0001"
+        ],
+        "webcaltides": [
+         "wct-0001"
+        ],
+        "xtide": [
+         "San\u0000Francisco"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0001/no\u0000aa"
+      }
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station_by_alias",
+     "args": {
+      "system": "xtide",
+      "alias_id": "San"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla-0001b"
+     },
+     "expect": {
+      "station_id": "OTC-T-0001"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
+    },
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0001",
+       "name": "San Francisco",
+       "country": "USA",
+       "lat": 37.8063,
+       "lon": -122.4659,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "gesla": [
+         "test-gesla\u00000001a",
+         "test-gesla-0001b"
+        ],
+        "kartverket": [
+         "TSF"
+        ],
+        "noaa": [
+         "9900001"
+        ],
+        "slackwater": [
+         "sw-0001"
+        ],
+        "ticon": [
+         "test-ticon-0001"
+        ],
+        "webcaltides": [
+         "wct-0001"
+        ],
+        "xtide": [
+         "San\u0000Francisco"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0001/no\u0000aa"
+      }
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "xtide",
+      "alias_id": "San"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla"
+     },
+     "expect": {
+      "station_id": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_by_alias",
+     "args": {
+      "system": "gesla",
+      "alias_id": "test-gesla-0001b"
+     },
+     "expect": {
+      "station_id": "OTC-T-0001"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-nul-set-id",
+   "title": "set_ids with a NUL inside (the recommended one too): the sets read them in full, and the part before the NUL is no set, from the .jsonl and from any SDK's stream index",
+   "spec": "6.2, 4.4, 6.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/values-nul/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "recommended_set",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "set_id": "OTC-T-0001/no\u0000aa"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/no"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/gesla"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "stations",
+     "args": {
+      "source_type": "official"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0004",
+       "OTC-T-0006",
+       "OTC-T-0019",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "stations",
+     "args": {
+      "kind": "tide",
+      "country": "USA"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0002",
+       "OTC-T-0003",
+       "OTC-T-0004",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${cache}/v1/releases/20991231.2/index-v1.json"
+     ],
+     "to": "${tmp}/index-copy"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "recommended_set",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "set_id": "OTC-T-0001/no\u0000aa"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/no"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "reader",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/gesla"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "reader",
+     "op": "stations",
+     "args": {
+      "source_type": "official"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0004",
+       "OTC-T-0006",
+       "OTC-T-0019",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "reader",
+     "op": "stations",
+     "args": {
+      "kind": "tide",
+      "country": "USA"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0002",
+       "OTC-T-0003",
+       "OTC-T-0004",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
+    },
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "recommended_set",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "set_id": "OTC-T-0001/no\u0000aa"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/no"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0001",
+      "set_id": "OTC-T-0001/gesla"
+     },
+     "expect": {
+      "set": null
+     }
+    },
+    {
+     "as": "writer",
+     "op": "stations",
+     "args": {
+      "source_type": "official"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0004",
+       "OTC-T-0006",
+       "OTC-T-0019",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "stations",
+     "args": {
+      "kind": "tide",
+      "country": "USA"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0001",
+       "OTC-T-0002",
+       "OTC-T-0003",
+       "OTC-T-0004",
+       "OTC-T-0020"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-copy/index-v1.json"
     },
     {
      "driver": "assert_requests",
