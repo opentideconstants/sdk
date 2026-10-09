@@ -1,6 +1,7 @@
 /* PK04 / C20, C28, C49: otc_fetch_prune removes only the release directories
  * themselves (a symlink inside is unlinked, never followed), reports only
- * what it removed, and raises OTC_E_CACHE when a removal fails. */
+ * what it removed, raises OTC_E_CACHE when a removal fails, and leaves a
+ * release alone while another process holds its .lock. */
 #include "otc_test.h"
 
 #include <errno.h>
@@ -65,6 +66,14 @@ int main(void)
     snprintf(p, sizeof p, "%s/v1/releases/20990102/.verified", cache);
     CHECK(exists(p));
 
+    /* 3. a release whose .lock is held (a download or index build runs) is left alone */
+    snprintf(p, sizeof p, "%s/v1/releases/20990102/.lock", cache);
+    mkdir(p, 0777);
+    memset(removed, 0, sizeof removed);
+    CHECK_STATUS(otc_fetch_prune(&fo, 1, NULL, removed, 8, &n), OTC_OK);
+    CHECK(n == 0);
+    snprintf(p, sizeof p, "%s/v1/releases/20990102/.verified", cache);
+    CHECK(exists(p));
     free(cache);
     free(outside);
     return test_done("test_fetch_prune");

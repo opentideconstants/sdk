@@ -2346,14 +2346,24 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
     if (st == OTC_OK && (!count || (cap && !removed))) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "count is NULL");
     if (st == OTC_OK) st = cached_list(&c, &list, &n);
     for (i = keep; st == OTC_OK && i < n; i++) {
-        char *d, *v;
+        char *d, *v, token[33];
+        int held = 0;
         if (current && !strcmp(current, list[i])) continue;
         d = rel_dir(&c, list[i]);
         v = d ? path2(d, ".verified") : NULL;
         if (!d || !v) { free(d); free(v); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); break; }
+        /* a release whose .lock another process holds (a download or an index build) is
+         * left alone; with the lock taken, the removal below takes the lock with it */
+        if ((st = lock_try(&c, d, &held, token)) != OTC_OK || !held) {
+            if (st == OTC_OK) logf_(&c, 1, "not pruning %s: another process holds its lock", list[i]);
+            free(d);
+            free(v);
+            continue;
+        }
         /* readers stop trusting it first; a release whose .verified cannot be removed is left whole */
         if ((fs_unlink(v) != 0 && fs_kind_nofollow(v) != 0) || fs_rm_rf(d) != 0) {
             st = fail(&c, OTC_E_CACHE, d, "cannot remove the cached release %s (%s)", list[i], d);
+            lock_release(&c, d, token);
         } else {
             logf_(&c, 1, "pruned %s", list[i]);
             st = put_string(&c, removed, cap, k++, list[i]);
