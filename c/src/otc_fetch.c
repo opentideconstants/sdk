@@ -582,16 +582,21 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
         fclose(f);
     }
     c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
-    c->formats = (o && o->formats) ? o->formats : (unsigned)OTC_FORMAT_JSONL;
+    /* formats: OTC_FORMATS_DEFAULT is jsonl; 0 names no format (CR 4c) */
+    c->formats = (!o || o->formats == OTC_FORMATS_DEFAULT) ? (unsigned)OTC_FORMAT_JSONL : o->formats;
+    if (c->formats == 0)
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL,
+                    "formats is empty: name at least one OTC_FORMAT_* bit, or pass OTC_FORMATS_DEFAULT");
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
-        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: unknown bits");
-    /* timeout_s: 0 is the defaults; otherwise a finite number of seconds, at most
-     * TIMEOUT_MAX_S so that the millisecond options of libcurl stay in a long */
-    if (o && (!(o->timeout_s >= 0) || o->timeout_s > TIMEOUT_MAX_S))
-        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "timeout_s must be 0 (the defaults) or a number of seconds up to %g",
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: only OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ and OTC_FORMAT_JSONL");
+    /* timeout_s: OTC_TIMEOUT_DEFAULT is the defaults; otherwise a number of seconds above 0 and at most
+     * TIMEOUT_MAX_S, so that the millisecond options of libcurl stay in a long (CR 4c, C59) */
+    if (o && o->timeout_s != OTC_TIMEOUT_DEFAULT && !(o->timeout_s > 0 && o->timeout_s <= TIMEOUT_MAX_S))
+        return fail(c, OTC_E_INVALID_ARGUMENT, NULL,
+                    "timeout_s must be a number of seconds above 0 and at most %g, or OTC_TIMEOUT_DEFAULT for the defaults",
                     TIMEOUT_MAX_S);
-    c->connect_s = (o && o->timeout_s > 0) ? o->timeout_s : CONNECT_TIMEOUT_S;
-    c->read_s = (o && o->timeout_s > 0) ? o->timeout_s : READ_TIMEOUT_S;
+    c->connect_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : CONNECT_TIMEOUT_S;
+    c->read_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : READ_TIMEOUT_S;
     c->raise = o && o->on_network_error == OTC_ON_NETWORK_ERROR_RAISE;
     return OTC_OK;
 }
@@ -2288,6 +2293,8 @@ void otc_fetch_options_init(otc_fetch_options *opts)
     if (!opts) return;
     memset(opts, 0, sizeof *opts);
     opts->struct_size = sizeof *opts;
+    opts->timeout_s = OTC_TIMEOUT_DEFAULT;
+    opts->formats = OTC_FORMATS_DEFAULT;
     opts->on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
 }
 
@@ -2663,7 +2670,12 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     memset(staged, 0, sizeof staged);
     if (st != OTC_OK) goto out;
     if (!count || !dir || (cap && !paths)) { st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "dir and count must not be NULL"); goto out; }
-    if (formats == 0) formats = OTC_FORMAT_JSONL;
+    if (formats == OTC_FORMATS_DEFAULT) formats = OTC_FORMAT_JSONL;
+    if (formats == 0) {   /* CR 4c: no format named */
+        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL,
+                  "formats is empty: name at least one of json, json.gz or jsonl, or pass OTC_FORMATS_DEFAULT");
+        goto out;
+    }
     if (formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL)) {
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "unknown format (use json, json.gz or jsonl)");
         goto out;

@@ -1,6 +1,9 @@
 /* PK07 / C59: a timeout_s that is NaN, negative or infinite is
- * invalid_argument, checked before any network access (spec 4.2, 5.7). 0
- * means the defaults (connect 10 s, read 60 s).
+ * invalid_argument, checked before any network access (spec 4.2, 5.7).
+ * CR 4c: OTC_TIMEOUT_DEFAULT (what otc_fetch_options_init sets) means the
+ * defaults (connect 10 s, read 60 s), and an explicit 0 is invalid_argument;
+ * OTC_FORMATS_DEFAULT means the default formats, and 0 (no format) is
+ * invalid_argument. The messages say what is wrong (not NaN, not unknown bits).
  * D19: a ca_file that does not exist is io, and a base_url or proxy that is
  * not an absolute http(s) URL is invalid_argument, at the first call and
  * before any network access (they never fall back to the cache).
@@ -18,9 +21,10 @@ int main(void)
     otc_fetch_options fo;
     otc_error err;
     size_t need;
-    static const double bad[] = {-1.0, -0.001};
+    static const double bad[] = {-2.0, -0.001};
     size_t i;
     otc_fetch_options_init(&fo);
+    CHECK(fo.timeout_s == OTC_TIMEOUT_DEFAULT && fo.formats == OTC_FORMATS_DEFAULT);
     otc_error_init(&err);
     fo.cache_dir = cache;
     fo.error = &err;
@@ -35,12 +39,25 @@ int main(void)
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
     fo.timeout_s = 1e300;   /* too large for the millisecond options of libcurl */
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    /* CR 4c */
     fo.timeout_s = 0;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    CHECK(strstr(err.message, "timeout_s") != NULL && strstr(err.message, "OTC_TIMEOUT_DEFAULT") != NULL);
+    CHECK(strstr(err.message, "NaN") == NULL && strstr(err.message, "0 (the defaults)") == NULL);
+    fo.timeout_s = OTC_TIMEOUT_DEFAULT;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
+    fo.formats = 0;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    CHECK(strstr(err.message, "formats") != NULL && strstr(err.message, "OTC_FORMATS_DEFAULT") != NULL);
+    CHECK(strstr(err.message, "unknown") == NULL);
+    fo.formats = OTC_FORMAT_OTHER;
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
+    fo.formats = OTC_FORMATS_DEFAULT;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     fo.timeout_s = 2.5;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_OFFLINE_UNAVAILABLE);
     /* D19 */
-    fo.timeout_s = 0;
+    fo.timeout_s = OTC_TIMEOUT_DEFAULT;
     fo.offline = false;
     fo.on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
     fo.base_url = "http://127.0.0.1:9/";   /* nothing listens there: any request would fail as network */

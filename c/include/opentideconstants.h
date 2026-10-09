@@ -30,6 +30,7 @@
 #ifndef OPENTIDECONSTANTS_H
 #define OPENTIDECONSTANTS_H
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -181,10 +182,14 @@ typedef enum otc_on_network_error {
     OTC_ON_NETWORK_ERROR_UNSET = 0, OTC_ON_NETWORK_ERROR_USE_CACHE, OTC_ON_NETWORK_ERROR_RAISE,
     OTC_ON_NETWORK_ERROR_OTHER
 } otc_on_network_error;
-/* Formats are bit flags for otc_fetch_to_dir; 0 means the default (jsonl). */
+/* Formats are bit flags for otc_fetch_to_dir and otc_fetch_options.formats. */
 typedef enum otc_format {
     OTC_FORMAT_JSON = 1, OTC_FORMAT_JSON_GZ = 2, OTC_FORMAT_JSONL = 4, OTC_FORMAT_OTHER = 8
 } otc_format;
+/* The formats value that means "the default formats" (OTC_FORMAT_JSONL). It
+ * has every bit set, so it is never a valid set of OTC_FORMAT_* bits. 0 names
+ * no format and is OTC_E_INVALID_ARGUMENT (spec 4.3.2, CR 4c). */
+#define OTC_FORMATS_DEFAULT UINT_MAX
 typedef enum otc_match { OTC_MATCH_UNSET = 0, OTC_MATCH_EXACT, OTC_MATCH_OTHER } otc_match;
 
 /* The schema string of an enum value ("tide", "water_level", ...); "other"
@@ -658,8 +663,9 @@ typedef struct otc_fetch_options {
                                            an absolute http(s) URL, else OTC_E_INVALID_ARGUMENT */
     bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE = 1, true, yes or on (any case,
                                            trimmed); no socket is ever opened */
-    double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both, in seconds
-                                           (at most 1e6); NaN, negative or larger: OTC_E_INVALID_ARGUMENT */
+    double               timeout_s;     /* OTC_TIMEOUT_DEFAULT (set by init): the defaults (connect 10 s, read
+                                           60 s); else both, in seconds, more than 0 and at most 1e6; any other
+                                           value (0, a negative number, NaN, more): OTC_E_INVALID_ARGUMENT */
     const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
                                            https_proxy / HTTPS_PROXY, ALL_PROXY and NO_PROXY (spec 5.7) */
     const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default; a file that cannot be
@@ -669,10 +675,18 @@ typedef struct otc_fetch_options {
     otc_error           *error;
     otc_log_fn           log_fn;
     void                *log_user_data;
-    unsigned             formats;       /* data files kept in the cache: OTC_FORMAT_* bits; 0 = OTC_FORMAT_JSONL.
+    unsigned             formats;       /* data files kept in the cache: OTC_FORMAT_* bits, or OTC_FORMATS_DEFAULT
+                                           (set by init) = OTC_FORMAT_JSONL; 0 or an unknown bit:
+                                           OTC_E_INVALID_ARGUMENT.
                                            The .jsonl and .meta.json are always kept (the C library opens them);
                                            OTC_FORMAT_JSON also keeps OTC_{D}.json, as eager mode does. */
 } otc_fetch_options;
+/* The timeout_s value that means "the defaults" (connect 10 s, read 60 s). A
+ * negative number is never a valid timeout, so it cannot mean anything else.
+ * An explicit 0 is OTC_E_INVALID_ARGUMENT (spec 5.7, CR 4c). */
+#define OTC_TIMEOUT_DEFAULT (-1.0)
+/* Zeroes opts, sets struct_size, timeout_s = OTC_TIMEOUT_DEFAULT, formats =
+ * OTC_FORMATS_DEFAULT and on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE. */
 OTC_API void otc_fetch_options_init(otc_fetch_options *opts);
 
 /* The path of OTC_{D}.jsonl of the latest release in the cache, downloaded and
@@ -727,7 +741,8 @@ OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *c
                                     size_t *needed, bool *updated);
 /* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":
  * the latest; on a network error with on_network_error USE_CACHE, the newest
- * readable cached release. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL.
+ * readable cached release. formats: OTC_FORMAT_* bits, or OTC_FORMATS_DEFAULT
+ * for OTC_FORMAT_JSONL; 0 (no format) or an unknown bit is OTC_E_INVALID_ARGUMENT.
  * paths gets the full paths written (a file left alone because it was
  * identical is not listed). Every file is checked before any is renamed into
  * dir, so a failure writes nothing there. */

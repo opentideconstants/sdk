@@ -10,6 +10,8 @@ void otc_fetch_options_init(otc_fetch_options *opts)
     if (!opts) return;
     memset(opts, 0, sizeof *opts);
     opts->struct_size = sizeof *opts;
+    opts->timeout_s = OTC_TIMEOUT_DEFAULT;
+    opts->formats = OTC_FORMATS_DEFAULT;
     opts->on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
 }
 

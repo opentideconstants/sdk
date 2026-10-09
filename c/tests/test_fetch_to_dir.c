@@ -2,7 +2,8 @@
  * C55: an existing file that cannot be read is OTC_E_IO, not "exists with a
  *      different SHA-256" (file_exists).
  * C54: "latest" on a network error honours on_network_error (CR D22): with
- *      use_cache it writes the newest cached release; with raise it fails. */
+ *      use_cache it writes the newest cached release; with raise it fails.
+ * CR 4c: formats OTC_FORMATS_DEFAULT is jsonl; formats 0 is invalid_argument. */
 #include "otc_test.h"
 
 int main(void)
@@ -19,7 +20,10 @@ int main(void)
     fo.base_url = base;
     fo.error = &err;
     memset(paths, 0, sizeof paths);
-    CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, 0, false, paths, 8, &n), OTC_OK);
+    /* CR 4c: formats 0 names no format: invalid_argument, and nothing is written */
+    CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, 0, false, paths, 8, &n), OTC_E_INVALID_ARGUMENT);
+    CHECK(n == 0 && strstr(err.message, "OTC_FORMATS_DEFAULT") != NULL && strstr(err.message, "unknown") == NULL);
+    CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_OK);
     CHECK(n == 3);
     for (i = 0; i < n && i < 8; i++) otc_free(paths[i]);
     /* C55 */
@@ -27,7 +31,7 @@ int main(void)
     chmod(p, 0000);
     if (access(p, R_OK) != 0) {
         memset(paths, 0, sizeof paths);
-        CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, 0, false, paths, 8, &n), OTC_E_IO);
+        CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_E_IO);
         CHECK(strstr(err.file, "OTC_20991231.2.jsonl") != NULL);
         for (i = 0; i < 8; i++) otc_free(paths[i]);
     } else {
@@ -42,12 +46,12 @@ int main(void)
         CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_OK);   /* the release is cached */
         fo.base_url = "http://127.0.0.1:9/";   /* the network is down */
         memset(paths, 0, sizeof paths);
-        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to2, 0, false, paths, 8, &n), OTC_OK);
+        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to2, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_OK);
         CHECK(n == 3);
         for (i = 0; i < n && i < 8; i++) otc_free(paths[i]);
         fo.on_network_error = OTC_ON_NETWORK_ERROR_RAISE;
         memset(paths, 0, sizeof paths);
-        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to3, 0, false, paths, 8, &n), OTC_E_NETWORK);
+        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to3, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_E_NETWORK);
         free(to2);
         free(to3);
     }

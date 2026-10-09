@@ -146,7 +146,7 @@
        "required": false,
        "positional": false,
        "default": null,
-       "note": "null = connect 10 s, read 60 s (spec 5.7)"
+       "note": "null = connect 10 s, read 60 s (spec 5.7); 0 or less is invalid_argument; C passes OTC_TIMEOUT_DEFAULT for the defaults, and 0 is OTC_E_INVALID_ARGUMENT"
       },
       {
        "name": "proxy",
@@ -403,7 +403,7 @@
         "jsonl"
        ],
        "enum": "format",
-       "note": "C: bit mask of OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ, OTC_FORMAT_JSONL; 0 = default"
+       "note": "[] is invalid_argument; C: bit mask of OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ, OTC_FORMAT_JSONL; OTC_FORMATS_DEFAULT = the default, and 0 (no format) is OTC_E_INVALID_ARGUMENT"
       },
       {
        "name": "overwrite",
@@ -2628,7 +2628,9 @@
    "OTC_FORMAT_JSON",
    "OTC_FORMAT_JSON_GZ",
    "OTC_FORMAT_JSONL",
-   "OTC_NO_LIMIT"
+   "OTC_NO_LIMIT",
+   "OTC_TIMEOUT_DEFAULT",
+   "OTC_FORMATS_DEFAULT"
   ]
  },
  "environment": {

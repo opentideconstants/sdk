@@ -86,7 +86,7 @@ static struct {
     double   last_check;
     otc_status auto_update_status;   /* the failure of the last automatic update (C69), OTC_OK if none */
     int      auto_update_nomove;     /* it said "updated" but named no newer release: last_error is uncaught */
-} g_client;
+} g_client = {.timeout_s = OTC_TIMEOUT_DEFAULT, .formats = OTC_FORMATS_DEFAULT};   /* no client yet: the defaults */
 
 static double now_s(void)
 {
@@ -107,6 +107,8 @@ static void client_free(void)
     free(g_client.ca_file);
     free(g_client.user_agent);
     memset(&g_client, 0, sizeof g_client);
+    g_client.timeout_s = OTC_TIMEOUT_DEFAULT;   /* 0 is not "the defaults" in C (CR 4c) */
+    g_client.formats = OTC_FORMATS_DEFAULT;
 }
 
 static int is_held(const otc_release *rel)
@@ -804,14 +806,17 @@ static void op_open(request *q, reply *r)
     g_client.ca_file = dup_or_null(arg_str(&q->a, "ca_file"));
     g_client.user_agent = dup_or_null(arg_str(&q->a, "user_agent"));
     g_client.offline = arg_bool(&q->a, "offline", false);
-    g_client.timeout_s = arg_num(&q->a, "timeout", 0.0);
-    /* timeout_s 0 is the defaults in C (header), so an explicit timeout of 0 s has no C spelling. The runner passes a
-     * value the library refuses (NaN, C59), so that the library judges it and 0 never turns into the defaults */
-    if (q->a.obj && cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(q->a.obj, "timeout")) && g_client.timeout_s == 0.0)
-        g_client.timeout_s = NAN;
+    /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it is,
+     * so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails loudly */
+    g_client.timeout_s = arg_num(&q->a, "timeout", OTC_TIMEOUT_DEFAULT);
+    if (q->a.obj && cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(q->a.obj, "timeout")) &&
+        g_client.timeout_s == OTC_TIMEOUT_DEFAULT) {
+        set_error(r, "uncaught:TimeoutSentinel", "timeout equals OTC_TIMEOUT_DEFAULT, which C reads as the defaults");
+        return;
+    }
     g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
     /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */
-    g_client.formats = mode && !strcmp(mode, "eager") ? (unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSONL) : 0u;
+    g_client.formats = mode && !strcmp(mode, "eager") ? (unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSONL) : OTC_FORMATS_DEFAULT;
     g_client.pinned = file != NULL || (release && strcmp(release, "latest") != 0);
     g_client.auto_update = arg_bool(&q->a, "auto_update", false);
     g_client.update_interval = arg_num(&q->a, "update_interval", 86400.0);
@@ -1542,14 +1547,14 @@ static void op_fetch(request *q, reply *r)
     } else if (!strcmp(q->op, "download")) {
         const char *to = arg_str(&q->a, "to"), *release = arg_str(&q->a, "release");
         const cJSON *fmts = q->a.obj ? cJSON_GetObjectItemCaseSensitive(q->a.obj, "formats") : NULL, *f;
-        unsigned formats = 0;
+        /* absent or null: OTC_FORMATS_DEFAULT; a list, [] included, goes to the library as its bits, so [] is 0 and the
+         * library judges it (CR 4c) */
+        unsigned formats = OTC_FORMATS_DEFAULT;
         char *paths[16];
         bool overwrite = arg_bool(&q->a, "overwrite", false);
         if (fmts && !cJSON_IsNull(fmts)) {
+            formats = 0;
             if (!cJSON_IsArray(fmts)) q->a.bad = 1;
-            /* formats 0 is the default (jsonl) in C (spec 4.3.2), so an empty list has no C spelling. The runner passes
-             * a bit the library refuses, so that the library judges it and [] never turns into the default */
-            else if (!cJSON_GetArraySize(fmts)) formats = OTC_FORMAT_OTHER;
             cJSON_ArrayForEach(f, fmts) {
                 if (!cJSON_IsString(f)) q->a.bad = 1;
                 else if (!strcmp(f->valuestring, "json")) formats |= OTC_FORMAT_JSON;
