@@ -184,6 +184,9 @@ export class OpenTideConstants {
         if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
         const caFile = optStr(options.caFile, "caFile");
         if (caFile !== null && node) node.checkReadable(caFile);
+        // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
+        const sslCertFile = caFile === null && node ? platform.env("SSL_CERT_FILE") : null;
+        if (sslCertFile) node?.checkReadable(sslCertFile);
         const cacheDir = optStr(options.cacheDir, "cacheDir");
         // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
         const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
