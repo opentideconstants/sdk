@@ -297,35 +297,10 @@
    "reason": "step 5 releases: expected a result, got error 'network' (HTTP 500 for http://127.0.0.1:51308/good/OTC_index.json)"
   },
   {
-   "case": "rules/pk03/bad-format-version-malformed-json",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
-   "case": "rules/pk03/bad-format-version-malformed-json-gz",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
-   "case": "rules/pk03/bad-format-version-malformed-jsonl",
-   "runners": [
-    "python"
-   ],
-   "package": "PK03",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
-  },
-  {
    "case": "rules/pk03/bad-format-version-malformed-jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "python"
+    "c-fetch"
    ],
    "package": "PK03",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.x\"}"
@@ -333,7 +308,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-json",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -342,7 +316,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-json-gz",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -351,7 +324,6 @@
   {
    "case": "rules/pk03/bad-min-reader-malformed-jsonl",
    "runners": [
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -362,7 +334,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK03",
@@ -371,7 +342,6 @@
   {
    "case": "rules/pk03/check-for-update-only-newer-major",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],

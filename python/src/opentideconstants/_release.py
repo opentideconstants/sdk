@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import threading
 import zlib
 from collections import OrderedDict
@@ -46,37 +47,42 @@ def _json(data: bytes, what: str):
         raise InvalidReleaseError(f"{what}: not JSON: {e}") from e
 
 
+_VERSION_RE = re.compile(r"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")  # ASCII digits only, no leading zeros
+
+
 def version_key(v):
-    """(MAJOR, MINOR) of a format version string, or None when it is not MAJOR.MINOR."""
-    if not isinstance(v, str):
-        return None
-    major, dot, minor = v.partition(".")
-    if not dot or not major.isdigit() or not minor.isdigit():
-        return None
-    return int(major), int(minor)
+    """(MAJOR, MINOR) of a format version string, or None when it is not MAJOR.MINOR (spec §7.4, CR D9)."""
+    m = _VERSION_RE.match(v) if isinstance(v, str) else None
+    return None if m is None else (int(m.group(1)), int(m.group(2)))
 
 
 def readable(format_version, min_reader_version) -> bool:
     """True when this SDK reads a release with these versions (spec §7.4): a supported major, and a
-    min_reader_version no newer than SUPPORTED_FORMAT_VERSION (a missing one does not block)."""
+    min_reader_version no newer than SUPPORTED_FORMAT_VERSION (a missing one does not block; a malformed one
+    does: the SDK never guesses a version, CR D9)."""
     fv = version_key(format_version)
     if fv is None or fv[0] not in SUPPORTED_FORMAT_MAJORS:
         return False
+    if min_reader_version is None:
+        return True
     mr = version_key(min_reader_version)
-    return mr is None or mr <= version_key(SUPPORTED_FORMAT_VERSION)
+    return mr is not None and mr <= version_key(SUPPORTED_FORMAT_VERSION)
 
 
 def check_format(fv, min_reader_version=None, datestamp=None) -> None:
-    if not isinstance(fv, str) or "." not in fv:
+    """Raise unless this SDK reads a release with these versions. A version that is present but is not
+    MAJOR.MINOR is invalid_release (CR D9)."""
+    key = version_key(fv)
+    if key is None:
         raise InvalidReleaseError(f"format_version missing or not MAJOR.MINOR: {fv!r}")
-    try:
-        major = int(fv.split(".", 1)[0])
-    except ValueError as e:
-        raise InvalidReleaseError(f"format_version not MAJOR.MINOR: {fv!r}") from e
-    if major not in SUPPORTED_FORMAT_MAJORS:
+    if key[0] not in SUPPORTED_FORMAT_MAJORS:
         raise UnsupportedFormatError(f"format {fv} is not supported (supported majors: {list(SUPPORTED_FORMAT_MAJORS)})")
+    if min_reader_version is None:
+        return
     mr = version_key(min_reader_version)
-    if mr is not None and mr > version_key(SUPPORTED_FORMAT_VERSION):
+    if mr is None:
+        raise InvalidReleaseError(f"release.min_reader_version is not MAJOR.MINOR: {min_reader_version!r}")
+    if mr > version_key(SUPPORTED_FORMAT_VERSION):
         raise ReaderTooOldError(f"release {datestamp or '?'} needs a reader for format {min_reader_version}; "
                                 f"this SDK reads format {SUPPORTED_FORMAT_VERSION}")
 

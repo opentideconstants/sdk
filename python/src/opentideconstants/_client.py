@@ -21,7 +21,7 @@ from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, Inv
 from ._http import Http
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
 from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
-                       meta_path_for, readable)
+                       meta_path_for, readable, version_key)
 
 __version__ = "0.1.0"
 SDK = f"opentideconstants-python/{__version__}"
@@ -32,12 +32,8 @@ _ON_ERR = ("use_cache", "raise")
 
 
 def _major(fv) -> Optional[int]:
-    if not isinstance(fv, str):
-        return None
-    try:
-        return int(fv.split(".", 1)[0])
-    except ValueError:
-        return None
+    k = version_key(fv)
+    return None if k is None else k[0]
 
 
 def _parse_sha256(text: str):
@@ -284,7 +280,15 @@ class OpenTideConstants:
                     index = self._cached_index_entries()
                 ifv, imr = index.get(ds, (None, None))
                 fv, mr = fv or ifv, mr or imr
-            if not readable(fv or SUPPORTED_FORMAT_VERSION, mr):
+            if fv is None:
+                # no recorded version: read the release's own header before choosing it (never guess, CR D9)
+                try:
+                    self._load_cached(ds, mode)._close()
+                except (UnsupportedFormatError, ReaderTooOldError, InvalidReleaseError) as e:
+                    self._log.info("cached release %s is not readable: %s", ds, e)
+                    continue
+                return ds
+            if not readable(fv, mr):
                 continue
             return ds
         return None
@@ -332,6 +336,11 @@ class OpenTideConstants:
         if not isinstance(ds, str) or not DATESTAMP_RE.match(ds):
             # a server-supplied datestamp names cache paths: never use one that is not a datestamp (spec §4.2, §5.4)
             raise InvalidReleaseError(f"{what}: bad datestamp {ds!r}")
+        fv, mrv = entry.get("format_version"), entry.get("min_reader_version")
+        if version_key(fv) is None or (mrv is not None and version_key(mrv) is None):
+            # never guess a version (spec §7.4, CR D9)
+            raise InvalidReleaseError(f"{what}: {ds}: format_version {fv!r} or min_reader_version {mrv!r} "
+                                      f"is not MAJOR.MINOR")
         try:
             files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
                                            f.get("sha256")) for f in entry.get("files") or ()),
@@ -598,18 +607,27 @@ class OpenTideConstants:
     def check_for_update(self) -> Optional[ReleaseInfo]:
         """A release newer than the loaded one that this SDK reads, or None. Also sets newer_format_major from
         a conditional GET of OTC_latest.json (spec §7.4)."""
-        info = self.latest()
+        if self._offline:
+            raise OfflineError("offline: the latest pointer cannot be read")
+        try:
+            info = self._latest_info()
+        except (UnsupportedFormatError, ReaderTooOldError):
+            # only newer-major releases: set newer_format_major first, then raise (CR D10)
+            self._newer_format_major = self._check_newer_major()
+            raise
         self._newer_format_major = self._check_newer_major()
         if datestamp_key(info.datestamp) > datestamp_key(self._release.datestamp):
             return info
         return None
 
     def _check_newer_major(self) -> Optional[int]:
+        """The format major of OTC_latest.json when it is newer than every supported major, else None. On an
+        error the value from before is kept (CR D10): the check only informs, it never fails the call."""
         try:
             got = self._get_json_conditional("OTC_latest.json")
-        except (NetworkError, InvalidReleaseError) as e:
+        except OpenTideConstantsError as e:
             self._log.debug("OTC_latest.json: %s", e)
-            return None
+            return self._newer_format_major
         if got is None or not isinstance(got[0], dict):
             return None
         major = _major(got[0].get("format_version"))

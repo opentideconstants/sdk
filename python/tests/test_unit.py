@@ -178,6 +178,69 @@ class PointerCacheTest(unittest.TestCase):
         self.assertEqual((d / "OTC_latest-f1.json").read_bytes(), b'{"a": 1}')
 
 
+class FormatVersionTest(unittest.TestCase):
+    """MAJOR.MINOR is two non-negative integers with no leading zeros (spec §7.4, CR D9, D10; review PK03)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "cache"
+
+    def tearDown(self):
+        for p in self.cache.rglob("*"):
+            if p.is_dir():
+                p.chmod(0o755)
+        self.tmp.cleanup()
+
+    def test_malformed_format_version_is_invalid_release(self):
+        from opentideconstants._release import check_format
+        for fv in ("1.x", "1.", "+1.0", " 1.0", "1.0.0", "1_0.0", "1.\u00b2", "01.0", "1.00", "1"):
+            with self.assertRaises(otc.InvalidReleaseError, msg=fv):
+                check_format(fv, "1.0")
+        for mrv in ("2", "1.x", "1.0.0", "\u00b9.0"):
+            with self.assertRaises(otc.InvalidReleaseError, msg=mrv):
+                check_format("1.0", mrv)
+        check_format("1.0", "1.0")
+        with self.assertRaises(otc.UnsupportedFormatError):
+            check_format("2.0", "2.0")
+
+    def test_malformed_pointer_format_version_is_invalid_release(self):
+        doc = json.loads((FIXTURES / "good" / "OTC_latest-f1.json").read_text(encoding="utf-8"))
+        doc["format_version"] = "1.x"
+        srv = _Server(script={"/OTC_latest-f1.json": (200, {}, json.dumps(doc).encode())})
+        try:
+            with self.assertRaises(otc.InvalidReleaseError):
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), on_network_error="raise")
+        finally:
+            srv.close()
+
+    def test_cached_release_with_no_recorded_version_is_checked_before_it_is_chosen(self):
+        import shutil
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream").close()
+        finally:
+            srv.close()
+        newer = self.cache / "v1" / "releases" / "20991231.3"
+        newer.mkdir()
+        for ext in (".jsonl", ".meta.json"):
+            shutil.copy(FIXTURES / "bad" / "format-major" / f"OTC_20991231{ext}", newer / f"OTC_20991231.3{ext}")
+        files = {f"OTC_20991231.3{ext}": {"sha256": None, "size": (newer / f"OTC_20991231.3{ext}").stat().st_size}
+                 for ext in (".jsonl", ".meta.json")}
+        (newer / ".verified").write_text(json.dumps({"files": files}), encoding="utf-8")
+        with otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream") as c:
+            self.assertEqual(c.release.datestamp, "20991231.2")
+
+    def test_check_for_update_with_a_read_only_pointer_cache(self):
+        srv = _Server()
+        try:
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as c:
+                (self.cache / "v1" / "pointer").chmod(0o555)
+                self.assertIsNone(c.check_for_update())
+        finally:
+            srv.close()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 
