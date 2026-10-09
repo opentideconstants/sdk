@@ -17,7 +17,8 @@ export const USER_AGENT = `opentideconstants-js/${VERSION} (+https://opentidecon
 /** @internal */
 export const SDK_ID = `opentideconstants-js/${VERSION}`;
 
-const DATESTAMP_RE = /^[0-9]{8}(\.[2-9]|\.[1-9][0-9]+)?$/;
+/** A datestamp: the date, then an optional counter of 2 or more with at most 9 digits (spec 4.2, CR D18). */
+const DATESTAMP_RE = /^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$/;
 
 /** @internal Throws invalid_argument unless `d` is a datestamp. */
 export function checkDatestamp(d: unknown, what = "release"): string {
@@ -28,8 +29,8 @@ export function checkDatestamp(d: unknown, what = "release"): string {
 }
 
 /** @internal True if `d` is a datestamp. */
-export function isDatestamp(d: string): boolean {
-    return DATESTAMP_RE.test(d);
+export function isDatestamp(d: unknown): d is string {
+    return typeof d === "string" && DATESTAMP_RE.test(d);
 }
 
 /** @internal Datestamp order: the date, then the counter (no counter = 1). Spec 4.3.1. */

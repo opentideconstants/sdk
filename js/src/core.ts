@@ -1,5 +1,5 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
-import { compareDatestamps, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
+import { compareDatestamps, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
     ChecksumError, InvalidReleaseError, NetworkError, OfflineError, ReleaseNotFoundError, UnsupportedFormatError,
 } from "./errors.js";
@@ -53,7 +53,11 @@ export interface Verified {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-export const relDir = (d: string) => `releases/${d}`;
+/** The cache directory of release D (spec 5.4). D is checked again here, so no path leaves `<root>/v1/releases`. */
+export function relDir(d: string): string {
+    if (!isDatestamp(d)) throw new InvalidReleaseError(`bad datestamp ${JSON.stringify(d)}`);
+    return `releases/${d}`;
+}
 
 export function log(ctx: Ctx, level: "debug" | "info" | "warn", message: string): void {
     try {
@@ -103,17 +107,32 @@ export async function httpGet(ctx: Ctx, url: string, etag: string | null = null)
     throw last ?? new NetworkError(`request failed: ${url}`, { url });
 }
 
-function parseEntry(v: unknown, pointerUrl: string): PointerEntry {
+/**
+ * Check one latest-pointer or index entry from the server (spec 4.2, 5.2). A datestamp that is not one (`../x`,
+ * `2026-10-08`, a counter `.01` or longer than 9 digits) is invalid_release: it names a cache directory (spec 5.4).
+ * `what` names the file in the message ("the pointer" or "OTC_index.json").
+ */
+function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry {
     if (!isObject(v) || typeof v["datestamp"] !== "string" || typeof v["format_version"] !== "string") {
-        throw new InvalidReleaseError(`the pointer ${pointerUrl} has no datestamp or format_version`);
+        throw new InvalidReleaseError(`${what} ${url}: an entry has no datestamp or format_version`);
     }
+    const d = v["datestamp"];
+    if (!isDatestamp(d)) throw new InvalidReleaseError(`${what} ${url}: bad datestamp ${JSON.stringify(d)}`);
+    const rawFiles = v["files"] ?? [];
+    if (!Array.isArray(rawFiles)) throw new InvalidReleaseError(`${what} ${url}: files of ${d} is not a list`);
     const files: FileInfo[] = [];
-    for (const f of Array.isArray(v["files"]) ? v["files"] : []) {
-        if (!isObject(f) || typeof f["name"] !== "string") continue;
+    for (const f of rawFiles) {
+        if (!isObject(f) || typeof f["name"] !== "string") throw new InvalidReleaseError(`${what} ${url}: a file of ${d} has no name`);
         const u = typeof f["url"] === "string" ? f["url"] : f["name"];
+        let href: string;
+        try {
+            href = new URL(u, url).href;
+        } catch (e) {
+            throw new InvalidReleaseError(`${what} ${url}: the url of ${f["name"]} is not a URL`, { cause: e });
+        }
         files.push({
             name: f["name"],
-            url: new URL(u, pointerUrl).href,
+            url: href,
             size: typeof f["size"] === "number" ? f["size"] : null,
             sha256: typeof f["sha256"] === "string" ? f["sha256"].toLowerCase() : null,
         });
@@ -121,7 +140,7 @@ function parseEntry(v: unknown, pointerUrl: string): PointerEntry {
     files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     const s = (k: string) => (typeof v[k] === "string" ? (v[k] as string) : null);
     return {
-        datestamp: v["datestamp"], format_version: v["format_version"], min_reader_version: s("min_reader_version"),
+        datestamp: d, format_version: v["format_version"], min_reader_version: s("min_reader_version"),
         concept_doi: s("concept_doi"), zenodo_version_doi: s("zenodo_version_doi"), content_sha256: s("content_sha256"), files,
     };
 }
@@ -169,8 +188,9 @@ export async function getIndex(ctx: Ctx): Promise<PointerEntry[]> {
 
 export function parseIndex(body: Uint8Array, url: string): PointerEntry[] {
     const doc = parseJson(body, "OTC_index.json");
-    const rels = isObject(doc) && Array.isArray(doc["releases"]) ? doc["releases"] : [];
-    return rels.map((e) => parseEntry(e, url)).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
+    const rels = isObject(doc) ? doc["releases"] : undefined;
+    if (!Array.isArray(rels)) throw new InvalidReleaseError(`OTC_index.json ${url}: releases is missing or not a list`);
+    return rels.map((e) => parseEntry(e, url, "OTC_index.json")).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
 }
 
 /** The cached index, for releases() offline. */
@@ -227,7 +247,7 @@ export async function getPointer(ctx: Ctx): Promise<PointerEntry> {
 export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
     const r = await getConditional(ctx, "OTC_latest.json");
     if (!r) return null;
-    const major = formatMajorOf(parseEntry(parseJson(r.body, "OTC_latest.json"), r.url).format_version);
+    const major = formatMajorOf(parseEntry(parseJson(r.body, "OTC_latest.json"), r.url, "OTC_latest.json").format_version);
     return Number.isNaN(major) ? null : major;
 }
 
@@ -269,6 +289,7 @@ export async function cachedDatestamps(ctx: Ctx): Promise<string[]> {
     let index: Map<string, PointerEntry> | null = null;
     const out: string[] = [];
     for (const d of await store.list("releases")) {
+        if (!isDatestamp(d)) continue;
         const v = await readVerified(store, d);
         if (!v) continue;
         if (!readable({ format_version: v.format_version ?? null, min_reader_version: v.min_reader_version ?? null })) continue;

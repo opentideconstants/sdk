@@ -222,8 +222,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK01",
    "reason": "step 0 open: expected error 'invalid_argument', got error 'release_not_found' (release 20991231.1234567890 not found (http://127.0.0.1:51308/good/OTC_20991231.1234567890.sha256))"
@@ -232,8 +231,7 @@
    "case": "rules/pk01/file-bad-name",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK01",
    "reason": "step 1 open: expected error 'invalid_argument', got error 'invalid_release' (/tmp/otc-conf-xbrulzgz/rel/OTC_20991231.2.meta.json: stations is missing)"
@@ -242,8 +240,7 @@
    "case": "rules/pk01/index-bad-datestamp",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK01",
    "reason": "step 2 releases: expected error 'invalid_release', got error 'uncaught:ValueError' (invalid literal for int() with base 10: './../x')"
@@ -251,8 +248,7 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-counter01",
    "runners": [
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK01",
    "reason": "step 1 open: expected error 'invalid_release', got error 'release_not_found' (release 20261008.01 not found (http://127.0.0.1:51319/good/OTC_20261008.01.sha256))"
@@ -260,8 +256,7 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dashed",
    "runners": [
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK01",
    "reason": "step 1 open: expected error 'invalid_release', got error 'release_not_found' (release 2026-10-08 not found (http://127.0.0.1:51319/good/OTC_2026-10-08.sha256))"
@@ -269,8 +264,7 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-dotdot",
    "runners": [
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK01",
    "reason": "step 1 open: expected error 'invalid_release', got error 'release_not_found' (release ../../x not found (http://127.0.0.1:51319/good/x.sha256))"
@@ -278,8 +272,7 @@
   {
    "case": "rules/pk01/pointer-bad-datestamp-newline",
    "runners": [
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK01",
    "reason": "step 1 open: expected error 'invalid_release', got error 'release_not_found' (release 20261008\n not found (http://127.0.0.1:51319/good/OTC_20261008.sha256))"

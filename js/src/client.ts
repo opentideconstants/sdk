@@ -1,5 +1,5 @@
 import {
-    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
+    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
@@ -197,15 +197,16 @@ export class OpenTideConstants {
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
         const dir = path.dirname(full);
         const name = path.basename(full);
-        const kind = name.endsWith(".json.gz") ? "json.gz" : name.endsWith(".jsonl") ? "jsonl" : name.endsWith(".json") ? "json" : null;
-        if (!kind) throw new InvalidArgumentError(`file must be a .json, .json.gz or .jsonl file; got ${name}`);
-        const stem = name.slice(0, name.length - (kind === "json.gz" ? 8 : kind === "jsonl" ? 6 : 5));
-        const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
+        // the name must be OTC_<D><ext> with a valid datestamp (spec 4.2, CR D18)
         const parts = splitReleaseName(name);
-        const shaPath = parts ? path.join(dir, `OTC_${parts.datestamp}.sha256`) : null;
+        const kind = parts && (parts.ext === "json" || parts.ext === "json.gz" || parts.ext === "jsonl") ? parts.ext : null;
+        if (!parts || !kind) throw new InvalidArgumentError(`file must be named OTC_<datestamp>.json, .json.gz or .jsonl; got ${name}`);
+        const stem = `OTC_${parts.datestamp}`;
+        const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
+        const shaPath = path.join(dir, `${stem}.sha256`);
         const bytes = new Map<string, Uint8Array>();
         for (const n of dataNames) bytes.set(n, node.readFileOrIo(path.join(dir, n)));
-        const shaBytes = shaPath ? node.readIfExists(shaPath) : null;
+        const shaBytes = node.readIfExists(shaPath);
         let files;
         let from: LoadedFrom;
         if (shaBytes) {
@@ -477,7 +478,7 @@ export class OpenTideConstants {
         if (!node || !store) throw new UnsupportedError("cachedReleases needs a file system (Node)");
         const dir = store.describe("releases");
         return Object.freeze(node.listDir(dir)
-            .filter((d) => node.exists(node.nodePath.join(dir, d, ".verified")))
+            .filter((d) => isDatestamp(d) && node.exists(node.nodePath.join(dir, d, ".verified")))
             .sort((a, b) => compareDatestamps(b, a)));
     }
 

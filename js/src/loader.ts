@@ -1,5 +1,5 @@
 /** @internal Turn release bytes into a Release (spec 6.1, 6.2). No I/O here. */
-import { formatMajor, readerReads, supportedFormat, SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION } from "./constants.js";
+import { formatMajor, isDatestamp, readerReads, supportedFormat, SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION } from "./constants.js";
 import { InvalidReleaseError, ReaderTooOldError, UnsupportedFormatError } from "./errors.js";
 import { deepFreeze, isObject, type Json, type JsonObject } from "./json.js";
 import {
@@ -150,5 +150,5 @@ export function parseSha256(text: string): Map<string, string> {
 /** @internal Split `OTC_{D}.{ext}` into its datestamp and extension. */
 export function splitReleaseName(name: string): { datestamp: string; ext: string } | null {
     const m = /^OTC_([0-9]{8}(?:\.[0-9]+)?)\.(json|json\.gz|jsonl|meta\.json|sha256)$/.exec(name);
-    return m && m[1] && m[2] ? { datestamp: m[1], ext: m[2] } : null;
+    return m && m[1] && m[2] && isDatestamp(m[1]) ? { datestamp: m[1], ext: m[2] } : null;
 }
