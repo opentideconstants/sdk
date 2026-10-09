@@ -1099,6 +1099,9 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "tombstone")) {
         otc_tombstone_t *t = NULL;
         const char *id = arg_str(&q->a, "station_id");
+        /* a station_id of the wrong type is the runner's invalid_argument (README "Argument rules"), never the
+         * library's answer for the NULL that arg_str gives */
+        if (q->a.bad) { set_error(r, "invalid_argument", "station_id"); return; }
         rc = otc_tombstone(R, id, &t);
         if (rc == OTC_OK) {
             cJSON_AddItemToObject(o, "tombstone", enc_tombstone(t, &bad));
