@@ -19,7 +19,7 @@ from ._cache import DATESTAMP_RE, Cache, atomic_write, datestamp_key, default_ro
 from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
-                      ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError)
+                      ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError, redact_credentials)
 from ._http import Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
 from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
@@ -755,7 +755,7 @@ class OpenTideConstants:
                 self._last_error = e
                 self._log.warning("automatic update failed: %s", e)
             except Exception as e:  # noqa: BLE001 - an automatic update never breaks the caller's query
-                self._log.warning("automatic update failed: %s: %s", type(e).__name__, e)
+                self._log.warning("automatic update failed: %s: %s", type(e).__name__, redact_credentials(str(e)))
 
     def verify(self) -> bool:
         """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A
