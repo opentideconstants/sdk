@@ -1,7 +1,8 @@
 /* Small helpers for the C library's own tests (c/tests). Each test is one
  * program that exits 0 when every CHECK holds. A test that needs the
  * conformance fixture server runs under c/tests/run_with_server.sh, which
- * sets OTC_TEST_SERVER (http://127.0.0.1:<port>) and OTC_TEST_PROXY. */
+ * sets OTC_TEST_SERVER (http://127.0.0.1:<port>), OTC_TEST_PROXY and
+ * OTC_TEST_REQUIRE_SERVER=1. */
 #ifndef OTC_TEST_H
 #define OTC_TEST_H
 
@@ -89,11 +90,21 @@ static int test_is_root(void)
 #endif
 }
 
-/* The conformance fixture server's base URL, or NULL (the test is then skipped). */
+/* The conformance fixture server's base URL. Under run_with_server.sh
+ * (OTC_TEST_REQUIRE_SERVER set, not "0") a missing or empty OTC_TEST_SERVER is
+ * a failure: the program exits 2, so a broken wrapper cannot turn every fetch
+ * test into a pass. Run by hand without the wrapper it is NULL. */
 static const char *test_server(void)
 {
     const char *s = getenv("OTC_TEST_SERVER");
-    return s && s[0] ? s : NULL;
+    const char *req = getenv("OTC_TEST_REQUIRE_SERVER");
+    if (s && s[0]) return s;
+    if (req && req[0] && strcmp(req, "0") != 0) {
+        fprintf(stderr, "OTC_TEST_SERVER is empty but OTC_TEST_REQUIRE_SERVER is set: the fixture server address "
+                        "is missing, which is a failure, not a skip\n");
+        exit(2);
+    }
+    return NULL;
 }
 
 /* A minimal release: format 1.0, one convention, one licence. */
