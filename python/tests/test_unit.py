@@ -781,6 +781,24 @@ class LifecycleTest(unittest.TestCase):
         c._maybe_auto_update()
 
 
+class DownloadTest(unittest.TestCase):
+    """download() writes all of a release or nothing (spec §4.3.2; review PK14)."""
+
+    def test_offline_with_a_partial_cache_writes_nothing(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            srv = _Server()
+            try:
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=tmp + "/c", mode="stream").close()
+            finally:
+                srv.close()
+            out = Path(tmp) / "out"
+            with otc.OpenTideConstants(cache_dir=tmp + "/c", offline=True, mode="stream") as c:
+                with self.assertRaises(otc.OfflineError):
+                    c.download("20991231.2", to=str(out), formats=["jsonl", "json.gz"])
+            self.assertEqual(sorted(p.name for p in out.iterdir()) if out.exists() else [], [])
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

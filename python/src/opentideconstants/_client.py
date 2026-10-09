@@ -860,68 +860,70 @@ class OpenTideConstants:
             to.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise FileError(f"cannot create {to}: {e}", path=str(to), cause=e) from e
-        written = []
         ptr = {f.name: f for f in info.files} if info is not None else {}
-        for n, sha in todo:
-            dest = to / n
-            if n == f"{base}.sha256":
-                tmp = tmp_name(to)
+        if self._offline:
+            missing = [n for n, _ in todo if n != f"{base}.sha256" and not (cached and (cdir / n).is_file())]
+            if missing:
+                raise OfflineError(f"offline, and {', '.join(missing)} is not in the cache")
+        # check, then rename (spec §4.3.2): every file goes to a checked temporary file in `to` first; only when
+        # all of them are there are they renamed into place, so a failure leaves nothing new in `to`
+        staged = []  # (tmp, dest)
+        try:
+            for n, sha in todo:
+                dest = to / n
+                if n == f"{base}.sha256":
+                    tmp = tmp_name(to)
+                    staged.append((tmp, dest))
+                    try:
+                        with open(tmp, "wb") as f:
+                            f.write(sha_body)
+                            f.flush()
+                            os.fsync(f.fileno())
+                    except OSError as e:
+                        raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
+                    continue
+                src = cdir / n
+                if cached and src.is_file():
+                    tmp = tmp_name(to)
+                    staged.append((tmp, dest))
+                    try:
+                        with open(src, "rb") as fi, open(tmp, "wb") as fo:
+                            while True:
+                                chunk = fi.read(1 << 20)
+                                if not chunk:
+                                    break
+                                fo.write(chunk)
+                            fo.flush()
+                            os.fsync(fo.fileno())
+                    except OSError as e:
+                        raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
+                    actual = file_sha256(tmp)
+                    if actual != sha:
+                        raise ChecksumError(f"{n}: the cached copy does not match", file=str(dest), expected=sha,
+                                            actual=actual)
+                else:
+                    url = ptr[n].url if n in ptr and ptr[n].url else self._url(n)
+                    try:
+                        tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
+                                               gz=n.endswith(".gz"))
+                    except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
+                        raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
+                    staged.append((tmp, dest))
+            written = []
+            for tmp, dest in staged:
                 try:
-                    with open(tmp, "wb") as f:
-                        f.write(sha_body)
-                        f.flush()
-                        os.fsync(f.fileno())
                     os.replace(tmp, dest)
                 except OSError as e:
-                    try:
-                        tmp.unlink()
-                    except OSError:
-                        pass
                     raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
                 written.append(str(dest))
-                continue
-            src = cdir / n
-            if cached and src.is_file():
-                tmp = tmp_name(to)
-                try:
-                    with open(src, "rb") as fi, open(tmp, "wb") as fo:
-                        while True:
-                            chunk = fi.read(1 << 20)
-                            if not chunk:
-                                break
-                            fo.write(chunk)
-                        fo.flush()
-                        os.fsync(fo.fileno())
-                except OSError as e:
-                    try:
-                        tmp.unlink()
-                    except OSError:
-                        pass
-                    raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
-                actual = file_sha256(tmp)
-                if actual != sha:
-                    tmp.unlink()
-                    raise ChecksumError(f"{n}: the cached copy does not match", file=str(dest), expected=sha,
-                                        actual=actual)
-            else:
-                if self._offline:
-                    raise OfflineError(f"offline, and {n} is not in the cache")
-                url = ptr[n].url if n in ptr and ptr[n].url else self._url(n)
-                try:
-                    tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
-                                           gz=n.endswith(".gz"))
-                except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
-                    raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
-            try:
-                os.replace(tmp, dest)
-            except OSError as e:
+            staged = []
+            return tuple(written)
+        finally:
+            for tmp, _ in staged:
                 try:
                     tmp.unlink()
                 except OSError:
                     pass
-                raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
-            written.append(str(dest))
-        return tuple(written)
 
     # ------------------------------------------------------------------ forwarded queries (spec §4.4)
 

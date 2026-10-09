@@ -1150,7 +1150,6 @@
    "case": "rules/pk14/network-fails-second-file-writes-nothing",
    "runners": [
     "c-fetch",
-    "python",
     "ruby"
    ],
    "package": "PK14",
