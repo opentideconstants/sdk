@@ -71,21 +71,30 @@ interface FileSource {
     shaPath: string | null;
 }
 
-/** The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). */
-function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
+/**
+ * @internal The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). A failure
+ * with no SDK code (a bug, a module that failed to load, a DataCloneError) is io, never network: network is only for
+ * transport failures, and io adds no new code (spec 5.6, CR2 DR5). The worker's original error is the cause.
+ */
+export function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
     const m = r.message ?? "the automatic update check failed";
+    let cause: Error | undefined;
+    if (r.cause) {
+        cause = new Error(r.cause.message);
+        cause.name = r.cause.name;
+        if (r.cause.stack !== undefined) cause.stack = r.cause.stack;
+    }
     switch (r.code) {
-        case "release_not_found": return new ReleaseNotFoundError(m);
-        case "offline_unavailable": return new OfflineError(m);
-        case "unsupported_format": return new UnsupportedFormatError(m);
-        case "reader_too_old": return new ReaderTooOldError(m);
-        case "invalid_release": return new InvalidReleaseError(m);
-        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: null, actual: null });
-        case "cache": return new CacheError(m, { path: r.path ?? null });
-        case "io": return new FileError(m, { path: r.path ?? "" });
+        case "network": return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null, cause });
+        case "release_not_found": return new ReleaseNotFoundError(m, { cause });
+        case "offline_unavailable": return new OfflineError(m, { cause });
+        case "unsupported_format": return new UnsupportedFormatError(m, { cause });
+        case "reader_too_old": return new ReaderTooOldError(m, { cause });
+        case "invalid_release": return new InvalidReleaseError(m, { cause });
+        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: r.expected ?? null, actual: r.actual ?? null, cause });
+        case "cache": return new CacheError(m, { path: r.path ?? null, cause });
         case "invalid_argument": return new InvalidArgumentError(m);
-        // network, and a worker that did not finish or failed outside the SDK: the check could not reach the data
-        default: return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null });
+        default: return new FileError(m, { path: r.path ?? "", cause });
     }
 }
 

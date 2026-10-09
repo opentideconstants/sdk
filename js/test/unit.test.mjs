@@ -453,3 +453,27 @@ test("R2-099: proxy credentials that are not valid percent-encoding are invalid_
         s.srv.close();
     }
 });
+
+test("R2-109 (DR5): a worker failure with no SDK code is io with its cause, never network; ChecksumError keeps expected and actual", async () => {
+    const { errorFromWorker } = await import("../dist/client.js");
+    assert.equal(typeof errorFromWorker, "function");
+    const raw = errorFromWorker({ ok: false, message: "x is not a function", cause: { name: "TypeError", message: "x is not a function", stack: "TypeError: x\n    at f" } });
+    assert.equal(raw.code, "io");
+    assert.equal(raw.cause?.name, "TypeError");
+    assert.match(String(raw.cause?.stack), /at f/);
+    const sum = errorFromWorker({ ok: false, code: "checksum_mismatch", message: "m", path: "OTC_x.jsonl", expected: "aa", actual: "bb" });
+    assert.deepEqual([sum.code, sum.file, sum.expected, sum.actual], ["checksum_mismatch", "OTC_x.jsonl", "aa", "bb"]);
+    const net = errorFromWorker({ ok: false, code: "network", message: "m", url: "http://x/", status: 503 });
+    assert.deepEqual([net.code, net.url, net.status], ["network", "http://x/", 503]);
+});
+
+test("R2-109: a worker that fails after it ran (a DataCloneError) is not labelled as failing to start, and keeps the cause", async () => {
+    const { runBlocking } = await import("../dist/node.js");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-worker-"));
+    const mod = path.join(dir, "w.mjs");
+    fs.writeFileSync(mod, 'import { workerData } from "node:worker_threads";\nworkerData.port.postMessage({ ok: false, f() {} });\n');
+    const res = runBlocking(new URL(`file://${mod}`), {}, 30_000);
+    assert.equal(res.ok, false);
+    assert.doesNotMatch(String(res.message), /failed to start/);
+    assert.equal(res.cause?.name, "DataCloneError");
+});

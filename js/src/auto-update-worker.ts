@@ -36,8 +36,11 @@ try {
         result.code = e.code;
         if (e instanceof NetworkError) Object.assign(result, { url: e.url, status: e.status });
         if (e instanceof CacheError || e instanceof FileError) result.path = e.path;
-        if (e instanceof ChecksumError) result.path = e.file;
+        if (e instanceof ChecksumError) Object.assign(result, { path: e.file, expected: e.expected, actual: e.actual });
     }
+    // the original failure goes with the result, so the client keeps it as the cause (CR2 DR5)
+    const c = e instanceof OpenTideConstantsError && e.cause instanceof Error ? e.cause : e;
+    if (c instanceof Error) result.cause = { name: c.name, message: c.message, stack: c.stack };
 }
 // the bootstrap (node.runBlocking) wakes the caller when this module has finished
 port.postMessage(result);
