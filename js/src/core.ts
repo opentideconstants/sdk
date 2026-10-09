@@ -1,7 +1,7 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
 import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
-    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, ReleaseNotFoundError,
+    ChecksumError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, redactCredentials, ReleaseNotFoundError,
     UnsupportedFormatError,
 } from "./errors.js";
 import { isObject } from "./json.js";
@@ -62,7 +62,7 @@ export function relDir(d: string): string {
 
 export function log(ctx: Ctx, level: "debug" | "info" | "warn", message: string): void {
     try {
-        ctx.logger?.[level](message);
+        ctx.logger?.[level](redactCredentials(message)); // no URL user or password in a log line (CR2 DR21)
     } catch {
         /* a logger must not break the SDK */
     }

@@ -4,22 +4,6 @@
   {
    "case": "net/proxy-credentials-redacted",
    "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-12",
-   "reason": "the SDK puts the user and password of the URL into the error message (CR2 DR21)"
-  },
-  {
-   "case": "net/base-url-credentials-redacted",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-12",
-   "reason": "the SDK puts the user and password of the URL into the error message (CR2 DR21)"
-  },
-  {
-   "case": "net/proxy-credentials-redacted",
-   "runners": [
     "c-fetch"
    ],
    "package": "PK-R2-12",

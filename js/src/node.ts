@@ -11,7 +11,7 @@ import * as zlib from "node:zlib";
 import type { Duplex } from "node:stream";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { CACHE_LAYOUT_VERSION, SDK_ID } from "./constants.js";
-import { CacheError, FileError, InvalidArgumentError, NetworkError } from "./errors.js";
+import { CacheError, FileError, InvalidArgumentError, NetworkError, redactUrl } from "./errors.js";
 import type { BlockingResult, NodeMod, NodePath } from "./node-api.js";
 import type { CacheStore, HttpOptions, HttpResponse, LockOptions, Platform, Unlock } from "./platform.js";
 
@@ -286,7 +286,7 @@ export function httpUrl(v: string, bareHost = false): URL | null {
 function proxyFor(target: URL, explicit: string | null): URL | null {
     if (explicit) {
         const u = httpUrl(explicit);
-        if (!u) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${explicit}`);
+        if (!u) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${redactUrl(explicit)}`);
         return u;
     }
     if (noProxy(target.hostname)) return null;
@@ -296,7 +296,7 @@ function proxyFor(target: URL, explicit: string | null): URL | null {
     const v = name === "HTTP_PROXY" && env("REQUEST_METHOD") !== null ? env("http_proxy") : envAnyCase(name);
     if (!v) return null;
     const u = httpUrl(v, true);
-    if (!u) throw new InvalidArgumentError(`the ${name} environment variable is not a proxy URL: ${v}`);
+    if (!u) throw new InvalidArgumentError(`the ${name} environment variable is not a proxy URL: ${redactUrl(v)}`);
     return u;
 }
 
