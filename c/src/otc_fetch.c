@@ -272,7 +272,7 @@ static otc_status fs_list(const char *dir, char ***out, size_t *n_out)
     struct dirent *e;
     *out = NULL;
     *n_out = 0;
-    if (!d) return OTC_E_IO;
+    if (!d) return errno == ENOMEM ? OTC_E_NOMEM : OTC_E_IO;
     while ((e = readdir(d)) != NULL) {
         char *name;
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
