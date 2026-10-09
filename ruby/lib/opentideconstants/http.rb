@@ -43,11 +43,17 @@ class OpenTideConstants
             @open_timeout = timeout || CONNECT_TIMEOUT
             @read_timeout = timeout || READ_TIMEOUT
             @proxy = proxy && HTTP.check_url!(proxy, "proxy")
-            # A ca_file that does not exist or cannot be read is io, at construction (CR D19).
-            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
-                raise FileError.new("ca_file #{ca_file} does not exist or cannot be read", path: ca_file)
+            # A ca_file, else SSL_CERT_FILE, that does not exist or cannot be read is io, at construction:
+            # never retried, never a reason to fall back to the cache (CR D19, CR2 DR20).
+            what = "ca_file"
+            if ca_file.nil? && !ENV["SSL_CERT_FILE"].to_s.empty?
+                ca_file = ENV["SSL_CERT_FILE"]
+                what = "SSL_CERT_FILE"
             end
-            @ca_file = ca_file || ENV["SSL_CERT_FILE"]
+            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
+                raise FileError.new("#{what} #{ca_file} does not exist or cannot be read", path: ca_file)
+            end
+            @ca_file = ca_file
             @user_agent = user_agent ? "#{USER_AGENT} #{user_agent}" : USER_AGENT
             @logger = logger
             @sleeper = sleeper || ->(s) { sleep(s) }
