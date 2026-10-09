@@ -670,6 +670,40 @@ def sums_disagree(files, sums, entry, reuse):
     return rehash(files, sums, entry, b"\n".join(lines) + b"\n")
 
 
+def sha256_dup_name(files, sums, entry, reuse):
+    """The .jsonl is listed twice: first with a wrong digest, then with the right one. A reader where the last row
+    wins passes it; DR14 refuses a repeated name, so that row order never decides a check."""
+    name = next(n for n in files if n.endswith(".jsonl")).encode()
+    lines = []
+    for line in sums.splitlines():
+        if line.endswith(b"  " + name):
+            lines.append(sha(b"wrong digest").encode() + b"  " + name)
+        lines.append(line)
+    return rehash(files, sums, entry, b"\n".join(lines) + b"\n")
+
+
+def sha256_invalid_utf8(files, sums, entry, reuse):
+    """A last row whose name has a byte that is not UTF-8 (DR14). Every other row is honest."""
+    return rehash(files, sums, entry, sums + sha(b"extra").encode() + b"  OTC_" + BASE.encode() + b".\xff\n")
+
+
+def sha256_no_json_row(files, sums, entry, reuse):
+    """The .sha256 and the pointer list the .json.gz but not the .json (DR15: an eager download needs the .json
+    row). The .json file is still published, so only the missing row is the defect."""
+    name = next(n for n in files if n.endswith(".json"))
+    sums = b"".join(l + b"\n" for l in sums.splitlines() if not l.endswith(b"  " + name.encode()))
+    entry = copy.deepcopy(entry)
+    entry["files"] = [f for f in entry["files"] if f["name"] != name]
+    return rehash(files, sums, entry, sums)
+
+
+def pointer_file_no_sha256(files, sums, entry, reuse):
+    """The pointer and index entry for OTC_{D}.sha256 have no sha256 (schema-invalid; DR12: invalid_release)."""
+    files, sums, entry = rehash(files, sums, entry)
+    next(f for f in entry["files"] if f["name"].endswith(".sha256")).pop("sha256")
+    return files, sums, entry
+
+
 def index_content_digest_bad(files, sums, entry, reuse):
     entry = copy.deepcopy(entry)
     entry["content_sha256"] = "not a digest"
@@ -800,6 +834,15 @@ BAD = [
      lambda: [release_doc(BASE)], index_content_digest_bad, {"index_invalid": True}),
     ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
      _too_new_broken, None, {"valid_as_1_0": False}),
+    # Cross-SDK rules of review round 2 (PK-R2-06: DR12, DR14, DR15).
+    ("sha256-dup-name", "invalid_release", "OTC_20991231.sha256 lists the .jsonl twice, first with a wrong SHA-256, then with the right one (DR14)",
+     lambda: [release_doc(BASE)], sha256_dup_name),
+    ("sha256-invalid-utf8", "invalid_release", "OTC_20991231.sha256 has a last row whose name has the byte 0xff, which is not UTF-8 (DR14)",
+     lambda: [release_doc(BASE)], sha256_invalid_utf8),
+    ("sha256-no-json-row", "checksum_mismatch", "OTC_20991231.sha256 and the pointer list the .json.gz but not the .json: an eager download fails with \"not listed\" (DR15)",
+     lambda: [release_doc(BASE)], sha256_no_json_row),
+    ("pointer-file-no-sha256", "invalid_release", "the pointer and index entry for OTC_20991231.sha256 have no sha256 (schema-invalid, DR12)",
+     lambda: [release_doc(BASE)], pointer_file_no_sha256, {"index_invalid": True}),
 ]
 
 
@@ -1224,13 +1267,27 @@ def open_release(root, datestamp, schemas):
     entry = next((e for e in index["releases"] if e["datestamp"] == datestamp), None)
     if entry is None:
         raise Fail("release_not_found", datestamp)
+    # CR2 DR12: every file entry has a string sha256 and a non-negative integer size (the index schema requires both)
+    for f in entry["files"]:
+        size = f.get("size")
+        if not isinstance(f.get("sha256"), str) or not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise Fail("invalid_release", f"{f.get('name')}: the entry needs a string sha256 and a size >= 0")
     sums_path = root / f"OTC_{datestamp}.sha256"
     sums = {}
-    for line in read_file(root, sums_path.name).decode("utf-8", "replace").splitlines():
+    try:
+        text = read_file(root, sums_path.name).decode("utf-8")
+    except UnicodeDecodeError as e:   # CR2 DR14
+        raise Fail("invalid_release", f"{sums_path.name}: not UTF-8: {e}") from None
+    for line in text.splitlines():
         m = re.fullmatch(r"([0-9a-f]{64})  (\S.*)", line)
         if not m:
             raise Fail("checksum_mismatch", f"{sums_path.name}: a line that is not '<sha256>  <name>': {line[:80]!r}")
+        if m.group(2) in sums:   # CR2 DR14: row order never decides a check
+            raise Fail("invalid_release", f"{sums_path.name}: {m.group(2)} is listed twice")
         sums[m.group(2)] = m.group(1)
+    # CR2 DR15: an eager download needs the .json row
+    if f"OTC_{datestamp}.json.gz" in sums and f"OTC_{datestamp}.json" not in sums:
+        raise Fail("checksum_mismatch", f"OTC_{datestamp}.json: not listed in {sums_path.name}")
     # Spec 5.2 step 4.1: the pointer and the .sha256 file must agree.
     for f in entry["files"]:
         if f["name"] == sums_path.name:

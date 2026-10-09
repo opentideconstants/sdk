@@ -1746,6 +1746,113 @@ def group_rules():
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
                      [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+    out += r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned)
+    return out
+
+
+def r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned):
+    """Review round 2, PK-R2-06: the .sha256 list, the pointer and index entries, and 200 bodies (CR2 DR12-DR15).
+    The shape of a 200 body (DR13) is its type: the pointer is an object with a datestamp and a files array, the
+    index an object with a releases array, a .sha256 file has at least one '<sha256>  <name>' row. A body of another
+    shape is a network error and is never cached; a wrong value inside a body of the right shape is invalid_release."""
+    out = []
+    P = "rules/r2-pk06"
+    kept_ptr = drv("assert_sha256", path="${cache}/v1/pointer/OTC_latest-f1.json", equals=f"{FIX}/good/OTC_latest-f1.json")
+    kept_idx = drv("assert_sha256", path="${cache}/v1/pointer/OTC_index.json", equals=f"{FIX}/good/OTC_index.json")
+    proxy_json = '{"error": "blocked by the proxy"}'
+    html = "<html>captive portal</html>"
+    # DR13: a 200 pointer of the wrong shape
+    for label, rule in [("object", {"action": "status", "status": 200, "body": proxy_json,
+                                    "headers": {"ETag": ptr_etag, "Content-Type": "application/json"}}),
+                        ("array", {"action": "status", "status": 200, "body": "[]",
+                                   "headers": {"ETag": ptr_etag, "Content-Type": "application/json"}}),
+                        ("files-not-array", {"action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+                                             "set": {"/files": {}}})]:
+        out.append(case(f"{P}/pointer-200-wrong-shape-{label}", f"the pointer answers 200 with JSON of the wrong shape ({label}): use_cache falls back with network, the cached pointer is kept, and the next open still works (DR13)", "5.2",
+                        [latest({"datestamp": d2}), drv("restart_runner"),
+                         drv("server_rules", rules=[{"match": pointer_rule, **rule}]),
+                         latest({"loaded_from": "cache_after_error", "datestamp": d2}),
+                         step("last_error", {"code": "network"}), kept_ptr,
+                         drv("server_rules", rules=[]), drv("restart_runner"),
+                         latest({"loaded_from": {"$any_of": ["cache", "download"]}, "datestamp": d2})],
+                        requires=["fs"], timeout_s=90))
+    out.append(case(f"{P}/pointer-200-wrong-shape-raise", "the pointer answers 200 with JSON of the wrong shape, on_network_error raise and an empty cache: network (DR13)", "5.2",
+                    [drv("server_rules", rules=[{"match": pointer_rule, "action": "status", "status": 200, "body": proxy_json,
+                                                 "headers": {"Content-Type": "application/json"}}]),
+                     latest(err("network"), on_network_error="raise")],
+                    requires=["fs"]))
+    # DR13 and D8 (G5): a 200 index that is not JSON, or of the wrong shape
+    for label, body, ctype in [("not-json", html, "text/html"), ("wrong-shape", proxy_json, "application/json"),
+                               ("releases-not-array", '{"releases": {}}', "application/json")]:
+        out.append(case(f"{P}/index-200-{label}", f"OTC_index.json answers 200 with a body that is {label.replace('-', ' ')}: releases() with use_cache answers from the cached index, which is kept (D8, DR13)", "4.3, 5.2",
+                        [latest({"datestamp": d2}), net(step("releases", {"releases": [info2, info1]})), drv("restart_runner"),
+                         latest({"datestamp": d2}),
+                         drv("server_rules", rules=[{"match": r"/good/OTC_index\.json$", "action": "status", "status": 200, "body": body,
+                                                     "headers": {"Content-Type": ctype}}]),
+                         net(step("releases", {"releases": [info2, info1]})), kept_idx],
+                        requires=["fs"], timeout_s=90))
+        out.append(case(f"{P}/index-200-{label}-raise", f"OTC_index.json answers 200 with a body that is {label.replace('-', ' ')}, on_network_error raise and no cached index: releases() is network (D8, DR13)", "4.3, 5.2",
+                        [latest({"datestamp": d2}, on_network_error="raise"),
+                         drv("server_rules", rules=[{"match": r"/good/OTC_index\.json$", "action": "status", "status": 200, "body": body,
+                                                     "headers": {"Content-Type": ctype}}]),
+                         net(step("releases", err("network")))],
+                        requires=["fs"]))
+    # DR13: a 200 .sha256 with no valid row (checked before its SHA-256 is compared with the pointer's)
+    sha_rule = [{"match": rf"/good/OTC_{re.escape(d2)}\.sha256$", "action": "status", "status": 200, "body": html,
+                 "headers": {"Content-Type": "text/html"}}]
+    out.append(case(f"{P}/sha256-200-html-latest", "the pointer names an uncached release whose OTC_{D}.sha256 answers 200 with an HTML page: use_cache falls back to the cached older release, last_error network (DR13)", "5.2",
+                    [pinned(d1), drv("restart_runner"), drv("server_rules", rules=sha_rule),
+                     latest({"loaded_from": "cache_after_error", "datestamp": d1}),
+                     step("last_error", {"code": "network"})],
+                    requires=["fs"], timeout_s=90))
+    out.append(case(f"{P}/sha256-200-html-pinned", "a pinned uncached release whose OTC_{D}.sha256 answers 200 with an HTML page: network (DR13)", "5.2",
+                    [drv("server_rules", rules=sha_rule), pinned(d2, err("network"), on_network_error="raise")],
+                    requires=["fs"]))
+    # DR12: a pointer or index file entry with no string sha256 or no integer size >= 0
+    PF = f"{SRV}/bad/pointer-file-no-sha256/"
+    out.append(case(f"{P}/pointer-file-no-sha256-latest", "latest from bad/pointer-file-no-sha256 (the pointer's OTC_{D}.sha256 entry has no sha256): invalid_release (DR12)", "5.3",
+                    [latest(err("invalid_release"), base=PF, on_network_error="raise", mode="stream")],
+                    requires=["fs", "stream"]))
+    out.append(case(f"{P}/pointer-file-no-sha256-releases", "releases() from bad/pointer-file-no-sha256 (an index entry with no sha256): invalid_release (DR12)", "4.3, 5.3",
+                    [step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=PF,
+                          cache_dir="${cache}"),
+                     net(step("releases", err("invalid_release")))],
+                    requires=["fs"]))
+    jl = next(i for i, f in enumerate(pointer_entry("good", d2)["files"]) if f["name"].endswith(".jsonl"))
+    for label, value in [("size-string", {"size": "25682"}), ("size-negative", {"size": -1}), ("size-null", {"size": None}),
+                         ("sha256-null", {"sha256": None}), ("sha256-number", {"sha256": 5})]:
+        sets = {f"/files/{jl}/{k}": v for k, v in value.items()}
+        out.append(case(f"{P}/pointer-entry-{label}", f"the pointer's .jsonl entry has {label.replace('-', ' ')}: invalid_release, and nothing is downloaded (DR12)", "5.3",
+                        [drv("server_rules", rules=[{"match": pointer_rule, "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "", "set": sets}]),
+                         latest(err("invalid_release"), on_network_error="raise", mode="stream"),
+                         drv("assert_requests", match=r"\.jsonl$", count=0)],
+                        requires=["fs", "stream"]))
+    out.append(case(f"{P}/index-entry-size-null", "an OTC_index.json entry whose .jsonl has size null: releases() is invalid_release (DR12)", "4.3, 5.3",
+                    [latest({"datestamp": d2}),
+                     drv("server_rules", rules=[{"match": r"/good/OTC_index\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "",
+                                                 "set": {f"/releases/0/files/{jl}/size": None}}]),
+                     net(step("releases", err("invalid_release")))],
+                    requires=["fs"]))
+    # DR14: a .sha256 that repeats a name, or is not UTF-8
+    for root in ["sha256-dup-name", "sha256-invalid-utf8"]:
+        out.append(case(f"{P}/{root}-latest", f"latest from bad/{root}: invalid_release (DR14)", "5.3",
+                        [latest(err("invalid_release"), base=f"{SRV}/bad/{root}/", on_network_error="raise", mode="stream")],
+                        requires=["fs", "stream"]))
+        out.append(case(f"{P}/{root}-pinned", f"a pinned download from bad/{root}: invalid_release (DR14)", "5.3",
+                        [pinned("20991231", err("invalid_release"), base=f"{SRV}/bad/{root}/", on_network_error="raise", mode="stream")],
+                        requires=["fs", "stream"]))
+        out.append(case(f"{P}/{root}-file", f"file: bad/{root}'s .jsonl, with its OTC_{{D}}.sha256 next to it: invalid_release (DR14)", "5.3",
+                        [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231.jsonl", mode="stream")],
+                        requires=["fs", "stream"]))
+    # DR15: an eager download needs the .json row
+    NJ = f"{SRV}/bad/sha256-no-json-row/"
+    not_listed = {**err("checksum_mismatch"), "error_message": {"$contains": "not listed"}}
+    out.append(case(f"{P}/sha256-no-json-row-eager", "eager latest from bad/sha256-no-json-row (.json.gz listed, .json not): checksum_mismatch \"not listed\" (DR15)", "5.3",
+                    [latest(not_listed, base=NJ, on_network_error="raise", mode="eager")],
+                    requires=["fs", "eager"]))
+    out.append(case(f"{P}/sha256-no-json-row-stream", "stream latest from bad/sha256-no-json-row: it loads (DR15 is for eager mode only)", "5.3",
+                    [latest({"datestamp": "20991231", "loaded_from": "download"}, base=NJ, on_network_error="raise", mode="stream")],
+                    requires=["fs", "stream"]))
     return out
 
 

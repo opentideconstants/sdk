@@ -51,6 +51,10 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `bad/jsonl-wrong-sha256/` | only the `.jsonl` has one byte changed (same size) | `checksum_mismatch` |
 | `bad/index-invalid/` | a good release whose `OTC_index.json` entry has a `content_sha256` that is not a digest | loads; the index fails `otc-index-1.0` |
 | `bad/too-new-broken/` | `min_reader_version` `1.99`, and its data is not valid 1.0 | `reader_too_old` (the version gate comes first) |
+| `bad/sha256-dup-name/` | `OTC_20991231.sha256` lists the `.jsonl` twice, first with a wrong SHA-256, then with the right one | `invalid_release` (CR2 DR14) |
+| `bad/sha256-invalid-utf8/` | `OTC_20991231.sha256` has a row whose name is not UTF-8 | `invalid_release` (CR2 DR14) |
+| `bad/sha256-no-json-row/` | `OTC_20991231.sha256` and the pointer list the `.json.gz` but not the `.json` (the `.json` file is still there) | `checksum_mismatch` "not listed" in eager mode (CR2 DR15); stream mode loads |
+| `bad/pointer-file-no-sha256/` | the pointer and index entry for `OTC_20991231.sha256` have no `sha256` (the pointers and the index fail `otc-index-1.0`) | `invalid_release` (CR2 DR12) |
 
 The reference reader checks that the files of one release agree (`.json.gz` with `.json`, `.jsonl` and `.meta.json` with `.json`). The SDKs do not (decision D37): each file is checked against `OTC_{D}.sha256`, so a release whose files disagree is a pipeline defect, and only the reference reader has cases for it. Each rule of the reference reader decides the outcome of at least one bad fixture, so turning a rule off fails `--check` (review round 1, B2-T1). Three rules repeat another check and cannot be turned off alone: the SHA-256 of `OTC_{D}.sha256` against the pointer (step 4.2 hashes it again), and the schema checks of the `.meta.json` and the `.jsonl` lines (they must equal the `.json`, which is validated in full). The pointer and too-new-file checks are covered by builder mutants (a wrong per-major pointer, a `.jsonl` that differs in a too-new release).
 

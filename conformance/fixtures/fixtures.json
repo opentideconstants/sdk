@@ -519,6 +519,51 @@
    ],
    "root": "bad/too-new-broken",
    "valid_as_1_0": false
+  },
+  {
+   "defect": "OTC_20991231.sha256 lists the .jsonl twice, first with a wrong SHA-256, then with the right one (DR14)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sha256-dup-name"
+  },
+  {
+   "defect": "OTC_20991231.sha256 has a last row whose name has the byte 0xff, which is not UTF-8 (DR14)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sha256-invalid-utf8"
+  },
+  {
+   "defect": "OTC_20991231.sha256 and the pointer list the .json.gz but not the .json: an eager download fails with \"not listed\" (DR15)",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sha256-no-json-row"
+  },
+  {
+   "defect": "the pointer and index entry for OTC_20991231.sha256 have no sha256 (schema-invalid, DR12)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "index_invalid": true,
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/pointer-file-no-sha256"
   }
  ],
  "reader_format_version": "1.0",

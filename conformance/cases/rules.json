@@ -4325,6 +4325,1893 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-200-wrong-shape-object",
+   "title": "the pointer answers 200 with JSON of the wrong shape (object): use_cache falls back with network, the cached pointer is kept, and the next open still works (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"error\": \"blocked by the proxy\"}",
+       "headers": {
+        "ETag": "\"f0164bb38464df86942e9dab686c29927463b1617bfe3fc0305ea999224ffdae\"",
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_latest-f1.json",
+     "equals": "${fixtures}/good/OTC_latest-f1.json"
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": {
+       "$any_of": [
+        "cache",
+        "download"
+       ]
+      },
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-200-wrong-shape-array",
+   "title": "the pointer answers 200 with JSON of the wrong shape (array): use_cache falls back with network, the cached pointer is kept, and the next open still works (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "[]",
+       "headers": {
+        "ETag": "\"f0164bb38464df86942e9dab686c29927463b1617bfe3fc0305ea999224ffdae\"",
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_latest-f1.json",
+     "equals": "${fixtures}/good/OTC_latest-f1.json"
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": {
+       "$any_of": [
+        "cache",
+        "download"
+       ]
+      },
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-200-wrong-shape-files-not-array",
+   "title": "the pointer answers 200 with JSON of the wrong shape (files-not-array): use_cache falls back with network, the cached pointer is kept, and the next open still works (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files": {}
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_latest-f1.json",
+     "equals": "${fixtures}/good/OTC_latest-f1.json"
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": {
+       "$any_of": [
+        "cache",
+        "download"
+       ]
+      },
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-200-wrong-shape-raise",
+   "title": "the pointer answers 200 with JSON of the wrong shape, on_network_error raise and an empty cache: network (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"error\": \"blocked by the proxy\"}",
+       "headers": {
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-not-json",
+   "title": "OTC_index.json answers 200 with a body that is not json: releases() with use_cache answers from the cached index, which is kept (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "<html>captive portal</html>",
+       "headers": {
+        "Content-Type": "text/html"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_index.json",
+     "equals": "${fixtures}/good/OTC_index.json"
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-not-json-raise",
+   "title": "OTC_index.json answers 200 with a body that is not json, on_network_error raise and no cached index: releases() is network (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "<html>captive portal</html>",
+       "headers": {
+        "Content-Type": "text/html"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-wrong-shape",
+   "title": "OTC_index.json answers 200 with a body that is wrong shape: releases() with use_cache answers from the cached index, which is kept (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"error\": \"blocked by the proxy\"}",
+       "headers": {
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_index.json",
+     "equals": "${fixtures}/good/OTC_index.json"
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-wrong-shape-raise",
+   "title": "OTC_index.json answers 200 with a body that is wrong shape, on_network_error raise and no cached index: releases() is network (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"error\": \"blocked by the proxy\"}",
+       "headers": {
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-releases-not-array",
+   "title": "OTC_index.json answers 200 with a body that is releases not array: releases() with use_cache answers from the cached index, which is kept (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"releases\": {}}",
+       "headers": {
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.2",
+        "format_version": "1.0",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.2",
+        "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
+        "files": [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29814,
+          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         },
+         {
+          "name": "OTC_20991231.2.json.gz",
+          "url": "${server}/good/OTC_20991231.2.json.gz",
+          "size": 4474,
+          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         },
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25827,
+          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         },
+         {
+          "name": "OTC_20991231.2.sha256",
+          "url": "${server}/good/OTC_20991231.2.sha256",
+          "size": 353,
+          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991231",
+        "format_version": "1.0",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+        "files": [
+         {
+          "name": "OTC_20991231.json",
+          "url": "${server}/good/OTC_20991231.json",
+          "size": 29779,
+          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+         },
+         {
+          "name": "OTC_20991231.json.gz",
+          "url": "${server}/good/OTC_20991231.json.gz",
+          "size": 4469,
+          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+         },
+         {
+          "name": "OTC_20991231.jsonl",
+          "url": "${server}/good/OTC_20991231.jsonl",
+          "size": 25682,
+          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+         },
+         {
+          "name": "OTC_20991231.meta.json",
+          "url": "${server}/good/OTC_20991231.meta.json",
+          "size": 4084,
+          "sha256": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c"
+         },
+         {
+          "name": "OTC_20991231.sha256",
+          "url": "${server}/good/OTC_20991231.sha256",
+          "size": 345,
+          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/pointer/OTC_index.json",
+     "equals": "${fixtures}/good/OTC_index.json"
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-200-releases-not-array-raise",
+   "title": "OTC_index.json answers 200 with a body that is releases not array, on_network_error raise and no cached index: releases() is network (D8, DR13)",
+   "spec": "4.3, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "status",
+       "status": 200,
+       "body": "{\"releases\": {}}",
+       "headers": {
+        "Content-Type": "application/json"
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-200-html-latest",
+   "title": "the pointer names an uncached release whose OTC_{D}.sha256 answers 200 with an HTML page: use_cache falls back to the cached older release, last_error network (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 200,
+       "body": "<html>captive portal</html>",
+       "headers": {
+        "Content-Type": "text/html"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache_after_error",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "last_error",
+     "expect": {
+      "code": "network"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-200-html-pinned",
+   "title": "a pinned uncached release whose OTC_{D}.sha256 answers 200 with an HTML page: network (DR13)",
+   "spec": "5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 200,
+       "body": "<html>captive portal</html>",
+       "headers": {
+        "Content-Type": "text/html"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-file-no-sha256-latest",
+   "title": "latest from bad/pointer-file-no-sha256 (the pointer's OTC_{D}.sha256 entry has no sha256): invalid_release (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/bad/pointer-file-no-sha256/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-file-no-sha256-releases",
+   "title": "releases() from bad/pointer-file-no-sha256 (an index entry with no sha256): invalid_release (DR12)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/bad/pointer-file-no-sha256/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-entry-size-string",
+   "title": "the pointer's .jsonl entry has size string: invalid_release, and nothing is downloaded (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/2/size": "25682"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "\\.jsonl$",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-entry-size-negative",
+   "title": "the pointer's .jsonl entry has size negative: invalid_release, and nothing is downloaded (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/2/size": -1
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "\\.jsonl$",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-entry-size-null",
+   "title": "the pointer's .jsonl entry has size null: invalid_release, and nothing is downloaded (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/2/size": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "\\.jsonl$",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-entry-sha256-null",
+   "title": "the pointer's .jsonl entry has sha256 null: invalid_release, and nothing is downloaded (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/2/sha256": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "\\.jsonl$",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/pointer-entry-sha256-number",
+   "title": "the pointer's .jsonl entry has sha256 number: invalid_release, and nothing is downloaded (DR12)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/files/2/sha256": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "\\.jsonl$",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/index-entry-size-null",
+   "title": "an OTC_index.json entry whose .jsonl has size null: releases() is invalid_release (DR12)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_index\\.json$",
+       "action": "json",
+       "file": "good/OTC_index.json",
+       "pointer": "",
+       "set": {
+        "/releases/0/files/2/size": null
+       }
+      }
+     ]
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-dup-name-latest",
+   "title": "latest from bad/sha256-dup-name: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/bad/sha256-dup-name/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-dup-name-pinned",
+   "title": "a pinned download from bad/sha256-dup-name: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/bad/sha256-dup-name/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-dup-name-file",
+   "title": "file: bad/sha256-dup-name's .jsonl, with its OTC_{D}.sha256 next to it: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/sha256-dup-name/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-invalid-utf8-latest",
+   "title": "latest from bad/sha256-invalid-utf8: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/bad/sha256-invalid-utf8/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-invalid-utf8-pinned",
+   "title": "a pinned download from bad/sha256-invalid-utf8: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/bad/sha256-invalid-utf8/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-invalid-utf8-file",
+   "title": "file: bad/sha256-invalid-utf8's .jsonl, with its OTC_{D}.sha256 next to it: invalid_release (DR14)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/sha256-invalid-utf8/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-no-json-row-eager",
+   "title": "eager latest from bad/sha256-no-json-row (.json.gz listed, .json not): checksum_mismatch \"not listed\" (DR15)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/bad/sha256-no-json-row/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_message": {
+       "$contains": "not listed"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk06/sha256-no-json-row-stream",
+   "title": "stream latest from bad/sha256-no-json-row: it loads (DR15 is for eager mode only)",
+   "spec": "5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/bad/sha256-no-json-row/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231",
+      "loaded_from": "download"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
   }
  ]
 }
