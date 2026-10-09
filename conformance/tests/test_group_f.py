@@ -116,3 +116,15 @@ def test_check_cases_rejects_bad_matchers(tmp_path, value):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "citation", "expect": {"citation": value}}]}])
     r = run_driver("--check-cases", "--cases", str(cases))
     assert r.returncode == 2 and "PROBLEM" in r.stdout and "Traceback" not in r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-400:])
+
+
+# --- K18: an error expectation with a key that is not error, error_fields, error_message or tolerance
+
+def test_error_expectation_with_result_keys_is_rejected(tmp_path):
+    exp = {"error": "not_found", "count": 1}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "station_count", "expect": exp}]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and "count" in r.stdout, r.stdout[-400:]
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases),
+                   env={"FAKE_REPLY": '{"ok": false, "error": {"code": "not_found"}}'})
+    assert "FAIL  a" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-400:])

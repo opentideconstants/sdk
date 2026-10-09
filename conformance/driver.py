@@ -242,8 +242,22 @@ def reply_problems(reply):
     return []
 
 
+def expect_shape_problems(expect):
+    """An error expectation has only the reserved keys; a result expectation has no error_* keys."""
+    if not isinstance(expect, dict):
+        return [f"an expectation must be an object, got {_type_name(expect)}"]
+    if "error" in expect:
+        extra = sorted(set(expect) - RESERVED_EXPECT)
+        return [f"an error expectation compares only {sorted(RESERVED_EXPECT)}; it also has {extra}"] if extra else []
+    stray = sorted({"error_fields", "error_message"} & set(expect))
+    return [f"{stray} need an \"error\" in the same expectation"] if stray else []
+
+
 def evaluate(expect, reply):
     """Compare a runner reply with a step expectation; return mismatch messages."""
+    bad = expect_shape_problems(expect)
+    if bad:
+        raise CaseError(bad[0])
     tol = expect.get("tolerance", DEFAULT_TOL)
     bad = reply_problems(reply)
     if bad:
@@ -396,8 +410,9 @@ def check_cases(cases):
             for exp in [st.get("expect")] + list((st.get("expect_if_missing") or {}).values()):
                 if exp is None:
                     continue
-                problems += [f"{where}: {p}" for p in matcher_problems(exp, "expect")]
-                if "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
+                shape = expect_shape_problems(exp)
+                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect")]
+                if not shape and "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
                     problems.append(f"{where}: an empty result satisfies this expectation")
             if st.get("expect") is not None:
                 compared += 1
