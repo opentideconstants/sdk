@@ -959,6 +959,27 @@ static otc_status write_atomic(fctx *c, const char *dir, const char *path, const
     return OTC_OK;
 }
 
+/* Writes data to <dir>/.tmp-* (fsynced) and returns that path; the caller renames it. */
+static otc_status write_tmp(fctx *c, const char *dir, const void *data, size_t len, char **tmp_out)
+{
+    char *tmp = tmp_path(dir);
+    FILE *f;
+    int bad;
+    *tmp_out = NULL;
+    if (!tmp) return fail(c, OTC_E_NOMEM, dir, "out of memory");
+    f = fs_fopen(tmp, "wb");
+    if (!f) { free(tmp); return fail(c, OTC_E_IO, dir, "cannot write into %s", dir); }
+    bad = (len && fwrite(data, 1, len, f) != len) || fs_fsync(f) != 0;
+    if (fclose(f) != 0) bad = 1;
+    if (bad) {
+        fs_unlink(tmp);
+        free(tmp);
+        return fail(c, OTC_E_IO, dir, "cannot write into %s", dir);
+    }
+    *tmp_out = tmp;
+    return OTC_OK;
+}
+
 /* Copies src to <dir>/.tmp-* (fsynced); returns the tmp path and its SHA-256. */
 static otc_status copy_to_tmp(fctx *c, const char *src, const char *dir, char **tmp_out, char hex[65])
 {
@@ -2576,7 +2597,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         {OTC_FORMAT_JSON, ".json"}, {OTC_FORMAT_JSON_GZ, ".json.gz"}, {OTC_FORMAT_JSONL, ".jsonl"}, {0, NULL}};
     fctx c;
     otc_release_info *info = NULL;
-    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8];
+    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8], *staged[8];
     char sha_digest[65], targets[8][NAME_CAP];
     const char *target_sha[8];
     size_t n_rows = 0, n_t = 0, n_todo = 0, i, written = 0, sha_len = 0;
@@ -2584,6 +2605,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     otc_status st = ctx_init(&c, opts);
     if (count) *count = 0;
     memset(todo_name, 0, sizeof todo_name);
+    memset(staged, 0, sizeof staged);
     if (st != OTC_OK) goto out;
     if (!count || !dir || (cap && !paths)) { st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "dir and count must not be NULL"); goto out; }
     if (formats == 0) formats = OTC_FORMAT_JSONL;
@@ -2692,45 +2714,44 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         todo_name[n_todo++] = targets[i];
     }
     if (fs_mkdir_p(dir) != 0) { st = fail(&c, OTC_E_IO, dir, "cannot create %s", dir); goto out; }
+    /* spec 4.3.2 "check, then rename": every file goes to a temporary file in dir first;
+     * only when all of them are there and checked are they renamed into place, so a
+     * failure (network, offline, checksum) leaves nothing in dir */
     for (i = 0; i < n_todo; i++) {
         const char *name = todo_name[i];
         const char *sha = row_of(names, digests, n_rows, name);
-        char *dest = path2(dir, name), *src = path2(cdir, name), *tmp = NULL;
-        if (!dest || !src) { free(dest); free(src); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+        char *src = path2(cdir, name);
+        if (!src) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         if (otc__ends_with(name, ".sha256")) {
-            st = write_atomic(&c, dir, dest, sha_body, sha_len);
-            if (st != OTC_OK) {
-                st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-                free(dest);
-                free(src);
-                goto out;
-            }
+            st = write_tmp(&c, dir, sha_body, sha_len, &staged[i]);
+        } else if (cached && fs_kind(src) == 2) {
+            char hex[65];
+            st = copy_to_tmp(&c, src, dir, &staged[i], hex);
+            if (st == OTC_OK && strcmp(hex, sha) != 0)
+                st = fail_checksum(&c, name, sha, hex, "the cached copy does not match");
+        } else if (c.offline) {
+            st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and %s is not in the cache", name);
         } else {
-            if (cached && fs_kind(src) == 2) {
-                char hex[65];
-                st = copy_to_tmp(&c, src, dir, &tmp, hex);
-                if (st == OTC_OK && strcmp(hex, sha) != 0) {
-                    fs_unlink(tmp);
-                    st = fail_checksum(&c, dest, sha, hex, "the cached copy does not match");
-                }
-            } else if (c.offline) {
-                st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and %s is not in the cache", name);
-            } else {
-                const otc_file_info *pf = info_file(info, name);
-                char *url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
-                st = url ? fetch_file(&c, url, dir, name, sha, pf ? pf->size : -1, &tmp)
-                         : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-                if (st == OTC_E_CACHE) st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-                free(url);
-            }
-            if (st == OTC_OK && fs_rename(tmp, dest) != 0) {
-                fs_unlink(tmp);
-                st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-            }
-            free(tmp);
-            if (st != OTC_OK) { free(dest); free(src); goto out; }
+            const otc_file_info *pf = info_file(info, name);
+            char *url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
+            st = url ? fetch_file(&c, url, dir, name, sha, pf ? pf->size : -1, &staged[i])
+                     : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+            free(url);
         }
+        if (st == OTC_E_CACHE) st = fail(&c, OTC_E_IO, dir, "cannot write into %s", dir);   /* the folder is the caller's */
         free(src);
+        if (st != OTC_OK) goto out;
+    }
+    for (i = 0; i < n_todo; i++) {
+        char *dest = path2(dir, todo_name[i]);
+        if (!dest) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+        if (fs_rename(staged[i], dest) != 0) {
+            st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
+            free(dest);
+            goto out;
+        }
+        free(staged[i]);
+        staged[i] = NULL;
         if (written < cap) paths[written] = dest;
         else free(dest);
         written++;
@@ -2738,6 +2759,10 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     *count = written;
     if (written > cap) st = OTC_E_BUFFER_TOO_SMALL;
 out:
+    for (i = 0; i < 8; i++) {   /* a failure leaves no temporary file behind */
+        if (staged[i]) fs_unlink(staged[i]);
+        free(staged[i]);
+    }
     if (st != OTC_OK && st != OTC_E_BUFFER_TOO_SMALL) {   /* nothing is reported on a failure */
         for (i = 0; i < written && i < cap; i++) {
             free(paths[i]);
