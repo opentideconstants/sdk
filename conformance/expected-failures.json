@@ -1,0 +1,4 @@
+{
+ "description": "Cases that are expected to fail for a runner today: the RED baseline of the cross-SDK behaviour rules that the SDK lanes (review round 1, packages PK01-PK15) have yet to fix. The driver reports a listed case that fails as XFAIL (the run still passes) and a listed case that passes as XPASS (the run fails, so the entry must be removed). A lane that fixes a case removes its entry. See conformance/README.md \"Expected failures\".",
+ "entries": []
+}

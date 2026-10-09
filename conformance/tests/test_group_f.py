@@ -258,3 +258,49 @@ def test_expect_if_missing_covers_later_steps(tmp_path):
     cases = write_cases(tmp_path, [{"id": "a", "requires": [], "steps": steps}])
     r = run_driver("--check-cases", "--cases", str(cases))
     assert r.returncode == 0, r.stdout[-400:]
+
+
+# --- expected failures: a listed case that fails is XFAIL (the run passes), one that passes is XPASS (the run fails)
+
+def _xf(tmp_path, entries):
+    p = tmp_path / "xf.json"
+    p.write_text(json.dumps({"entries": entries}))
+    return p
+
+
+def test_expected_failure_is_xfail_and_the_run_passes(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}, {"id": "b", "steps": [OK_STEP]}])
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["fake"], "package": "PK00", "reason": "test"}])
+    env = {"FAKE_REPLY": '{"ok": true, "result": {"count": 1}}'}
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf), env=env)
+    assert "XPASS  a" in r.stdout and r.returncode == 1, r.stdout[-500:]       # a passes but is listed: strict
+    env = {"FAKE_REPLY": '{"ok": true, "result": {"count": 2}}'}
+    xf = _xf(tmp_path, [{"case": "*", "runners": ["fake"], "package": "PK00", "reason": "test"}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf), env=env)
+    assert "XFAIL  a" in r.stdout and "XFAIL  b" in r.stdout and r.returncode == 0, r.stdout[-500:]
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf),
+                   "--no-expected-failures", env=env)
+    assert "FAIL  a" in r.stdout and r.returncode == 1, r.stdout[-500:]
+
+
+def test_expected_failure_for_another_runner_does_not_apply(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["ruby"], "package": "PK00", "reason": "test"}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf),
+                   env={"FAKE_REPLY": '{"ok": true, "result": {"count": 2}}'})
+    assert "FAIL  a" in r.stdout and "XFAIL" not in r.stdout and r.returncode == 1, r.stdout[-500:]
+
+
+def test_check_cases_lints_the_expected_failures(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    for bad in [[{"case": "no-such-case", "runners": ["python"], "package": "PK01", "reason": "x"}],
+                [{"case": "a", "runners": ["pyhton"], "package": "PK01", "reason": "x"}],
+                [{"case": "a", "runners": ["python"]}]]:
+        r = run_driver("--check-cases", "--cases", str(cases), "--expected-failures", str(_xf(tmp_path, bad)))
+        assert r.returncode == 2 and "expected-failures" in r.stdout, r.stdout[-400:]
+
+
+def test_committed_expected_failures_are_clean():
+    r = run_driver("--check-cases")
+    bad = [l for l in r.stdout.splitlines() if l.startswith("PROBLEM") and "expected-failures" in l]
+    assert not bad and "case check:" in r.stdout, bad[:5] or r.stdout[-400:]

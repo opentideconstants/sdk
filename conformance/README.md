@@ -35,6 +35,16 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 **Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`; `typescript-browser` all but `fs`; `c` must claim `fs` and `stream`, `c-fetch` also `fetch`. A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
 
+## Expected failures
+
+`expected-failures.json` lists the cases that are known to fail for a runner today: the RED baseline of cross-SDK behaviour rules that an SDK does not follow yet. Each entry is `{"case", "runners", "package", "reason"}`:
+
+- `case` is an expanded case id (`load/bad-duplicate-station-id-jsonl`, `geo/near-limit-zero@json`, `cross/verified-doi-handoff[ruby>typescript]`) or an `fnmatch` pattern of ids (`load/bad-duplicate-station-id-*`).
+- `runners` are the runner names (the hello's `runner`: `python`, `ruby`, `typescript`, `typescript-browser`, `c`, `c-fetch`) the entry applies to; `cross` applies to a `--cross` run, whose ids name the runners (`[writer>reader]`, with the `--cross` names `python`, `ruby`, `typescript`, `c`).
+- `package` names the fix package (the SDK lane) that owns the fix; `reason` says what the SDK does today.
+
+A listed case that fails is reported as `XFAIL` and does not fail the run. A listed case that passes is reported as `XPASS` and fails the run (exit 1): the SDK now follows the rule, so its lane removes the entry in the same change. A harness error is never expected. `--no-expected-failures` ignores the file and reports every failure as `FAIL` (to see a lane's RED cases); `--expected-failures FILE` reads another file. `--check-cases` checks the file: known runner names, a package and a reason, and a pattern that names at least one case.
+
 ## How a run works
 
 1. The driver starts the fixture server and the recording proxy on free ports on 127.0.0.1.

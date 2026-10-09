@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fnmatch
 import gzip
 import hashlib
 import http.client
@@ -102,6 +103,58 @@ PROFILES = {
 
 class CaseError(Exception):
     pass
+
+
+# --------------------------------------------------------------------------- expected failures
+
+EXPECTED_FAILURES = HERE / "expected-failures.json"
+# The runner names an entry may list: the profiles (a hello's "runner"), and "cross" for a --cross run.
+XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "c", "c-fetch", "cross"}
+# The --cross names the CI and the gates use; a cross entry's case pattern must match one of these expansions.
+CROSS_NAMES = ["python", "ruby", "typescript", "c"]
+
+
+def load_expected_failures(path):
+    """The entries of an expected-failures file (README "Expected failures"). ValueError for a malformed file."""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = doc.get("entries") if isinstance(doc, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError(f"{path}: needs an object with an entries list")
+    for i, e in enumerate(entries):
+        if not (isinstance(e, dict) and isinstance(e.get("case"), str) and e["case"]
+                and isinstance(e.get("runners"), list) and e["runners"] and all(isinstance(r, str) for r in e["runners"])):
+            raise ValueError(f"{path}: entry {i} needs a case pattern and a non-empty runners list: {json.dumps(e)[:200]}")
+    return entries
+
+
+def expected_failure(entries, case_id, runner):
+    """The entry that expects case_id to fail for this runner, or None. case is an exact id or an fnmatch pattern."""
+    for e in entries:
+        if runner in e["runners"] and fnmatch.fnmatchcase(case_id, e["case"]):
+            return e
+    return None
+
+
+def expected_failure_problems(path, plain_ids, cross_ids):
+    """Lint an expected-failures file: known runner names, a package and a reason, and a case pattern that names at
+    least one case id (plain ids for the plain runners; cross ids expanded with CROSS_NAMES for "cross")."""
+    try:
+        entries = load_expected_failures(path)
+    except (OSError, ValueError) as e:
+        return [f"expected-failures: {e}"]
+    out = []
+    for i, e in enumerate(entries):
+        where = f"expected-failures entry {i} ({e['case']})"
+        for r in e["runners"]:
+            if r not in XF_RUNNERS:
+                out.append(f"{where}: unknown runner {r!r} (one of {sorted(XF_RUNNERS)})")
+        for k in ("package", "reason"):
+            if not isinstance(e.get(k), str) or not e[k]:
+                out.append(f"{where}: needs a {k}")
+        ids = (cross_ids if "cross" in e["runners"] else []) + (plain_ids if set(e["runners"]) - {"cross"} else [])
+        if not any(fnmatch.fnmatchcase(c, e["case"]) for c in ids):
+            out.append(f"{where}: the pattern names no case")
+    return out
 
 
 class RunnerError(Exception):
@@ -1125,6 +1178,10 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--check-cases", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--expected-failures", default=str(EXPECTED_FAILURES),
+                    help="the expected-failures file (default conformance/expected-failures.json)")
+    ap.add_argument("--no-expected-failures", action="store_true",
+                    help="ignore the expected-failures file: report every failure as FAIL (to see a lane's RED cases)")
     ap.add_argument("--api", default=str(API), help="the API manifest that --check-cases checks error codes against "
                                                      "(default conformance/api.json)")
     a = ap.parse_args()
@@ -1169,6 +1226,11 @@ def main():
             print(f"--api {a.api}: cannot read the API manifest: {type(e).__name__}: {e}", file=sys.stderr)
             return 2
         problems += api_error_problems(raw + raw_cross, by_op)
+        if not a.cases or a.expected_failures != str(EXPECTED_FAILURES):
+            import itertools
+            cross_ids = [f"{c['id']}[{'>'.join(p)}]" for c in raw_cross
+                         for p in itertools.permutations(CROSS_NAMES, len(c.get("roles") or {}))]
+            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expand(raw)], cross_ids)
         n_cross = 0
         if not a.cases:
             problems += check_cases(raw_cross)
@@ -1225,6 +1287,14 @@ def main():
         features = set()
     else:
         cmd, features, hello, profile = hellos["main"]
+    xf_entries = []
+    if not a.no_expected_failures and Path(a.expected_failures).exists():
+        try:
+            xf_entries = load_expected_failures(a.expected_failures)
+        except (OSError, ValueError) as e:
+            print(f"--expected-failures: {e}", file=sys.stderr)
+            return 2
+    xf_runner = "cross" if a.cross else hello.get("runner")
     srv = FixtureServer().start()
     try:
         proxy = RecordingProxy().start()
@@ -1240,7 +1310,7 @@ def main():
     print(f"fixture server {srv.url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
-    counts = {"PASS": 0, "FAIL": 0, "SKIP": 0}
+    counts = {"PASS": 0, "FAIL": 0, "SKIP": 0, "XFAIL": 0, "XPASS": 0}
     t0 = time.monotonic()
     try:
         for c in cases:
@@ -1254,10 +1324,18 @@ def main():
             runners = c.pop("_runners") if a.cross else {"main": (cmd, features)}
             failures, stderr_tail = run_case(c, runners, srv, proxy, a.keep_tmp, a.all_steps, stats)
             status = "FAIL" if failures else "PASS"
+            xf = expected_failure(xf_entries, c["id"], xf_runner)
+            if xf and not any(f.get("harness_error") for f in failures):   # a harness error is never expected
+                status = "XFAIL" if failures else "XPASS"
             counts[status] += 1
-            report.append({"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""})
+            entry = {"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""}
+            if xf:
+                entry["expected_failure"] = {"package": xf.get("package"), "reason": xf.get("reason")}
+            report.append(entry)
             line = f"{status}  {c['id']}"
-            if failures:
+            if status == "XPASS":
+                line += f"  (listed in the expected failures for {xf.get('package')}: it passes now; remove the entry)"
+            elif failures:
                 first = failures[0]
                 where = f"step {first['step']} {first.get('op') or first.get('driver') or ''}".strip()
                 if first.get("as"):
@@ -1272,8 +1350,9 @@ def main():
     finally:
         srv.shutdown()
         proxy.shutdown()
-    ran = counts["PASS"] + counts["FAIL"]
-    print(f"\n{len(cases)} cases: {counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped "
+    ran = counts["PASS"] + counts["FAIL"] + counts["XFAIL"] + counts["XPASS"]
+    xf_text = f", {counts['XFAIL']} expected failures, {counts['XPASS']} unexpected passes" if xf_entries else ""
+    print(f"\n{len(cases)} cases: {counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped{xf_text} "
           f"({ran} ran; {stats['steps_compared']} runner steps compared, {stats['steps_failed']} failed) in {time.monotonic() - t0:.1f} s")
     if a.report:
         Path(a.report).write_text(json.dumps({"runner": hello, "counts": counts, "steps": stats, "cases": report}, indent=1) + "\n")
@@ -1283,7 +1362,7 @@ def main():
     if ran == 0:
         print("no case ran: check --only and the features the runner reports (exit 1)")
         return 1
-    return 0 if counts["FAIL"] == 0 else 1
+    return 0 if counts["FAIL"] == 0 and counts["XPASS"] == 0 else 1
 
 
 if __name__ == "__main__":
