@@ -1688,7 +1688,14 @@ static char *run_threaded(request *q, int n)
 #else
     pthread_t *th = (pthread_t *)calloc((size_t)n, sizeof *th);
 #endif
-    if (!jobs || !th) { free(jobs); free(th); return run_query(q); }
+    if (!jobs || !th) {   /* never a quiet single-thread run: the multi-thread check (spec 6.4) would not happen */
+        reply r;
+        free(jobs);
+        free(th);
+        memset(&r, 0, sizeof r);
+        set_error(&r, "uncaught:ThreadStart", "out of memory for the thread jobs");
+        return render(&r);
+    }
     for (i = 0; i < n; i++) {
         jobs[i].q = *q;
         jobs[i].index = i;
