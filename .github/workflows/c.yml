@@ -46,10 +46,15 @@ jobs:
           if [ "${{ matrix.cc }}" = msvc ]; then
             cmake -S c -B c/build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           else
-            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_TESTS=ON
           fi
+      # The library, c/tests and the runner, all with warnings as errors
       - name: Build
         run: cmake --build c/build --config Debug --parallel
+      # The C library's own tests (c/tests); they use POSIX calls, so not on Windows
+      - name: C library tests (c/tests)
+        if: runner.os != 'Windows'
+        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
       - name: Conformance suite (profile c, no otc_fetch)
         run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c
       - name: Conformance suite, every query in 8 threads
@@ -87,10 +92,15 @@ jobs:
           if [ "${{ matrix.cc }}" = msvc ]; then
             cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           else
-            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON -DOTC_BUILD_TESTS=ON
           fi
+      # The library, c/tests and the runner, all with warnings as errors
       - name: Build
         run: cmake --build c/build --config Debug --parallel
+      # The C library's own tests (c/tests), the test_fetch_* ones against the fixture server; not on Windows (POSIX calls)
+      - name: C library tests (c/tests)
+        if: runner.os != 'Windows'
+        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
       - name: Conformance suite (profile c-fetch)
         run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c-fetch
       - name: Conformance suite, every query in 8 threads
@@ -124,11 +134,14 @@ jobs:
         with: { python-version: "3.12" }
       - if: matrix.fetch == 'ON'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
-      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }} -DOTC_WITH_FETCH=${{ matrix.fetch }}
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }} -DOTC_WITH_FETCH=${{ matrix.fetch }} -DOTC_BUILD_TESTS=ON
       - run: cmake --build c/build --parallel
       # TSan on recent Ubuntu kernels needs fewer ASLR bits.
       - run: sudo sysctl vm.mmap_rnd_bits=28
       - run: mkdir -p san
+      # c/tests under the same sanitizer (the out-of-memory tests replace malloc, so CMake leaves them out here)
+      - name: C library tests (c/tests)
+        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
         env: { OTC_RUNNER_THREADS: "8" }
