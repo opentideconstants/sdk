@@ -671,7 +671,10 @@ OTC_API otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_rele
 /* *found is true and *info is set when the latest readable release (a
  * supported major and a readable min_reader_version, spec 7.4) is newer than
  * current. It also makes a conditional GET of OTC_latest.json, which
- * otc_fetch_newer_format_major reads. */
+ * otc_fetch_newer_format_major reads. That GET is a side probe: when it fails,
+ * the call still answers, the failure goes to log_fn at level 2 with its
+ * cause, and otc_fetch_newer_format_major keeps the value from before (spec
+ * 7.4). Without a log_fn the probe's failure is not reported. */
 OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, const char *current,
                                               otc_release_info **info, bool *found);
 /* The format major of the newest release on the server when it is newer than

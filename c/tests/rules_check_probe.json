@@ -1,0 +1,1 @@
+[{"match": "^/good/OTC_latest\\.json$", "action": "status", "status": 500}]
