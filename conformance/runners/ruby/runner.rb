@@ -397,11 +397,18 @@ end
 runner = Runner.new
 $stdout.write(JSON.generate(runner.hello) + "\n")
 $stdin.each_line do |line|
-    next if line.strip.empty?
-    req = begin
-        JSON.parse(line)
-    rescue JSON::ParserError => e
-        e
+    # the protocol is UTF-8 whatever the locale; a line that is not valid UTF-8 cannot be stripped or parsed: an
+    # error reply below, and the runner goes on
+    line = line.dup.force_encoding(Encoding::UTF_8)
+    req = if line.valid_encoding?
+        next if line.strip.empty?
+        begin
+            JSON.parse(line)
+        rescue JSON::ParserError => e
+            e
+        end
+    else
+        EncodingError.new("the request line is not valid UTF-8")
     end
     reply = if req.is_a?(Hash)
         runner.handle(req)
