@@ -18,58 +18,6 @@
    "reason": "step 0 open: expected error 'invalid_argument', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk08/fold-d12@json",
-   "runners": [
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK08",
-   "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
-  },
-  {
-   "case": "rules/pk08/fold-d12@json.gz",
-   "runners": [
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK08",
-   "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
-  },
-  {
-   "case": "rules/pk08/fold-d12@jsonl",
-   "runners": [
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK08",
-   "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
-  },
-  {
-   "case": "rules/pk08/fold-d12@jsonl-stream",
-   "runners": [
-    "c",
-    "c-fetch",
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK08",
-   "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
-  },
-  {
-   "case": "rules/pk08/fold-d12@server",
-   "runners": [
-    "python",
-    "ruby",
-    "typescript"
-   ],
-   "package": "PK08",
-   "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
-  },
-  {
    "case": "rules/pk13/auto-update-failure-sets-last-error",
    "runners": [
     "c-fetch"
