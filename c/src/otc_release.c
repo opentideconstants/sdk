@@ -287,6 +287,8 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     if (!otc__find_convention(r, conv)) return bad_line(b, "a constant set's convention_id does not resolve");
     if (!otc__find_licence(r, lic)) return bad_line(b, "a constant set's licence_id does not resolve");
     if (cons && !cJSON_IsArray(cons)) return bad_line(b, "constituents is not an array");
+    if (otc__jget(set, "qc_flags") && !cJSON_IsArray(otc__jget(set, "qc_flags")))
+        return bad_line(b, "qc_flags is not an array");
     cJSON_ArrayForEach(c, cons) {
         const char *name = otc__jstr(c, "name");
         if (!name) return bad_line(b, "a constituent has no name");
@@ -864,6 +866,14 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
     if (!cJSON_IsObject(r->release_obj) || !otc__jstr(r->release_obj, "datestamp")) {
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s has no release.datestamp", meta_path);
         return OTC_E_INVALID_RELEASE;
+    }
+    {   /* spec 4.8, 7.3: a field of the wrong type is invalid_release at open, in every SDK */
+        const cJSON *created = otc__jget(r->release_obj, "created"), *sv = otc__jget(r->release_obj, "source_versions");
+        if ((created && !cJSON_IsString(created)) || (sv && !cJSON_IsObject(sv))) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s: release.%s has the wrong type", meta_path,
+                         created && !cJSON_IsString(created) ? "created" : "source_versions");
+            return OTC_E_INVALID_RELEASE;
+        }
     }
     {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions; a
          * min_reader_version that is present but not MAJOR.MINOR is invalid_release (CR D9) */

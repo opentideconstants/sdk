@@ -696,8 +696,6 @@
   {
    "case": "rules/pk07/bad-created-not-string-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "ruby",
     "typescript"
    ],
@@ -802,8 +800,6 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "ruby",
     "typescript"
    ],
@@ -843,8 +839,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"
