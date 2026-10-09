@@ -340,7 +340,13 @@ async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
 /** Proxy-Authorization from the user and password of a proxy URL (percent-decoded), or none (PK12 T7). */
 function proxyAuth(proxy: URL): Record<string, string> {
     if (!proxy.username && !proxy.password) return {};
-    const cred = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    let cred: string;
+    try {
+        cred = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    } catch (e) {
+        // a bad %-escape in the user or password: the proxy setting is wrong, never a raw URIError (R2-099)
+        throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+    }
     return { "Proxy-Authorization": `Basic ${Buffer.from(cred, "utf8").toString("base64")}` };
 }
 

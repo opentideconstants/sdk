@@ -438,3 +438,18 @@ test("R2-097: a read error in stream mode (EISDIR, EIO, EBADF) is io, not a raw 
         r.close();
     }
 });
+
+test("R2-099: proxy credentials that are not valid percent-encoding are invalid_argument, not a raw URIError", async () => {
+    const s = await counting404();
+    const proxy = `http://u:p%ZZ@127.0.0.1:${s.srv.address().port}/`;
+    try {
+        const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-px-"));
+        await assert.rejects(otc.OpenTideConstants.open({ baseUrl: s.url, cacheDir, proxy }), isCode("invalid_argument"));
+        const { nodePlatform } = await import("../dist/node.js");
+        await assert.rejects(nodePlatform().get("http://example.invalid/x", { headers: {}, timeout: 5, proxy, caFile: null }),
+            isCode("invalid_argument"));
+        assert.equal(s.requests, 0);
+    } finally {
+        s.srv.close();
+    }
+});

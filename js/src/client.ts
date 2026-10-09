@@ -187,6 +187,15 @@ export class OpenTideConstants {
         if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
         const proxy = optStr(options.proxy, "proxy");
         if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+        if (proxy !== null) {
+            const u = new URL(proxy);
+            try {
+                decodeURIComponent(u.username);
+                decodeURIComponent(u.password);
+            } catch (e) {
+                throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+            }
+        }
         const caFile = optStr(options.caFile, "caFile");
         if (caFile !== null && node) node.checkReadable(caFile);
         // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
