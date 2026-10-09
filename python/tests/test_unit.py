@@ -724,6 +724,63 @@ class HttpTest(unittest.TestCase):
             srv.close()
 
 
+class LifecycleTest(unittest.TestCase):
+    """close(), swapped-out releases and the automatic update (spec §4.2, §4.3, §5.6, CR D21; review PK13)."""
+
+    def test_queries_after_close_are_io_in_both_modes(self):
+        for mode in ("eager", "stream"):
+            c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode=mode)
+            c.close()
+            c.close()  # a second close does nothing
+            for call in (lambda: c.station("OTC-T-0001"), lambda: c.stations(), lambda: c.search(name="san"),
+                         lambda: c.near(lat=0, lon=0, radius_km=1), lambda: c.attribution(), lambda: c.verify(),
+                         lambda: c.cached_releases()):
+                with self.assertRaises(otc.FileError, msg=mode) as cm:
+                    call()
+                self.assertIn("closed", str(cm.exception))
+
+    def test_a_swapped_out_release_is_closed_when_it_is_dropped(self):
+        import gc
+        import tempfile
+        idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+        script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
+        srv = _Server(script=script)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with otc.OpenTideConstants(base_url=srv.url, cache_dir=tmp, mode="stream") as c:
+                    fh = c.release._fh
+                    del script["/OTC_latest-f1.json"]
+                    c.update()
+                    gc.collect()
+                    self.assertTrue(fh.closed, "the old release's file handle leaks")
+        finally:
+            srv.close()
+
+    def test_a_read_on_a_handle_closed_under_it_is_io(self):
+        # the state a reader sees when close() runs between its closed-check and its read
+        c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"), mode="stream")
+        c.release._fh.close()
+        with self.assertRaises(otc.FileError):
+            c.release.station("OTC-T-0001")
+        c.close()
+
+    def test_auto_update_does_not_run_after_close_and_non_sdk_errors_do_not_escape(self):
+        import time
+        c = otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl"))
+        c._file = None  # behave as a latest client for the automatic update
+        c._auto_update, c._update_interval = True, 0.001
+
+        def boom():
+            raise RuntimeError("not an SDK error")
+        c._update = boom
+        time.sleep(0.01)
+        self.assertEqual(c.station("OTC-T-0001").station_id, "OTC-T-0001")
+        c.close()
+        c._update = lambda: self.fail("auto-update ran after close")
+        time.sleep(0.01)
+        c._maybe_auto_update()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

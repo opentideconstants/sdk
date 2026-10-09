@@ -1140,7 +1140,6 @@
    "case": "rules/pk13/auto-update-failure-sets-last-error",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],

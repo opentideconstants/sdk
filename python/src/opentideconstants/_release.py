@@ -475,12 +475,19 @@ class Release:
                 self._lru.popitem(last=False)
         return st
 
+    def _check_open(self) -> None:
+        if self._closed:
+            raise FileError("the release is closed", path=None if self._jsonl is None else str(self._jsonl))
+
     def _read_line(self, e):
+        """Called with self._lock held, so close() cannot run in the middle of it."""
         if self._fh is None:
             raise FileError("the release is closed", path=str(self._jsonl))
         try:
             self._fh.seek(e["offset"])
             data = self._fh.read(e["length"])
+        except ValueError as ex:  # the handle was closed under the reader
+            raise FileError("the release is closed", path=str(self._jsonl), cause=ex) from ex
         except OSError as ex:
             raise FileError(f"cannot read {self._jsonl}: {ex}", path=str(self._jsonl), cause=ex) from ex
         try:
@@ -504,6 +511,7 @@ class Release:
         return d
 
     def station(self, station_id: str) -> Optional[Station]:
+        self._check_open()
         _check_type("station_id", station_id, (str,), allow_none=False)
         e = self._by_id.get(station_id)
         return None if e is None else self._station_from_entry(e)
@@ -518,6 +526,7 @@ class Release:
         raise StationNotFoundError(f"no station {station_id}")
 
     def tombstone(self, station_id: str) -> Optional[Tombstone]:
+        self._check_open()
         _check_type("station_id", station_id, (str,), allow_none=False)
         e = self._tombs.get(station_id)
         if e is None:
@@ -529,12 +538,14 @@ class Release:
         return Tombstone._parse(d)
 
     def station_by_alias(self, system: str, alias_id: str) -> Optional[Station]:
+        self._check_open()
         _check_type("system", system, (str,), allow_none=False)
         _check_type("alias_id", alias_id, (str,), allow_none=False)
         sid = self._alias.get(str(system), {}).get(alias_id)
         return None if sid is None else self.station(sid)
 
     def _filtered(self, country=None, type=None, kind=None, source=None, source_type=None):  # noqa: A002
+        self._check_open()
         for name, v in (("country", country), ("type", type), ("kind", kind), ("source", source),
                         ("source_type", source_type)):
             _check_type(name, v, (str,))
@@ -656,6 +667,7 @@ class Release:
 
     def attribution(self, stations: Optional[Sequence[Station]] = None) -> str:
         """The CC BY 4.0 attribution text for what an app shows (spec §4.6)."""
+        self._check_open()
         if stations is None:
             lic_ids = {x.licence_id for x in self._licences}
         else:
@@ -686,10 +698,21 @@ class Release:
                 + "; ".join(parts))
 
     def _close(self) -> None:
-        self._closed = True
-        fh, self._fh = self._fh, None
+        with self._lock:
+            self._closed = True
+            fh, self._fh = self._fh, None
         if fh is not None:
             fh.close()
+
+    def __del__(self):
+        # a Release nobody holds any more (for example one an update swapped out) gives its file handle back
+        try:
+            fh = self._fh
+            self._fh = None
+            if fh is not None:
+                fh.close()
+        except Exception:  # noqa: BLE001 - never raise from a finaliser
+            pass
 
     def __repr__(self) -> str:
         return f"<Release {self.datestamp} format {self.format_version} {self._mode}>"

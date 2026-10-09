@@ -127,11 +127,19 @@ class OpenTideConstants:
         return False
 
     def close(self) -> None:
-        """Close the client (stream mode holds a file handle)."""
+        """Close the client and every Release it made (stream mode holds a file handle). After close every
+        query and release-management call is io "the release is closed" (spec §4.2, CR D21). A second close does
+        nothing."""
         with self._lock:
             self._closed = True
+            for r in list(self._handed_out):
+                r._close()
             if self._release is not None:
                 self._release._close()
+
+    def _check_open(self) -> None:
+        if self._closed:
+            raise FileError("the release is closed")
 
     # ------------------------------------------------------------------ attributes
 
@@ -632,6 +640,7 @@ class OpenTideConstants:
 
     def releases(self) -> Tuple[ReleaseInfo, ...]:
         """Every release, newest first (OTC_index.json)."""
+        self._check_open()
         if self._offline:
             body = self._cache.read_pointer_body("OTC_index.json")
             if body is None:
@@ -659,6 +668,7 @@ class OpenTideConstants:
 
     def latest(self) -> ReleaseInfo:
         """The latest release (one conditional GET of the pointer). It does not switch releases."""
+        self._check_open()
         if self._offline:
             raise OfflineError("offline: the latest pointer cannot be read")
         return self._latest_info()
@@ -666,6 +676,7 @@ class OpenTideConstants:
     def check_for_update(self) -> Optional[ReleaseInfo]:
         """A release newer than the loaded one that this SDK reads, or None. Also sets newer_format_major from
         a conditional GET of OTC_latest.json (spec §7.4)."""
+        self._check_open()
         if self._offline:
             raise OfflineError("offline: the latest pointer cannot be read")
         try:
@@ -697,6 +708,7 @@ class OpenTideConstants:
 
     def update(self) -> UpdateResult:
         """Download a newer release, verify it and swap it in. A Release held from before stays valid."""
+        self._check_open()
         with self._lock:
             if self._pinned is not None or self._file is not None:
                 raise PinnedReleaseError("this client was opened on a pinned release or a file")
@@ -717,7 +729,7 @@ class OpenTideConstants:
         return UpdateResult(True, cur, info.datestamp)
 
     def _maybe_auto_update(self) -> None:
-        if not self._auto_update or self._offline or self._pinned is not None or self._file is not None \
+        if self._closed or not self._auto_update or self._offline or self._pinned is not None or self._file is not None \
                 or self._release is None:
             return  # offline, the automatic update does not check at all (spec §5.6, CR D6)
         now = time.monotonic()
@@ -730,11 +742,16 @@ class OpenTideConstants:
             try:
                 self._update()
             except OpenTideConstantsError as e:
+                # keep the current release; record and log the failure (spec §5.6)
+                self._last_error = e
                 self._log.warning("automatic update failed: %s", e)
+            except Exception as e:  # noqa: BLE001 - an automatic update never breaks the caller's query
+                self._log.warning("automatic update failed: %s: %s", type(e).__name__, e)
 
     def verify(self) -> bool:
         """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A
         missing file is io; a missing OTC_{D}.sha256, a missing row or another digest is checksum_mismatch."""
+        self._check_open()
         rel = self._release
         ds = rel.datestamp
         opened = rel._opened
@@ -756,10 +773,12 @@ class OpenTideConstants:
         return True
 
     def cached_releases(self) -> Tuple[str, ...]:
+        self._check_open()
         return tuple(self._cache.cached())
 
     def prune(self, *, keep: int = 3) -> Tuple[str, ...]:
         """Remove cached releases beyond the newest ``keep``. Never removes the loaded release."""
+        self._check_open()
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
             raise InvalidArgumentError("keep must be a non-negative integer")
         # never the loaded release, nor one that the caller still holds from before an update (spec §4.3)
@@ -779,6 +798,7 @@ class OpenTideConstants:
     def download(self, release: str = "latest", *, to, formats: Sequence[str] = ("jsonl",),
                  overwrite: bool = False) -> Tuple[str, ...]:
         """Write a verified release into the folder ``to`` (spec §4.3.2). Returns the paths written."""
+        self._check_open()
         if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
             raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
         if isinstance(formats, str) or not isinstance(formats, (list, tuple)) or not formats:
@@ -906,6 +926,7 @@ class OpenTideConstants:
     # ------------------------------------------------------------------ forwarded queries (spec §4.4)
 
     def _r(self) -> Release:
+        self._check_open()
         self._maybe_auto_update()
         return self._release
 
