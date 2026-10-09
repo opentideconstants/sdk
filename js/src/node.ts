@@ -417,9 +417,29 @@ async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     }
 }
 
-/** The CA certificates Node trusts by default (with NODE_EXTRA_CA_CERTS where Node has getCACertificates). */
+let extraCaCerts: readonly string[] | null = null;
+
+/**
+ * The CA certificates Node trusts by default: its root store plus NODE_EXTRA_CA_CERTS. Node 23.5+ and 22.15+ give
+ * them with tls.getCACertificates("default"). Older Node (22.12) has only tls.rootCertificates, which leaves out
+ * NODE_EXTRA_CA_CERTS, so the SDK adds that file itself (CR2 R2-117). Node reads the variable once at start-up and
+ * only warns when the file cannot be read, so the SDK reads it once too and skips a file it cannot read.
+ */
 function defaultCaCerts(): readonly string[] {
-    return typeof tls.getCACertificates === "function" ? tls.getCACertificates("default") : tls.rootCertificates;
+    if (typeof tls.getCACertificates === "function") return tls.getCACertificates("default");
+    if (extraCaCerts === null) {
+        const file = process.env.NODE_EXTRA_CA_CERTS;
+        let extra: string[] = [];
+        if (file) {
+            try {
+                extra = [fs.readFileSync(file, "latin1")];
+            } catch {
+                extra = [];
+            }
+        }
+        extraCaCerts = extra;
+    }
+    return [...tls.rootCertificates, ...extraCaCerts];
 }
 
 /** Proxy-Authorization from the user and password of a proxy URL (percent-decoded), or none (PK12 T7). */
