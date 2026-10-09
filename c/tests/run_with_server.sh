@@ -5,9 +5,11 @@
 # OTC_TEST_PROXY, and OTC_TEST_REQUIRE_SERVER=1, so a test that finds no server
 # address fails (it does not skip). The exit status is the test's, except:
 #   2   the server did not start, or its banner gave no address
+#   1   the test passed, but the server logged a rule error (a rule that could
+#       not be applied is a broken test, not a pass)
 #   77  the test skipped itself (ctest's SKIP_RETURN_CODE)
-# The wrapper stops only the server and the test it started, also when it is
-# interrupted.
+# On a failure the server log is printed and kept. The wrapper stops only the
+# server and the test it started, also when it is interrupted.
 set -u
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
     echo "usage: $0 <test program> [rules.json]" >&2
@@ -20,6 +22,7 @@ test_bin=$1
 rules=${2:-}
 pid=
 test_pid=
+keep_log=0
 log=$(mktemp "${TMPDIR:-/tmp}/otc-server-XXXXXX") || {
     echo "run_with_server.sh: cannot make a temporary file for the server log" >&2
     exit 2
@@ -28,16 +31,21 @@ log=$(mktemp "${TMPDIR:-/tmp}/otc-server-XXXXXX") || {
 cleanup() {
     if [ -n "$test_pid" ]; then kill "$test_pid" 2>/dev/null; wait "$test_pid" 2>/dev/null; fi
     if [ -n "$pid" ]; then kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; fi
-    rm -f "$log"
+    if [ "$keep_log" = 1 ]; then
+        echo "run_with_server.sh: the server log is kept at $log" >&2
+    else
+        rm -f "$log"
+    fi
 }
 fail_with_log() {
     echo "run_with_server.sh: $1; the server log:" >&2
     cat "$log" >&2
+    keep_log=1
 }
 trap cleanup EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'keep_log=1; exit 129' HUP
+trap 'keep_log=1; exit 130' INT
+trap 'keep_log=1; exit 143' TERM
 
 if [ -n "$rules" ]; then
     "$py" -u "$server" --port 0 --proxy-port 0 --rules "$rules" >"$log" 2>&1 &
@@ -70,4 +78,19 @@ wait "$test_pid"
 rc=$?
 test_pid=
 
+# a rule that could not be applied (the server answered 500 instead) fails the test,
+# as the conformance driver fails the case
+if grep -q '^fixture server: \(cannot serve\|error while sending\|tripwire accept\)' "$log"; then
+    fail_with_log "the fixture server logged a rule error (test exit $rc)"
+    [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ] || rc=1
+    exit $rc
+fi
+if ! kill -0 "$pid" 2>/dev/null; then
+    fail_with_log "the fixture server stopped during the test (test exit $rc)"
+    [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ] || rc=1
+    exit $rc
+fi
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ]; then
+    fail_with_log "the test failed (exit $rc)"
+fi
 exit $rc
