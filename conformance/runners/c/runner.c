@@ -752,6 +752,15 @@ static void op_open(request *q, reply *r)
     otc_error err;
     otc_status rc;
     if (q->a.bad) { set_error(r, "invalid_argument", "file and release must be strings"); return; }
+    /* an enum the C API cannot hold (README "Argument rules"): invalid_argument, never a silent default */
+    if (mode && strcmp(mode, "eager") && strcmp(mode, "stream")) {
+        set_error(r, "invalid_argument", "mode must be eager or stream");
+        return;
+    }
+    if (one && strcmp(one, "raise") && strcmp(one, "use_cache")) {
+        set_error(r, "invalid_argument", "on_network_error must be raise or use_cache");
+        return;
+    }
     close_current();
     client_free();
     g_client.cache_dir = dup_or_null(arg_str(&q->a, "cache_dir"));
