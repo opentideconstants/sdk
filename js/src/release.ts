@@ -242,7 +242,7 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
         usable_sources: [...new Set(usable.map((cs) => cs.source).filter((x): x is string => x !== null))],
         set_sources: usable.map((cs) => cs.source).filter((x): x is string => x !== null),
         set_qc_statuses: s.sets.map((cs) => en(cs.qc_status, QC_STATUSES)).filter((x): x is QcStatus | Other => x !== null),
-        constituent_names: [...names].sort(),
+        constituent_names: [...names].sort(cmp),
     };
 }
 
@@ -633,9 +633,21 @@ export class Station {
     }
 }
 
+/** Order by Unicode code point (as Python, Ruby and C compare), not by UTF-16 code unit (PK08 T82). */
 function cmp(a: string, b: string): number {
-    return a < b ? -1 : a > b ? 1 : 0;
+    if (a === b) return 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+        const x = a.codePointAt(i) as number;
+        const y = b.codePointAt(i) as number;
+        if (x !== y) return x < y ? -1 : 1;
+        if (x > 0xffff) i++;
+    }
+    return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }
+
+/** @internal */
+export { cmp as compareCodePoints };
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const p1 = lat1 * DEG;
@@ -880,7 +892,8 @@ export class Release {
         const s = this.station(stationId);
         if (s) return s;
         const t = this.tombstone(stationId);
-        if (t) throw new StationRemovedError(stationId, t, t.removed_reason);
+        // the message names the reason as the file gives it, not the enum value ("other" for an unknown one)
+        if (t) throw new StationRemovedError(stationId, t, str(t.raw, "removed_reason"));
         throw new StationNotFoundError(stationId);
     }
 

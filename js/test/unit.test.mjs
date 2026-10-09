@@ -239,3 +239,17 @@ test("T12: updateInterval 0 is invalid_argument", async () => {
     await assert.rejects(otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), updateInterval: 0 }),
         isCode("invalid_argument"));
 });
+
+test("T82: names order by code point, not UTF-16 code unit", async () => {
+    const { compareCodePoints } = await import("../dist/release.js");
+    assert.ok(compareCodePoints("￿", "\u{10000}") < 0);
+    assert.deepEqual(["\u{10000}", "￿", "a"].sort(compareCodePoints), ["a", "￿", "\u{10000}"]);
+});
+
+test("T22: the station_removed message gives the removed_reason as the file gives it", async () => {
+    const { releaseFromJson } = await import("../dist/loader.js");
+    const doc = { format_version: "1.0", release: { datestamp: "20991231" }, conventions: [], licences: [],
+        stations: [{ station_id: "X", status: "removed", removed_reason: "renumbered" }] };
+    const r = releaseFromJson(enc(doc), []);
+    assert.throws(() => r.requireStation("X"), (e) => isCode("station_removed")(e) && /renumbered/.test(e.message));
+});
