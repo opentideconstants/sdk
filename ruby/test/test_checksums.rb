@@ -74,3 +74,52 @@ class ChecksumTest < Minitest::Test
         c&.close
     end
 end
+
+# R79: the bytes that are hashed are the bytes that are loaded. A file
+# swapped for another one after the hash must not be used as verified.
+class ChecksumSwapTest < Minitest::Test
+    include TestSupport
+    OTC = OpenTideConstants
+
+    # Swaps the file at path for other bytes right after it is hashed (the
+    # window between the hash and the read).
+    def with_swap_after_hash(path, other)
+        hook = Module.new do
+            define_method(:sha256_file) do |p|
+                result = super(p)
+                File.binwrite(p, other) if p == path
+                result
+            end
+            define_method(:file) do |p|
+                result = super(p)
+                File.binwrite(p, other) if p == path
+                result
+            end
+        end
+        OTC::Release.singleton_class.prepend(hook)
+        Digest::SHA256.singleton_class.prepend(hook)
+        yield
+    ensure
+        # A prepended module cannot be taken out again; emptying it undoes the hook.
+        hook.send(:remove_method, :sha256_file)
+        hook.send(:remove_method, :file)
+    end
+
+    def test_a_file_swapped_after_its_hash_is_not_loaded
+        %w[json json.gz jsonl].each do |ext|
+            dir = tmpdir
+            %W[OTC_20991231.2.#{ext} OTC_20991231.2.sha256 OTC_20991231.2.meta.json].each { |n| FileUtils.cp(fixture("good", n), dir) }
+            path = File.join(dir, "OTC_20991231.2.#{ext}")
+            # Same release, other bytes: the older release's file under this name.
+            other = File.binread(fixture("good", "OTC_20991231.#{ext}"))
+            c = nil
+            with_swap_after_hash(path, other) do
+                c = OTC.new(file: path)
+            rescue OTC::ChecksumError, OTC::Error
+                c = nil
+            end
+            assert(c.nil? || c.release.datestamp == "20991231.2", "#{ext}: loaded swapped bytes as #{c&.release&.datestamp}")
+            c&.close
+        end
+    end
+end

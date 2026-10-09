@@ -565,32 +565,29 @@ class OpenTideConstants
         dir = cache.release_dir(d)
         paths = names.map { |n| File.join(dir, n) }
         checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
-        if @verify_on_open
-            begin
-                Reader.verify_checks(checks)
-            rescue ChecksumError => e
-                log(:warn, "#{e.message}; deleting the cached file")
-                cache.remove_file(e.file)
-                raise
-            end
-        end
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
-        doi = ver["zenodo_version_doi"]
-        return Reader.load(paths.first, mode: @mode, files: files, checks: checks, zenodo_version_doi: doi) unless @mode == :stream
+        # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open }
+        return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
         if index
             begin
-                return Reader.load(paths.first, mode: @mode, files: files, checks: checks, index: index, zenodo_version_doi: doi)
+                return Reader.load(paths.first, index: index, **opts)
             rescue InvalidReleaseError => e
                 log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
             end
         end
         rows = []
-        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks, index_rows: rows, zenodo_version_doi: doi)
+        rel = Reader.load(paths.first, index_rows: rows, **opts)
         write_stream_index(d, rel, rows, ver, paths.first)
         rel
+    rescue ChecksumError => e
+        # A cached file that fails its check is deleted (spec §4.8 checksum_mismatch).
+        log(:warn, "#{e.message}; deleting the cached #{File.basename(e.file.to_s)}")
+        cache.remove_file(e.file) if e.file
+        raise
     end
 
     # The entries of index-v1.json when it is fresh for release d (spec §6.2), else nil.
