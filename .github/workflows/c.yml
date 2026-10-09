@@ -173,10 +173,50 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.12" }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind libcurl4-openssl-dev
-      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=${{ matrix.fetch }} && cmake --build c/build --parallel
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=${{ matrix.fetch }} -DOTC_BUILD_TESTS=ON && cmake --build c/build --parallel
       # The driver ignores the runner's exit status at close, so every Valgrind report
       # goes to a log file per process; the job fails if any of them is not empty.
       - run: mkdir -p vg
+      # c/tests under Valgrind, except the out-of-memory tests (they replace malloc).
+      # A test that skips itself exits 77 (TEST_SKIP_RC in c/tests/otc_test.h, ctest's
+      # SKIP_RETURN_CODE): it is listed as skipped, not failed. Any other non-zero
+      # exit fails the step; 99 is a Valgrind error.
+      - name: C library tests (c/tests) under Valgrind
+        env:
+          OTC_TEST_PYTHON: python
+          VG: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect
+        run: |
+          cd c/build
+          skipped=""
+          ran=0
+          for t in test_*; do
+            [ -f "$t" ] && [ -x "$t" ] || continue
+            case $t in *_oom*) continue ;; esac
+            log="$GITHUB_WORKSPACE/vg/ctest-$t-%p.log"
+            rc=0
+            case $t in
+              test_fetch_*)
+                rules="../tests/rules_${t#test_fetch_}.json"
+                [ -f "$rules" ] || rules=""
+                printf '#!/bin/sh\nexec %s --log-file=%s ./%s\n' "$VG" "$log" "$t" > "vg-$t.sh"
+                chmod +x "vg-$t.sh"
+                # shellcheck disable=SC2086  # an empty rules is no argument
+                sh ../tests/run_with_server.sh "./vg-$t.sh" $rules || rc=$?
+                ;;
+              *)
+                # shellcheck disable=SC2086  # VG is a command with its options
+                $VG --log-file="$log" "./$t" || rc=$?
+                ;;
+            esac
+            ran=$((ran + 1))
+            case $rc in
+              0) ;;
+              77) echo "SKIPPED $t"; skipped="$skipped $t" ;;
+              *) echo "FAILED $t (exit $rc)"; exit 1 ;;
+            esac
+          done
+          test "$ran" -gt 10
+          echo "$ran tests under Valgrind; skipped:${skipped:- none}"
       - name: Conformance suite under Valgrind
         env:
           OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/%p.log
