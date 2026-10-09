@@ -495,3 +495,50 @@ def test_missing_explicit_expected_failures_file_exits_2(tmp_path):
                    "--expected-failures", str(tmp_path / "nope.json"), env={"FAKE_REPLY": OK_REPLY})
     assert r.returncode == 2 and "nope.json" in r.stderr and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-300:])
     assert "PASS  a" not in r.stdout, r.stdout[-300:]
+
+
+# --- R2-146: an expected-failure entry covers a wrong answer, not a runner crash, a hang or a failure at another step
+
+def _crashing_runner(tmp_path, code):
+    p = tmp_path / "crash.py"
+    p.write_text("import sys\nprint('{\"hello\": {\"runner\": \"fake\", \"features\": []}}', flush=True)\n"
+                 f"sys.stdin.readline()\nsys.exit({code})\n")
+    return f"{sys.executable} {p}"
+
+
+@pytest.mark.parametrize("code", [0, 1])
+def test_expected_failure_does_not_cover_a_runner_crash(tmp_path, code):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["fake"], "package": "PK00", "reason": "test"}])
+    r = run_driver("--runner", _crashing_runner(tmp_path, code), "--cases", str(cases), "--expected-failures", str(xf))
+    assert re.search(r"^FAIL  a  .*EOFError", r.stdout, re.M) and r.returncode == 1, (r.returncode, r.stdout[-500:])
+
+
+def test_expected_failure_does_not_cover_a_timeout(tmp_path):
+    p = tmp_path / "hang.py"
+    p.write_text("import sys, time\nprint('{\"hello\": {\"runner\": \"fake\", \"features\": []}}', flush=True)\n"
+                 "sys.stdin.readline()\nsys.stdin.read()\n")   # no reply: wait for stdin to close
+    cases = write_cases(tmp_path, [{"id": "a", "timeout_s": 1, "steps": [OK_STEP]}])
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["fake"], "package": "PK00", "reason": "test"}])
+    r = run_driver("--runner", f"{sys.executable} {p}", "--cases", str(cases), "--expected-failures", str(xf))
+    assert re.search(r"^FAIL  a  .*TimeoutError", r.stdout, re.M) and r.returncode == 1, (r.returncode, r.stdout[-500:])
+
+
+def test_expected_failure_step_pins_the_failing_step(tmp_path):
+    steps = [{"op": "station_count", "expect": {"count": 2}}, {"op": "station_count", "expect": {"count": 1}}]
+    cases = write_cases(tmp_path, [{"id": "a", "steps": steps}])
+    env = {"FAKE_REPLY": OK_REPLY}   # step 0 fails (count 1, not 2)
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["fake"], "package": "PK00", "reason": "test", "step": 0}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf), env=env)
+    assert re.search(r"^XFAIL  a", r.stdout, re.M) and r.returncode == 0, (r.returncode, r.stdout[-500:])
+    xf = _xf(tmp_path, [{"case": "a", "runners": ["fake"], "package": "PK00", "reason": "test", "step": 1}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--expected-failures", str(xf), env=env)
+    assert re.search(r"^FAIL  a  \[step 0", r.stdout, re.M) and r.returncode == 1, (r.returncode, r.stdout[-500:])
+
+
+@pytest.mark.parametrize("step", ["1", -1, True, 1.5])
+def test_check_cases_lints_the_expected_failure_step(tmp_path, step):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    bad = [{"case": "a", "runners": ["python"], "package": "PK01", "reason": "x", "step": step}]
+    r = run_driver("--check-cases", "--cases", str(cases), "--expected-failures", str(_xf(tmp_path, bad)))
+    assert r.returncode == 2 and re.search(r"^PROBLEM expected-failures entry 0 .*step", r.stdout, re.M), r.stdout[-400:]

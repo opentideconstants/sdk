@@ -155,6 +155,14 @@ def expected_failure(entries, case_id, runner):
     return None
 
 
+def expected_failure_covers(entry, failures):
+    """Whether an entry covers these failures: a wrong answer, never a harness error or a runner that crashed, hung or
+    broke the protocol (those are FAIL even for a listed case); with "step", the first failure must be at that step."""
+    if not failures or any(f.get("harness_error") or f.get("runner_fault") for f in failures):
+        return False
+    return "step" not in entry or failures[0].get("step") == entry["step"]
+
+
 def case_names(pattern, case_id):
     """An exact case id, or an fnmatch pattern (a cross id's [writer>reader] is matched exactly, not as a class)."""
     return case_id == pattern or fnmatch.fnmatchcase(case_id, pattern)
@@ -176,6 +184,11 @@ def expected_failure_problems(path, plain_ids, cross_ids):
         for k in ("package", "reason"):
             if not isinstance(e.get(k), str) or not e[k]:
                 out.append(f"{where}: needs a {k}")
+        if "step" in e and (isinstance(e["step"], bool) or not isinstance(e["step"], int) or e["step"] < 0):
+            out.append(f"{where}: step must be a step index (an integer of 0 or more), got {e['step']!r}")
+        unknown = sorted(set(e) - {"case", "runners", "package", "reason", "step"})
+        if unknown:
+            out.append(f"{where}: unknown field(s) {unknown}")
         ids = (cross_ids if "cross" in e["runners"] else []) + (plain_ids if set(e["runners"]) - {"cross"} else [])
         if not any(case_names(e["case"], c) for c in ids):
             out.append(f"{where}: the pattern names no case")
@@ -1108,7 +1121,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 if restart_env is not None:
                     status = live.pop("main").close()
                     if status != 0:
-                        failures.append({"step": i, "driver": "restart_runner",
+                        failures.append({"step": i, "driver": "restart_runner", "runner_fault": True,
                                          "problems": [f"the runner exited with status {status} when it was stopped"]})
                     env_extra.update(restart_env)
                     live["main"] = start("main")
@@ -1141,8 +1154,8 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 last_step |= last
             if (failed and not all_steps) or last_step:
                 break
-    except (TimeoutError, EOFError, RunnerError, OSError) as e:
-        failures.append({**cur, "problems": [f"{type(e).__name__}: {e}"]})
+    except (TimeoutError, EOFError, RunnerError, OSError) as e:   # the runner crashed, hung or broke the protocol
+        failures.append({**cur, "runner_fault": True, "problems": [f"{type(e).__name__}: {e}"]})
     except Exception as e:  # a case-file or driver error: fail this case, flag the run, go on
         stats["harness_errors"] += 1
         failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
@@ -1150,7 +1163,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
         for role, r in live.items():
             status = r.close()
             if status != 0 and not failures:  # a runner that fails at shutdown (a close() error) fails the case
-                failures.append({"step": None, **({"as": role} if role != "main" else {}),
+                failures.append({"step": None, "runner_fault": True, **({"as": role} if role != "main" else {}),
                                  "problems": [f"the runner exited with status {status} at the end of the case"]})
         if srv.errors:  # a server rule that could not be applied: the harness is wrong, not the SDK
             stats["harness_errors"] += 1
@@ -1487,8 +1500,10 @@ def main():
             failures, stderr_tail = run_case(c, runners, srv, proxy, a.keep_tmp, a.all_steps, stats)
             status = "FAIL" if failures else "PASS"
             xf = expected_failure(xf_entries, c["id"], xf_runner)
-            if xf and not any(f.get("harness_error") for f in failures):   # a harness error is never expected
-                status = "XFAIL" if failures else "XPASS"
+            if xf and not failures:
+                status = "XPASS"
+            elif xf and expected_failure_covers(xf, failures):   # not a harness error, a crash, or another step
+                status = "XFAIL"
             counts[status] += 1
             entry = {"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""}
             if xf:
