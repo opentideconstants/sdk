@@ -1159,6 +1159,73 @@ def group_network():
     return out
 
 
+def group_network_cr2_pk11():
+    """Error classification (CR2 PK-R2-11): D32, DR20, a redirect with no host, a 304 with no stored copy, and an
+    index 404 when the pointer's release is too new (spec 4.2, 4.8, 5.2, 5.7)."""
+    out = []
+    G = f"{SRV}/good/"
+    d2, d1 = "20991231.2", "20991231"
+    B = "${tmp}/bundle"
+
+    def open_latest(expect, base=G, **kw):
+        return net(step("open", expect, base_url=base, cache_dir="${cache}", **kw))
+
+    # D32: the release exists (its .sha256 lists the file), so a 404 for the file is a server inconsistency:
+    # network with status 404, never retried, never release_not_found
+    d32_message = {"$contains": "missing on the server"}
+    jl404 = err("network", status=404)
+    jl404["error_message"] = d32_message
+    out.append(case("net/listed-file-404", "a data file that OTC_{D}.sha256 lists answers 404: network with status 404, sent once (D32)", "4.8, 5.2",
+                    [drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d2)}\.jsonl$", "action": "status", "status": 404}]),
+                     open_latest(jl404, mode="stream", on_network_error="raise"),
+                     drv("assert_requests", match=rf"^/good/OTC_{re.escape(d2)}\.jsonl$", count=1)],
+                    requires=["fs", "stream"]))
+    out.append(case("net/listed-file-404-download", "download of a release whose listed .jsonl answers 404: network with status 404, and nothing is written (D32)", "4.3.2, 4.8",
+                    [open_latest({"datestamp": d2}, mode="stream"),
+                     drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d1)}\.jsonl$", "action": "status", "status": 404}]),
+                     net(step("download", jl404, release=d1, to=B), fs=True),
+                     drv("assert_requests", match=rf"^/good/OTC_{re.escape(d1)}\.jsonl$", count=1),
+                     drv("assert_tree", dir=B, allow=[], may_be_missing=True)],
+                    requires=["fs", "stream"]))
+    # DR20: SSL_CERT_FILE is checked at construction like ca_file: io, no request, no fallback to a cached release
+    out.append(case("net/ssl-cert-file-missing", "SSL_CERT_FILE names a missing file, with a cached release and use_cache: io at once, no request, no fallback (DR20)", "4.2, 4.8, 5.7",
+                    [open_latest({"datestamp": d2}),
+                     drv("restart_runner", env={"SSL_CERT_FILE": "${tmp}/no-such-ca.pem"}), drv("clear_log"),
+                     open_latest(err("io")),
+                     drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
+    # DR20: a user_agent with a control character is invalid_argument at construction, before any request
+    ua_steps = []
+    for ua in ["app/1\r\nX-Injected: 1", "app/1\n", "app\u007f1", "app\t1"]:
+        ua_steps.append(open_latest(err("invalid_argument"), user_agent=ua))
+    out.append(case("net/user-agent-control-char", "user_agent with CR LF, LF, DEL or TAB: invalid_argument at construction, and no request (DR20)", "4.2, 4.8, 5.7",
+                    ua_steps + [drv("assert_requests", source="any", count=0)],
+                    requires=["fs"]))
+    # a redirect Location with no host is not followed: network, and no request to any other host
+    out.append(case("net/redirect-no-host", "OTC_{D}.sha256 redirects to a Location with no host (http://): network, not followed", "5.7",
+                    [drv("server_rules", rules=[{"match": rf"^/good/OTC_{re.escape(d2)}\.sha256$", "action": "status", "status": 302,
+                                                 "headers": {"Location": "http://"}}]),
+                     net(step("open", err("network"), release=d2, base_url=G, cache_dir="${cache}", on_network_error="raise")),
+                     drv("assert_requests", match=rf"^/good/OTC_{re.escape(d2)}\.sha256$", min=1)],
+                    requires=["fs"], timeout_s=90))
+    # a 304 to a GET that sent no If-None-Match (no stored copy) is a network error with status 304, never a 200
+    out.append(case("net/304-no-cache", "the pointer answers 304 with an empty cache (no If-None-Match sent): network with status 304", "5.2, 4.8",
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 304}]),
+                     open_latest(err("network", status=304), on_network_error="raise")],
+                    requires=["fs"], timeout_s=90))
+    # the pointer's release is too new and OTC_index.json is a 404: the SDK has no readable release, so the error
+    # is reader_too_old for the pointer's release (spec 5.2 step 2a, 7.4), not release_not_found
+    RD = f"{SRV}/reader/"
+    too_old = err("reader_too_old")
+    too_old["error_message"] = TOO_OLD_MESSAGE
+    out.append(case("net/index-404-reader-too-old", "the pointer names a release too new for the SDK and OTC_index.json answers 404: reader_too_old, not release_not_found", "5.2, 7.4",
+                    [drv("server_rules", rules=[{"match": r"/reader/OTC_index\.json$", "action": "status", "status": 404}]),
+                     open_latest(too_old, base=RD, on_network_error="raise"),
+                     drv("assert_requests", match=r"OTC_20991231\.4\.", count=0)],
+                    requires=["fs"]))
+    return out
+
+
 def group_update():
     out = []
     G = f"{SRV}/good/"
@@ -1645,8 +1712,11 @@ def group_rules():
                     [latest({"datestamp": d2}), drv("mkdir", path=B), drv("chmod", path=B, mode="555"),
                      net(step("download", err("io"), release=d2, to=B), fs=True)],
                     requires=["fs"]))
-    out.append(case("rules/pk10/bad-ca-file-no-retry", "ca_file names a missing file: io or invalid_argument at once, and no request (D19)", "4.8, 5.7",
-                    [latest(err({"$any_of": ["io", "invalid_argument"]}), ca_file="${tmp}/no-such-ca.pem", on_network_error="raise"),
+    # D19: a missing ca_file is io (never invalid_argument), at construction, never retried, and never a reason to
+    # fall back to the cache: a cached release and use_cache (the default) must not hide it (CR2 G11)
+    out.append(case("rules/pk10/bad-ca-file-no-retry", "ca_file names a missing file, with a cached release and use_cache: io at once, no request, no fallback (D19)", "4.8, 5.7",
+                    [latest({"datestamp": d2}), drv("restart_runner"), drv("clear_log"),
+                     latest(err("io"), ca_file="${tmp}/no-such-ca.pem", on_network_error="use_cache"),
                      drv("assert_requests", source="any", count=0)],
                     requires=["fs"]))
     NG = f"{SRV}/nogz/"
@@ -1757,7 +1827,7 @@ GROUPS = {
     "search": lambda R2, R1: group_search(R2),
     "geo": lambda R2, R1: group_geo(R2),
     "tolerant": lambda R2, R1: group_tolerant(),
-    "network": lambda R2, R1: group_network(),
+    "network": lambda R2, R1: group_network() + group_network_cr2_pk11(),
     "update": lambda R2, R1: group_update(),
     "cache": lambda R2, R1: group_cache(),
     "download": lambda R2, R1: group_download(),
