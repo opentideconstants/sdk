@@ -84,6 +84,7 @@ static void sort_by_window(const otc_validation_t **v, size_t n)
 static void free_sets(otc_station_t *st)
 {
     size_t i;
+    if (!st->sets) return;   /* the calloc failed: there is nothing in it to free */
     for (i = 0; i < st->n_sets; i++) {
         free(st->sets[i].cons);
         free((void *)st->sets[i].val);
