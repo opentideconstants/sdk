@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 import pytest
@@ -82,7 +83,8 @@ def test_corrupt_empty_file_is_failure_not_crash(tmp_path):
         {"driver": "corrupt", "path": "${tmp}/empty"}, OK_STEP]}])
     r = run_driver("--runner", f"{sys.executable} {NULL_RUNNER}", "--cases", str(cases))
     assert "Traceback" not in r.stderr, r.stderr[-800:]
-    assert "FAIL  c" in r.stdout and "empty" in r.stdout, r.stdout[-500:]
+    # the reason, not the file name (the path ${tmp}/empty has "empty" in it too)
+    assert re.search(r"^FAIL  c  \[step 1 corrupt\] corrupt: \S+ is empty$", r.stdout, re.M), r.stdout[-500:]
     assert r.returncode == 1
 
 
