@@ -3,6 +3,7 @@ never a pass and never a plain runner failure."""
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 import pytest
@@ -334,3 +335,18 @@ def test_expected_failure_matches_a_cross_id_exactly():
     assert driver.expected_failure(e, "cross/x[python>ruby]", "cross")
     assert not driver.expected_failure(e, "cross/x[ruby>python]", "cross")
     assert driver.expected_failure([{"case": "rules/pk01/*", "runners": ["python"]}], "rules/pk01/a@json", "python")
+
+
+# --- R2-139: a .jsonl that the SDK left missing or corrupt is an SDK failure of assert_index, not a harness error
+
+@pytest.mark.parametrize("jsonl", [None, "not json\n", '{"station_id": 1}\n'])
+def test_assert_index_bad_sdk_jsonl_is_a_case_failure(tmp_path, jsonl):
+    steps = [{"driver": "write", "path": "${tmp}/cache/index-v1.json", "text": "{}"}]
+    if jsonl is not None:
+        steps.append({"driver": "write", "path": "${tmp}/cache/OTC_20991231.jsonl", "text": jsonl})
+    steps += [{"driver": "assert_index", "path": "${tmp}/cache/index-v1.json", "jsonl": "${tmp}/cache/OTC_20991231.jsonl",
+               "datestamp": "20991231"}, OK_STEP]
+    cases = write_cases(tmp_path, [{"id": "a", "steps": steps}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert re.search(r"^FAIL  a  \[step \d+ assert_index\]", r.stdout, re.M), r.stdout[-800:]
+    assert "harness error" not in r.stdout and r.returncode == 1, (r.returncode, r.stdout[-800:])

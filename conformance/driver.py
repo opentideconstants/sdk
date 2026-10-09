@@ -927,7 +927,14 @@ def act_assert_index(a):
         doc = json.loads(p.read_text(encoding="utf-8"))
     except ValueError as e:
         return [f"{p}: not JSON ({e})"]
-    return [f"{p.name}: {x}" for x in stream_index.compare(doc, stream_index.build(jsonl, a["datestamp"]))][:20]
+    # the .jsonl is the SDK's cache copy: a missing or unreadable one is the SDK's fault (a step failure), not the harness's
+    if not jsonl.is_file():
+        return [f"{jsonl}: missing"]
+    try:
+        ref = stream_index.build(jsonl, a["datestamp"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as e:
+        return [f"{jsonl}: cannot build the reference index from it ({type(e).__name__}: {e})"]
+    return [f"{p.name}: {x}" for x in stream_index.compare(doc, ref)][:20]
 
 
 # --------------------------------------------------------------------------- run one case
