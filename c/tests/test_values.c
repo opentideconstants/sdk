@@ -26,7 +26,7 @@ static otc_release *open_lines(const char *lines, char **dir_out)
     test_write(dir, "OTC_20990101.jsonl", lines);
     path = test_join(dir, "OTC_20990101.jsonl");
     st = otc_open_file(path, NULL, &rel);
-    if (st != OTC_OK) fprintf(stderr, "open: %s\n", otc_status_code(st));
+    CHECK_STATUS(st, OTC_OK);   /* a fixture that does not open fails here; its checks below do not run */
     free(path);
     *dir_out = dir;
     return rel;
@@ -41,7 +41,8 @@ int main(void)
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
                      "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n", &dir);
     CHECK(rel != NULL);
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         const otc_validation_t *v = NULL;
         CHECK_STATUS(otc_station_validation_at(st, 0, &v), OTC_OK);
         if (v) {
@@ -80,6 +81,7 @@ int main(void)
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
                      "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\",\"quantity\":\"salinity\","
                      "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
+    CHECK(rel != NULL);
     if (rel) {
         otc_filter f;
         const char *ids[4];
@@ -102,7 +104,9 @@ int main(void)
                      "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\","
                      "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
     st = NULL;
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    CHECK(rel != NULL);
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         const otc_set *set = NULL;
         char pj[16];
         size_t pn = 0;
@@ -118,7 +122,9 @@ int main(void)
     /* C13 */
     rel = open_lines(TEST_STATION("OTC-X-1", "\xc3\x98st") "\n", &dir);
     st = NULL;
-    if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
+    CHECK(rel != NULL);
+    if (rel) CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+    if (st) {
         char b[4];
         size_t need = 0;
         CHECK_STATUS(otc_station_name(st, b, 2, &need), OTC_E_BUFFER_TOO_SMALL);
