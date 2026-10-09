@@ -216,3 +216,39 @@ def test_duplicate_cross_case_id_stops_the_build(tmp_path, monkeypatch):
     monkeypatch.setattr(bc, "group_cross", lambda r2: real(r2) + real(r2)[:1])
     with pytest.raises(SystemExit):
         bc.build(tmp_path / "cases", tmp_path / "cross")
+
+
+# --- K10, K17: the reference stream index resolves every entry's kind, survives odd alias values, and checks `by` exactly
+
+import stream_index  # noqa: E402
+
+
+def _jsonl(tmp_path, stations):
+    p = tmp_path / "OTC_20991231.jsonl"
+    p.write_bytes(b"".join(json.dumps(s).encode() + b"\n" for s in stations))
+    return p
+
+
+def test_reference_index_resolves_the_kind_of_every_entry(tmp_path):
+    doc = bf.release_doc(bf.SECOND)
+    by = {s["station_id"]: s for s in doc["stations"]}
+    sub = by["OTC-T-0003"]                 # a subordinate with offsets: its kind is its reference station's
+    idx = stream_index.build(_jsonl(tmp_path, [by["OTC-T-0001"], sub, copy.deepcopy(sub)]), "20991231")
+    kinds = [e["kind"] for e in idx["stations"]]
+    assert kinds == ["tide", "tide", "tide"], kinds
+
+
+@pytest.mark.parametrize("value", [None, 5, {"a": "b"}])
+def test_reference_index_survives_odd_alias_values(tmp_path, value):
+    st = copy.deepcopy(next(s for s in bf.release_doc(bf.SECOND)["stations"] if s["station_id"] == "OTC-T-0006"))
+    st["aliases"] = {"kartverket": value}
+    idx = stream_index.build(_jsonl(tmp_path, [st]), "20991231")
+    assert idx["stations"][0]["aliases"] == {"kartverket": []}
+
+
+def test_index_by_must_match_exactly(tmp_path):
+    st = next(s for s in bf.release_doc(bf.SECOND)["stations"] if s["station_id"] == "OTC-T-0006")
+    ref = stream_index.build(_jsonl(tmp_path, [st]), "20991231")
+    bad = dict(ref, by="opentideconstants-py/1.0\n")
+    assert any(p.startswith("by is") for p in stream_index.compare(bad, ref))
+    assert not stream_index.compare(dict(ref, by="opentideconstants-py/1.0"), ref)
