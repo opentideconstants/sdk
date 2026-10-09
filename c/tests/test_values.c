@@ -2,7 +2,8 @@
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
  *      not cut to an integer: it reads as missing (-1).
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
- *      text after a line's object is invalid_release, not ignored.
+ *      text after a line's object is invalid_release, not ignored; white
+ *      space after it (CRLF, spaces, tabs) is not text.
  * C34: the kind filter "other" is not a kind value: it matches no station,
  *      also not one whose kind is unknown (spec 4.4).
  * C35: a validation row without previous_release has NaN and -1 there, as
@@ -63,6 +64,12 @@ int main(void)
     CHECK(rel != NULL && otc_release_station_count(rel) == 2);
     otc_close(rel);
     free(dir);
+    /* white space after a line's object is not text after it: CRLF, spaces and tabs, an empty line */
+    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\r\n" TEST_STATION("OTC-X-2", "Two") " \t\n\n"
+                     TEST_STATION("OTC-X-3", "Three") " \r\n", &dir);
+    CHECK(rel != NULL && otc_release_station_count(rel) == 3);
+    otc_close(rel);
+    free(dir);
     {
         char *d2 = test_tmpdir(), *path;
         otc_release *r2 = NULL;
@@ -96,6 +103,12 @@ int main(void)
         f.kind = NULL;
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
         CHECK(n == 1);
+        /* the premise: this station's kind is OTHER (a quantity the library does not know), so the
+         * zero above is the filter's doing, not a kind that is unknown */
+        CHECK_STATUS(otc_station(rel, "OTC-X-1", &st), OTC_OK);
+        if (st) CHECK(otc_station_kind(st) == OTC_KIND_OTHER);
+        otc_station_free(st);
+        st = NULL;
     }
     otc_close(rel);
     free(dir);
