@@ -77,13 +77,22 @@ class ErrorClassTest < Minitest::Test
         cert.sign(key, OpenSSL::Digest.new("SHA256"))
         ctx.cert = cert
         ctx.key = key
-        ssl = OpenSSL::SSL::SSLServer.new(tls, ctx)
-        accepted = 0
+        # Each connection is counted when it is accepted, before its handshake.
+        # The client's error comes from a failed handshake, so when it is
+        # raised, every connection it made has been counted.
+        connections = Queue.new
         t = Thread.new do
             loop do
-                s = ssl.accept rescue nil
-                accepted += 1
-                s&.close
+                sock = tls.accept
+                connections << 1
+                ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+                begin
+                    ssl.accept
+                rescue OpenSSL::SSL::SSLError, SystemCallError
+                    nil # the client refused the certificate
+                ensure
+                    sock.close
+                end
             end
         end
         log = Log.new
@@ -91,6 +100,7 @@ class ErrorClassTest < Minitest::Test
             OTC.new(base_url: "https://127.0.0.1:#{port}/", cache_dir: tmpdir, on_network_error: :raise, logger: log)
         end
         assert_match(/certificate/i, err.message)
+        assert_equal 1, connections.size, "a certificate failure was retried"
         refute(log.lines.any? { |_, m| m.include?("retry") }, "a certificate failure was retried")
     ensure
         t&.kill
