@@ -53,8 +53,11 @@ LANGUAGES = {
 
 
 def literal(rhs):
-    """The version in a declaration's value: a quoted MAJOR.MINOR literal (Ruby may add .freeze), else None."""
-    v = re.sub(r"\s*(//.*|#.*)$", "", rhs.strip()).rstrip(";").strip()
+    """The version in a declaration's value: a quoted MAJOR.MINOR literal (Ruby may add .freeze, TypeScript
+    as const, C a /* comment */), else None."""
+    v = re.sub(r"/\*.*?\*/", "", rhs)
+    v = re.sub(r"\s*(//.*|#.*)$", "", v.strip()).rstrip(";").strip()
+    v = re.sub(r"\s+as\s+const$", "", v)
     v = re.sub(r"\.freeze$", "", v)
     m = re.fullmatch(rf"""(['"])({VERSION_RE})\1""", v)
     return m.group(2) if m else None
