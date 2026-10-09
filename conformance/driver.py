@@ -130,9 +130,14 @@ def load_expected_failures(path):
 def expected_failure(entries, case_id, runner):
     """The entry that expects case_id to fail for this runner, or None. case is an exact id or an fnmatch pattern."""
     for e in entries:
-        if runner in e["runners"] and fnmatch.fnmatchcase(case_id, e["case"]):
+        if runner in e["runners"] and case_names(e["case"], case_id):
             return e
     return None
+
+
+def case_names(pattern, case_id):
+    """An exact case id, or an fnmatch pattern (a cross id's [writer>reader] is matched exactly, not as a class)."""
+    return case_id == pattern or fnmatch.fnmatchcase(case_id, pattern)
 
 
 def expected_failure_problems(path, plain_ids, cross_ids):
@@ -152,7 +157,7 @@ def expected_failure_problems(path, plain_ids, cross_ids):
             if not isinstance(e.get(k), str) or not e[k]:
                 out.append(f"{where}: needs a {k}")
         ids = (cross_ids if "cross" in e["runners"] else []) + (plain_ids if set(e["runners"]) - {"cross"} else [])
-        if not any(fnmatch.fnmatchcase(c, e["case"]) for c in ids):
+        if not any(case_names(e["case"], c) for c in ids):
             out.append(f"{where}: the pattern names no case")
     return out
 
@@ -494,7 +499,7 @@ def step_needs(st):
         f = a.get("file")
         if isinstance(f, str):
             need.add("fs")
-            if f.endswith((".json", ".json.gz")):
+            if f.endswith((".json", ".json.gz")) and not f.endswith(".meta.json"):
                 need.add("json")
         elif "base_url" in a or "release" in a or "cache_dir" in a or not a:
             need.add("fetch")   # no file: the release comes from the network module

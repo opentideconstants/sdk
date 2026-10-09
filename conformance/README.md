@@ -39,7 +39,7 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 `expected-failures.json` lists the cases that are known to fail for a runner today: the RED baseline of cross-SDK behaviour rules that an SDK does not follow yet. Each entry is `{"case", "runners", "package", "reason"}`:
 
-- `case` is an expanded case id (`load/bad-duplicate-station-id-jsonl`, `geo/near-limit-zero@json`, `cross/verified-doi-handoff[ruby>typescript]`) or an `fnmatch` pattern of ids (`load/bad-duplicate-station-id-*`).
+- `case` is an expanded case id (`load/bad-duplicate-station-id-jsonl`, `geo/near-limit-zero@json`, `cross/verified-doi-handoff[ruby>typescript]`) or an `fnmatch` pattern of ids (`load/bad-duplicate-station-id-*`; an exact id matches first, so a cross id's `[writer>reader]` needs no escape).
 - `runners` are the runner names (the hello's `runner`: `python`, `ruby`, `typescript`, `typescript-browser`, `c`, `c-fetch`) the entry applies to; `cross` applies to a `--cross` run, whose ids name the runners (`[writer>reader]`, with the `--cross` names `python`, `ruby`, `typescript`, `c`).
 - `package` names the fix package (the SDK lane) that owns the fix; `reason` says what the SDK does today.
 
@@ -232,6 +232,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | `download` | the §7.1 download cases: then-open, identical, mismatch, from-cache, bad checksum, browser (`expect_if_missing.fs`), plus formats and errors |
 | `v1` | the format 1.0 annotations (`fixtures/v1`): `qc_status` `ok`, `flagged` and `no_constants`; `no_constants` sets left out of `constant_sets()` unless `include_no_constants`, left out of the `source` filter and of `stats.source`, and never recommended; a carried-over set (`carried_from_release`); the `time_base` codes; `provenance.build`; a `merged` tombstone; `stats`, attribution |
 | `format` | format versions (§4.8, §5.2 step 2a, §7.4): `format/reader-too-old` (§7.1); `latest`, `check_for_update`, `update` and `download` skip a release whose `min_reader_version` is too new with one GET of `OTC_index.json`, only in that case; offline with a cached index; a newer major on the server (`format/latest-newer-major`, `format/check-for-update-newer-major`: `newer_format_major`); errors |
+| `rules` | the cross-SDK behaviour rules of review round 1 (`rules/pkNN/...`, one prefix per fix package PK01-PK15, with the decisions D1-D37): server datestamps and nothing written outside `<cache>/v1`; a 200 pointer that is not JSON; malformed and inconsistent releases (`bad/*` roots) refused with `invalid_release` in every load path; argument rules (`limit` 0, `formats` []); one answer for one input (`values*`, `fold` roots); offline `update`; local IO and configuration errors; `verify` that hashes; redirects, httpoxy, Content-Encoding; download writes all files or none; attribution input. Many fail on today's SDKs: `expected-failures.json` lists which, per runner |
 
 ### Cross-SDK cases
 
@@ -244,6 +245,9 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | `cross/index-shared` | One entry of the writer's index is changed (still fresh). The reader's answer shows the change, and the file is not rewritten: the reader uses the other SDK's index. |
 | `cross/index-stale`, `cross/index-other-version` | A wrong `jsonl_sha256` or another `index_version` makes the index stale: the reader ignores it and writes the reference index. |
 | `cross/lock-contention` | Both runners open the same uncached release at once, with a slow `.jsonl`: the server sends it once, and no `.lock` or `.tmp-*` is left. |
+| `cross/index-station-id-swapped`, `cross/index-offset-past-eof`, `cross/index-datestamp-mismatch` | An index entry that names another station's line is `invalid_release` at the query; an entry out of bounds or another datestamp makes the index stale (rebuilt) (D4). |
+| `cross/index-nul-name` | A station name with a NUL inside survives the writer's index and the reader's search. |
+| `cross/verified-doi-handoff`, `cross/verified-doi-preserved` | The version DOI from the pointer reaches the other SDK through `.verified`, and an SDK that adds a file to the release keeps it (D26). |
 
 ## Choices this suite makes where the spec is silent
 

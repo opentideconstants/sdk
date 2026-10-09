@@ -327,3 +327,10 @@ def test_error_expectation_may_be_a_matcher():
     assert driver.evaluate(exp, {"ok": False, "error": {"code": "io"}}) == []
     assert driver.evaluate(exp, {"ok": False, "error": {"code": "network"}})
     assert driver.evaluate(exp, {"ok": True, "result": {}})
+
+
+def test_expected_failure_matches_a_cross_id_exactly():
+    e = [{"case": "cross/x[python>ruby]", "runners": ["cross"]}]
+    assert driver.expected_failure(e, "cross/x[python>ruby]", "cross")
+    assert not driver.expected_failure(e, "cross/x[ruby>python]", "cross")
+    assert driver.expected_failure([{"case": "rules/pk01/*", "runners": ["python"]}], "rules/pk01/a@json", "python")
