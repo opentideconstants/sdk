@@ -37,6 +37,27 @@
 #define OTC_RUNNER_FETCH 0
 #endif
 
+/* ------------------------------------------------------------ test faults */
+
+/*
+ * OTC_RUNNER_FAULT (self-tests only, conformance/tests/test_group_h.py): a comma-separated list of faults the
+ * runner plants in its own code, to show that a library failure it cannot otherwise provoke still fails the step.
+ * Unset in every conformance run.
+ */
+static const char *g_fault;
+
+static int fault(const char *name)
+{
+    const char *p = g_fault;
+    size_t n = strlen(name);
+    while (p && *p) {
+        if (!strncmp(p, name, n) && (p[n] == ',' || p[n] == '\0')) return 1;
+        p = strchr(p, ',');
+        if (p) p++;
+    }
+    return 0;
+}
+
 /* ------------------------------------------------------------------ state */
 
 #define MAX_HELD 16
@@ -196,6 +217,7 @@ static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
 static cJSON *j_parse_or_null(char *text)
 {
     cJSON *v = NULL;
+    if (text && fault("json") && text[0]) text[0] = 'x';   /* the library returned text that is not JSON */
     if (text) {
         PARSE_LOCK();
         v = cJSON_Parse(text);
@@ -687,7 +709,7 @@ static cJSON *ids_array(const char **ids, size_t n)
         RC = CALL_NULL;                                                           \
         if (RC == OTC_OK || RC == OTC_E_BUFFER_TOO_SMALL) {                       \
             cap_ = COUNT;                                                         \
-            ITEMS = (TYPE *)calloc(cap_ ? cap_ : 1, sizeof(TYPE));                \
+            ITEMS = fault("list-nomem") ? NULL : (TYPE *)calloc(cap_ ? cap_ : 1, sizeof(TYPE)); \
             RC = ITEMS ? CALL_BUF : OTC_E_NOMEM;                                  \
         }                                                                         \
     } while (0)
@@ -708,7 +730,7 @@ static const otc_set *find_set(request *q, const otc_station_t *st)
     const char *set_id = arg_str(&q->a, "set_id");
     const otc_set *set = NULL;
     if (!st || !set_id) return NULL;
-    if (otc_station_set(st, set_id, &set) != OTC_OK) return NULL;
+    if ((fault("lookup") ? OTC_E_IO : otc_station_set(st, set_id, &set)) != OTC_OK) return NULL;
     return set;
 }
 
@@ -959,7 +981,7 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "convention")) {
         const char *id = arg_str(&q->a, "convention_id");
         const otc_convention *c = NULL;
-        if (!q->a.bad && id && otc_release_convention(R, id, &c) == OTC_OK)
+        if (!q->a.bad && id && (fault("lookup") ? OTC_E_IO : otc_release_convention(R, id, &c)) == OTC_OK)
             cJSON_AddItemToObject(o, "convention", enc_convention(c, &bad));
         else
             cJSON_AddNullToObject(o, "convention");
@@ -1154,7 +1176,7 @@ static void op_query(request *q, reply *r)
         if (q->a.bad) { otc_station_free(st); set_error(r, "invalid_argument", "station_id"); return; }
         if (!strcmp(op, "reference_station")) {
             otc_station_t *ref = NULL;
-            if (st && otc_reference_station(R, st, &ref) == OTC_OK) {
+            if (st && (fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref)) == OTC_OK) {
                 cJSON_AddItemToObject(o, "station_id", j_take(s_st_id(ref, &bad)));
                 otc_station_free(ref);
             } else {
@@ -1166,7 +1188,12 @@ static void op_query(request *q, reply *r)
             if (st) {
                 LIST_CALL(rc, const char *, ids, count, otc_subordinates_of(R, st, NULL, 0, &count),
                           otc_subordinates_of(R, st, ids, cap_, &count));
-                if (rc != OTC_OK) bad = 1;
+                if (rc != OTC_OK) {   /* ids may be NULL with a count: never read them */
+                    free((void *)ids);
+                    otc_station_free(st);
+                    set_status(r, rc, "otc_subordinates_of");
+                    return;
+                }
             }
             cJSON_AddItemToObject(o, "station_ids", ids_array(ids, count));
             free((void *)ids);
@@ -1183,7 +1210,7 @@ static void op_query(request *q, reply *r)
             otc_offsets_t off;
             memset(&off, 0, sizeof off);
             off.struct_size = sizeof off;
-            if (st && otc_station_offsets(st, &off) == OTC_OK) {
+            if (st && (fault("lookup") ? OTC_E_IO : otc_station_offsets(st, &off)) == OTC_OK) {
                 cJSON *x = cJSON_CreateObject();
                 cJSON_AddItemToObject(x, "reference_station_id", j_cstr(off.reference_station_id));
                 cJSON_AddItemToObject(x, "time_offset_high_min", j_num(off.time_offset_high_min));
@@ -1199,7 +1226,7 @@ static void op_query(request *q, reply *r)
             }
         } else if (!strcmp(op, "recommended_set")) {
             const otc_set *set = NULL;
-            if (st && otc_station_recommended_set(st, &set) == OTC_OK)
+            if (st && (fault("lookup") ? OTC_E_IO : otc_station_recommended_set(st, &set)) == OTC_OK)
                 cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, &bad)));
             else
                 cJSON_AddNullToObject(o, "set_id");
@@ -1547,20 +1574,25 @@ static char *run_query(request *q)
 typedef struct thread_job {
     request q;      /* each thread has its own copy (args.bad is written per call) */
     char *out;
+    int index;
 } thread_job;
+
+static void thread_run(thread_job *j)
+{
+    j->out = run_query(&j->q);
+    if (j->index == 0 && fault("thread0-null")) { cJSON_free(j->out); j->out = NULL; }   /* a thread with no reply */
+}
 
 #ifdef _WIN32
 static DWORD WINAPI thread_main(LPVOID p)
 {
-    thread_job *j = (thread_job *)p;
-    j->out = run_query(&j->q);
+    thread_run((thread_job *)p);
     return 0;
 }
 #else
 static void *thread_main(void *p)
 {
-    thread_job *j = (thread_job *)p;
-    j->out = run_query(&j->q);
+    thread_run((thread_job *)p);
     return NULL;
 }
 #endif
@@ -1578,6 +1610,7 @@ static char *run_threaded(request *q, int n)
     if (!jobs || !th) { free(jobs); free(th); return run_query(q); }
     for (i = 0; i < n; i++) {
         jobs[i].q = *q;
+        jobs[i].index = i;
 #ifdef _WIN32
         th[i] = CreateThread(NULL, 0, thread_main, &jobs[i], 0, NULL);
         if (!th[i]) break;
@@ -1701,6 +1734,7 @@ int main(void)
     const char *t = getenv("OTC_RUNNER_THREADS");
     int threads = t ? atoi(t) : 1;
     size_t i;
+    g_fault = getenv("OTC_RUNNER_FAULT");
     printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s]}}\n",
            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
            OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\"" : "\"fs\", \"stream\"");

@@ -229,3 +229,51 @@ def test_c_wrong_typed_argument_is_invalid_argument(c_good, op, args):
 def test_c_raw_unknown_object_is_a_runner_failure(c_good):
     reply = c_good("raw", object="no-such-object", station_id="OTC-T-0001")
     assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+# --- C runner failures that only a planted fault provokes (OTC_RUNNER_FAULT)
+
+def c_good_with(tmp_path, fault, threads=None):
+    path = _copy_release(tmp_path)
+    env = {"OTC_RUNNER_FAULT": fault}
+    if threads:
+        env["OTC_RUNNER_THREADS"] = str(threads)
+    r = CRunner("c", env)
+    assert r("open", file=str(path), mode="stream")["ok"]
+    return r
+
+
+def test_c_failed_list_call_is_an_error_not_a_crash(tmp_path):  # C112
+    r = c_good_with(tmp_path, "list-nomem")
+    try:
+        reply = r("subordinates_of", station_id="OTC-T-0001")
+    finally:
+        r.close()
+    assert reply["ok"] is False, reply
+
+
+@pytest.mark.parametrize("op,args,fault", [
+    ("conventions", {}, "json"),
+    ("provenance", {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/noaa"}, "json"),
+    ("convention", {"convention_id": "otc-greenwich-v1"}, "lookup"),
+    ("reference_station", {"station_id": "OTC-T-0003"}, "lookup"),
+    ("recommended_set", {"station_id": "OTC-T-0001"}, "lookup"),
+    ("subordinate_offsets", {"station_id": "OTC-T-0003"}, "lookup"),
+    ("constant_set", {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/noaa"}, "lookup"),
+])
+def test_c_library_failure_is_not_a_null_value(tmp_path, op, args, fault):  # C63
+    r = c_good_with(tmp_path, fault)
+    try:
+        reply = r(op, **args)
+    finally:
+        r.close()
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+def test_c_null_reply_from_a_thread_is_a_mismatch(tmp_path):  # C68
+    r = c_good_with(tmp_path, "thread0-null", threads=2)
+    try:
+        reply = r("station_count")
+    finally:
+        r.close()
+    assert reply["ok"] is False and reply["error"]["code"] in ("uncaught:ThreadMismatch", "uncaught:NoMemory"), reply
