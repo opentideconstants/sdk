@@ -1906,6 +1906,46 @@
    ]
   },
   {
+   "id": "net/listed-file-404",
+   "title": "a data file that OTC_{D}.sha256 lists answers 404: network error with status 404, not release_not_found (D32)",
+   "spec": "4.8, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_20991231\\.2\\.(json\\.gz|jsonl|json)$",
+       "action": "status",
+       "status": 404
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 404
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "net/slow-timeout",
    "title": "a body slower than the timeout: network error",
    "spec": "5.7",
