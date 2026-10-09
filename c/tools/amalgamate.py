@@ -14,6 +14,7 @@ with any C99 compiler: cc -std=c99 -c opentideconstants.c (link with -lm, and
 """
 import argparse
 import re
+import sys
 from pathlib import Path
 
 C = Path(__file__).resolve().parents[1]
@@ -34,7 +35,9 @@ PARTS = [
     "vendor/sha256/sha-256.c",
     "vendor/cjson/cJSON.c",
 ]
-LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"\s*$')
+# A local include, also with a comment after it (C81).
+LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"\s*(?:/\*.*?\*/\s*|//.*)?$')
+ANY_LOCAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"')
 
 PRELUDE = """/*
  * opentideconstants.c - single-file amalgamation of the OpenTideConstants C
@@ -72,12 +75,17 @@ def main():
     cjson = re.search(r"#define CJSON_VERSION_MAJOR (\d+)\s+#define CJSON_VERSION_MINOR (\d+)\s+#define CJSON_VERSION_PATCH (\d+)",
                       (C / "vendor/cjson/cJSON.h").read_text())
     chunks = [PRELUDE.format(version=version, cjson=".".join(cjson.groups()))]
+    # a local include is dropped only when the file it names is in the bundle already
+    # (a part, or the public header of the prelude); any other one is an error (C81)
+    inlined = {Path(p).name for p in PARTS} | {"opentideconstants.h"}
     for part in PARTS:
         lines = []
-        for line in (C / part).read_text().splitlines():
+        for n, line in enumerate((C / part).read_text().splitlines(), 1):
             m = LOCAL_INCLUDE.match(line)
-            if m:
+            if m and Path(m.group(1)).name in inlined:
                 lines.append(f"/* #include \"{m.group(1)}\" (inlined) */")
+            elif m or ANY_LOCAL_INCLUDE.match(line):
+                sys.exit(f"amalgamate: {part}:{n}: {line.strip()} names a file that is not in the amalgamation")
             else:
                 lines.append(line)
         chunks.append(f"\n/* ======================================== {part} */\n" + "\n".join(lines) + "\n")
