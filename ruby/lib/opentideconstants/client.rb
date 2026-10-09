@@ -16,6 +16,9 @@ class OpenTideConstants
     attr_reader :loaded_from
     # The error behind loaded_from :cache_after_error, or nil.
     attr_reader :last_error
+    # The format major of a release on the server that this SDK cannot read
+    # (newer than every supported major), as check_for_update last saw it; or nil.
+    attr_reader :newer_format_major
 
     # Opens a client and yields it, closing it afterwards. Without a block it
     # is the same as new.
@@ -61,6 +64,7 @@ class OpenTideConstants
         @http = HTTP.new(timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, logger: logger)
         @lock = Monitor.new
         @last_error = nil
+        @newer_format_major = nil
         @file = file
         if file
             @release, @loaded_from = Reader.open_file(file, mode: @mode)
@@ -79,7 +83,8 @@ class OpenTideConstants
     def releases
         body = fetch_pointer_file("OTC_index.json", missing: :offline)
         doc = parse_pointer(body)
-        list = doc.is_a?(Hash) && doc["releases"].is_a?(Array) ? doc["releases"] : []
+        list = index_entries(doc)
+        list.each { |e| note_version_doi(e) }
         list.map { |e| release_info(e, @base_url + "OTC_index.json") }
             .sort_by { |i| Cache.datestamp_key(i.datestamp) }.reverse.freeze
     end
@@ -92,10 +97,14 @@ class OpenTideConstants
         release_info(entry, url)
     end
 
-    # A release newer than the loaded one with a supported format major, or nil.
+    # A release newer than the loaded one, with a supported format major and
+    # a readable min_reader_version, or nil (spec §4.3, §5.2 step 2a). It also
+    # sets newer_format_major when the server has a release of a newer major.
     def check_for_update
-        info = latest
-        return nil unless supported_major?(info.format_version)
+        raise OfflineError, "offline: the latest pointer is not available" if @offline
+        entry, url = resolve_latest
+        check_newer_major
+        info = release_info(entry, url)
         newer?(info.datestamp, @release.datestamp) ? info : nil
     end
 
@@ -106,8 +115,7 @@ class OpenTideConstants
         raise PinnedReleaseError, "the client was opened on release #{@requested}" unless @requested == :latest
         @lock.synchronize do
             from = @release.datestamp
-            entry, url = fetch_latest_pointer
-            check_major!(entry["format_version"])
+            entry, url = resolve_latest
             unless newer?(entry["datestamp"], from)
                 @last_check = monotonic
                 return UpdateResult.new(false, from, from)
@@ -180,7 +188,7 @@ class OpenTideConstants
         @cache ||= Cache.new(@cache_dir || Cache.default_root)
     end
 
-    # The latest pointer: [entry, url]. OTC_latest-f0.json, then
+    # The latest pointer: [entry, url]. OTC_latest-f1.json, then
     # OTC_latest.json on a 404 only.
     def fetch_latest_pointer
         names = SUPPORTED_FORMAT_MAJORS.sort.reverse.map { |m| "OTC_latest-f#{m}.json" } + ["OTC_latest.json"]
@@ -194,9 +202,34 @@ class OpenTideConstants
         raise ReleaseNotFoundError, "no latest pointer at #{@base_url}"
     end
 
-    def check_major!(format_version)
-        return if supported_major?(format_version)
-        raise UnsupportedFormatError, "the latest release has format #{format_version}, not supported by this SDK"
+    # The newest release this SDK reads: [entry, url] (spec §5.2 steps 2 and
+    # 2a, §7.4). The pointer's release when it is readable; otherwise one GET
+    # of OTC_index.json and its newest readable entry. None: reader_too_old
+    # when a release of a supported major exists, else unsupported_format.
+    def resolve_latest
+        entry, url = fetch_latest_pointer
+        return [entry, url] if readable_entry?(entry)
+        index_url = @base_url + "OTC_index.json"
+        body = fetch_pointer_file("OTC_index.json", missing: :nil)
+        list = body ? index_entries(parse_pointer(body)) : []
+        pick = list.select { |e| readable_entry?(e) }.max_by { |e| Cache.datestamp_key(e["datestamp"]) }
+        return [pick, index_url] if pick
+        too_new = ([entry] + list).find { |e| Release.supported_major?(e["format_version"]) }
+        if too_new
+            raise ReaderTooOldError, "release #{too_new['datestamp']} needs a reader for format " \
+                                     "#{too_new['min_reader_version']}; this SDK reads format #{SUPPORTED_FORMAT_VERSION}"
+        end
+        raise UnsupportedFormatError, "the latest release has format #{entry['format_version']}, not supported by this " \
+                                      "SDK (supported majors: #{SUPPORTED_FORMAT_MAJORS.join(', ')})"
+    end
+
+    # The newest cached release this SDK reads, or nil. With usable: true,
+    # only one this client's mode can load.
+    def newest_cached(usable: true)
+        index = cached_index
+        cache.cached_releases.find do |d|
+            cached_readable?(d, cache.verified(d), index[d]) && (!usable || usable_cached?(d))
+        end
     end
 
     def release_info(entry, pointer_url)
@@ -216,7 +249,8 @@ class OpenTideConstants
         @logger&.public_send(level, "opentideconstants: #{msg}")
     end
 
-    private :http, :base_url, :offline, :cache, :fetch_latest_pointer, :check_major!, :release_info, :resolve, :log
+    private :http, :base_url, :offline, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,
+            :resolve, :log
 
     private
 
@@ -254,9 +288,69 @@ class OpenTideConstants
         value
     end
 
-    def supported_major?(format_version)
-        m = /\A(\d+)\./.match(format_version.to_s)
-        m && SUPPORTED_FORMAT_MAJORS.include?(m[1].to_i)
+    # True when this SDK reads the release of a pointer or index entry.
+    def readable_entry?(entry)
+        return false unless entry.is_a?(Hash) && Release.supported_major?(entry["format_version"])
+        mrv = entry["min_reader_version"]
+        mrv.nil? || Release.readable_version?(mrv)
+    end
+
+    def index_entries(doc)
+        list = doc.is_a?(Hash) && doc["releases"].is_a?(Array) ? doc["releases"] : []
+        list.select { |e| e.is_a?(Hash) && e["datestamp"].is_a?(String) && e["datestamp"].match?(DATESTAMP_RE) }
+    end
+
+    # The entries of the cached OTC_index.json by datestamp ({} if none).
+    def cached_index
+        cached = cache.read_pointer("OTC_index.json")
+        return {} unless cached
+        index_entries(JSON.parse(cached[0])).to_h { |e| [e["datestamp"], e] }
+    rescue JSON::ParserError
+        {}
+    end
+
+    # Whether a cached release is readable, by its .verified, else the cached
+    # index entry, else its .meta.json. Unknown counts as readable (the load
+    # then checks it).
+    def cached_readable?(d, ver, index_entry)
+        fv = ver&.dig("format_version") || index_entry&.dig("format_version")
+        mrv = ver&.dig("min_reader_version") || index_entry&.dig("min_reader_version")
+        if fv.nil? || mrv.nil?
+            meta = cached_meta(d)
+            fv ||= meta["format_version"]
+            mrv ||= meta["release"].is_a?(Hash) ? meta["release"]["min_reader_version"] : nil
+        end
+        (fv.nil? || Release.supported_major?(fv)) && (mrv.nil? || Release.readable_version?(mrv))
+    end
+
+    def cached_meta(d)
+        path = File.join(cache.release_dir(d), "OTC_#{d}.meta.json")
+        doc = File.file?(path) ? JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)) : {}
+        doc.is_a?(Hash) ? doc : {}
+    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+        {}
+    end
+
+    # check_for_update: a conditional GET of OTC_latest.json; a release there
+    # with a major newer than every supported one sets newer_format_major (spec §7.4).
+    def check_newer_major
+        @newer_format_major = nil
+        body = fetch_pointer_file("OTC_latest.json", missing: :nil)
+        return if body.nil?
+        entry = parse_pointer(body)
+        key = entry.is_a?(Hash) ? Release.version_key(entry["format_version"]) : nil
+        return unless key && key[0] > SUPPORTED_FORMAT_MAJORS.max
+        @newer_format_major = key[0]
+        log(:warn, "a newer format (#{key[0]}) exists; upgrade opentideconstants to read it")
+    rescue NetworkError, InvalidReleaseError => e
+        log(:warn, "cannot check OTC_latest.json for a newer format: #{e.message}")
+    end
+
+    # Keeps the version DOI of an entry in the .verified of its cached release.
+    def note_version_doi(entry)
+        d = entry["datestamp"]
+        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && entry.key?("zenodo_version_doi")
+        cache.note_version_doi(d, entry["zenodo_version_doi"])
     end
 
     def newer?(a, b)
@@ -312,8 +406,7 @@ class OpenTideConstants
         end
         cache.ensure_dir(cache.releases_dir)
         begin
-            entry, url = fetch_latest_pointer
-            check_major!(entry["format_version"])
+            entry, url = resolve_latest
             @release, @loaded_from = load_from_entry(entry, url)
         rescue NetworkError => e
             d = @on_network_error == :use_cache ? newest_cached : nil
@@ -340,17 +433,12 @@ class OpenTideConstants
     # [release, loaded_from] for a pointer entry: the cache when it has it.
     def load_from_entry(entry, url)
         d = entry["datestamp"]
-        raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.match?(DATESTAMP_RE)
-        return [load_cached(d), :cache] if usable_cached?(d)
-        [fetch_release(d, entry, url), :download]
-    end
-
-    # The newest cached release with a supported format major.
-    def newest_cached
-        cache.cached_releases.find do |d|
-            ver = cache.verified(d)
-            (ver["format_version"].nil? || supported_major?(ver["format_version"])) && usable_cached?(d)
+        raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
+        if usable_cached?(d)
+            note_version_doi(entry)
+            return [load_cached(d), :cache]
         end
+        [fetch_release(d, entry, url), :download]
     end
 
     # The data files a load in this mode reads, in order of preference.
@@ -376,17 +464,18 @@ class OpenTideConstants
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
-        return Reader.load(paths.first, mode: @mode, files: files, checks: checks) unless @mode == :stream
+        doi = ver["zenodo_version_doi"]
+        return Reader.load(paths.first, mode: @mode, files: files, checks: checks, zenodo_version_doi: doi) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
         if index
             begin
-                return Reader.load(paths.first, mode: @mode, files: files, checks: checks, index: index)
+                return Reader.load(paths.first, mode: @mode, files: files, checks: checks, index: index, zenodo_version_doi: doi)
             rescue InvalidReleaseError => e
                 log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
             end
         end
         rows = []
-        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks, index_rows: rows)
+        rel = Reader.load(paths.first, mode: @mode, files: files, checks: checks, index_rows: rows, zenodo_version_doi: doi)
         write_stream_index(d, rel, rows, ver, paths.first)
         rel
     end
@@ -455,7 +544,7 @@ class OpenTideConstants
                                    "url" => url_of.call(sha_name) }
         end
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
-        format_version = entry && entry["format_version"]
+        info = entry ? %w[format_version min_reader_version zenodo_version_doi].to_h { |k| [k, entry[k]] } : {}
         if @mode == :stream
             %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
                 size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],
@@ -476,15 +565,12 @@ class OpenTideConstants
                 FileUtils.rm_f(tmp_gz)
             end
         end
-        if format_version.nil?
-            format_version = begin
-                if @mode == :stream
-                    JSON.parse(File.read(File.join(dir, "OTC_#{d}.meta.json")))["format_version"]
-                end
-            rescue StandardError
-                nil
-            end
+        if entry.nil? && @mode == :stream
+            # A pinned download reads no pointer: take the versions from the sidecar.
+            meta = cached_meta(d)
+            info["format_version"] = meta["format_version"]
+            info["min_reader_version"] = meta["release"]["min_reader_version"] if meta["release"].is_a?(Hash)
         end
-        cache.write_verified(d, verified, format_version)
+        cache.write_verified(d, verified, info)
     end
 end

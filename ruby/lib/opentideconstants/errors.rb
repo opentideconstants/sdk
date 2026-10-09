@@ -44,6 +44,11 @@ class OpenTideConstants
         CODE = "unsupported_format".freeze
     end
 
+    # The release's release.min_reader_version is newer than SUPPORTED_FORMAT_VERSION.
+    class ReaderTooOldError < Error
+        CODE = "reader_too_old".freeze
+    end
+
     class InvalidReleaseError < Error
         CODE = "invalid_release".freeze
     end

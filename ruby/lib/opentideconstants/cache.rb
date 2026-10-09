@@ -7,7 +7,7 @@ require "time"
 class OpenTideConstants
     # The on-disk cache shared by every SDK on one machine (spec §5.4):
     #
-    #     <root>/v1/pointer/OTC_latest-f0.json (+ .etag), OTC_index.json (+ .etag)
+    #     <root>/v1/pointer/OTC_latest-f1.json (+ .etag), OTC_index.json (+ .etag)
     #     <root>/v1/releases/<D>/OTC_<D>.sha256, data files, .verified, .lock/
     #
     # Every write is a temporary file in the same directory, fsynced and then
@@ -138,7 +138,12 @@ class OpenTideConstants
             row["size"].nil? || File.size(path) == row["size"]
         end
 
-        def write_verified(datestamp, files, format_version)
+        # The release-level values .verified keeps next to the files: what the
+        # pointer or index entry said (format_version, min_reader_version,
+        # zenodo_version_doi). A key that info leaves out keeps its old value.
+        VERIFIED_INFO = %w[format_version min_reader_version zenodo_version_doi].freeze
+
+        def write_verified(datestamp, files, info = {})
             path = File.join(release_dir(datestamp), ".verified")
             prev = verified(datestamp)
             merged = prev ? prev["files"].dup : {}
@@ -149,8 +154,21 @@ class OpenTideConstants
             end
             doc = { "files" => merged.sort.to_h, "verified_at" => Time.now.utc.iso8601,
                     "by" => "opentideconstants-ruby/#{VERSION}" }
-            doc["format_version"] = format_version || prev&.dig("format_version")
+            VERIFIED_INFO.each do |k|
+                doc[k] = info.key?(k) ? info[k] : prev&.dig(k)
+            end
             write_atomic(path, JSON.pretty_generate(doc) + "\n")
+        end
+
+        # Stores the version DOI of a pointer or index entry in the .verified
+        # of a cached release, when it differs (spec §4.3). Best effort.
+        def note_version_doi(datestamp, doi)
+            ver = verified(datestamp)
+            return if ver.nil? || (ver.key?("zenodo_version_doi") && ver["zenodo_version_doi"] == doi)
+            ver["zenodo_version_doi"] = doi
+            write_atomic(File.join(release_dir(datestamp), ".verified"), JSON.pretty_generate(ver) + "\n")
+        rescue CacheError
+            nil
         end
 
         # Datestamps of trusted release directories, newest first.
