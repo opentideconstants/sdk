@@ -87,11 +87,11 @@ def test_bad_rule_fields_raise_valueerror(srv, rule):
         srv.set_rules([rule])
 
 
-def test_json_rule_with_missing_file_is_404(srv):
-    srv.set_rules([{"match": "latest", "action": "json", "file": "good/no-such.json", "pointer": "/x"}])
-    conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
-    assert _get(conn)[0] == 404
-    assert [e["status"] for e in srv.log.entries()] == [404]
+def test_json_rule_with_missing_file_is_rejected(srv):
+    # R2-142: a rule whose fixture is missing is a bad rule (a harness error), never a plain 404 the SDK might expect
+    with pytest.raises(ValueError, match="good/no-such.json"):
+        srv.set_rules([{"match": "latest", "action": "json", "file": "good/no-such.json", "pointer": "/x"}])
+    assert srv.log.entries() == []
 
 
 def test_request_time_rule_error_is_logged_500(srv, capsys):

@@ -30,7 +30,8 @@ What it does:
       with "set": {"/datestamp": "x", ...}, the served value is changed at those pointers first
     A file rule takes "headers" too (sent with the file, for example Content-Encoding).
   Rules are tried in order; the first active match applies. "times" null = always.
-  A rule that cannot be applied when a request comes (for example a JSON pointer that does not resolve) gets a
+  A file or json rule's fixture must be a file under fixtures/ (validate_rule checks it). A rule that cannot be
+  applied when a request comes (a JSON pointer that does not resolve, a fixture that went missing) gets a
   500, a log entry with an "error", and a line in errors; the driver fails the case with a harness error.
 - Records every request (method, path, query, headers, status, time) in a log.
 - stop() closes the HTTP listener and every open (keep-alive) connection, and
@@ -40,9 +41,17 @@ What it does:
   stopped" and "no socket was opened" can both be checked. resume() serves again.
   An accept() error of the tripwire goes to trip_errors; the driver fails the case with a harness error, because
   a tripwire that cannot accept records nothing.
+- start_tls() adds an https listener that serves the same fixtures, with the same
+  rules and the same log, under a certificate from a throw-away CA (made with the
+  openssl command at start). tls_url is its base URL and tls_ca the CA file a
+  client passes as ca_file. It is for the https cases (a redirect from https to
+  http, D1).
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays. Its aliases map a host name (one that
-  does not resolve) to the address it connects to instead.
+  does not resolve) to the address it connects to instead. A request it cannot
+  relay (the upstream refuses, or fails mid-body) gets a 502 or a cut body, a log
+  entry with an "error", and a line in errors; the driver fails the case with a
+  harness error.
 """
 from __future__ import annotations
 
@@ -55,14 +64,19 @@ import json
 import re
 import select
 import socket
+import shutil
 import socketserver
+import ssl
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_slow_sleep = time.sleep   # the wait of a slow rule; a test replaces this hook, never the process-wide time.sleep
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -120,9 +134,19 @@ def validate_rule(i, r):
     for ptr in r.get("set") or {}:
         if not pointer_parts(ptr):    # each key of set is a pointer below the served value
             raise ValueError(f"rule {i}: set needs pointers below the value, got {ptr!r}")
+    if r["action"] in ("file", "json") and fixture_path(r["file"]) is None:
+        raise ValueError(f"rule {i}: fixture file {r['file']!r} is not a file under conformance/fixtures")
     times = r.get("times")
     if times is not None and (isinstance(times, bool) or not isinstance(times, int) or times < 1):
         raise ValueError(f"rule {i}: times must be an integer of 1 or more, or null, got {times!r}")
+
+
+def fixture_path(rel):
+    """The fixture file at rel (relative to conformance/fixtures), or None when it is missing, not a file, or outside."""
+    target = (FIXTURES / rel.lstrip("/")).resolve()
+    if FIXTURES.resolve() not in target.parents or not target.is_file():
+        return None
+    return target
 
 
 def pointer_parts(pointer):
@@ -276,10 +300,16 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
                 pass
 
     def _load(self, rel):
-        target = (FIXTURES / rel.lstrip("/")).resolve()
-        if FIXTURES.resolve() not in target.parents or not target.is_file():
-            return None
-        return target.read_bytes()
+        target = fixture_path(rel)
+        return None if target is None else target.read_bytes()
+
+    def _load_rule_file(self, rule):
+        """A file or json rule's fixture. A missing one is a rule that cannot be applied (a 500 and a harness error),
+        never a plain 404 that a case expecting not_found or network would accept."""
+        data = self._load(rule["file"])
+        if data is None:
+            raise FileNotFoundError(f"the rule's fixture file {rule['file']!r} is not a file under conformance/fixtures")
+        return data
 
     def _serve(self, path, rule, head):
         action = rule["action"] if rule else None
@@ -293,22 +323,19 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         served = path  # the name that decides the Content-Type
         if action == "file":
-            data = self._load(rule["file"])
+            data = self._load_rule_file(rule)
             served = rule["file"]
         elif action == "json":
-            raw = self._load(rule["file"])
-            if raw is None:
-                data = None
-            else:
-                value = json_pointer(json.loads(raw), rule.get("pointer", ""))
-                for ptr, v in (rule.get("set") or {}).items():
-                    parts = pointer_parts(ptr)
-                    parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
-                    if isinstance(parent, list):
-                        parent[array_index(parts[-1], len(parent))] = v
-                    else:
-                        parent[parts[-1]] = v
-                data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
+            raw = self._load_rule_file(rule)
+            value = json_pointer(json.loads(raw), rule.get("pointer", ""))
+            for ptr, v in (rule.get("set") or {}).items():
+                parts = pointer_parts(ptr)
+                parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
+                if isinstance(parent, list):
+                    parent[array_index(parts[-1], len(parent))] = v
+                else:
+                    parent[parts[-1]] = v
+            data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
             served = "x.json"
         else:
             data = self._load(path)
@@ -354,15 +381,38 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self._started = True
             self.wfile.flush()
-            time.sleep(float(rule.get("delay_s", 5)))
+            _slow_sleep(float(rule.get("delay_s", 5)))
             if not head:
                 self.wfile.write(body)
             return
         self._send(200, body, headers, head)
 
 
+_CA_EXT = "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n"
+_LEAF_EXT = ("basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"
+             "subjectAltName=IP:127.0.0.1,DNS:localhost\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always\n")
+
+
+def make_tls_files(d: Path):
+    """A throw-away CA and a server certificate for 127.0.0.1 signed by it (openssl command). Returns (ca, cert, key).
+    The extensions are the ones a strict verifier (Python 3.13 VERIFY_X509_STRICT) requires."""
+    def run(*args):
+        subprocess.run(["openssl", *args], cwd=d, check=True, capture_output=True, timeout=60)
+    (d / "ca.ext").write_text(_CA_EXT)
+    (d / "leaf.ext").write_text(_LEAF_EXT)
+    run("genrsa", "-out", "ca.key", "2048")
+    run("req", "-new", "-key", "ca.key", "-subj", "/CN=otc conformance test CA", "-out", "ca.csr")
+    run("x509", "-req", "-in", "ca.csr", "-signkey", "ca.key", "-days", "2", "-sha256", "-extfile", "ca.ext", "-out", "ca.pem")
+    run("genrsa", "-out", "leaf.key", "2048")
+    run("req", "-new", "-key", "leaf.key", "-subj", "/CN=127.0.0.1", "-out", "leaf.csr")
+    run("x509", "-req", "-in", "leaf.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-set_serial", "2", "-days", "2", "-sha256",
+        "-extfile", "leaf.ext", "-out", "leaf.pem")
+    return d / "ca.pem", d / "leaf.pem", d / "leaf.key"
+
+
 class FixtureServer:
-    """The fixture HTTP server. Use start(), url, set_rules(), log, stop(), resume(), shutdown()."""
+    """The fixture HTTP server. Use start(), url, set_rules(), log, stop(), resume(), shutdown(); start_tls() adds
+    an https listener (tls_url, tls_ca)."""
 
     def __init__(self, host="127.0.0.1", port=0):
         self.host = host
@@ -378,6 +428,10 @@ class FixtureServer:
         self._conns = set()
         self._conns_lock = threading.Lock()
         self.trip_errors = []
+        self._tls_httpd = None
+        self._tls_dir = None
+        self.tls_url = None
+        self.tls_ca = None
         # Harness errors: a rule that could not be applied to a request (the request got a 500). The driver fails
         # the case when this list is not empty, so a broken rule never looks like correct SDK error handling.
         self.errors = []
@@ -502,10 +556,37 @@ class FixtureServer:
         self._stop_tripwire()
         self.start()
 
+    def start_tls(self):
+        """Serve the fixtures over https too. OSError or subprocess.CalledProcessError when it cannot (no openssl)."""
+        self._tls_dir = Path(tempfile.mkdtemp(prefix="otc-tls-"))
+        try:
+            ca, cert, key = make_tls_files(self._tls_dir)
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert, key)
+            httpd = _ThreadingServer((self.host, 0), _FixtureHandler)
+            # no handshake in accept(): it happens on the first read, in the request's own thread
+            httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True, do_handshake_on_connect=False)
+        except BaseException:
+            shutil.rmtree(self._tls_dir, ignore_errors=True)
+            raise
+        httpd.fixture = self  # type: ignore[attr-defined]
+        self._tls_httpd = httpd
+        self.tls_url = f"https://{self.host}:{httpd.server_address[1]}"
+        self.tls_ca = str(ca)
+        threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        return self
+
     def shutdown(self):
         if self.running:
             self._close_listener()
         self._stop_tripwire()
+        if self._tls_httpd is not None:
+            self._tls_httpd.shutdown()
+            self._tls_httpd.server_close()
+            self._tls_httpd = None
+        if self._tls_dir is not None:
+            shutil.rmtree(self._tls_dir, ignore_errors=True)
+            self._tls_dir = None
 
 
 class _ProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -518,6 +599,12 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
         self.server.proxy.log.add(source="proxy", method=self.command, path=target, query="",  # type: ignore[attr-defined]
                                   headers={k.lower(): v for k, v in self.headers.items()}, status=status, rule=None,
                                   error=error)
+
+    def _relay_failed(self, target, msg):
+        """The proxy could not relay to the upstream: the harness is broken (the alias, the fixture server), not the
+        SDK. The driver fails the case with a harness error, so a 502 never passes as the SDK's network error."""
+        print(f"recording proxy: cannot relay {target}: {msg}", file=sys.stderr, flush=True)
+        self.server.proxy.errors.append(f"cannot relay {target}: {msg}")  # type: ignore[attr-defined]
 
     def do_CONNECT(self):
         self.close_connection = True  # after a tunnel the connection carries no more HTTP
@@ -532,6 +619,7 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
             upstream = socket.create_connection((host, int(port)), timeout=10)
         except OSError as e:
             self._record(502, self.path, error=f"{type(e).__name__}: {e}")
+            self._relay_failed(self.path, f"{type(e).__name__}: {e}")
             self.send_error(502)
             return
         self._record(200, self.path)
@@ -583,18 +671,19 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
                 resp = conn.getresponse()
             except (OSError, ValueError, http.client.HTTPException) as e:
                 self._record(502, target, error=f"{type(e).__name__}: {e}")
+                self._relay_failed(target, f"{type(e).__name__}: {e}")
                 try:
                     self.send_error(502)
                 except OSError:
                     pass
                 return
             self._record(resp.status, target)
-            self._stream(resp)
+            self._stream(resp, target)
         finally:
             if conn is not None:
                 conn.close()
 
-    def _stream(self, resp):
+    def _stream(self, resp, target):
         """Relay the upstream response as it comes: its status, its headers (its own Content-Length, also for HEAD),
         then the body in chunks. A body that ends early (short_body) ends early here too: the proxy closes the
         connection after the bytes it got, so the client sees the same short body as without the proxy."""
@@ -613,15 +702,21 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.flush()
         if self.command == "HEAD" or resp.status in (204, 304):
             return
-        try:
-            while True:
+        while True:
+            try:
                 chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
-                if not chunk:
-                    break
+            except (OSError, http.client.HTTPException) as e:   # the upstream failed mid-body: a harness error
+                self._relay_failed(target, f"reading the body: {type(e).__name__}: {e}")
+                self.close_connection = True
+                return
+            if not chunk:
+                break
+            try:
                 self.wfile.write(chunk)
                 self.wfile.flush()
-        except (OSError, http.client.HTTPException):
-            pass
+            except OSError:   # the client went away (an SDK may stop reading): its own business, not a harness error
+                self.close_connection = True
+                return
         if resp.length:  # upstream closed before Content-Length bytes: end the client connection the same way
             self.close_connection = True
 
@@ -636,6 +731,8 @@ class RecordingProxy:
         self.port = port
         self.log = RequestLog()
         self.aliases = {}  # host name -> the address the proxy connects to instead
+        # Harness errors: a request the proxy could not relay (the driver fails the case when this is not empty)
+        self.errors = []
         self._httpd = None
 
     @property

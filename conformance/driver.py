@@ -28,6 +28,7 @@ import gzip
 import hashlib
 import http.client
 import json
+import math
 import os
 import queue
 import re
@@ -83,10 +84,29 @@ OPS = {
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
-DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
-                  "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir",
-                  "assert_index", "json_set", "chmod", "assert_tree"}
-PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
+PLACEHOLDERS = {"fixtures", "server", "server_alias", "server_tls", "tls_ca", "proxy", "tmp", "cache"}
+# The fields of each driver action (README "Driver steps"): {action: (required {field: type}, optional {field: type})}.
+# Any other field is a typo, and a typo of an assertion field (count, absent) would make the step assert nothing.
+_STR, _LIST, _DICT, _BOOL, _NUM = str, list, dict, bool, (int, float)
+_COUNT = "count"   # a non-negative integer
+DRIVER_FIELDS = {
+    "server_rules": ({"rules": _LIST}, {}), "server_stop": ({}, {}), "server_start": ({}, {}), "clear_log": ({}, {}),
+    "assert_requests": ({}, {"source": _STR, "match": _STR, "status": int, "header": _DICT, "all": _BOOL,
+                             "has_query": _BOOL, "count": _COUNT, "min": _COUNT, "max": _COUNT, "min_gap_s": _NUM}),
+    "copy": ({"files": _LIST, "to": _STR}, {}), "write": ({"path": _STR, "text": _STR}, {}),
+    "delete": ({"path": _STR}, {}), "mkdir": ({"path": _STR}, {}), "corrupt": ({"path": _STR}, {"offset": _COUNT}),
+    "assert_files": ({"dir": _STR}, {"present": _LIST, "absent": _LIST, "exactly": _LIST, "no_tmp": _BOOL,
+                                    "may_be_missing": _BOOL}),
+    "assert_sha256": ({"path": _STR, "equals": _STR}, {"negate": _BOOL}),
+    "assert_json": ({"path": _STR, "match": _DICT}, {}),
+    "sleep": ({"s": _NUM}, {}), "restart_runner": ({}, {"env": _DICT}),
+    "assert_index": ({"path": _STR, "jsonl": _STR, "datestamp": _STR}, {}),
+    "json_set": ({"path": _STR, "pointer": _STR, "value": object}, {}),
+    "chmod": ({"path": _STR, "mode": _STR}, {}),
+    "assert_tree": ({"dir": _STR, "allow": _LIST}, {"may_be_missing": _BOOL}),
+}
+DRIVER_ACTIONS = set(DRIVER_FIELDS)
+REQUEST_SOURCES = {"server", "tripwire", "proxy", "any"}
 # A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
 # fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
 # rule for loopback addresses (Ruby's Net::HTTP has one) can hide that an SDK ignored the proxy.
@@ -135,6 +155,14 @@ def expected_failure(entries, case_id, runner):
     return None
 
 
+def expected_failure_covers(entry, failures):
+    """Whether an entry covers these failures: a wrong answer, never a harness error or a runner that crashed, hung or
+    broke the protocol (those are FAIL even for a listed case); with "step", the first failure must be at that step."""
+    if not failures or any(f.get("harness_error") or f.get("runner_fault") for f in failures):
+        return False
+    return "step" not in entry or failures[0].get("step") == entry["step"]
+
+
 def case_names(pattern, case_id):
     """An exact case id, or an fnmatch pattern (a cross id's [writer>reader] is matched exactly, not as a class)."""
     return case_id == pattern or fnmatch.fnmatchcase(case_id, pattern)
@@ -156,6 +184,11 @@ def expected_failure_problems(path, plain_ids, cross_ids):
         for k in ("package", "reason"):
             if not isinstance(e.get(k), str) or not e[k]:
                 out.append(f"{where}: needs a {k}")
+        if "step" in e and (isinstance(e["step"], bool) or not isinstance(e["step"], int) or e["step"] < 0):
+            out.append(f"{where}: step must be a step index (an integer of 0 or more), got {e['step']!r}")
+        unknown = sorted(set(e) - {"case", "runners", "package", "reason", "step"})
+        if unknown:
+            out.append(f"{where}: unknown field(s) {unknown}")
         ids = (cross_ids if "cross" in e["runners"] else []) + (plain_ids if set(e["runners"]) - {"cross"} else [])
         if not any(case_names(e["case"], c) for c in ids):
             out.append(f"{where}: the pattern names no case")
@@ -199,6 +232,8 @@ def match(exp, act, tol, path="result"):
         (op, arg), = exp.items()
         if op == "$contains":
             return [] if isinstance(act, str) and arg in act else [f"{path}: {act!r} does not contain {arg!r}"]
+        if op == "$not_contains":   # a string that does not hold arg (for example a secret in an error message)
+            return [] if isinstance(act, str) and arg not in act else [f"{path}: {act!r} contains {arg!r} (or is not a string)"]
         if op == "$regex":
             return [] if isinstance(act, str) and re.search(arg, act) else [f"{path}: {act!r} does not match /{arg}/"]
         if op == "$type":
@@ -244,7 +279,7 @@ def match(exp, act, tol, path="result"):
     raise CaseError(f"cannot match {exp!r}")
 
 
-MATCHERS = {"$contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
+MATCHERS = {"$contains", "$not_contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
 TYPE_NAMES = {"object", "array", "string", "number", "boolean", "null"}
 
 
@@ -266,7 +301,7 @@ def matcher_problems(v, path):
         (op, arg), = v.items()
         if op not in MATCHERS:
             return [f"{path}: unknown matcher {op}"]
-        if op in ("$contains", "$regex") and not isinstance(arg, str):
+        if op in ("$contains", "$not_contains", "$regex") and not isinstance(arg, str):
             out.append(f"{path}: {op} needs a string")
         elif op == "$regex":
             try:
@@ -479,10 +514,20 @@ def api_error_problems(cases, errors_by_op):
                 if isinstance(exp, dict) and "error" in exp:
                     e = exp["error"]
                     codes = e["$any_of"] if isinstance(e, dict) and isinstance(e.get("$any_of"), list) else [e]
+                    known = errors_by_op[op] | API_ANY_OP_ERRORS
                     for code in codes:
-                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
-                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
-                                            f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
+                        if isinstance(code, str):
+                            bad = code not in known
+                        elif is_matcher(code):   # a matcher ($regex, ...) must match at least one code api.json lists
+                            try:
+                                bad = all(match(code, k, DEFAULT_TOL, "error") for k in sorted(known))
+                            except (CaseError, TypeError, re.error):
+                                bad = True       # matcher_problems reports the malformed matcher itself
+                        else:
+                            bad = True           # a number, null, list or object is never an error code
+                        if bad:
+                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {json.dumps(code)}, "
+                                            f"which matches no code api.json lists for {op} ({sorted(errors_by_op[op])})")
     return problems
 
 
@@ -535,6 +580,80 @@ def requires_problems(c):
     return out
 
 
+def tolerance_problems(exp):
+    """An expectation's tolerance must be a finite number of 0 or more (a string fails every runner at run time, and a
+    negative one fails every number)."""
+    if not isinstance(exp, dict) or "tolerance" not in exp:
+        return []
+    t = exp["tolerance"]
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or t < 0:
+        return [f"tolerance must be a finite number of 0 or more, got {t!r}"]
+    return []
+
+
+def id_problems(expanded, cross):
+    """Every case id is unique across the expanded cases/ (plain ids and matrix variants) and cross/: a duplicate makes
+    --only and expected-failure patterns name two cases."""
+    seen, out = {}, []
+    for where, cs in (("cases/", expanded), ("cross/", cross)):
+        for c in cs:
+            cid = c.get("id")
+            if cid in seen:
+                out.append(f"duplicate id {cid!r} ({seen[cid]} and {where})")
+            else:
+                seen[cid] = where
+    return out
+
+
+def _field_ok(v, t):
+    if t is object:
+        return True
+    if t == _COUNT:
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    if t is _BOOL:
+        return isinstance(v, bool)
+    return not isinstance(v, bool) and isinstance(v, t)
+
+
+def driver_step_problems(st):
+    """The fields of one driver step: the known ones only, each of the right type, and enough of them for an
+    assertion step to assert something. Returns problems (empty = good)."""
+    kind = st.get("driver")
+    if kind not in DRIVER_FIELDS:
+        return [f"unknown driver action {kind!r}"]
+    req, opt = DRIVER_FIELDS[kind]
+    out = [f"{kind} needs {k!r}" for k in req if k not in st]
+    unknown = sorted(set(st) - {"driver"} - set(req) - set(opt))
+    if unknown:
+        out.append(f"{kind} has no field(s) {unknown}")
+    for k, t in {**opt, **req}.items():
+        if k in st and not _field_ok(st[k], t):
+            out.append(f"{kind} {k} has the wrong type: {st[k]!r}")
+    lists = {"copy": ["files"], "assert_files": ["present", "absent", "exactly"], "assert_tree": ["allow"]}.get(kind, [])
+    for k in lists:
+        if isinstance(st.get(k), list) and not all(isinstance(x, str) for x in st[k]):
+            out.append(f"{kind} {k} must be a list of strings")
+    for k in (["env"] if kind == "restart_runner" else ["header"] if kind == "assert_requests" else []):
+        if isinstance(st.get(k), dict) and not all(isinstance(x, str) and isinstance(y, str) for x, y in st[k].items()):
+            out.append(f"{kind} {k} must be an object of strings")
+    if kind == "assert_requests":
+        if "source" in st and st["source"] not in REQUEST_SOURCES:
+            out.append(f"assert_requests source must be one of {sorted(REQUEST_SOURCES)}, got {st['source']!r}")
+        if not any(k in st for k in ("count", "min", "max", "min_gap_s")) and not st.get("all"):
+            out.append("assert_requests asserts nothing: it needs count, min, max, min_gap_s or all")
+        if st.get("all") and not st.get("header"):
+            out.append("assert_requests all: true needs a header")
+    if kind == "assert_files" and not any(k in st for k in ("present", "absent", "exactly")) and not st.get("no_tmp"):
+        out.append("assert_files asserts nothing: it needs present, absent, exactly or no_tmp")
+    if kind == "assert_json" and st.get("match") == {}:
+        out.append("assert_json asserts nothing: match is empty")
+    if kind == "sleep" and _field_ok(st.get("s"), _NUM) and st["s"] < 0:
+        out.append(f"sleep s must be 0 or more, got {st['s']!r}")
+    if kind == "chmod" and isinstance(st.get("mode"), str) and not re.fullmatch(r"[0-7]{3,4}", st["mode"]):
+        out.append(f"chmod mode must be an octal string such as \"555\", got {st['mode']!r}")
+    return out
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -577,8 +696,7 @@ def check_cases(cases):
                 if not (FIXTURES / s).exists():
                     problems.append(f"{where}: fixture file {s} does not exist")
             if "driver" in st:
-                if st["driver"] not in DRIVER_ACTIONS:
-                    problems.append(f"{where}: unknown driver action {st['driver']!r}")
+                problems += [f"{where}: {p}" for p in driver_step_problems(st)]
                 if st["driver"] == "assert_requests":
                     for name, rx in [("match", st.get("match"))] + list((st.get("header") or {}).items()):
                         try:
@@ -610,7 +728,7 @@ def check_cases(cases):
                 if exp is None:
                     continue
                 shape = expect_shape_problems(exp)
-                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect")]
+                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect") + tolerance_problems(exp)]
                 if not shape and "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
                     problems.append(f"{where}: an empty result satisfies this expectation")
             if st.get("expect") is not None:
@@ -618,6 +736,8 @@ def check_cases(cases):
             for f in (st.get("expect_if_missing") or {}):
                 if f not in FEATURES:
                     problems.append(f"{where}: unknown feature {f!r}")
+        for exp in [c.get("open_expect")] if isinstance(c.get("open_expect"), dict) else []:
+            problems += [f"{cid} open_expect: {p}" for p in tolerance_problems(exp)]
         if compared == 0 and not c.get("matrix"):
             problems.append(f"{cid}: no runner step with an expectation")
         for f in c.get("requires", []):
@@ -816,17 +936,25 @@ def act_assert_tree(a):
 
 
 def restore_writable(root):
-    """Give the owner write and search permission again under root (after chmod steps), so it can be removed."""
-    for p in [Path(root), *Path(root).rglob("*")]:
-        try:
-            if not p.is_symlink():
-                p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
-        except OSError:
-            pass
+    """Give the owner write and search permission again under root (after chmod steps), so it can be removed. Top
+    down: each directory is fixed before it is listed, so a directory under one with no read bit (000) is reached."""
+    p = Path(root)
+    try:
+        if p.is_symlink():
+            return
+        p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
+        children = list(p.iterdir()) if p.is_dir() else []
+    except OSError:
+        return
+    for c in children:
+        restore_writable(c)
 
 
 def run_action(st, ctx, srv, proxy):
     """Run a driver action. Returns (problems, restart_env or None)."""
+    bad = driver_step_problems(st)
+    if bad:   # a step that would assert nothing, or a typo: the case file is wrong (a harness error), not the SDK
+        raise CaseError(f"driver step: {bad[0]}")
     a = subst(st, ctx)
     kind = a["driver"]
     if kind == "server_rules":
@@ -887,7 +1015,14 @@ def run_action(st, ctx, srv, proxy):
             return [f"{p}: not JSON ({e})"], None
         out = []
         for k, v in a["match"].items():
-            out += match(v, doc.get(k, _MISSING) if isinstance(doc, dict) else _MISSING, DEFAULT_TOL, f"{p.name}.{k}")
+            if k.startswith("/"):   # an RFC 6901 pointer into the document (for example the value a json_set wrote)
+                try:
+                    got = json_pointer(doc, k)
+                except (KeyError, IndexError, ValueError):
+                    got = _MISSING
+                out += match(v, got, DEFAULT_TOL, f"{p.name}{k}")
+            else:
+                out += match(v, doc.get(k, _MISSING) if isinstance(doc, dict) else _MISSING, DEFAULT_TOL, f"{p.name}.{k}")
         return out, None
     elif kind == "sleep":
         time.sleep(float(a["s"]))
@@ -896,7 +1031,7 @@ def run_action(st, ctx, srv, proxy):
     elif kind == "assert_index":
         return act_assert_index(a), None
     elif kind == "json_set":
-        p = Path(a["path"])
+        p, value = Path(a["path"]), a["value"]   # a missing value is a case-file error (driver_step_problems)
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
@@ -907,9 +1042,9 @@ def run_action(st, ctx, srv, proxy):
                 raise ValueError("json_set cannot replace the whole document")
             node = json_pointer(doc, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
             if isinstance(node, list):
-                node[array_index(parts[-1], len(node))] = a["value"]
+                node[array_index(parts[-1], len(node))] = value
             elif isinstance(node, dict):
-                node[parts[-1]] = a["value"]
+                node[parts[-1]] = value
             else:
                 raise TypeError(type(node).__name__)
         except (KeyError, IndexError, ValueError, TypeError) as e:
@@ -927,7 +1062,14 @@ def act_assert_index(a):
         doc = json.loads(p.read_text(encoding="utf-8"))
     except ValueError as e:
         return [f"{p}: not JSON ({e})"]
-    return [f"{p.name}: {x}" for x in stream_index.compare(doc, stream_index.build(jsonl, a["datestamp"]))][:20]
+    # the .jsonl is the SDK's cache copy: a missing or unreadable one is the SDK's fault (a step failure), not the harness's
+    if not jsonl.is_file():
+        return [f"{jsonl}: missing"]
+    try:
+        ref = stream_index.build(jsonl, a["datestamp"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as e:
+        return [f"{jsonl}: cannot build the reference index from it ({type(e).__name__}: {e})"]
+    return [f"{p.name}: {x}" for x in stream_index.compare(doc, ref)][:20]
 
 
 # --------------------------------------------------------------------------- run one case
@@ -936,12 +1078,15 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     """Run one case. runners: {role: (command, features)}; a case without roles has the one role "main"."""
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
+    if srv.tls_url:   # the https listener (start_tls); a case that names it on a server without one is a case error
+        ctx.update({"server_tls": srv.tls_url, "tls_ca": srv.tls_ca})
     env_extra = isolated_env(tmp)
     srv.set_rules([])
     srv.log.clear()
     srv.errors.clear()
     srv.trip_errors.clear()
     proxy.log.clear()
+    proxy.errors.clear()
     failures = []
     live = {}
     step_timeout = 60.0
@@ -992,8 +1137,10 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 if restart_env is not None:
                     status = live.pop("main").close()
                     if status != 0:
-                        failures.append({"step": i, "driver": "restart_runner",
+                        failures.append({"step": i, "driver": "restart_runner", "runner_fault": True,
                                          "problems": [f"the runner exited with status {status} when it was stopped"]})
+                        if not all_steps:   # a failed step stops the case, as every other one does
+                            break
                     env_extra.update(restart_env)
                     live["main"] = start("main")
                 if problems:
@@ -1025,8 +1172,8 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 last_step |= last
             if (failed and not all_steps) or last_step:
                 break
-    except (TimeoutError, EOFError, RunnerError, OSError) as e:
-        failures.append({**cur, "problems": [f"{type(e).__name__}: {e}"]})
+    except (TimeoutError, EOFError, RunnerError, OSError) as e:   # the runner crashed, hung or broke the protocol
+        failures.append({**cur, "runner_fault": True, "problems": [f"{type(e).__name__}: {e}"]})
     except Exception as e:  # a case-file or driver error: fail this case, flag the run, go on
         stats["harness_errors"] += 1
         failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
@@ -1034,12 +1181,16 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
         for role, r in live.items():
             status = r.close()
             if status != 0 and not failures:  # a runner that fails at shutdown (a close() error) fails the case
-                failures.append({"step": None, **({"as": role} if role != "main" else {}),
+                failures.append({"step": None, "runner_fault": True, **({"as": role} if role != "main" else {}),
                                  "problems": [f"the runner exited with status {status} at the end of the case"]})
         if srv.errors:  # a server rule that could not be applied: the harness is wrong, not the SDK
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "server", "harness_error": True,
                              "problems": [f"harness error: fixture server: {e}" for e in srv.errors[:5]]})
+        if proxy.errors:  # the recording proxy could not relay: a 502 the SDK saw is the harness's fault
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "proxy", "harness_error": True,
+                             "problems": [f"harness error: recording proxy: {e}" for e in proxy.errors[:5]]})
         if srv.trip_errors:  # the tripwire could not accept: "no connection was made" checks would pass vacuously
             stats["harness_errors"] += 1
             failures.append({"step": None, "driver": "tripwire", "harness_error": True,
@@ -1088,7 +1239,7 @@ def expand_cross(cases, hellos):
 # --------------------------------------------------------------------------- self-test of the server
 
 def selftest():
-    srv = FixtureServer().start()
+    srv = FixtureServer().start().start_tls()
     proxy = RecordingProxy().start()
     results = []
 
@@ -1128,6 +1279,12 @@ def selftest():
         check("a .gz file is sent as is", r.getheader("Content-Encoding") is None and body == (FIXTURES / "good" / "OTC_20991231.2.json.gz").read_bytes())
         r, _ = get("/good/OTC_20991230.sha256")
         check("404 for a missing file", r.status == 404)
+        import ssl
+        tls = http.client.HTTPSConnection(srv.host, int(srv.tls_url.rsplit(":", 1)[1]), timeout=10,
+                                          context=ssl.create_default_context(cafile=srv.tls_ca))
+        tls.request("GET", "/good/OTC_latest-f1.json")
+        r = tls.getresponse(); body = r.read(); tls.close()
+        check("https: the same file under the throw-away CA", r.status == 200 and body == fx)
         srv.set_rules([{"match": r"sha256$", "action": "status", "status": 500, "times": 1}])
         r1, _ = get("/good/OTC_20991231.2.sha256")
         r2, _ = get("/good/OTC_20991231.2.sha256")
@@ -1240,7 +1397,8 @@ def main():
         print(f"case files in {cases_dir}: {len(malformed)} malformed case(s) (exit 2)", file=sys.stderr)
         return 2
     try:
-        cases = raw if a.cross else expand(raw)
+        expanded = expand(raw) if not a.cross or a.check_cases else None
+        cases = raw if a.cross else expanded
     except (KeyError, TypeError, AttributeError) as e:
         print(f"case files in {cases_dir}: cannot expand a matrix case: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
@@ -1254,7 +1412,7 @@ def main():
             cases = [c for c in cases if only.search(c["id"])]
     if a.check_cases:
         # non-matrix cases are the same before and after expansion: lint them once
-        problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
+        problems = check_cases(raw) + check_cases([c for c in expanded if "@" in c["id"]])
         try:
             by_op = api_errors(a.api)
         except (OSError, ValueError, KeyError, TypeError) as e:
@@ -1265,16 +1423,17 @@ def main():
             import itertools
             cross_ids = [f"{c['id']}[{'>'.join(p)}]" for c in raw_cross
                          for p in itertools.permutations(CROSS_NAMES, len(c.get("roles") or {}))]
-            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expand(raw)], cross_ids)
+            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expanded], cross_ids)
         n_cross = 0
         if not a.cases:
             problems += check_cases(raw_cross)
             problems += [f"{c['id']}: a cross case needs roles" for c in raw_cross if not c.get("roles")]
             problems += [f"{c['id']}: a case in cases/ must not have roles" for c in raw if c.get("roles")]
+            problems += id_problems(expanded, raw_cross)
             n_cross = len(raw_cross)
         for p in problems:
             print("PROBLEM", p)
-        print(f"case check: {len(raw)} case definitions, {len(expand(raw))} expanded cases, "
+        print(f"case check: {len(raw)} case definitions, {len(expanded)} expanded cases, "
               f"{n_cross} cross-SDK case definitions, {len(problems)} problems")
         return 0 if not problems else 2
     if a.list:
@@ -1284,6 +1443,11 @@ def main():
         return 0
     if not a.runner and not a.cross:
         ap.error("--runner (or --cross, two or more times) is required")
+    # only the default file may be absent (no entries); a path given on the command line must exist (a typo would
+    # silently run with no entries)
+    if not a.no_expected_failures and a.expected_failures != str(EXPECTED_FAILURES) and not Path(a.expected_failures).is_file():
+        print(f"--expected-failures {a.expected_failures}: no such file", file=sys.stderr)
+        return 2
     named = {}
     for spec in (a.cross or []):
         name, sep, command = spec.partition("=")
@@ -1332,6 +1496,13 @@ def main():
     xf_runner = "cross" if a.cross else hello.get("runner")
     srv = FixtureServer().start()
     try:
+        srv.start_tls()
+    except (OSError, subprocess.SubprocessError) as e:   # no openssl: the https cases could not run; a broken harness
+        srv.shutdown()
+        print(f"fixture server: cannot start the https listener (the openssl command makes its certificate): "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+    try:
         proxy = RecordingProxy().start()
     except BaseException:
         srv.shutdown()
@@ -1342,7 +1513,7 @@ def main():
             print(f"runner {n}: {h[2].get('runner')} {h[2].get('version', '')}  features: {sorted(h[1])}  profile: {h[3]}")
     else:
         print(f"runner: {hello.get('runner')} {hello.get('version', '')}  features: {sorted(features)}  profile: {profile}")
-    print(f"fixture server {srv.url}  proxy {proxy.url}")
+    print(f"fixture server {srv.url}  https {srv.tls_url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
     counts = {"PASS": 0, "FAIL": 0, "SKIP": 0, "XFAIL": 0, "XPASS": 0}
@@ -1360,8 +1531,10 @@ def main():
             failures, stderr_tail = run_case(c, runners, srv, proxy, a.keep_tmp, a.all_steps, stats)
             status = "FAIL" if failures else "PASS"
             xf = expected_failure(xf_entries, c["id"], xf_runner)
-            if xf and not any(f.get("harness_error") for f in failures):   # a harness error is never expected
-                status = "XFAIL" if failures else "XPASS"
+            if xf and not failures:
+                status = "XPASS"
+            elif xf and expected_failure_covers(xf, failures):   # not a harness error, a crash, or another step
+                status = "XFAIL"
             counts[status] += 1
             entry = {"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""}
             if xf:

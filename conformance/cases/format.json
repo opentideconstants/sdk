@@ -1045,6 +1045,103 @@
      "count": 1
     }
    ]
+  },
+  {
+   "id": "format/check-for-update-keeps-newer-major-on-error",
+   "title": "the per-major pointer names the loaded release and OTC_latest.json names format 2: check_for_update finds nothing newer and sets newer_format_major to 2; a later check whose OTC_latest.json answers 500 keeps 2, it does not reset it (D10)",
+   "spec": "7.4",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_latest\\.json$",
+       "action": "file",
+       "file": "bad/format-major/OTC_latest.json"
+      }
+     ]
+    },
+    {
+     "op": "check_for_update",
+     "expect": {
+      "release": null
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "newer_format_major",
+     "expect": {
+      "newer_format_major": 2
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_latest\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "check_for_update",
+     "expect": {
+      "release": null
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "match": "^/good/OTC_latest\\.json$",
+     "status": 500,
+     "min": 1
+    },
+    {
+     "op": "newer_format_major",
+     "expect": {
+      "newer_format_major": 2
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
   }
  ]
 }

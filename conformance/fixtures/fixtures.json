@@ -92,6 +92,16 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "a station with aliases in two systems that format 1.0 added (linz, dmi; DR29)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "aliases"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"

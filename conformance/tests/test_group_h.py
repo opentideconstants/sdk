@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -45,8 +47,29 @@ def talk(lang, lines, mode="", timeout=30):
     data = "".join((json.dumps(x) if isinstance(x, dict) else x) + "\n" for x in lines)
     p = subprocess.run(cmd, input=data, capture_output=True, text=True, env=e, timeout=timeout, cwd=str(CONF.parent))
     out = p.stdout.splitlines()
-    hello = json.loads(out[0]) if out else None
+    try:
+        hello = json.loads(out[0]) if out else None
+    except ValueError:
+        raise AssertionError(f"the runner's first line is not JSON: {out[0][:200]!r} (exit {p.returncode}; "
+                             f"stderr {p.stderr[-300:]!r})") from None
     return p.returncode, hello, out[1:], p.stderr
+
+
+def opened(lang, lines, mode="", n=None):
+    """talk(), then check that the runner answered every line and that the first one (an open) succeeded, so a later
+    error reply is about the condition under test, not "no client is open" (R2-154). Returns the parsed replies."""
+    rc, hello, out, err = talk(lang, lines, mode=mode)
+    ctx = (rc, out, err[-500:])
+    assert hello and len(out) == (n or len(lines)), ctx
+    replies = [strict(x) for x in out]
+    assert replies[0]["ok"] is True, ctx
+    return replies
+
+
+def uncaught(reply):
+    """An error reply for a non-SDK failure, and not the one a runner gives when no client is open."""
+    return (reply["ok"] is False and reply["error"]["code"].startswith("uncaught:")
+            and "no client" not in str(reply["error"].get("message")).lower())
 
 
 def strict(line):
@@ -75,10 +98,8 @@ def test_bad_request_line_gets_an_error_reply(lang):
 
 @pytest.mark.parametrize("lang", LANGS)
 def test_infinity_is_an_error_reply(lang):
-    rc, hello, out, err = talk(lang, [OPEN, {"op": "station_count"}, {"op": "station_count"}], mode="inf")
-    assert len(out) == 3, (rc, out, err[-500:])
-    reply = strict(out[1])
-    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    replies = opened(lang, [OPEN, {"op": "station_count"}, {"op": "station_count"}], mode="inf")
+    assert uncaught(replies[1]) and uncaught(replies[2]), replies   # each step is an error reply; the runner goes on
 
 
 @pytest.mark.parametrize("lang", LANGS)
@@ -107,11 +128,9 @@ def test_unencodable_value_is_an_error_reply(lang, mode):
 
 
 def test_ruby_error_encoding_failure_is_an_error_reply():
-    rc, hello, out, err = talk("ruby", [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}, {"op": "loaded_from"}],
-                               mode="error-field-raises")
-    assert len(out) == 3, (rc, out, err[-500:])
-    reply = strict(out[1])
-    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    replies = opened("ruby", [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}, {"op": "loaded_from"}],
+                     mode="error-field-raises")
+    assert uncaught(replies[1]) and replies[2]["ok"] is True, replies
 
 
 # --- an op with no open client is an error reply (no crash, no empty success)
@@ -139,58 +158,87 @@ def _copy_release(tmp_path):
     return tmp_path / f"OTC_{d}.jsonl"
 
 
-@pytest.mark.parametrize("lang", ["c", "c-fetch"])
-def test_c_verify_with_no_file_left_is_not_verified(tmp_path, lang):
-    path = _copy_release(tmp_path)
-    cmd, env = runner_cmd(lang)
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=dict(os.environ, **env))
-    try:
-        p.stdout.readline()
-        p.stdin.write(json.dumps({"op": "open", "args": {"file": str(path), "mode": "stream"}}) + "\n")
-        p.stdin.flush()
-        assert strict(p.stdout.readline())["ok"] is True
-        p.stdin.write(json.dumps({"op": "verify"}) + "\n")
-        p.stdin.flush()
-        assert strict(p.stdout.readline()) == {"ok": True, "result": {"verified": True}}  # the files are there
-        for f in tmp_path.iterdir():
-            f.unlink()
-        p.stdin.write(json.dumps({"op": "verify"}) + "\n")
-        p.stdin.flush()
-        reply = strict(p.stdout.readline())
-    finally:
-        p.stdin.close()
-        p.wait(timeout=10)
-    assert reply.get("ok") is False, reply
-
-
 class CRunner:
-    """A C runner process driven one request at a time."""
+    """A C runner process driven one request at a time. Every read has a deadline (a runner that hangs fails the test,
+    it does not block pytest), and close() kills a runner that does not exit (R2-156)."""
 
-    def __init__(self, lang, env=None):
+    def __init__(self, lang, env=None, timeout=30):
         cmd, e = runner_cmd(lang)
+        self.timeout = timeout
         self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
                                   env=dict(os.environ, **e, **(env or {})), cwd=str(CONF.parent))
-        self.p.stdout.readline()
+        self.lines = queue.Queue()
+        threading.Thread(target=self._pump, daemon=True).start()
+        try:
+            self._read("the hello")
+        except BaseException:
+            self.close()
+            raise
+
+    def _pump(self):
+        for line in self.p.stdout:
+            self.lines.put(line)
+        self.lines.put("")
+
+    def _read(self, what):
+        try:
+            line = self.lines.get(timeout=self.timeout)
+        except queue.Empty:
+            raise AssertionError(f"the runner gave no reply to {what} within {self.timeout} s") from None
+        assert line, f"the runner died on {what}"
+        return line
 
     def __call__(self, op, **args):
         self.p.stdin.write(json.dumps({"op": op, "args": args}) + "\n")
         self.p.stdin.flush()
-        line = self.p.stdout.readline()
-        assert line, f"the runner died on {op} {args}"
-        return strict(line)
+        return strict(self._read(f"{op} {args}"))
 
     def close(self):
-        self.p.stdin.close()
-        return self.p.wait(timeout=10)
+        try:
+            self.p.stdin.close()
+        except OSError:
+            pass
+        try:
+            return self.p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.p.kill()
+            self.p.wait()
+            return None
+
+
+def c_runner_opened(lang, path, env=None, **open_args):
+    """A C runner with the release at path open; the runner is closed if the open fails."""
+    r = CRunner(lang, env)
+    try:
+        opened_ = r("open", file=str(path), **open_args)
+        assert opened_["ok"], opened_
+    except BaseException:
+        r.close()
+        raise
+    return r
+
+
+@pytest.mark.parametrize("lang", ["c", "c-fetch"])
+def test_c_verify_with_no_file_left_is_not_verified(tmp_path, lang):
+    path = _copy_release(tmp_path)
+    r = c_runner_opened(lang, path, mode="stream")
+    try:
+        assert r("verify") == {"ok": True, "result": {"verified": True}}  # the files are there
+        for f in tmp_path.iterdir():
+            f.unlink()
+        reply = r("verify")
+    finally:
+        r.close()
+    assert reply.get("ok") is False, reply
 
 
 @pytest.fixture
 def c_good(tmp_path):
-    path = _copy_release(tmp_path)
-    r = CRunner("c")
-    assert r("open", file=str(path), mode="stream")["ok"]
-    yield r
-    r.close()
+    r = c_runner_opened("c", _copy_release(tmp_path), mode="stream")
+    try:
+        yield r
+    finally:
+        r.close()
 
 
 # --- C110: an explicit limit 0 is not the same as no limit (D36: limit 0 is invalid_argument)
@@ -236,13 +284,10 @@ def test_c_raw_unknown_object_is_a_runner_failure(c_good):
 # --- C runner failures that only a planted fault provokes (OTC_RUNNER_FAULT)
 
 def c_good_with(tmp_path, fault, threads=None):
-    path = _copy_release(tmp_path)
     env = {"OTC_RUNNER_FAULT": fault}
     if threads:
         env["OTC_RUNNER_THREADS"] = str(threads)
-    r = CRunner("c", env)
-    assert r("open", file=str(path), mode="stream")["ok"]
-    return r
+    return c_runner_opened("c", _copy_release(tmp_path), env, mode="stream")
 
 
 def test_c_failed_list_call_is_an_error_not_a_crash(tmp_path):  # C112
@@ -278,7 +323,8 @@ def test_c_null_reply_from_a_thread_is_a_mismatch(tmp_path):  # C68
         reply = r("station_count")
     finally:
         r.close()
-    assert reply["ok"] is False and reply["error"]["code"] in ("uncaught:ThreadMismatch", "uncaught:NoMemory"), reply
+    # only ThreadMismatch: NoMemory is what main prints when a regression returns thread 0's NULL reply (R2-155)
+    assert reply["ok"] is False and reply["error"]["code"] == "uncaught:ThreadMismatch", reply
 
 
 @pytest.fixture
@@ -293,8 +339,12 @@ def c_fetch_on_old_release(tmp_path, srv, fault):
     """A c-fetch runner opened (latest) on 20991231 while the server has 20991231.2."""
     srv.set_rules([{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}])
     r = CRunner("c-fetch", {"OTC_RUNNER_FAULT": fault})
-    opened = r("open", base_url=f"{srv.url}/good/", cache_dir=str(tmp_path / "cache"))
-    assert opened["ok"] and opened["result"]["datestamp"] == "20991231", opened
+    try:
+        got = r("open", base_url=f"{srv.url}/good/", cache_dir=str(tmp_path / "cache"))
+        assert got["ok"] and got["result"]["datestamp"] == "20991231", got
+    except BaseException:
+        r.close()
+        raise
     srv.set_rules([])
     return r
 
@@ -343,14 +393,12 @@ def test_driver_fails_a_case_whose_runner_exits_non_zero(tmp_path):
 @pytest.mark.parametrize("field,op", [("recommendedSet", "station"), ("timezone", "station"), ("isCurrent", "station"),
                                       ("previous_release", "station_validation")])
 def test_node_missing_field_is_an_error(field, op):
-    rc, hello, out, err = talk("node", [OPEN, {"op": op, "args": {"station_id": "OTC-T-0001"}}], mode=f"station-without-{field}")
-    reply = strict(out[1])
-    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    replies = opened("node", [OPEN, {"op": op, "args": {"station_id": "OTC-T-0001"}}], mode=f"station-without-{field}")
+    assert uncaught(replies[1]), replies
 
 
 def test_node_full_station_encodes():
-    rc, hello, out, err = talk("node", [OPEN, {"op": "station", "args": {"station_id": "OTC-T-0001"}}], mode="station-without-nothing")
-    reply = strict(out[1])
+    reply = opened("node", [OPEN, {"op": "station", "args": {"station_id": "OTC-T-0001"}}], mode="station-without-nothing")[1]
     assert reply["ok"] is True and reply["result"]["station"]["recommended_set_id"] is None, reply
 
 
@@ -396,17 +444,29 @@ def test_missing_parent_gives_null_not_empty_list(tmp_path, lang):
 
 @pytest.mark.parametrize("lang", LANGS)
 def test_unencodable_tombstone_changes_the_code(lang):
-    rc, hello, out, err = talk(lang, [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}])
-    reply = strict(out[1])
-    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    replies = opened(lang, [OPEN, {"op": "require_station", "args": {"station_id": "OTC-T-0005"}}])
+    assert uncaught(replies[1]), replies
+
+
+# --- R2-160: a non-SDK exception that the SDK raises during a query is an uncaught: reply naming it; the runner goes on
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_non_sdk_exception_from_the_sdk_is_an_uncaught_reply(lang):
+    replies = opened(lang, [OPEN, {"op": "tombstone_count"}, {"op": "loaded_from"}], mode="raise")
+    assert uncaught(replies[1]) and "not an SDK error" in replies[1]["error"]["message"], replies
+    assert replies[2] == {"ok": True, "result": {"loaded_from": "file"}}, replies
+
+
+def test_tombstone_count_without_the_raise_mode_is_a_value():
+    for lang in LANGS:
+        assert opened(lang, [OPEN, {"op": "tombstone_count"}])[1] == {"ok": True, "result": {"tombstone_count": 1}}, lang
 
 
 # --- R57: a stats field the SDK returns as nil is a failure, not {}
 
 def test_ruby_nil_stats_field_is_an_error():
-    rc, hello, out, err = talk("ruby", [OPEN, {"op": "stats"}], mode="stats-nil")
-    reply = strict(out[1])
-    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+    replies = opened("ruby", [OPEN, {"op": "stats"}], mode="stats-nil")
+    assert uncaught(replies[1]), replies
 
 
 # --- R88 (and P61): a runner whose SDK has no error base class or no version fails the handshake

@@ -82,7 +82,7 @@ NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
-GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "nogz",
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "aliases", "nogz",
              "bad", "fixtures.json"]
 
 BASE = "20991231"
@@ -961,6 +961,20 @@ def fold_doc():
     return doc
 
 
+ALIASES_D = "20991231.2"
+# a station with aliases in two of the systems that format 1.0 added (DR29: 16 systems): linz and dmi
+ALIAS_STATION = ("OTC-T-0171", "Nelson", {"linz": "077NELSON", "dmi": "30017"})
+
+
+def aliases_doc():
+    """A station with a linz and a dmi alias (PK-R2-18, DR29): station_by_alias must find it in both systems."""
+    doc = small_doc(ALIASES_D)
+    sid, name, aliases = ALIAS_STATION
+    doc["stations"].append(gauge_station(sid, name, "NZL", -41.26, 173.28, "Pacific/Auckland", 0.4, aliases=dict(aliases)))
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
 def no_gz(files, sums, entry, reuse):
     """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
     files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
@@ -994,6 +1008,9 @@ ROOTS = [
      {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a source_name of 31 characters, 62 bytes"}),
     ("fold", lambda: [fold_doc()], {}, (),
      {"releases": [FOLD_D], "latest": FOLD_D, "expect": "load", "defect": None, "note": "station names for the D12 fold rules"}),
+    ("aliases", lambda: [aliases_doc()], {}, (),
+     {"releases": [ALIASES_D], "latest": ALIASES_D, "expect": "load", "defect": None,
+      "note": "a station with aliases in two systems that format 1.0 added (linz, dmi; DR29)"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,

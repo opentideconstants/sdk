@@ -200,6 +200,55 @@
    ]
   },
   {
+   "id": "rules/pk01/pointer-bad-datestamp-counter10",
+   "title": "the pointer's datestamp is '20991231.1234567890': invalid_release, and nothing is written outside the cache's v1 directory",
+   "spec": "4.2, 5.4",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/datestamp": "20991231.1234567890"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "invalid_release"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_tree",
+     "dir": "${cache}",
+     "allow": [
+      "v1",
+      "v1/**"
+     ],
+     "may_be_missing": true
+    }
+   ]
+  },
+  {
    "id": "rules/pk01/index-bad-datestamp",
    "title": "an OTC_index.json entry with the datestamp ../../x: releases() is invalid_release, and nothing is written outside v1",
    "spec": "4.2, 4.3, 5.4",
@@ -2445,6 +2494,32 @@
    ]
   },
   {
+   "id": "rules/pk07/timeout-negative",
+   "title": "a negative timeout (-5; -1 is the C default sentinel): invalid_argument (R2-152)",
+   "spec": "4.2, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "timeout": -5
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "rules/pk07/file-offline",
    "title": "file with offline true: invalid_argument (D31)",
    "spec": "4.2",
@@ -3979,6 +4054,140 @@
        "error": "not_built"
       }
      }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk12/redirect-to-ftp",
+   "title": "OTC_{D}.sha256 redirects to an ftp:// URL: network error (D1: http and https only)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 302,
+       "headers": {
+        "Location": "ftp://127.0.0.1:1/good/OTC_20991231.2.sha256"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "match": "^/good/OTC_20991231\\.2\\.sha256$",
+     "status": 302,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "rules/pk12/https-pinned-loads",
+   "title": "a pinned release over https, with ca_file the conformance CA: it loads (the control case of the https cases)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server_tls}/good/",
+      "cache_dir": "${cache}",
+      "ca_file": "${tls_ca}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "datestamp": "20991231.2",
+      "loaded_from": "download"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk12/redirect-https-to-http-refused",
+   "title": "over https, OTC_{D}.sha256 redirects to the same file over http: network error, and the http URL is never requested (D1)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 302,
+       "times": 1,
+       "headers": {
+        "Location": "${server}/good/OTC_20991231.2.sha256"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server_tls}/good/",
+      "cache_dir": "${cache}",
+      "ca_file": "${tls_ca}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "match": "^/good/OTC_20991231\\.2\\.sha256$",
+     "status": 302,
+     "count": 1
+    },
+    {
+     "driver": "assert_requests",
+     "source": "server",
+     "match": "^/good/OTC_20991231\\.2\\.sha256$",
+     "status": 200,
+     "count": 0
     }
    ]
   },

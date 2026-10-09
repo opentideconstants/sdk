@@ -78,10 +78,15 @@ SCHEMA_DIR = os.environ.get("OTC_SCHEMA_DIR") or str(CONF / "schemas")   # the v
 
 @pytest.fixture(scope="module")
 def schemas():
+    """The pinned schemas, from the vendored copy (or OTC_SCHEMA_DIR). Every failure fails the tests that need them:
+    a schema whose SHA-256 is not the pin, a format checker without rfc3339-validator and rfc3986-validator, or a
+    directory that is not there. Never a skip, and never a fall back to a download (R2-153)."""
+    if not os.path.isdir(SCHEMA_DIR):
+        pytest.fail(f"the schema directory {SCHEMA_DIR} (OTC_SCHEMA_DIR or conformance/schemas) is not a directory")
     try:
-        return bf.load_schemas(SCHEMA_DIR if os.path.isdir(SCHEMA_DIR) else None)
-    except (OSError, SystemExit) as e:
-        pytest.skip(f"no pinned schemas: {e}")
+        return bf.load_schemas(SCHEMA_DIR)
+    except (OSError, SystemExit, ValueError) as e:
+        pytest.fail(f"cannot load the pinned schemas from {SCHEMA_DIR}: {e}")
 
 
 # --- K46: a set with no provenance at all is invalid_release; the missing-build repair does not crash on it
@@ -193,7 +198,7 @@ def test_fixture_write_is_all_or_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(_shutil, "copytree", failing(real_copytree))
     monkeypatch.setattr(_os, "replace", failing(real_replace))
     monkeypatch.setattr(sys, "argv", ["build_fixtures.py"])
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match=r"No space left on device \(test\)"):   # the planted failure, not another one
         bf.main()
     after = {p.relative_to(fx).as_posix(): p.read_bytes() for p in fx.rglob("*") if p.is_file()}
     assert after == before, sorted(set(before) ^ set(after))[:10]
@@ -214,7 +219,7 @@ def test_duplicate_cross_case_id_stops_the_build(tmp_path, monkeypatch):
     import build_cases as bc
     real = bc.group_cross
     monkeypatch.setattr(bc, "group_cross", lambda r2: real(r2) + real(r2)[:1])
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit, match="duplicate case id "):
         bc.build(tmp_path / "cases", tmp_path / "cross")
 
 

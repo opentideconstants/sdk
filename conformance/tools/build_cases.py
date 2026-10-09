@@ -549,6 +549,14 @@ def group_stations(R2, R1):
                     step("station_by_alias", {"station_id": None}, system="no-such-system", alias_id="9900001"),
                     step("station_by_alias", {"station_id": None}, system="ticon", alias_id="9900001")]
     out.append(mcase("stations/aliases", "station_by_alias in every system, each id of a list alias, and misses", "4.4", alias_steps))
+    A = Rel("aliases", "20991231.2")
+    sa = A.by_id["OTC-T-0171"]
+    out.append(mcase("stations/alias-linz", "station_by_alias in two systems that format 1.0 added: linz and dmi (DR29: 16 alias systems)", "4.4",
+                     [step("station_by_alias", {"station_id": "OTC-T-0171"}, system="linz", alias_id=sa["aliases"]["linz"]),
+                      step("station_by_alias", {"station_id": "OTC-T-0171"}, system="dmi", alias_id=sa["aliases"]["dmi"]),
+                      step("station_by_alias", {"station_id": None}, system="linz", alias_id="999NOWHERE"),
+                      step("station", {"station": enc_station(A, sa)}, station_id="OTC-T-0171")],
+                     root="aliases", release="20991231.2"))
     # listing and filters
     filter_sets = [{}, {"country": "GBR"}, {"country": "NOR"}, {"type": "subordinate"}, {"type": "reference", "country": "USA"},
                    {"kind": "current"}, {"kind": "tide", "country": "USA"}, {"source": "gesla-fit"}, {"source": "noaa"},
@@ -871,6 +879,19 @@ def group_format():
                      drv("assert_files", dir=B, exactly=names), no_new,
                      index_once],
                     requires=[]))
+    d2 = "20991231.2"
+    out.append(case("format/check-for-update-keeps-newer-major-on-error", "the per-major pointer names the loaded release and OTC_latest.json names format 2: check_for_update finds nothing newer and sets newer_format_major to 2; a later check whose OTC_latest.json answers 500 keeps 2, it does not reset it (D10)", "7.4",
+                    [step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{FIX}/good/OTC_{d2}.jsonl",
+                          base_url=f"{SRV}/good/", cache_dir="${cache}"),
+                     drv("server_rules", rules=[{"match": r"^/good/OTC_latest\.json$", "action": "file", "file": "bad/format-major/OTC_latest.json"}]),
+                     net(step("check_for_update", {"release": None})),
+                     net(step("newer_format_major", {"newer_format_major": 2})),
+                     drv("server_rules", rules=[{"match": r"^/good/OTC_latest\.json$", "action": "status", "status": 500}]),
+                     drv("clear_log"),
+                     net(step("check_for_update", {"release": None})),
+                     drv("assert_requests", source="server", match=r"^/good/OTC_latest\.json$", status=500, min=1),
+                     net(step("newer_format_major", {"newer_format_major": 2}))],
+                    requires=["fs"], timeout_s=90))
     return out
 
 
@@ -1111,6 +1132,10 @@ def group_network():
                     [drv("server_rules", rules=[{"match": r"/good/OTC_20991231\.2\.(json\.gz|jsonl|json)$", "action": "truncate", "bytes": 1000}]),
                      net(step("open", err("checksum_mismatch"), release=d2, base_url=G, cache_dir="${cache}", on_network_error="raise"))],
                     requires=["fs"]))
+    out.append(case("net/listed-file-404", "a data file that OTC_{D}.sha256 lists answers 404: network error with status 404, not release_not_found (D32)", "4.8, 5.2",
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_20991231\.2\.(json\.gz|jsonl|json)$", "action": "status", "status": 404}]),
+                     net(step("open", err("network", status=404), release=d2, base_url=G, cache_dir="${cache}", on_network_error="raise"))],
+                    requires=["fs"]))
     out.append(case("net/slow-timeout", "a body slower than the timeout: network error", "5.7",
                     [drv("server_rules", rules=[{"match": r"/good/OTC_20991231\.2\.(json\.gz|jsonl|json)$", "action": "slow", "delay_s": 4}]),
                      net(step("open", err("network"), release=d2, base_url=G, cache_dir="${cache}", on_network_error="raise", timeout=1))],
@@ -1304,6 +1329,17 @@ def group_download():
                     [open_latest_no_cache(G), dl(err("release_not_found"), release="20991230", to=B)], requires=[]))
     # offline through the environment: offline=True together with file is invalid_argument (CR D31), and the
     # variable is not an option, so it does not conflict (spec 4.2)
+    ptr_fail = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 503}])
+    out.append(case("download/latest-network-error-use-cache", "download with no release when the pointer answers 503, with the release cached and on_network_error use_cache (the default): the newest cached readable release is written (D22)", "4.3.2",
+                    [open_latest_step(G, mode="stream"), ptr_fail,
+                     dl({"paths": default_files}, to=B),
+                     drv("assert_files", dir=B, exactly=default_files)] + same(default_files),
+                    requires=["fs", "stream"], timeout_s=90))
+    out.append(case("download/latest-network-error-raise", "the same with on_network_error raise: network error, and nothing is written (D22)", "4.3.2",
+                    [open_latest_step(G, mode="stream", on_network_error="raise"), ptr_fail,
+                     dl(err("network"), to=B),
+                     drv("assert_files", dir=B, exactly=[], may_be_missing=True)],
+                    requires=["fs", "stream"], timeout_s=90))
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}"),
                      dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"], env={"OPENTIDECONSTANTS_OFFLINE": "1"}))
@@ -1363,6 +1399,7 @@ def group_cross(R2):
     country = R2.by_id["OTC-T-0011"]["country"]
     out.append(case("cross/index-shared", "the reader uses the stream index the writer built (a fresh index is read, not rebuilt)", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ"}),
                             drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
@@ -1372,7 +1409,8 @@ def group_cross(R2):
                     roles=roles))
     out.append(case("cross/index-stale", "a stale stream index (its jsonl_sha256 does not match) is ignored, rebuilt and rewritten", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/jsonl_sha256", value="0" * 64)] + offline + [
+                            drv("json_set", path=idx, pointer="/jsonl_sha256", value="0" * 64),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/jsonl_sha256": "0" * 64})] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("stations", {"station_ids": [x["station_id"] for x in apply_filters(R2, R2.active, {"country": country})]}, country=country)),
@@ -1382,7 +1420,8 @@ def group_cross(R2):
                     roles=roles))
     out.append(case("cross/index-other-version", "an index with another index_version is stale: rebuilt and rewritten", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/index_version", value=2)] + offline + [
+                            drv("json_set", path=idx, pointer="/index_version", value=2),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/index_version": 2})] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("close")),
@@ -1415,7 +1454,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     ids = [s["station_id"] for s in R2.doc["stations"]]
     out.append(case("cross/index-station-id-swapped", "two index entries trade station ids (the index is still fresh and in bounds): a query for one reads the other's line, which must be invalid_release, never the wrong station (D4)", "6.2",
                     fill + [drv("json_set", path=idx, pointer="/stations/0/station_id", value=ids[1]),
-                            drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0])] + offline + [
+                            drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0]),
+                            drv("assert_json", path=idx, match={"/stations/0/station_id": ids[1], "/stations/1/station_id": ids[0]})] + offline + [
                         reader_open,
                         as_("reader", step("station", err("invalid_release"), station_id=ids[0])),
                         no_requests],
@@ -1423,7 +1463,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
     last = ids[-1]
     out.append(case("cross/index-offset-past-eof", "an index entry whose offset is past the end of the .jsonl: the index is stale, so it is rebuilt, and the query is right (D4)", "6.2",
-                    fill + [drv("json_set", path=idx, pointer=f"/stations/{len(ids) - 1}/offset", value=jsize + 10)] + offline + [
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{len(ids) - 1}/offset", value=jsize + 10),
+                            drv("assert_json", path=idx, match={f"/stations/{len(ids) - 1}/offset": jsize + 10})] + offline + [
                         reader_open,
                         as_("reader", step("tombstone" if last not in R2.by_id else "station",
                                            {"tombstone": enc_tombstone(R2.tomb_by_id[last])} if last not in R2.by_id else {"station": enc_station(R2, R2.by_id[last])},
@@ -1434,7 +1475,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     pos = ids.index("OTC-T-0011")
     out.append(case("cross/index-datestamp-mismatch", "an index whose datestamp is not the release's is stale: it is ignored and rebuilt", "6.2",
                     fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("json_set", path=idx, pointer="/datestamp", value="20991230")] + offline + [
+                            drv("json_set", path=idx, pointer="/datestamp", value="20991230"),
+                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ", "/datestamp": "20991230"})] + offline + [
                         reader_open,
                         as_("reader", step("stations", {"station_ids": []}, country="ZZ")),
                         as_("reader", step("close")),
@@ -1449,7 +1491,9 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                      as_("writer", step("close")),
                      drv("assert_index", path=f"{vdir}/index-v1.json", jsonl=f"{vdir}/OTC_{vd}.jsonl", datestamp=vd)] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": vd}, release=vd, cache_dir="${cache}", offline=True, mode="stream")),
-                        as_("reader", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")), no_requests],
+                        as_("reader", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")),
+                        # past the NUL: a reader that cuts the name at the NUL ("Me") finds nothing (R2-149)
+                        as_("reader", step("search", {"station_ids": search(Rel("values", vd), "da")}, name="da")), no_requests],
                     roles=roles))
     latest_writer = [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
@@ -1467,17 +1511,48 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi}))],
                     roles={"writer": ["fs", "fetch", "stream"], "reader": ["fs", "fetch", "eager"]}))
+    citation_v = citation(R2, vdoi)
+    out.append(case("cross/verified-doi-pinned-writer", "the writer caches a pinned release (no pointer, so no version DOI); the reader opens latest online, gets the cached release (a 304 path or a pointer for the same datestamp) and records the pointer's version DOI in .verified; the writer then has it offline (B1-5, D26, R2-151)", "4.3, 5.4",
+                    [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode="stream")),
+                     as_("writer", step("close")),
+                     as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                     as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                     as_("reader", step("close")),
+                     drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi, "files": {"$len_min": 4}})] + offline + [
+                        as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("writer", step("verify", {"verified": True})),
+                        as_("writer", step("citation", {"citation": citation_v})), no_requests],
+                    roles=roles))
+    rows = sha256_rows("good", d)
+    files_only = {"files": {n: {"sha256": h, "size": (FIXTURES / "good" / n).stat().st_size} for n, h in sorted(rows.items())}}
+    out.append(case("cross/verified-keys", "the writer's .verified has the seven keys of D26 (files, verified_at, by, datestamp, format_version, min_reader_version, zenodo_version_doi); a reader opens offline a release whose .verified holds only files (D26, G13)", "5.4",
+                    latest_writer + [
+                        drv("assert_json", path=f"{rdir}/.verified", match={
+                            "files": {"$len_min": len(rows)}, "verified_at": {"$regex": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"},
+                            "by": {"$regex": r"^opentideconstants-[a-z]+/\S+$"}, "datestamp": d, "format_version": R2.doc["format_version"],
+                            "min_reader_version": R2.doc["release"]["min_reader_version"], "zenodo_version_doi": vdoi}),
+                        drv("write", path=f"{rdir}/.verified", text=json.dumps(files_only, indent=1, sort_keys=True) + "\n")] + offline + [
+                        reader_open,
+                        as_("reader", step("verify", {"verified": True})),
+                        as_("reader", step("station_count", {"station_count": len(R2.active)})), no_requests],
+                    roles=roles))
     return out
 
 
 # --------------------------------------------------------------------------- review round 1: cross-SDK rules
 
-def fold_d12(name):
-    """The fold of spec 4.4.1 with the D12 changes (final sigma, h/t/n/k with stroke or eng or kra, the middle dot,
-    NBSP as a space). The fold table does not have them yet, so these cases are written out by this rule."""
-    extra = {"ς": "σ", "ħ": "h", "Ħ": "h", "ŧ": "t", "Ŧ": "t", "ŋ": "n", "Ŋ": "n",
-             "ĸ": "k", "·": "", " ": " "}
-    return fold("".join(extra.get(ch, ch) for ch in name))
+# D12 (spec 4.4.1), written out by hand from the rule and not from name_fold.json: each query of the fold root and
+# the stations it must find, in rank order. The build checks the table-driven oracle (search) against it, so a fold
+# table without a D12 row stops the build instead of being checked against itself (R2-163).
+FOLD_D12 = [
+    ("hamrun", {}, ["OTC-T-0161"]),                      # Ħamrun: H with stroke -> h
+    ("torvik", {}, ["OTC-T-0162"]),                      # Ŧorvik: T with stroke -> t
+    ("naliq", {}, ["OTC-T-0163"]),                       # Ŋaliq: eng -> n
+    ("kimmik", {}, ["OTC-T-0164"]),                      # ĸimmik: kra -> k
+    ("ΠΟΡΟΣ", {"match": "exact"}, ["OTC-T-0165"]),       # Πόρος: final sigma = sigma, accent removed
+    ("parallel", {}, ["OTC-T-0166"]),                    # Paral·lel: the middle dot is removed
+    ("saint malo", {"match": "exact"}, ["OTC-T-0167"]),  # Saint<NBSP>Malo: NBSP is a space
+]
 
 
 def group_rules():
@@ -1501,7 +1576,8 @@ def group_rules():
 
     # PK01: a datestamp from the server or from the user must match the datestamp pattern; nothing is written
     # outside <cache>/v1 (spec 4.2, 5.4; D18)
-    for label, bad in [("dotdot", "../../x"), ("dashed", "2026-10-08"), ("counter01", "20261008.01"), ("newline", "20261008\n")]:
+    for label, bad in [("dotdot", "../../x"), ("dashed", "2026-10-08"), ("counter01", "20261008.01"), ("newline", "20261008\n"),
+                       ("counter10", "20991231.1234567890")]:   # D18: a counter longer than 9 digits from the server (G10)
         out.append(case(f"rules/pk01/pointer-bad-datestamp-{label}", f"the pointer's datestamp is {bad!r}: invalid_release, and nothing is written outside the cache's v1 directory", "4.2, 5.4",
                         [drv("server_rules", rules=[{"match": pointer_rule, "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "", "set": {"/datestamp": bad}}]),
                          latest(err("invalid_release"), on_network_error="raise"), only_v1],
@@ -1568,6 +1644,8 @@ def group_rules():
     # PK07: arguments
     out.append(case("rules/pk07/timeout-zero", "timeout 0: invalid_argument", "4.2, 4.8",
                     [latest(err("invalid_argument"), timeout=0)], requires=["fs"]))
+    out.append(case("rules/pk07/timeout-negative", "a negative timeout (-5; -1 is the C default sentinel): invalid_argument (R2-152)", "4.2, 4.8",
+                    [latest(err("invalid_argument"), timeout=-5)], requires=["fs"]))
     # CR D31 (spec 4.2): a file client reads no pointer and opens no socket, so these options would be ignored
     for cid, title, extra in (("file-offline", "file with offline true", {"offline": True}),
                               ("file-release", "file with a pinned release", {"release": d2}),
@@ -1612,10 +1690,11 @@ def group_rules():
                          root=root, release="20991231.2"))
     F = Rel("fold", "20991231.2")
     fold_steps = []
-    for q, kw in [("hamrun", {}), ("torvik", {}), ("naliq", {}), ("kimmik", {}), ("ΠΟΡΟΣ", {"match": "exact"}),
-                  ("parallel", {}), ("saint malo", {"match": "exact"})]:
-        want = sorted(s["station_id"] for s in F.active if (fold_d12(s["name"]) == fold_d12(q) if kw else fold_d12(q) in fold_d12(s["name"])))
-        assert want, q
+    for q, kw, want in FOLD_D12:
+        got = search(F, q, **kw)
+        if got != want:
+            raise SystemExit(f"rules/pk08/fold-d12: search {q!r} with the fold table gives {got}, D12 needs {want} "
+                             f"(conformance/name_fold.json lacks a D12 row?)")
         fold_steps.append(step("search", {"station_ids": want}, name=q, **kw))
     out.append(mcase("rules/pk08/fold-d12", "the fold rules of D12: final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP", "4.4.1",
                      fold_steps, root="fold", release="20991231.2"))
@@ -1708,6 +1787,24 @@ def group_rules():
                     requires=["fs"]))
     out.append(case("rules/pk12/redirect-six-hops", "6 redirects in a row: network error (D1: at most 5)", "5.7",
                     [drv("server_rules", rules=hops(6)), pinned(d2, err("network"), on_network_error="raise")],
+                    requires=["fs"], timeout_s=90))
+    sha_rx = rf"^/good/OTC_{re.escape(d2)}\.sha256$"
+    out.append(case("rules/pk12/redirect-to-ftp", "OTC_{D}.sha256 redirects to an ftp:// URL: network error (D1: http and https only)", "5.7",
+                    [drv("server_rules", rules=[{"match": sha_rx, "action": "status", "status": 302,
+                                                 "headers": {"Location": f"ftp://127.0.0.1:1/good/OTC_{d2}.sha256"}}]),
+                     pinned(d2, err("network"), on_network_error="raise"),
+                     drv("assert_requests", source="server", match=sha_rx, status=302, count=1)],
+                    requires=["fs"], timeout_s=90))
+    TLS = "${server_tls}/good/"
+    out.append(case("rules/pk12/https-pinned-loads", "a pinned release over https, with ca_file the conformance CA: it loads (the control case of the https cases)", "5.7",
+                    [pinned(d2, {"datestamp": d2, "loaded_from": "download"}, base=TLS, ca_file="${tls_ca}", on_network_error="raise")],
+                    requires=["fs"]))
+    out.append(case("rules/pk12/redirect-https-to-http-refused", "over https, OTC_{D}.sha256 redirects to the same file over http: network error, and the http URL is never requested (D1)", "5.7",
+                    [drv("server_rules", rules=[{"match": sha_rx, "action": "status", "status": 302, "times": 1,
+                                                 "headers": {"Location": f"${{server}}/good/OTC_{d2}.sha256"}}]),
+                     pinned(d2, err("network"), base=TLS, ca_file="${tls_ca}", on_network_error="raise"),
+                     drv("assert_requests", source="server", match=sha_rx, status=302, count=1),   # the https request got the redirect
+                     drv("assert_requests", source="server", match=sha_rx, status=200, count=0)],  # and http was not used
                     requires=["fs"], timeout_s=90))
     out.append(case("rules/pk12/http-proxy-uppercase-cgi", "with REQUEST_METHOD set (a CGI request), upper-case HTTP_PROXY is not used (httpoxy, D7)", "5.7",
                     [drv("restart_runner", env={"REQUEST_METHOD": "GET", "HTTP_PROXY": "${proxy}"}),

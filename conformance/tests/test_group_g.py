@@ -173,15 +173,18 @@ def test_running_is_set_before_the_thread_starts(monkeypatch):
 
     class Probe(real):
         def start(self):
-            seen.append(srv.running)
+            seen.append((getattr(self, "_target", None), srv.running))
             super().start()
 
-    monkeypatch.setattr(server.threading, "Thread", Probe)
-    srv.start()
+    monkeypatch.setattr(server.threading, "Thread", Probe)   # server.threading is the module; undone at once below
     try:
-        assert seen and seen[0] is True, seen
+        srv.start()
     finally:
         monkeypatch.undo()
+    try:
+        serving = [running for target, running in seen if target == srv._httpd.serve_forever]
+        assert len(serving) == 1 and all(running for _, running in seen), seen   # every thread start, not only the first
+    finally:
         srv.shutdown()
 
 
@@ -193,7 +196,7 @@ def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
 
     def boom(_):
         raise RuntimeError("broken after the headers")
-    monkeypatch.setattr(server.time, "sleep", boom)
+    monkeypatch.setattr(server, "_slow_sleep", boom)   # the slow rule's own hook, not the process-wide time.sleep
     conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
     conn.request("GET", JSONL)
     r = conn.getresponse()
@@ -204,7 +207,8 @@ def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
     monkeypatch.undo()
     statuses = [e["status"] for e in srv.log.entries()]
     assert statuses == [200], statuses
-    assert srv.errors, "the error after the headers was not reported to the driver"
+    assert len(srv.errors) == 1 and srv.errors[0].startswith(f"error while sending {JSONL} ") \
+        and "broken after the headers" in srv.errors[0], srv.errors
 
 
 # --- harness support for the review round 1 cases
@@ -230,3 +234,64 @@ def test_file_rule_headers(pair):
     r = conn.getresponse()
     body = r.read()
     assert r.getheader("Content-Encoding") == "gzip" and body == (CONF / "fixtures" / "good" / "OTC_20991231.2.json.gz").read_bytes()
+
+
+# --- R2-142: a file or json rule whose fixture is missing (or outside fixtures/) is a harness error, never a plain 404
+
+BAD_FILES = ["good/no-such-file.json", "../driver.py", "/etc/hosts", "good"]
+
+
+@pytest.mark.parametrize("action", ["file", "json"])
+@pytest.mark.parametrize("name", BAD_FILES)
+def test_rule_with_a_missing_fixture_is_rejected(action, name):
+    with pytest.raises(ValueError, match="fixture"):
+        server.validate_rule(0, {"match": "x", "action": action, "file": name})
+
+
+@pytest.mark.parametrize("action", ["file", "json"])
+def test_rule_whose_fixture_goes_missing_is_a_500_and_an_error(pair, monkeypatch, action):
+    srv, _ = pair
+    monkeypatch.setattr(server, "validate_rule", lambda i, r: None)   # the rule got past the check (the file went away)
+    srv.set_rules([{"match": "OTC_latest", "action": action, "file": "good/no-such-file.json"}])
+    r, _ = _get(srv, "/good/OTC_latest.json")
+    assert r.status == 500, r.status
+    assert len(srv.errors) == 1 and "no-such-file.json" in srv.errors[0], srv.errors
+    assert [e["status"] for e in srv.log.entries()] == [500] and srv.log.entries()[0]["error"], srv.log.entries()
+
+
+def test_plain_missing_file_is_still_a_404(pair):
+    srv, _ = pair
+    r, _ = _get(srv, "/good/no-such-file.json")
+    assert r.status == 404 and srv.errors == [], (r.status, srv.errors)
+
+
+# --- R2-144: the proxy records its own relay failures in errors (the driver fails the case with a harness error)
+
+def test_proxy_upstream_failure_goes_to_errors():
+    proxy = RecordingProxy().start()
+    try:
+        conn = http.client.HTTPConnection(proxy.host, proxy.port, timeout=10)
+        conn.request("GET", "http://127.0.0.1:1/x")
+        r = conn.getresponse()
+        r.read()
+        assert r.status == 502 and len(proxy.errors) == 1 and "127.0.0.1:1" in proxy.errors[0], (r.status, proxy.errors)
+        conn = http.client.HTTPConnection(proxy.host, proxy.port, timeout=10)
+        conn.request("CONNECT", "127.0.0.1:1")
+        r = conn.getresponse()
+        assert r.status == 502 and len(proxy.errors) == 2, (r.status, proxy.errors)
+    finally:
+        proxy.shutdown()
+
+
+def test_proxy_upstream_read_failure_goes_to_errors(pair, monkeypatch):
+    srv, proxy = pair
+
+    def boom(self, *a):
+        raise ConnectionResetError(54, "reset by the upstream (test)")
+    monkeypatch.setattr(http.client.HTTPResponse, "read1", boom)
+    conn, r = via_proxy(srv, proxy, "GET", "/good/OTC_latest.json")
+    with pytest.raises((http.client.IncompleteRead, OSError)):
+        r.read()
+    conn.close()
+    monkeypatch.undo()
+    assert len(proxy.errors) == 1 and "reset by the upstream" in proxy.errors[0], proxy.errors

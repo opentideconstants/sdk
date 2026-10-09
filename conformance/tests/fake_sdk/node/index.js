@@ -8,6 +8,7 @@ class Tomb { constructor() { this.station_id = "OTC-T-0005"; this.name = "Old Pi
 class Release {
     get datestamp() { return "20991231.2"; }
     get format_version() { return "1.0"; }
+    get tombstoneCount() { if (MODE === "raise") throw new TypeError("not an SDK error"); return 1; }
     get stationCount() { return { inf: Infinity, nan: NaN, bigint: 10n }[MODE] ?? 20; }
     station(id) {
         if (MODE === "station-no-fields") return { station_id: id };
