@@ -296,7 +296,6 @@
   {
    "case": "rules/pk02/releases-use-cache",
    "runners": [
-    "c-fetch",
     "python",
     "typescript"
    ],

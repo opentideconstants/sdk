@@ -1989,6 +1989,29 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     return st;
 }
 
+/* The cached OTC_index.json -> ReleaseInfo list; missing_st / missing_msg when it is not cached. */
+static otc_status cached_index(fctx *c, otc_status missing_st, const char *missing_msg, otc_release_info ***v,
+                               size_t *n)
+{
+    char *dir = pointer_dir(c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = p ? slurp(p) : NULL;
+    char *url = url_resolve(c->base_url, "OTC_index.json");
+    cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+    otc_status st;
+    if (!dir || !p || !url) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    else if (!t) st = fail(c, missing_st, NULL, "%s", missing_msg);
+    else if (!doc) st = fail(c, OTC_E_INVALID_RELEASE, p, "cached OTC_index.json: not JSON");
+    else {
+        otc_error_init(c->err);
+        st = index_infos(c, doc, url, v, n);
+    }
+    cJSON_Delete(doc);
+    free(url);
+    free(dir);
+    free(p);
+    free(t);
+    return st;
+}
+
 otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap, size_t *count)
 {
     fctx c;
@@ -1999,20 +2022,16 @@ otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **
     if (st == OTC_OK && (!count || (cap && !out))) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "count is NULL");
     if (st == OTC_OK) {
         if (c.offline) {
-            char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_index.json") : NULL, *t = p ? slurp(p) : NULL;
-            char *url = url_resolve(c.base_url, "OTC_index.json");
-            cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
-            if (!t) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and the release index is not in the cache");
-            else if (!doc) st = fail(&c, OTC_E_INVALID_RELEASE, p, "cached OTC_index.json: not JSON");
-            else if (!url) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-            else st = index_infos(&c, doc, url, &v, &n);
-            cJSON_Delete(doc);
-            free(url);
-            free(dir);
-            free(p);
-            free(t);
+            st = cached_index(&c, OTC_E_OFFLINE_UNAVAILABLE, "offline, and the release index is not in the cache", &v, &n);
         } else {
             st = fetch_index(&c, &v, &n);
+            if (st == OTC_E_NETWORK && !c.raise) {
+                /* spec 4.3, 5.2 step 5: with use_cache, a network error gives the cached index */
+                char msg[512];
+                snprintf(msg, sizeof msg, "%s", c.err->message);
+                st = cached_index(&c, OTC_E_NETWORK, msg, &v, &n);
+                if (st == OTC_OK) logf_(&c, 2, "network error (%s); using the cached release index", msg);
+            }
         }
     }
     for (i = 0; st == OTC_OK && i < n; i++) note_entry(&c, v[i]);

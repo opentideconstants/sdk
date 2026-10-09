@@ -662,6 +662,9 @@ OTC_API otc_status otc_fetch_release(const otc_fetch_options *opts, const char *
  * errors go to fopts->error (and oopts->error). */
 OTC_API otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, const otc_open_options *oopts,
                                   otc_release **out);
+/* Every release in OTC_index.json, newest first. On a network error with
+ * on_network_error USE_CACHE it gives the cached index (spec 4.3, 5.2 step 5);
+ * offline, the cached index or OTC_E_OFFLINE_UNAVAILABLE. */
 OTC_API otc_status otc_fetch_releases(const otc_fetch_options *opts, otc_release_info **out, size_t cap,
                                       size_t *count);
 OTC_API otc_status otc_fetch_latest_info(const otc_fetch_options *opts, otc_release_info **info);
