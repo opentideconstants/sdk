@@ -406,7 +406,8 @@ OTC_API otc_status otc_subordinates_of(const otc_release *rel, const otc_station
 /* ----------------------------------------------------------- station fields */
 
 OTC_API otc_status otc_station_station_id(const otc_station_t *st, char *buf, size_t len, size_t *needed);
-#define otc_station_id otc_station_station_id
+/* The spec 6.4 name; a function-like macro, so it does not rewrite other uses of the name. */
+#define otc_station_id(st, buf, len, needed) otc_station_station_id((st), (buf), (len), (needed))
 OTC_API otc_status otc_station_name(const otc_station_t *st, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_station_country(const otc_station_t *st, char *buf, size_t len, size_t *needed);
 OTC_API double otc_station_lat(const otc_station_t *st);
@@ -573,7 +574,7 @@ OTC_API otc_status otc_set_licence(const otc_set *set, const otc_licence **out);
 OTC_API otc_status otc_set_provenance_field(const otc_set *set, const char *field, char *buf, size_t len,
                                             size_t *needed);
 OTC_API otc_status otc_set_provenance_json(const otc_set *set, char *buf, size_t len, size_t *needed);
-#define otc_set_provenance_raw_json otc_set_provenance_json
+#define otc_set_provenance_raw_json(set, buf, len, needed) otc_set_provenance_json((set), (buf), (len), (needed))
 OTC_API otc_status otc_set_provenance_adapter_version(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_input_sha256_json(const otc_set *set, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_set_provenance_selection_reason(const otc_set *set, char *buf, size_t len, size_t *needed);
