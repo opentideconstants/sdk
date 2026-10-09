@@ -42,6 +42,19 @@ if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "
 
 out({ hello: { runner: "typescript", version: sdk.VERSION, features: ["fs", "fetch", "json", "eager", "stream"] } });
 
+// An error that escapes the op (a promise that rejects with no handler, a timer that throws: SDK background work)
+// must not kill the runner in the middle of a case: it fails the step it happened in, or the next one, as in the
+// browser runner (uncaught:PageError).
+const background = [];
+const keep = (kind) => (e) => {
+    process.stderr.write(`[${kind}] ${e && e.stack ? e.stack : e}\n`);
+    background.push(`${kind}: ${e && e.stack ? e.stack : e}`);
+};
+process.on("unhandledRejection", keep("unhandledRejection"));
+process.on("uncaughtException", keep("uncaughtException"));
+// let the event loop run what the op left pending (timers, rejected promises) before the reply is written
+const settle = () => new Promise((r) => setTimeout(() => setTimeout(r, 0), 0));
+
 const runner = makeRunner(sdk);
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
@@ -55,6 +68,14 @@ for await (const line of rl) {
         out({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `bad request line: ${e.message}` } });
         continue;
     }
-    out(await runner.handle(msg));
+    let reply = await runner.handle(msg);
+    await settle();
+    if (background.length) {
+        reply = { ok: false, error: { code: "uncaught:BackgroundError", message: background.splice(0).join("\n").slice(0, 2000) } };
+    }
+    out(reply);
 }
-process.exit((await runner.shutdown()) ? 0 : 1);
+const closed = await runner.shutdown();
+await settle();
+// an error that escaped after the last reply has no step to fail: the exit status reports it
+process.exit(closed && !background.length ? 0 : 1);

@@ -387,7 +387,7 @@ def main():
             req = json.loads(line)
             if not isinstance(req, dict):
                 raise ValueError(f"a request must be a JSON object, got {line.strip()[:80]!r}")
-        except ValueError as e:  # a request the runner cannot read: an error reply, and the runner goes on
+        except (ValueError, RecursionError) as e:  # a request the runner cannot read (too deep, too): an error reply, and the runner goes on
             print(f"bad request line: {e}", file=sys.stderr)
             out.write(json.dumps({"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": f"bad request line: {e}"}}) + "\n")
             out.flush()

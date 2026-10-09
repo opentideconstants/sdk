@@ -157,13 +157,24 @@ function finite(v) {
     if (typeof v === "bigint" || typeof v === "symbol" || typeof v === "function") {
         throw new TypeError(`the runner cannot encode a ${typeof v} as JSON`);
     }
-    if (Array.isArray(v)) return v.map(finite);
-    if (v !== null && typeof v === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(v))) {
+    // a value the SDK left out: JSON.stringify would drop the key, or write null in a list; fail the step instead
+    if (v === undefined) throw new TypeError("the SDK gave no value (undefined)");
+    // a list element that is missing (a hole) is undefined too, so map over every index, not with Array.map
+    if (Array.isArray(v)) return Array.from(v, finite);
+    if (v !== null && typeof v === "object") {
+        // only a plain object is encoded key by key; anything else (a Map, a Set, a Date, a class instance, a Promise)
+        // JSON.stringify would write as {} or a string, hiding what the SDK returned
+        if (![Object.prototype, null].includes(Object.getPrototypeOf(v))) {
+            throw new TypeError(`the runner cannot encode a ${v.constructor ? v.constructor.name : "object"} as JSON`);
+        }
         const out = {};
         for (const [k, x] of Object.entries(v)) {
-            // a field the SDK left out: JSON.stringify would drop the key; fail the step instead
-            if (x === undefined) throw new TypeError(`the SDK gave no value for ${k}`);
-            out[k] = finite(x);
+            try {
+                out[k] = finite(x);
+            } catch (e) {
+                e.message = `${k}: ${e.message}`;
+                throw e;
+            }
         }
         return out;
     }
