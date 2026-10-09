@@ -329,8 +329,6 @@
   {
    "case": "rules/pk03/bad-format-version-malformed-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python"
    ],
    "package": "PK03",

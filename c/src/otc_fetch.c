@@ -529,14 +529,13 @@ static int ds_cmp_desc(const void *x, const void *y)
     return ds_cmp(*(const char *const *)y, *(const char *const *)x);
 }
 
-/* The major of "MAJOR.MINOR", or -1. */
+/* The major of "MAJOR.MINOR", or -1 when fv is not a valid version (spec 7.4, CR D9). */
 static int format_major(const char *fv)
 {
-    char *end;
     long m;
-    if (!fv || !strchr(fv, '.') || fv[0] < '0' || fv[0] > '9') return -1;
-    m = strtol(fv, &end, 10);
-    return (*end == '.' && m >= 0 && m < 1000000) ? (int)m : -1;
+    if (!otc__version_valid(fv)) return -1;
+    m = strtol(fv, NULL, 10);
+    return m < 1000000 ? (int)m : -1;
 }
 
 /* --------------------------------------------------------------------- URLs */
@@ -1000,6 +999,9 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     *out = NULL;
     if (!cJSON_IsObject(e) || !ds || !valid_datestamp(ds) || (files && !cJSON_IsArray(files)))
         return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a release entry without a valid datestamp or files", doc_url);
+    if (otc__jget(e, "format_version") && !otc__version_valid(fv))   /* spec 7.4 (CR D9) */
+        return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: release %s has a format_version that is not MAJOR.MINOR",
+                    doc_url, ds);
     ri = (otc_release_info *)calloc(1, sizeof *ri);
     if (!ri) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     ri->datestamp = otc__strdup(ds);

@@ -107,6 +107,9 @@ otc_quantity otc__parse_quantity(const char *s);
 otc_qc_status otc__parse_qc_status(const char *s);
 otc_removed_reason otc__parse_removed_reason(const char *s);
 otc_time_base_code_t otc__parse_time_base_code(const char *s);
+/* 1 when v is MAJOR.MINOR: two non-negative integers (at most 9 digits) with no
+ * leading zeros, joined by one dot (spec 7.4, CR D9). */
+int otc__version_valid(const char *v);
 /* Compares two "MAJOR.MINOR" format versions numerically (-1, 0, 1); an
  * unparsable version sorts as 0.0. */
 int otc__version_cmp(const char *a, const char *b);

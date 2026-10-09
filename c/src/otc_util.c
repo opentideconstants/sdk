@@ -71,6 +71,23 @@ void otc__err_set(otc_error *err, otc_status st, const char *file, const char *f
 
 /* ----------------------------------------------------------- format versions */
 
+/* One non-negative integer with no leading zero; returns the end, or NULL. */
+static const char *version_part(const char *p)
+{
+    const char *start = p;
+    while (*p >= '0' && *p <= '9') p++;
+    if (p == start || p - start > 9 || (p - start > 1 && *start == '0')) return NULL;
+    return p;
+}
+
+int otc__version_valid(const char *v)
+{
+    const char *p;
+    if (!v || !(p = version_part(v)) || *p != '.') return 0;
+    p = version_part(p + 1);
+    return p && *p == '\0';
+}
+
 static void version_parse(const char *v, long *major, long *minor)
 {
     char *end = NULL;

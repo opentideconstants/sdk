@@ -714,10 +714,9 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
 {
     char *text = NULL;
     size_t len = 0;
-    const char *fv, *dot;
+    const char *fv;
     const cJSON *convs, *lics, *c;
     long major;
-    char *end;
     size_t i;
     otc_status st = otc__read_all(meta_path, &text, &len);
     if (st != OTC_OK) {
@@ -735,12 +734,11 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s has no format_version", meta_path);
         return OTC_E_INVALID_RELEASE;
     }
-    major = strtol(fv, &end, 10);
-    dot = strchr(fv, '.');
-    if (end == fv || !dot || end != dot) {
-        otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "format_version %s is not MAJOR.MINOR", fv);
+    if (!otc__version_valid(fv)) {   /* spec 7.4 (CR D9): fail closed, never guess a version */
+        otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "format_version \"%s\" is not MAJOR.MINOR", fv);
         return OTC_E_INVALID_RELEASE;
     }
+    major = strtol(fv, NULL, 10);
     if (major != OTC_FORMAT_MAJOR) {
         otc__err_set(err, OTC_E_UNSUPPORTED_FORMAT, meta_path, "format %s: this library reads format major %d", fv,
                      OTC_FORMAT_MAJOR);
