@@ -758,17 +758,29 @@ static char *dup_or_null(const char *v) { return v ? xstrdup(v) : NULL; }
 static void fetch_options(otc_fetch_options *fo, otc_error *err);
 
 /* The path of a release that otc_fetch_open just opened from the cache:
- * otc_fetch_release on a cached datestamp makes no network access. */
-static char *current_jsonl_path(const char *ds)
+ * otc_fetch_release on a cached datestamp makes no network access. When the
+ * runner cannot get it, the result is NO_PATH followed by the reason (the
+ * library's code and message), which verify reports; a path never starts
+ * with NO_PATH. ds is NULL when the datestamp itself could not be read (st). */
+#define NO_PATH '\n'
+static char *current_jsonl_path(const char *ds, otc_status st)
 {
     otc_fetch_options fo;
     otc_error err;
-    char path[4096];
+    char path[4096], why[700];
     size_t need = 0;
+    otc_status rc;
     fetch_options(&fo, &err);
     fo.offline = true;
-    if (!ds[0] || otc_fetch_release(&fo, ds, path, sizeof path, &need) != OTC_OK) return xstrdup("");
-    return xstrdup(path);
+    if (!ds) {
+        snprintf(why, sizeof why, "%cotc_release_datestamp: %s", NO_PATH, otc_status_code(st));
+    } else if ((rc = otc_fetch_release(&fo, ds, path, sizeof path, &need)) != OTC_OK) {
+        snprintf(why, sizeof why, "%cotc_fetch_release(%s): %s: %.500s", NO_PATH, ds, otc_status_code(rc), err.message);
+    } else {
+        return xstrdup(path);
+    }
+    fprintf(stderr, "the runner has no path for the release: %s\n", why + 1);
+    return xstrdup(why);
 }
 
 static void fetch_options(otc_fetch_options *fo, otc_error *err)
@@ -861,8 +873,8 @@ static void op_open(request *q, reply *r)
         fetch_options(&fo, &err);
         rc = otc_fetch_open(&fo, release, NULL, &g_current);
         if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
-        if (otc_release_datestamp(g_current, path, sizeof path, &need) != OTC_OK) path[0] = '\0';
-        g_current_path = current_jsonl_path(path);
+        rc = otc_release_datestamp(g_current, path, sizeof path, &need);
+        g_current_path = current_jsonl_path(rc == OTC_OK ? path : NULL, rc);
     }
     {
         int bad = 0;
@@ -887,7 +899,13 @@ static void op_verify(request *q, reply *r)
     otc_error oerr;
     otc_status orc;
     /* no path: the runner does not know where the release is; it must not answer verified with nothing hashed */
-    if (!q->path || !q->path[0]) { set_error(r, "uncaught:NoPath", "verify: the runner has no path for this release"); return; }
+    if (!q->path || !q->path[0] || q->path[0] == NO_PATH) {
+        char msg[sizeof r->message];
+        snprintf(msg, sizeof msg, "verify: the runner has no path for this release (%.500s)",
+                 q->path && q->path[0] ? q->path + 1 : "no reason recorded");
+        set_error(r, "uncaught:NoPath", msg);
+        return;
+    }
     slash1 = strrchr(q->path, '/');
     slash2 = strrchr(q->path, '\\');
     slash = slash1 > slash2 ? slash1 : slash2;
@@ -1518,7 +1536,7 @@ static otc_status swap_to(const char *ds, otc_error *err)
     fetch_options(&fo, err);   /* the caller's error struct: the detail of a failed open reaches the reply */
     rc = otc_fetch_open(&fo, fault("swap") ? "20000101" : ds, NULL, &rel);   /* fault: the open fails */
     if (rc != OTC_OK) return rc;
-    path = current_jsonl_path(ds);
+    path = current_jsonl_path(ds, OTC_OK);
     if (g_current && !is_held(g_current)) otc_close(g_current);
     free(g_current_path);
     g_current = rel;
