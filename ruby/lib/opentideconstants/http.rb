@@ -220,6 +220,20 @@ class OpenTideConstants
             raise EOFError, "#{uri}: body ended after #{got} of #{expected} bytes"
         end
 
+        # An HTTP date as a Time, or nil. Impossible calendar fields, hour 24,
+        # a leap second and the wrong weekday are malformed (CR2 DR6):
+        # Time.httpdate would roll them over into another date.
+        def http_date(v)
+            f = Date._httpdate(v)
+            return nil unless f && f[:year] && f[:mon] && f[:mday] && f[:hour] && f[:min] && f[:sec]
+            return nil unless Date.valid_date?(f[:year], f[:mon], f[:mday], Date::GREGORIAN)
+            return nil unless f[:hour] <= 23 && f[:min] <= 59 && f[:sec] <= 59
+            return nil if f[:wday] && f[:wday] != Date.new(f[:year], f[:mon], f[:mday], Date::GREGORIAN).wday
+            Time.httpdate(v)
+        rescue ArgumentError
+            nil
+        end
+
         # Retry-After in seconds (a number, or an HTTP date), at most 60; nil
         # when it is missing or malformed.
         def retry_after(value)
@@ -227,11 +241,7 @@ class OpenTideConstants
             v = value.strip
             s = Integer(v, 10, exception: false)
             if s.nil?
-                t = begin
-                    Time.httpdate(v)
-                rescue ArgumentError
-                    nil
-                end
+                t = http_date(v)
                 return nil if t.nil?
                 s = [(t - Time.now).ceil, 0].max
             end
