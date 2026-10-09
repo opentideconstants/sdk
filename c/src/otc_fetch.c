@@ -1381,11 +1381,15 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
             if (c->err) c->err->http_status = 200;
             goto done;
         }
-        if (fs_mkdir_p(dir) != 0) { st = fail(c, OTC_E_CACHE, dir, "cannot create the cache directory %s", dir); goto done; }
-        if ((st = write_atomic(c, dir, path, r.body ? (const char *)r.body : "", r.len)) != OTC_OK) goto done;
-        if (r.etag[0]) st = write_atomic(c, dir, etag_path, r.etag, strlen(r.etag));
-        else fs_unlink(etag_path);
-        if (st != OTC_OK) goto done;
+        /* the cached copy only saves work: a failure to write it is logged and the call goes on
+         * (spec 4.8 cache, 5.2, CR D8); the .etag goes first, so a stale one never pairs with a new body */
+        fs_unlink(etag_path);
+        if (fs_mkdir_p(dir) != 0
+            || write_atomic(c, dir, path, r.body ? (const char *)r.body : "", r.len) != OTC_OK
+            || (r.etag[0] && write_atomic(c, dir, etag_path, r.etag, strlen(r.etag)) != OTC_OK)) {
+            logf_(c, 2, "cannot write the cached %s (%s); going on without it", path, c->err->message);
+            otc_error_init(c->err);
+        }
     }
     *doc_url = url;
     url = NULL;
