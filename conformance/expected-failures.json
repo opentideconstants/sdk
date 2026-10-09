@@ -2,22 +2,6 @@
  "description": "Cases that are expected to fail for a runner today: the RED baseline of the cross-SDK behaviour rules that the SDK lanes (review round 1, packages PK01-PK15) have yet to fix. The driver reports a listed case that fails as XFAIL (the run still passes) and a listed case that passes as XPASS (the run fails, so the entry must be removed). A lane that fixes a case removes its entry. See conformance/README.md \"Expected failures\".",
  "entries": [
   {
-   "case": "rules/pk07/formats-empty",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK07",
-   "reason": "step 1 download: expected error 'invalid_argument', got a result {\"paths\": [\"OTC_20991231.2.jsonl\", \"OTC_20991231.2.meta.json\", \"OTC_20991231.2.sha256\"]}"
-  },
-  {
-   "case": "rules/pk07/timeout-zero",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_argument', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
-  },
-  {
    "case": "rules/pk13/auto-update-failure-sets-last-error",
    "runners": [
     "c-fetch"

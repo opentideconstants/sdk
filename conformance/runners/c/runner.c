@@ -803,6 +803,10 @@ static void op_open(request *q, reply *r)
     g_client.user_agent = dup_or_null(arg_str(&q->a, "user_agent"));
     g_client.offline = arg_bool(&q->a, "offline", false);
     g_client.timeout_s = arg_num(&q->a, "timeout", 0.0);
+    /* timeout_s 0 is the defaults in C (header), so an explicit timeout of 0 s has no C spelling. The runner passes a
+     * value the library refuses (NaN, C59), so that the library judges it and 0 never turns into the defaults */
+    if (q->a.obj && cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(q->a.obj, "timeout")) && g_client.timeout_s == 0.0)
+        g_client.timeout_s = NAN;
     g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
     /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */
     g_client.formats = mode && !strcmp(mode, "eager") ? (unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSONL) : 0u;
@@ -1528,6 +1532,9 @@ static void op_fetch(request *q, reply *r)
         bool overwrite = arg_bool(&q->a, "overwrite", false);
         if (fmts && !cJSON_IsNull(fmts)) {
             if (!cJSON_IsArray(fmts)) q->a.bad = 1;
+            /* formats 0 is the default (jsonl) in C (spec 4.3.2), so an empty list has no C spelling. The runner passes
+             * a bit the library refuses, so that the library judges it and [] never turns into the default */
+            else if (!cJSON_GetArraySize(fmts)) formats = OTC_FORMAT_OTHER;
             cJSON_ArrayForEach(f, fmts) {
                 if (!cJSON_IsString(f)) q->a.bad = 1;
                 else if (!strcmp(f->valuestring, "json")) formats |= OTC_FORMAT_JSON;
