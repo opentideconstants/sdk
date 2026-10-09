@@ -223,6 +223,16 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     });
 }
 
+/**
+ * @internal The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
+ * status, the references and the sets. The other keys are used as the index gives them (spec 6.2).
+ */
+export function lineView(s: StoredEntry): string {
+    const sets = Array.isArray(s.sets) ? s.sets : [];
+    return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
+        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents])]);
+}
+
 /** @internal The in-memory entry of a stored index entry (spec 6.2). */
 export function entryFromStored(s: StoredEntry): IndexEntry {
     const rec = s.recommended_set_id === null ? undefined : s.sets.find((cs) => cs.set_id === s.recommended_set_id);

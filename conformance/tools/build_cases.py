@@ -1451,6 +1451,25 @@ def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("reader", step("close")),
                         drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"), no_requests],
                     roles=roles))
+    # An entry whose sets disagree with its line (a convention that resolves, but is not the line's; a
+    # constituent left out): reading the line is invalid_release naming index-v1.json, which is deleted, and
+    # the next open rebuilds it.
+    bad_index = {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}
+    conv = a["sets"][0]["convention_id"]
+    other = next(c["convention_id"] for c in R2.doc["conventions"] if c["convention_id"] != conv)
+    for label, title, pointer, value in [
+            ("index-set-mismatch", f"an entry's sets[0].convention_id is {other}, the line's is {conv}", "/stations/0/sets/0/convention_id", other),
+            ("index-constituent-dropped", "an entry's sets[0] leaves out the last constituent name of the line", "/stations/0/sets/0/constituents", a["sets"][0]["constituents"][:-1])]:
+        out.append(case(f"cross/{label}", f"{title} (the index is still fresh): reading the line is invalid_release naming index-v1.json, which is deleted; the next open rebuilds it (CR D4)", "6.2",
+                        fill + [drv("json_set", path=idx, pointer=pointer, value=value)] + offline + [
+                            reader_open,
+                            as_("reader", step("station", bad_index, station_id=a["station_id"])),
+                            drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
+                            reader_open,
+                            as_("reader", step("station", {"station": enc_station(R2, R2.by_id[a["station_id"]])}, station_id=a["station_id"])),
+                            as_("reader", step("close")),
+                            drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
+                        roles=roles))
     msize = (FIXTURES / "good" / f"OTC_{d}.meta.json").stat().st_size
     out.append(case("cross/verified-float-size", "a .verified whose file sizes are written as 25846.0: the release is cached, and the reader opens it offline (CR2 DR10)", "5.4",
                     fill + [drv("json_set", path=f"{rdir}/.verified", pointer=f"/files/OTC_{d}.jsonl/size", value=float(jsize)),
@@ -1474,7 +1493,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                     fill + [drv("json_set", path=idx, pointer="/stations/0/station_id", value=ids[1]),
                             drv("json_set", path=idx, pointer="/stations/1/station_id", value=ids[0])] + offline + [
                         reader_open,
-                        as_("reader", step("station", err("invalid_release"), station_id=ids[0])),
+                        as_("reader", step("station", {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}, station_id=ids[0])),
+                        drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
                         no_requests],
                     roles=roles))
     jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
@@ -1535,6 +1555,49 @@ def fold_d12(name):
     extra = {"ς": "σ", "ħ": "h", "Ħ": "h", "ŧ": "t", "Ŧ": "t", "ŋ": "n", "Ŋ": "n",
              "ĸ": "k", "·": "", " ": " "}
     return fold("".join(extra.get(ch, ch) for ch in name))
+
+
+def rules_r2_pk07():
+    """PK-R2-07: a line read through a fresh stream index gets the checks of the full pass (spec 6.2, CR D4). A
+    cached, verified bad release whose index-v1.json (the reference builder's) is fresh: the open uses the
+    index, and the query that reads the bad line is invalid_release naming index-v1.json, which is deleted;
+    the next open makes the pass, which fails too."""
+    out = []
+    d = "20991231"
+    rdir = f"${{cache}}/v1/releases/{d}"
+    names = [f"OTC_{d}.jsonl", f"OTC_{d}.meta.json", f"OTC_{d}.sha256"]
+    bad_index = {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}
+
+    def changed_line(root):
+        good = (FIXTURES / "good" / f"OTC_{d}.jsonl").read_bytes().splitlines()
+        bad = (FIXTURES / root / f"OTC_{d}.jsonl").read_bytes().splitlines()
+        return next(i for i, (x, y) in enumerate(zip(good, bad)) if x != y)
+
+    for label, root, sets in [
+            ("qc-flags", "bad/qc-flags-not-array", {}),
+            # the index names a convention that resolves, the line one that does not
+            ("unresolved-convention", "bad/unresolved-convention", {"convention_id": "otc-greenwich-v1"})]:
+        idx = reference_index(FIXTURES / root / f"OTC_{d}.jsonl", d)
+        i = changed_line(root)
+        sid = idx["stations"][i]["station_id"]
+        if sets:
+            j = next(k for k, cs in enumerate(idx["stations"][i]["sets"])
+                     if any(cs[x] != v for x, v in sets.items()))
+            idx["stations"][i]["sets"][j].update(sets)
+        idx["by"] = "opentideconstants-conformance/1.0"
+        verified = {"files": {n: {"sha256": hashlib.sha256((FIXTURES / root / n).read_bytes()).hexdigest(),
+                                  "size": (FIXTURES / root / n).stat().st_size, "url": None} for n in names},
+                    "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+        out.append(case(f"rules/r2-pk07/index-line-{label}", f"{root} cached with a fresh index-v1.json: the open uses the index; reading {sid}'s line is invalid_release naming index-v1.json, which is deleted; the next open fails the full pass", "6.2",
+                        [drv("copy", files=[f"{FIX}/{root}/{n}" for n in names], to=rdir),
+                         drv("write", path=f"{rdir}/.verified", text=json.dumps(verified, sort_keys=True)),
+                         drv("write", path=f"{rdir}/index-v1.json", text=json.dumps(idx, ensure_ascii=False)),
+                         net(step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                         step("station", bad_index, station_id=sid),
+                         drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
+                         step("open", err("invalid_release"), release=d, cache_dir="${cache}", offline=True, mode="stream")],
+                        requires=["fs", "fetch", "stream"]))
+    return out
 
 
 def group_rules():
@@ -1803,6 +1866,7 @@ def group_rules():
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
                      [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+    out += rules_r2_pk07()
     return out
 
 

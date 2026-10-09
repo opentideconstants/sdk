@@ -220,6 +220,14 @@ def integral(v):
     return None
 
 
+def _line_view(e):
+    """The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
+    status, the references and the sets. The other keys are used as the index gives them (spec §6.2)."""
+    return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
+            e.get("offsets_licence_id"),
+            [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()),) for cs in e.get("sets") or ()])
+
+
 def _usable_index(idx, name, sha256, size, conv, lic):
     """The entries of a fresh index-v1.json, or None when it is stale or cannot be used (spec §6.2). An integer
     key may be written as a number with an integral value (CR2 DR10)."""
@@ -511,6 +519,8 @@ class Release:
             if not isinstance(d, dict) or d.get("station_id") != e["station_id"]:
                 raise InvalidReleaseError(f"the line at offset {e['offset']} of {self._jsonl} is not "
                                           f"{e['station_id']}")
+            if self._index_path is not None:
+                self._check_line(d, e)
         except InvalidReleaseError as ex:
             # the index does not match the file (CR D4): name it and drop it, so the next open rebuilds it
             if self._index_path is not None:
@@ -523,6 +533,18 @@ class Release:
                 raise InvalidReleaseError(f"{self._index_path.name} does not match the release: {ex}") from ex
             raise
         return d
+
+    def _check_line(self, d, e):
+        """A line read through the stream index gets the checks of the full pass, and it must give its entry's
+        status, references and sets (spec §6.2, CR D4, PK-R2-07)."""
+        try:
+            _validate_refs(d, self._conv_by_id, self._lic_by_id)
+            got = _entry(d, e["offset"], e["length"])
+        except (KeyError, TypeError, AttributeError) as ex:
+            raise InvalidReleaseError(f"the line of {e['station_id']}: {ex!r}") from ex
+        if _line_view(got) != _line_view(e):
+            raise InvalidReleaseError(f"the line of {e['station_id']} does not give the status, references and "
+                                      f"sets of its entry")
 
     def station(self, station_id: str) -> Optional[Station]:
         self._check_open()

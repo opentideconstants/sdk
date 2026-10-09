@@ -132,30 +132,45 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
 }
 
 static const char *path_base(const char *path);
+static const char *line_problem(const otc_release *r, const cJSON *root);
+static uint64_t line_view(const cJSON *root);
 
-otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length, cJSON **out)
+otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
+                                  uint64_t view, cJSON **out)
 {
     otc_status st = otc__read_line(rel, offset, length, out);
-    char got[96];
-    if (st != OTC_OK) return st;
-    if (otc__jstr(*out, "station_id") && !strcmp(otc__jstr(*out, "station_id"), id)) return OTC_OK;
-    snprintf(got, sizeof got, "%s", otc__jstr(*out, "station_id") ? otc__jstr(*out, "station_id") : "not a station");
+    char got[160];
+    const char *base, *why = NULL;
+    char *dir, *ix;
+    int removed;
+    if (st != OTC_OK && !(st == OTC_E_INVALID_RELEASE && rel->index_used)) return st;
+    if (st == OTC_OK && otc__jstr(*out, "station_id") && !strcmp(otc__jstr(*out, "station_id"), id)) {
+        if (!rel->index_used) return OTC_OK;
+        /* PK-R2-07: a line read through the index gets the checks of the full pass, and
+         * it gives its entry's status, references and sets */
+        why = line_problem(rel, *out);
+        if (!why && line_view(*out) == view) return OTC_OK;
+        snprintf(got, sizeof got, "%s", why ? why : "a line that does not give the status, references and sets of its entry");
+    } else {
+        snprintf(got, sizeof got, "%s", st != OTC_OK ? "not JSON"
+                 : otc__jstr(*out, "station_id") ? otc__jstr(*out, "station_id") : "not a station");
+    }
     cJSON_Delete(*out);
     *out = NULL;
-    if (rel->index_used) {
-        /* spec 6.2 (CR D4): the index named the wrong line; delete it so the next open rebuilds it */
-        const char *base = path_base(rel->path);
-        char *dir = otc__strndup(rel->path, (size_t)(base - rel->path)), *ix = dir ? otc__join(dir, "index-v1.json") : NULL;
-        int removed = ix && otc__remove_file(ix) == 0;
-        free(ix);
-        free(dir);
-        return otc__fail(rel, OTC_E_INVALID_RELEASE,
-                         "index-v1.json names the line at offset %llu of %s for station %s, but the line is %s; the "
-                         "index is stale%s", (unsigned long long)offset, rel->path, id, got,
-                         removed ? " and was deleted (the next open rebuilds it)" : " and could not be deleted");
-    }
-    return otc__fail(rel, OTC_E_INVALID_RELEASE, "the line at offset %llu of %s is not station %s (it changed after open?)",
-                     (unsigned long long)offset, rel->path, id);
+    if (!rel->index_used)
+        return otc__fail(rel, OTC_E_INVALID_RELEASE, "the line at offset %llu of %s is not station %s (it changed after open?)",
+                         (unsigned long long)offset, rel->path, id);
+    /* spec 6.2 (CR D4): the index does not match the line; delete it so the next open rebuilds it */
+    base = path_base(rel->path);
+    dir = otc__strndup(rel->path, (size_t)(base - rel->path));
+    ix = dir ? otc__join(dir, "index-v1.json") : NULL;
+    removed = ix && otc__remove_file(ix) == 0;
+    free(ix);
+    free(dir);
+    return otc__fail(rel, OTC_E_INVALID_RELEASE,
+                     "index-v1.json names the line at offset %llu of %s for station %s, but the line is %s; the "
+                     "index is stale%s", (unsigned long long)offset, rel->path, id, got,
+                     removed ? " and was deleted (the next open rebuilds it)" : " and could not be deleted");
 }
 
 /* ----------------------------------------------------------------- close */
@@ -293,7 +308,56 @@ static otc_status add_alias(builder *b, const char *system, const char *alias, c
     return OTC_OK;
 }
 
-/* Checks one constant set and adds what the index needs from it. */
+/* The checks of the full pass on one station line (spec 6.1, 7.3), with no side
+ * effect: NULL when the line passes them, else what is wrong. The pass uses it,
+ * and so does a query that reads a line through the stream index (PK-R2-07). */
+static const char *line_problem(const otc_release *r, const cJSON *root)
+{
+    const char *id = otc__jstr(root, "station_id"), *status = otc__jstr(root, "status"), *rec_id;
+    const cJSON *aliases, *a, *sets, *s, *off;
+    int rec_found = 0;
+    if (!cJSON_IsObject(root) || !id || !status) return "not a station object with station_id and status";
+    if (strcmp(status, "active") != 0) return NULL;   /* a tombstone, or another status (7.3) */
+    aliases = otc__jget(root, "aliases");
+    sets = otc__jget(root, "constant_sets");
+    off = otc__jget(root, "subordinate_offsets");
+    rec_id = otc__jstr(root, "recommended_set_id");
+    if (!otc__jstr(root, "name") || !cJSON_IsNumber(otc__jget(root, "lat")) || !cJSON_IsNumber(otc__jget(root, "lon"))
+        || !otc__jstr(root, "type"))
+        return "an active station lacks name, lat, lon or type";
+    if ((sets && !cJSON_IsArray(sets)) || (aliases && !cJSON_IsObject(aliases)))
+        return "constant_sets is not an array or aliases is not an object";
+    /* spec 4.5: a link that does not resolve fails the open (the reference station
+     * is checked when every line is in) */
+    if (cJSON_IsObject(off) && otc__jstr(off, "licence_id") && !otc__find_licence(r, otc__jstr(off, "licence_id")))
+        return "subordinate_offsets.licence_id does not resolve";
+    cJSON_ArrayForEach(s, sets) {
+        const cJSON *t, *cons = otc__jget(s, "constituents"), *c;
+        const char *sid = otc__jstr(s, "set_id");
+        for (t = sets->child; sid && t != s; t = t->next)   /* spec 6.1 (CR D5): a set_id once per station */
+            if (!otc__strcmp_null(otc__jstr(t, "set_id"), sid)) return "a set_id appears twice in the station";
+        if (!cJSON_IsObject(s) || !sid || !otc__jstr(s, "source") || !otc__jstr(s, "qc_status"))
+            return "a constant set lacks set_id, source or qc_status";
+        if (!otc__find_convention(r, otc__jstr(s, "convention_id"))) return "a constant set's convention_id does not resolve";
+        if (!otc__find_licence(r, otc__jstr(s, "licence_id"))) return "a constant set's licence_id does not resolve";
+        if (cons && !cJSON_IsArray(cons)) return "constituents is not an array";
+        if (otc__jget(s, "qc_flags") && !cJSON_IsArray(otc__jget(s, "qc_flags"))) return "qc_flags is not an array";
+        cJSON_ArrayForEach(c, cons) if (!otc__jstr(c, "name")) return "a constituent has no name";
+        if (rec_id && !strcmp(rec_id, sid)) rec_found = 1;
+    }
+    if (rec_id && !rec_found) return "recommended_set_id does not resolve";
+    cJSON_ArrayForEach(a, aliases) {
+        const cJSON *x;
+        if (cJSON_IsArray(a)) {
+            cJSON_ArrayForEach(x, a) if (!cJSON_IsString(x)) return "an alias id is not a string";
+        } else if (!cJSON_IsString(a)) {
+            return "an alias is not a string or a list";
+        }
+    }
+    return NULL;
+}
+
+/* Adds what the index needs from one constant set (line_problem checked it). */
 static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const char *rec_id)
 {
     otc_release *r = b->rel;
@@ -303,16 +367,9 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     const cJSON *cons = otc__jget(set, "constituents"), *c;
     otc_qc_status qcs;
     otc_status st;
-    if (!cJSON_IsObject(set) || !set_id || !source || !qc) return bad_line(b, "a constant set lacks set_id, source or qc_status");
-    if (!otc__find_convention(r, conv)) return bad_line(b, "a constant set's convention_id does not resolve");
-    if (!otc__find_licence(r, lic)) return bad_line(b, "a constant set's licence_id does not resolve");
-    if (cons && !cJSON_IsArray(cons)) return bad_line(b, "constituents is not an array");
-    if (otc__jget(set, "qc_flags") && !cJSON_IsArray(otc__jget(set, "qc_flags")))
-        return bad_line(b, "qc_flags is not an array");
+    (void)conv;
     cJSON_ArrayForEach(c, cons) {
-        const char *name = otc__jstr(c, "name");
-        if (!name) return bad_line(b, "a constituent has no name");
-        if ((st = add_cname(b, name)) != OTC_OK) return st;
+        if ((st = add_cname(b, otc__jstr(c, "name"))) != OTC_OK) return st;
     }
     /* spec 4.3: qc_status counts every set (a value format 1.0 does not have is
      * "other", 7.3); source counts, and the source filter sees, only sets with
@@ -351,9 +408,10 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
     otc_release *r = b->rel;
     const char *id, *status;
     otc_status st = OTC_OK;
+    const char *why = line_problem(r, root);
+    if (why) return bad_line(b, why);
     id = otc__jstr(root, "station_id");
     status = otc__jstr(root, "status");
-    if (!cJSON_IsObject(root) || !id || !status) return bad_line(b, "not a station object with station_id and status");
     if (!strcmp(status, "removed")) {
         GROW(r->tomb, r->n_tomb, b->cap_tomb);
         r->tomb[r->n_tomb].id = otc__strdup(id);
@@ -367,10 +425,6 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         const cJSON *off = otc__jget(root, "subordinate_offsets");
         const char *name = otc__jstr(root, "name"), *rec_id = otc__jstr(root, "recommended_set_id");
         const cJSON *lat = otc__jget(root, "lat"), *lon = otc__jget(root, "lon");
-        if (!name || !cJSON_IsNumber(lat) || !cJSON_IsNumber(lon) || !otc__jstr(root, "type"))
-            return bad_line(b, "an active station lacks name, lat, lon or type");
-        if ((sets && !cJSON_IsArray(sets)) || (aliases && !cJSON_IsObject(aliases)))
-            return bad_line(b, "constant_sets is not an array or aliases is not an object");
         if (r->n_st == b->cap_st) {
             size_t nc = b->cap_st ? b->cap_st * 2 : 64;
             otc__entry *np = (otc__entry *)realloc(r->st, nc * sizeof *np);
@@ -405,34 +459,19 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             e->ref_id = otc__strdup(ref);
             e->off_licence = otc__strdup(ol);
             if ((ref && !e->ref_id) || (ol && !e->off_licence)) return OTC_E_NOMEM;
-            /* spec 4.5: a link that does not resolve fails the open (the reference station
-             * is checked when every line is in) */
-            if (ol && !otc__find_licence(r, ol)) return bad_line(b, "subordinate_offsets.licence_id does not resolve");
         }
         cJSON_ArrayForEach(s, sets) {
-            const cJSON *t;
-            const char *sid = otc__jstr(s, "set_id");
-            for (t = sets->child; sid && t != s; t = t->next) {   /* spec 6.1 (CR D5): a set_id once per station */
-                if (!otc__strcmp_null(otc__jstr(t, "set_id"), sid)) {
-                    st = bad_line(b, "a set_id appears twice in the station");
-                    break;
-                }
-            }
-            if (st != OTC_OK || (st = index_set(b, s, e, rec_id)) != OTC_OK) break;
+            if ((st = index_set(b, s, e, rec_id)) != OTC_OK) break;
         }
-        if (st == OTC_OK && rec_id && !e->has_rec) st = bad_line(b, "recommended_set_id does not resolve");
         if (st == OTC_OK) {
             cJSON_ArrayForEach(a, aliases) {
                 if (cJSON_IsString(a)) {
                     st = add_alias(b, a->string, a->valuestring, id);
-                } else if (cJSON_IsArray(a)) {
+                } else {
                     const cJSON *x;
                     cJSON_ArrayForEach(x, a) {
-                        if (!cJSON_IsString(x)) { st = bad_line(b, "an alias id is not a string"); break; }
                         if ((st = add_alias(b, a->string, x->valuestring, id)) != OTC_OK) break;
                     }
-                } else {
-                    st = bad_line(b, "an alias is not a string or a list");
                 }
                 if (st != OTC_OK) break;
             }
@@ -611,6 +650,46 @@ static cJSON *line_from_entry(const cJSON *e)
     return o;
 }
 
+/* FNV-1a over a string or null, with a marker so that null, "" and the
+ * boundary between two strings all hash apart. */
+static uint64_t view_str(uint64_t h, const char *v)
+{
+    h = (h ^ (v ? 1u : 0u)) * 1099511628211ull;
+    if (v) {
+        for (; *v; v++) h = (h ^ (unsigned char)*v) * 1099511628211ull;
+        h = (h ^ 0xffu) * 1099511628211ull;
+    }
+    return h;
+}
+
+/* The hash of what a line read through the index must give as its entry does
+ * (PK-R2-07): station_id, status, recommended_set_id, the two references and
+ * every set's keys and constituent names. from_line: root is a .jsonl line;
+ * else an index-v1.json entry. */
+static uint64_t view_of(const cJSON *root, int from_line)
+{
+    uint64_t h = 1469598103934665603ull;
+    const cJSON *off = from_line ? otc__jget(root, "subordinate_offsets") : root, *cs, *c;
+    size_t k;
+    if (from_line && !cJSON_IsObject(off)) off = NULL;
+    h = view_str(h, otc__jstr(root, "station_id"));
+    h = view_str(h, otc__jstr(root, "status"));
+    h = view_str(h, otc__jstr(root, "recommended_set_id"));
+    h = view_str(h, otc__jstr(off, "reference_station_id"));
+    h = view_str(h, otc__jstr(off, from_line ? "licence_id" : "offsets_licence_id"));
+    cJSON_ArrayForEach(cs, otc__jget(root, from_line ? "constant_sets" : "sets")) {
+        h = (h ^ 0x5eu) * 1099511628211ull;   /* one set */
+        for (k = 0; SET_KEYS[k]; k++) h = view_str(h, otc__jstr(cs, SET_KEYS[k]));
+        cJSON_ArrayForEach(c, otc__jget(cs, "constituents")) {
+            const char *n = from_line ? otc__jstr(c, "name") : (cJSON_IsString(c) ? c->valuestring : NULL);
+            if (n) h = view_str(h, n);
+        }
+    }
+    return h;
+}
+
+static uint64_t line_view(const cJSON *root) { return view_of(root, 1); }
+
 /* Indexes the release from index-v1.json in dir when it is fresh (spec 6.2).
  * OTC_E_NOT_FOUND: no fresh index (nothing was added). Another status: the
  * index looked fresh but an entry could not be used (the caller opens again
@@ -649,12 +728,15 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     st = OTC_OK;
     cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
         cJSON *line = line_from_entry(e);
+        size_t n_st = b->rel->n_st, n_tomb = b->rel->n_tomb;
         if (!line) { st = OTC_E_NOMEM; break; }
         b->line_no++;
         st = index_parsed(b, line, (size_t)otc__jget(e, "length")->valuedouble,
                           (uint64_t)otc__jget(e, "offset")->valuedouble, NULL, 0);
         cJSON_Delete(line);
         if (st != OTC_OK) break;
+        if (b->rel->n_st > n_st) b->rel->st[n_st].view = view_of(e, 0);
+        if (b->rel->n_tomb > n_tomb) b->rel->tomb[n_tomb].view = view_of(e, 0);
     }
 done:
     cJSON_Delete(doc);

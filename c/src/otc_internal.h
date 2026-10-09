@@ -225,12 +225,14 @@ typedef struct otc__entry {
     size_t             n_sources;
     uint64_t           offset;
     size_t             length;
+    uint64_t           view;            /* index_used: the hash of the entry's status, references and sets */
 } otc__entry;
 
 typedef struct otc__tomb {
     char    *id;
     uint64_t offset;
     size_t   length;
+    uint64_t view;    /* as in otc__entry */
 } otc__tomb;
 
 typedef struct otc__alias {
@@ -282,8 +284,12 @@ cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const ch
 /* Reads and parses one line of the .jsonl file. */
 otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length, cJSON **out);
 /* Reads the line of station id: invalid_release when the line is another
- * station's (a stale index, spec 6.2 / CR D4; the index file is then deleted). */
-otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length, cJSON **out);
+ * station's (a stale index, spec 6.2 / CR D4; the index file is then deleted).
+ * When the stations came from the index, the line must also pass the checks of
+ * the full pass and give the status, references and sets whose hash is view
+ * (PK-R2-07). */
+otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
+                                  uint64_t view, cJSON **out);
 int otc__filter_match(const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */
