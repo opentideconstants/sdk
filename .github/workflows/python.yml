@@ -83,7 +83,16 @@ jobs:
             sleep 0.2
           done
           python -c 'import socket; [socket.create_connection(("127.0.0.1", p), 1).close() for p in (8765, 8766)]' || { echo "the fixture server is not ready after 30 s"; exit 1; }
-          OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:8765/good/ python /repo/python/examples/quickstart.py
+          expect() { grep -qxF "$2" "$1" || { echo "quickstart output lacks the line: $2"; exit 1; }; }
+          export OPENTIDECONSTANTS_BASE_URL=http://127.0.0.1:8765/good/
+          python /repo/python/examples/quickstart.py | tee /tmp/online.txt
+          expect /tmp/online.txt "release 20991231.2 format 1.0 from download"
+          expect /tmp/online.txt "station OTC-T-0001 San Francisco 37.8063 -122.4659"
+          expect /tmp/online.txt "M2 0.5 m 101.25 deg"
+          OPENTIDECONSTANTS_OFFLINE=1 python /repo/python/examples/quickstart.py | tee /tmp/offline.txt
+          expect /tmp/offline.txt "release 20991231.2 format 1.0 from cache"
+          expect /tmp/offline.txt "M2 0.5 m 101.25 deg"
+          unset OPENTIDECONSTANTS_BASE_URL
           python /repo/conformance/runners/python/check_api.py --installed
           python /repo/conformance/driver.py --runner "python /repo/conformance/runners/python/runner.py --installed"
           SCRIPT
