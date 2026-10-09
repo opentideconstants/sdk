@@ -1,12 +1,15 @@
-"""Unit tests (python -m unittest discover -s python/tests). The conformance suite is the main proof."""
+"""Unit tests (python -m unittest discover -s python/tests). The conformance suite is the main proof.
+With OTC_TEST_INSTALLED=1 they test the installed package instead of python/src."""
 import dataclasses
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "python" / "src"))
+if not os.environ.get("OTC_TEST_INSTALLED"):  # set it to test the installed package (a wheel) instead of python/src
+    sys.path.insert(0, str(ROOT / "python" / "src"))
 
 import opentideconstants as otc  # noqa: E402
 from opentideconstants._cache import datestamp_key  # noqa: E402
@@ -83,6 +86,15 @@ class Format10Test(unittest.TestCase):
         self.assertEqual(otc.SUPPORTED_FORMAT_VERSION, "1.0")
         pkg = json.loads((ROOT / "python" / "supported-formats.json").read_text(encoding="utf-8"))
         self.assertEqual(pkg["supported_format_version"], otc.SUPPORTED_FORMAT_VERSION)
+
+    def test_supported_formats_json_ships_in_the_package(self):
+        """spec §7.4: supported-formats.json is inside every package; read it as package data."""
+        from importlib.resources import files
+        res = files(otc) / "supported-formats.json"
+        doc = json.loads(res.read_text(encoding="utf-8"))
+        self.assertEqual(doc, {"language": "python", "version": otc.__version__,
+                               "supported_format_version": otc.SUPPORTED_FORMAT_VERSION})
+        self.assertEqual(doc, json.loads((ROOT / "python" / "supported-formats.json").read_text(encoding="utf-8")))
 
     def test_no_constants_hidden_by_default(self):
         st = self.c.station("OTC-T-0103")
