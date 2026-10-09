@@ -926,8 +926,6 @@
   {
    "case": "rules/pk07/limit-zero@jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

@@ -348,6 +348,9 @@ typedef struct otc_filter {
 } otc_filter;
 OTC_API void otc_filter_init(otc_filter *filter);
 
+/* The limit of otc_search and otc_near that means "no limit" (spec 4.4, CR D36). */
+#define OTC_NO_LIMIT SIZE_MAX
+
 typedef struct otc_hit {      /* otc_search; the strings are borrowed from the release */
     const char *id;
     const char *name;
@@ -377,9 +380,11 @@ OTC_API otc_status otc_iter_open(const otc_release *rel, const otc_filter *filte
 /* The next station (caller frees it), or OTC_E_NOT_FOUND at the end. */
 OTC_API otc_status otc_iter_next(otc_iter *it, otc_station_t **out);
 OTC_API void otc_iter_close(otc_iter *it);
-/* limit 0 means no limit. */
+/* limit: the most hits to return, 1 or more, or OTC_NO_LIMIT for all of them;
+ * 0 is OTC_E_INVALID_ARGUMENT (spec 4.4, CR D36). */
 OTC_API otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
                               otc_hit *out, size_t cap, size_t *count);
+/* limit as for otc_search. */
 OTC_API otc_status otc_near(const otc_release *rel, double lat, double lon, double radius_km,
                             const otc_filter *filter, size_t limit, otc_nearby *out, size_t cap, size_t *count);
 /* max_km NaN or +infinity means no limit. OTC_E_NOT_FOUND if nothing is in range. */

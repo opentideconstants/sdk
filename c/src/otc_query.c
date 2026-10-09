@@ -246,6 +246,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     size_t i, n = 0, total;
     if (!rel || !name || !count || (!out && cap) || !filter_ok(filter))
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_search: bad argument");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
     q = otc__fold(name);
     if (!q) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (!q[0]) {
@@ -265,7 +266,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     }
     free(q);
     if (n > 1) qsort(r, n, sizeof *r, ranked_cmp);
-    total = (limit && limit < n) ? limit : n;
+    total = limit < n ? limit : n;
     for (i = 0; out && i < total && i < cap; i++) {
         out[i].id = r[i].e->id;
         out[i].name = r[i].e->name;
@@ -335,9 +336,10 @@ otc_status otc_near(const otc_release *rel, double lat, double lon, double radiu
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_near: bad argument");
     if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
     if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
     st = geo_scan(rel, lat, lon, radius_km, filter, &hits, &n);
     if (st != OTC_OK) return otc__fail(rel, st, "out of memory");
-    total = (limit && limit < n) ? limit : n;
+    total = limit < n ? limit : n;
     for (i = 0; out && i < total && i < cap; i++) out[i] = hits[i];
     free(hits);
     *count = total;
