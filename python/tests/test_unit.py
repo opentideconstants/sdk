@@ -461,6 +461,20 @@ class MalformedInputTest(RepeatedIdsTest):
         with self.assertRaises(otc.InvalidReleaseError):
             parse_time("31/12/2099")
 
+    def test_impossible_and_out_of_range_times(self):
+        """CR2 DR6: impossible calendar fields, hour 24, a leap second and a time out of range in UTC are malformed:
+        InvalidReleaseError (a build time: None), never a rolled-over date or a raw OverflowError."""
+        from opentideconstants._models import parse_time, _time_or_none
+        import datetime as dt
+        for v in ("2099-02-30T00:00:00Z", "2099-02-31T00:00:00Z", "2097-02-29T00:00:00Z", "2099-12-31T24:00:00Z",
+                  "2099-12-31T23:59:60Z", "0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"):
+            with self.subTest(v=v):
+                with self.assertRaises(otc.InvalidReleaseError):
+                    parse_time(v, "release.created")
+                self.assertIsNone(_time_or_none(v, "provenance.build.built_at"))
+        self.assertEqual(parse_time("2096-02-29T00:00:00Z"), dt.datetime(2096, 2, 29, tzinfo=dt.timezone.utc))
+        self.assertEqual(parse_time("0001-01-01T01:00:00+01:00"), dt.datetime(1, 1, 1, tzinfo=dt.timezone.utc))
+
     def test_bad_provenance_build_time_does_not_fail_the_station(self):
         def edit(d):
             d["constant_sets"][0].setdefault("provenance", {})["build"] = {"built_at": "not a time"}
