@@ -21,6 +21,8 @@ from ._errors import FileError, InvalidArgumentError, NetworkError
 
 CONNECT_TIMEOUT_S = 10.0
 READ_TIMEOUT_S = 60.0
+TIMEOUT_MIN_S = 0.001  # the range of the timeout option, in every SDK (spec §5.7, CR2 DR19)
+TIMEOUT_MAX_S = 1e6
 ATTEMPTS = 3
 BACKOFF_S = (1.0, 2.0)  # the waits between the 3 attempts (conformance README)
 RETRY_AFTER_MAX_S = 60.0

@@ -57,8 +57,9 @@ class OpenTideConstants
             raise InvalidArgumentError, "update_interval must be a number of seconds > 0"
         end
         @update_interval = update_interval
-        unless timeout.nil? || (timeout.is_a?(Numeric) && timeout.positive?)
-            raise InvalidArgumentError, "timeout must be nil or a number of seconds > 0"
+        # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19); a Float NaN fails the range check too
+        unless timeout.nil? || (timeout.is_a?(Numeric) && timeout.real? && timeout >= HTTP::TIMEOUT_MIN && timeout <= HTTP::TIMEOUT_MAX)
+            raise InvalidArgumentError, "timeout must be nil or a number of seconds from #{HTTP::TIMEOUT_MIN} to #{HTTP::TIMEOUT_MAX.to_i}"
         end
         %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
             raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)

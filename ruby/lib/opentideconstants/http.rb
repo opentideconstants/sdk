@@ -15,6 +15,8 @@ class OpenTideConstants
         MAX_RETRY_AFTER = 60
         CONNECT_TIMEOUT = 10
         READ_TIMEOUT = 60
+        TIMEOUT_MIN = 0.001 # the range of the timeout option, in every SDK (spec §5.7, CR2 DR19)
+        TIMEOUT_MAX = 1e6
         USER_AGENT = "opentideconstants-ruby/#{VERSION} (+https://opentideconstants.org)".freeze
         NETWORK_ERRORS = [SocketError, SystemCallError, IOError, EOFError, Timeout::Error, OpenSSL::SSL::SSLError,
                           Net::ProtocolError, Net::OpenTimeout, Net::ReadTimeout, Net::HTTPBadResponse,

@@ -300,7 +300,7 @@ export interface OpenOptions {
     offline?: boolean | null;
     mode?: Mode | null;
     baseUrl?: string | null;
-    /** Seconds, for both the connect and the read timeout. */
+    /** Seconds, for both the connect and the read timeout: 0.001 to 1e6 (spec 5.7). */
     timeout?: number | null;
     proxy?: string | null;
     caFile?: string | null;

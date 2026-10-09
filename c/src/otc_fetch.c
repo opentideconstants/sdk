@@ -45,6 +45,7 @@
 #define USER_AGENT SDK_ID " (+https://opentideconstants.org)"
 #define CONNECT_TIMEOUT_S 10.0
 #define READ_TIMEOUT_S 60.0
+#define TIMEOUT_MIN_S 0.001
 #define TIMEOUT_MAX_S 1.0e6
 #define ATTEMPTS 3
 #define RETRY_AFTER_MAX_S 60.0
@@ -589,12 +590,14 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
                     "formats is empty: name at least one OTC_FORMAT_* bit, or pass OTC_FORMATS_DEFAULT");
     if (c->formats & ~(unsigned)(OTC_FORMAT_JSON | OTC_FORMAT_JSON_GZ | OTC_FORMAT_JSONL))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "formats: only OTC_FORMAT_JSON, OTC_FORMAT_JSON_GZ and OTC_FORMAT_JSONL");
-    /* timeout_s: OTC_TIMEOUT_DEFAULT is the defaults; otherwise a number of seconds above 0 and at most
-     * TIMEOUT_MAX_S, so that the millisecond options of libcurl stay in a long (CR 4c, C59) */
-    if (o && o->timeout_s != OTC_TIMEOUT_DEFAULT && !(o->timeout_s > 0 && o->timeout_s <= TIMEOUT_MAX_S))
+    /* timeout_s: OTC_TIMEOUT_DEFAULT is the defaults; otherwise a number of seconds from TIMEOUT_MIN_S to
+     * TIMEOUT_MAX_S (spec 5.7, CR2 DR19). Below 1 ms, CONNECTTIMEOUT_MS and LOW_SPEED_TIME would round to 0,
+     * which libcurl reads as "no limit"; above the maximum, the millisecond options would not fit in a long
+     * (CR 4c, C59). */
+    if (o && o->timeout_s != OTC_TIMEOUT_DEFAULT && !(o->timeout_s >= TIMEOUT_MIN_S && o->timeout_s <= TIMEOUT_MAX_S))
         return fail(c, OTC_E_INVALID_ARGUMENT, NULL,
-                    "timeout_s must be a number of seconds above 0 and at most %g, or OTC_TIMEOUT_DEFAULT for the defaults",
-                    TIMEOUT_MAX_S);
+                    "timeout_s must be a number of seconds from %g to %g, or OTC_TIMEOUT_DEFAULT for the defaults",
+                    TIMEOUT_MIN_S, TIMEOUT_MAX_S);
     c->connect_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : CONNECT_TIMEOUT_S;
     c->read_s = (o && o->timeout_s != OTC_TIMEOUT_DEFAULT) ? o->timeout_s : READ_TIMEOUT_S;
     c->raise = o && o->on_network_error == OTC_ON_NETWORK_ERROR_RAISE;

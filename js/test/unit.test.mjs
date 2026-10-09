@@ -403,3 +403,24 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
+
+test("CR2 DR19: a timeout outside 0.001 to 1e6 s is invalid_argument, before any network access", async () => {
+    // a server that answers late: before the fix a 1e7 s timer overflowed setTimeout and fired after 1 ms
+    let requests = 0;
+    const srv = http.createServer((req, res) => { requests++; setTimeout(() => { res.statusCode = 404; res.end(); }, 300); });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+        const baseUrl = `http://127.0.0.1:${srv.address().port}/`;
+        for (const timeout of [0.0001, 0.000999, 1e6 + 1, 1e7, 2 ** 31]) {
+            await assert.rejects(otc.OpenTideConstants.open({ baseUrl, cacheDir: tmpdir(), timeout, onNetworkError: "raise" }),
+                isCode("invalid_argument"), String(timeout));
+        }
+        assert.equal(requests, 0);
+        for (const timeout of [0.001, 1e6]) {
+            const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), timeout });
+            c.close();
+        }
+    } finally {
+        srv.close();
+    }
+});

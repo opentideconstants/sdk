@@ -1568,6 +1568,10 @@ def group_rules():
     # PK07: arguments
     out.append(case("rules/pk07/timeout-zero", "timeout 0: invalid_argument", "4.2, 4.8",
                     [latest(err("invalid_argument"), timeout=0)], requires=["fs"]))
+    out.append(case("rules/pk07/timeout-tiny", "timeout below 0.001 s: invalid_argument (CR2 DR19)", "4.8, 5.7",
+                    [latest(err("invalid_argument"), timeout=0.0001)], requires=["fs"]))
+    out.append(case("rules/pk07/timeout-huge", "timeout above 1e6 s: invalid_argument (CR2 DR19)", "4.8, 5.7",
+                    [latest(err("invalid_argument"), timeout=1e7)], requires=["fs"]))
     # CR D31 (spec 4.2): a file client reads no pointer and opens no socket, so these options would be ignored
     for cid, title, extra in (("file-offline", "file with offline true", {"offline": True}),
                               ("file-release", "file with a pinned release", {"release": d2}),

@@ -20,7 +20,7 @@ from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
                       ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError)
-from ._http import Http, check_http_url
+from ._http import TIMEOUT_MAX_S, TIMEOUT_MIN_S, Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
 from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
                        meta_path_for, readable, version_key)
@@ -96,6 +96,9 @@ class OpenTideConstants:
             if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
                                   or v <= 0):
                 raise InvalidArgumentError(f"{name} must be a positive finite number, not {v!r}")
+        # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19): below 1 ms a timeout rounds to "none" in some HTTP clients
+        if timeout is not None and not TIMEOUT_MIN_S <= timeout <= TIMEOUT_MAX_S:
+            raise InvalidArgumentError(f"timeout must be from {TIMEOUT_MIN_S} to {TIMEOUT_MAX_S:g} seconds, not {timeout!r}")
         self._pinned = release if release != "latest" else None
         self._file = None if file is None else Path(file)
         self._mode = mode
