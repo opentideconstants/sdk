@@ -141,6 +141,15 @@ class AliasSystem(_StrEnum):
     KARTVERKET = "kartverket"
     SLACKWATER = "slackwater"
     WEBCALTIDES = "webcaltides"
+    LINZ = "linz"
+    SHOM = "shom"
+    PEGELONLINE = "pegelonline"
+    RWS = "rws"
+    MI = "mi"
+    DMI = "dmi"
+    SMHI = "smhi"
+    FMI = "fmi"
+    UHSLC = "uhslc"
     OTHER = "other"
 
 
