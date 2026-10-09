@@ -803,6 +803,19 @@ BAD = [
 ]
 
 
+# Review round 2, PK-R2-09: values the four SDKs gave different answers for.
+def _quantity_null(doc):
+    _station(doc, "OTC-T-0020")["constant_sets"][0]["quantity"] = None
+    del _station(doc, "OTC-T-0019")["constant_sets"][0]["quantity"]
+
+
+BAD += [
+    ("quantity-null", "load", "OTC-T-0020's recommended set has quantity null and OTC-T-0019's has no quantity (malformed 1.0); "
+     "it must load, and both stations have kind other (orchestrator S3)",
+     changed_doc(_quantity_null), None),
+]
+
+
 def no_build_doc():
     doc = release_doc(BASE)
     st = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0004")
@@ -1282,6 +1295,23 @@ def open_release(root, datestamp, schemas):
     return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
 
 
+def tolerate_values(doc):
+    """The values an SDK reads from a malformed 1.0 station, put right in a copy so that each is the only defect
+    (review round 2, PK-R2-09). A set with no quantity (null or absent) gives the station the kind "other"
+    (orchestrator S3); it is checked as a water_level set, or a current set when it has current_bins.
+    Returns (the copy, the tolerances)."""
+    notes = []
+    doc = copy.deepcopy(doc)
+    for st in doc.get("stations") or []:
+        if not isinstance(st, dict) or not isinstance(st.get("constant_sets"), list):
+            continue
+        for cs in st["constant_sets"]:
+            if isinstance(cs, dict) and cs.get("quantity") is None:
+                notes.append(f"{cs.get('set_id')}: no quantity (kind other, S3)")
+                cs["quantity"] = "current" if "current_bins" in cs else "water_level"
+    return doc, notes
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1292,12 +1322,15 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     version = version_key(doc["format_version"])
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
     tolerated = []
+    if allow_missing_build:   # the general read rules of the SDKs: each is put right in a copy, and listed
+        doc, tolerated = tolerate_values(doc)
+        lines = [tolerate_values({"stations": [l]})[0]["stations"][0] if isinstance(l, dict) else l for l in lines]
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
     # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
     missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", [])
                if isinstance(cs.get("provenance"), dict) and "build" not in cs["provenance"]]
     if missing and allow_missing_build:
-        tolerated = [f"no provenance.build in {m}" for m in missing]
+        tolerated += [f"no provenance.build in {m}" for m in missing]
         doc = restore_build(doc)
         meta = restore_build(meta)
         lines = [restore_station_build(l) for l in lines]

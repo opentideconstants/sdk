@@ -88,7 +88,7 @@ class Rel:
     def kind(self, s, seen=()):
         rs = self.rec_set(s)
         if rs is not None:
-            return {"water_level": "tide", "current": "current"}.get(rs["quantity"], "other")
+            return {"water_level": "tide", "current": "current"}.get(rs.get("quantity"), "other")
         if s["type"] == "subordinate" and s.get("subordinate_offsets"):
             ref = self.by_id.get(s["subordinate_offsets"]["reference_station_id"])
             if ref is not None and ref["station_id"] not in seen:
@@ -1746,6 +1746,32 @@ def group_rules():
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
                      [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+    out += rules_r2_pk09()
+    return out
+
+
+# Review round 2, PK-R2-09: one value for one input in every SDK (orchestrator S3; CR D5; CR2 DR7, DR8, DR11, DR24,
+# DR26, DR28). The fixtures are bad/ roots that load (build_fixtures.py, BAD).
+def rules_r2_pk09():
+    out = []
+    # S3: a recommended set with no quantity (null, or no key) gives the kind "other", in every SDK and in the
+    # stream index each SDK writes
+    Q = Rel("bad/quantity-null", "20991231")
+    q_ids = ["OTC-T-0019", "OTC-T-0020"]
+    out.append(mcase("rules/r2-pk09/quantity-null", "a recommended set with quantity null or no quantity: the station's kind is other, and stats counts it so (orchestrator S3)", "4.4, 6.2",
+                     [step("station", {"station": enc_station(Q, Q.by_id[i])}, station_id=i) for i in q_ids] + [
+                      step("stats", {"stats": stats(Q)}),
+                      step("constant_set", {"set": enc_set(Q, Q.by_id["OTC-T-0020"], Q.rec_set(Q.by_id["OTC-T-0020"]))},
+                           station_id="OTC-T-0020", set_id="OTC-T-0020/noaa")],
+                     root="bad/quantity-null", release="20991231"))
+    qdir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/quantity-null-index", "the stream index of a release with a quantity-null recommended set gives kind other, as the reference index does (orchestrator S3)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/quantity-null/",
+                              cache_dir="${cache}", mode="stream")),
+                     step("station", {"station": enc_station(Q, Q.by_id["OTC-T-0020"])}, station_id="OTC-T-0020"),
+                     step("close"),
+                     drv("assert_index", path=f"{qdir}/index-v1.json", jsonl=f"{qdir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
     return out
 
 

@@ -519,6 +519,15 @@
    ],
    "root": "bad/too-new-broken",
    "valid_as_1_0": false
+  },
+  {
+   "defect": "OTC-T-0020's recommended set has quantity null and OTC-T-0019's has no quantity (malformed 1.0); it must load, and both stations have kind other (orchestrator S3)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/quantity-null"
   }
  ],
  "reader_format_version": "1.0",

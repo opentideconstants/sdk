@@ -4325,6 +4325,200 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/r2-pk09/quantity-null",
+   "title": "a recommended set with quantity null or no quantity: the station's kind is other, and stats counts it so (orchestrator S3)",
+   "spec": "4.4, 6.2",
+   "matrix": {
+    "root": "bad/quantity-null",
+    "release": "20991231"
+   },
+   "steps": [
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0019"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0019",
+       "name": "Test Current Pass",
+       "country": "USA",
+       "lat": 47.9,
+       "lon": -122.6,
+       "type": "reference",
+       "kind": "other",
+       "timezone": "America/Los_Angeles",
+       "aliases": {
+        "noaa": [
+         "TEST1901"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": false,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0019/noaa"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0020"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0020",
+       "name": "Minimal Station",
+       "country": "USA",
+       "lat": 21.3,
+       "lon": -157.9,
+       "type": "reference",
+       "kind": "other",
+       "timezone": "Pacific/Honolulu",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": false,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0020/noaa"
+      }
+     }
+    },
+    {
+     "op": "stats",
+     "expect": {
+      "stats": {
+       "type": {
+        "reference": 18,
+        "subordinate": 2
+       },
+       "kind": {
+        "other": 2,
+        "tide": 18
+       },
+       "country": {
+        "DEU": 1,
+        "FJI": 1,
+        "GAB": 1,
+        "GBR": 5,
+        "IRL": 1,
+        "KIR": 1,
+        "NOR": 2,
+        "POL": 1,
+        "SJM": 1,
+        "USA": 6
+       },
+       "source": {
+        "eot20": 3,
+        "gesla-fit": 11,
+        "kartverket": 1,
+        "noaa": 4,
+        "ticon-fallback": 1
+       },
+       "qc_status": {
+        "flagged": 3,
+        "no_constants": 1,
+        "ok": 17
+       }
+      }
+     }
+    },
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0020",
+      "set_id": "OTC-T-0020/noaa"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0020/noaa",
+       "source": "noaa",
+       "source_type": "official",
+       "quantity": null,
+       "source_record_id": "noaa:T-0020",
+       "source_version": "20991231",
+       "record_span": null,
+       "datum": null,
+       "qc_status": "ok",
+       "qc_flags": [],
+       "dropped_constituents": [],
+       "time_base": null,
+       "is_recommended": true,
+       "convention_id": "noaa-greenwich-v1",
+       "licence_id": "noaa",
+       "constituent_count": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/r2-pk09/quantity-null-index",
+   "title": "the stream index of a release with a quantity-null recommended set gives kind other, as the reference index does (orchestrator S3)",
+   "spec": "6.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/bad/quantity-null/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0020"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0020",
+       "name": "Minimal Station",
+       "country": "USA",
+       "lat": 21.3,
+       "lon": -157.9,
+       "type": "reference",
+       "kind": "other",
+       "timezone": "Pacific/Honolulu",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": false,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0020/noaa"
+      }
+     }
+    },
+    {
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231/OTC_20991231.jsonl",
+     "datestamp": "20991231"
+    }
+   ]
   }
  ]
 }

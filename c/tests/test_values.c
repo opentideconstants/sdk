@@ -11,8 +11,8 @@
  *      UTF-8 character, never inside one.
  * C43: a set without provenance: otc_set_provenance_json is OTC_E_NOT_FOUND,
  *      as every other accessor of an absent value (CR D34), not "{}".
- * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
- *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
+ * C4:  a recommended set with no quantity gives kind OTHER, as in every SDK and
+ *      the reference stream index (spec 6.2; orchestrator S3, PK-R2-09). */
 #include "otc_test.h"
 
 #include <math.h>
@@ -106,11 +106,11 @@ int main(void)
         const otc_set *set = NULL;
         char pj[16];
         size_t pn = 0;
-        CHECK(otc_station_kind(st) == OTC_KIND_UNSET);
+        CHECK(otc_station_kind(st) == OTC_KIND_OTHER);
         /* C43: this set has no provenance */
         CHECK_STATUS(otc_station_recommended_set(st, &set), OTC_OK);
         CHECK_STATUS(otc_set_provenance_json(set, pj, sizeof pj, &pn), OTC_E_NOT_FOUND);
-        if (otc_station_kind(st) != OTC_KIND_UNSET) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
+        if (otc_station_kind(st) != OTC_KIND_OTHER) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
     }
     otc_station_free(st);
     otc_close(rel);
