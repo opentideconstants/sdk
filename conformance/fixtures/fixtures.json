@@ -62,7 +62,8 @@
    "note": "OTC_latest.json names 20991231.3 (format 2.0); OTC_latest-f1.json names 20991231.2: check_for_update reports newer_format_major 2 (spec 7.4)",
    "releases": [
     "20991231.3",
-    "20991231.2"
+    "20991231.2",
+    "20991231"
    ],
    "root": "major"
   },
@@ -140,6 +141,15 @@
     "20991231"
    ],
    "root": "bad/min-reader"
+  },
+  {
+   "defect": "OTC-T-0004's set has no provenance.build (malformed: format 1.0 requires it); it must load, with build null",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/no-build"
   }
  ],
  "reader_format_version": "1.0",

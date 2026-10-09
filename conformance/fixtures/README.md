@@ -23,14 +23,15 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `order/` | releases `20991231.2` and `20991231.10`, with the pointers on `20991231.10`: numeric counter order (.10 after .2) differs from string order (§4.3.1). Same content as `good/`'s `20991231.2` apart from the datestamp | both load |
 | `v1/` | release `20991231.3` with the annotation stations below; version DOI `10.5072/zenodo.3` and `zenodo_material` in its index entry | loads |
 | `reader/` | releases `20991231.2` and `20991231.3` (format 1.0) and `20991231.4` (format and `min_reader_version` `1.99`); the pointers name `20991231.4` | `.4`: `reader_too_old`; `latest` for a 1.0 reader is `.3` (one GET of `OTC_index.json`) |
-| `major/` | releases `20991231.2` (format 1.0) and `20991231.3` (format 2.0); `OTC_latest.json` and `OTC_latest-f2.json` name `.3`, `OTC_latest-f1.json` names `.2` | `.3`: `unsupported_format`; `latest` is `.2`; `check_for_update` reports `newer_format_major` 2 |
+| `major/` | releases `20991231` and `20991231.2` (format 1.0) and `20991231.3` (format 2.0); `OTC_latest.json` and `OTC_latest-f2.json` name `.3`, `OTC_latest-f1.json` names `.2` | `.3`: `unsupported_format`; `latest` is `.2`; `check_for_update` reports `newer_format_major` 2 |
 | `bad/wrong-sha256/` | every station data file differs from its SHA-256 (same size, one byte changed) | `checksum_mismatch` |
 | `bad/truncated/` | the `.json`, `.json.gz` and `.jsonl` files are cut to half their size | `checksum_mismatch` |
 | `bad/pointer-mismatch/` | the files match `.sha256`, but the pointer and the index give other SHA-256 values | `checksum_mismatch` |
 | `bad/format-major/` | `format_version` `2.0` (pointer `OTC_latest-f2.json`, no `-f1`) | `unsupported_format` |
-| `bad/format-minor/` | `format_version` `1.1` (`min_reader_version` `1.0`) with unknown fields at every level and an unknown alias system | loads; the unknown fields are in `raw` |
+| `bad/format-minor/` | `format_version` `1.1` (`min_reader_version` `1.0`) with unknown fields at every level, an unknown alias system, and a set on `OTC-T-0010` with `qc_status` `excluded` | loads; the unknown fields are in `raw`; the status is `other` |
 | `bad/unresolved-convention/` | a set whose `convention_id` does not exist | `invalid_release` |
 | `bad/min-reader/` | the only release has `min_reader_version` `1.99` | `reader_too_old` |
+| `bad/no-build/` | `OTC-T-0004`'s set has no `provenance.build` (malformed 1.0; valid once it is put back) | loads; `build` is null |
 
 `fixtures.json` lists the same roots, releases and expected outcomes in machine-readable form.
 
@@ -54,7 +55,7 @@ Each release has `OTC_{D}.json`, `.json.gz`, `.jsonl`, `.meta.json` and `.sha256
 |---|---|
 | `OTC-T-0001` San Francisco | reference station with two sets (official `noaa`, recommended, with every `provenance.build` field; gauge `gesla-fit`, `flagged` with an `unverified` time base); aliases in all seven systems; validation with `previous_release` as an object, as `null` and missing; dropped constituents (`rayleigh` with `not_separable_from`); provenance with a field the typed object does not have (`tcd_sha256`); every optional field |
 | `OTC-T-0002` South San Francisco | the recommended carried-over set (`flagged`, `carried_over`, `carried_from_release` `20991230`) and a `no_constants` set (`fit_unusable`, `record_issues`) |
-| `OTC-T-0003` Alameda | subordinate, `R` (ratio) offsets only, `recommended_set_id` null, offsets `licence_id` |
+| `OTC-T-0003` Alameda | subordinate, `R` (ratio) offsets only, `recommended_set_id` null, offsets `licence_id` `kartverket` (not the licence of its reference station's recommended set, `noaa`, so its attribution needs both) |
 | `OTC-T-0004` Oakland Pier | subordinate, `A` (additive) offsets, with its own set |
 | `OTC-T-0005` Old Pier | tombstone (`duplicate` of `OTC-T-0001`) |
 | `OTC-T-0006` Tromsø | local-phase convention (UTC+1); a name with ø |
@@ -69,7 +70,7 @@ Each release has `OTC_{D}.json`, `.json.gz`, `.jsonl`, `.meta.json` and `.sha256
 | `OTC-T-0021` Closing Pier | active in `20991231`, a tombstone (`merged` into `OTC-T-0022`) in `20991231.2` |
 | `OTC-T-0022` New Pier | only in `20991231.2` |
 
-Every gauge set has a `time_base` and `record_span.good_hours`; the model and official sets have no `time_base`. Release `20991231` has a null `concept_doi`, a build commit and a changelog URL. Release `20991231.2` has the concept DOI `10.5072/zenodo.1` (test prefix `10.5072`), the version DOI `10.5072/zenodo.2` in its index entry, and leaves out the optional build commit and changelog URL.
+The licences are not in `licence_id` order. Every gauge set has a `time_base` and `record_span.good_hours`; the model and official sets have no `time_base`. Release `20991231` has a null `concept_doi`, a build commit and a changelog URL. Release `20991231.2` has the concept DOI `10.5072/zenodo.1` (test prefix `10.5072`), the version DOI `10.5072/zenodo.2` in its index entry, and leaves out the optional build commit and changelog URL.
 
 ## The annotation stations (`v1/`, release `20991231.3`)
 
@@ -80,6 +81,7 @@ Every gauge set has a `time_base` and `record_span.good_hours`; the model and of
 | `OTC-T-0103` Six Mixed Quay | an `ok` official set and a `no_constants` gauge set (`too_short`): `gesla-fit` is not a usable source here |
 | `OTC-T-0104` Six Empty Reef | only a `no_constants` set (`fit_unusable`): no recommended set |
 | `OTC-T-0105` Six Carried Pier | a `flagged` set carried over from `20991231.2` |
+| `OTC-T-0106` Six Jma Port | a JMA set (`owner` `jma`, `redistribution` `redistribute` and the other JMA provenance keys, read through `raw`), with its own licence |
 | `OTC-T-0108` | a tombstone, `removed_reason` `merged`, `merged_into` `OTC-T-0101` |
 
 The `reader/` and `major/` releases hold only `OTC-T-0101`.
