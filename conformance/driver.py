@@ -28,6 +28,7 @@ import gzip
 import hashlib
 import http.client
 import json
+import math
 import os
 import queue
 import re
@@ -479,10 +480,20 @@ def api_error_problems(cases, errors_by_op):
                 if isinstance(exp, dict) and "error" in exp:
                     e = exp["error"]
                     codes = e["$any_of"] if isinstance(e, dict) and isinstance(e.get("$any_of"), list) else [e]
+                    known = errors_by_op[op] | API_ANY_OP_ERRORS
                     for code in codes:
-                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
-                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
-                                            f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
+                        if isinstance(code, str):
+                            bad = code not in known
+                        elif is_matcher(code):   # a matcher ($regex, ...) must match at least one code api.json lists
+                            try:
+                                bad = all(match(code, k, DEFAULT_TOL, "error") for k in sorted(known))
+                            except (CaseError, TypeError, re.error):
+                                bad = True       # matcher_problems reports the malformed matcher itself
+                        else:
+                            bad = True           # a number, null, list or object is never an error code
+                        if bad:
+                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {json.dumps(code)}, "
+                                            f"which matches no code api.json lists for {op} ({sorted(errors_by_op[op])})")
     return problems
 
 
@@ -532,6 +543,31 @@ def requires_problems(c):
                 out.append(f"{c.get('id')} step {i}: op {st['op']} uses {', '.join(repr(f) for f in lacking)}, "
                            f"which the case does not require" + (f" for role {role}" if role != "main" else ""))
             covered[role] |= eim
+    return out
+
+
+def tolerance_problems(exp):
+    """An expectation's tolerance must be a finite number of 0 or more (a string fails every runner at run time, and a
+    negative one fails every number)."""
+    if not isinstance(exp, dict) or "tolerance" not in exp:
+        return []
+    t = exp["tolerance"]
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or t < 0:
+        return [f"tolerance must be a finite number of 0 or more, got {t!r}"]
+    return []
+
+
+def id_problems(expanded, cross):
+    """Every case id is unique across the expanded cases/ (plain ids and matrix variants) and cross/: a duplicate makes
+    --only and expected-failure patterns name two cases."""
+    seen, out = {}, []
+    for where, cs in (("cases/", expanded), ("cross/", cross)):
+        for c in cs:
+            cid = c.get("id")
+            if cid in seen:
+                out.append(f"duplicate id {cid!r} ({seen[cid]} and {where})")
+            else:
+                seen[cid] = where
     return out
 
 
@@ -610,7 +646,7 @@ def check_cases(cases):
                 if exp is None:
                     continue
                 shape = expect_shape_problems(exp)
-                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect")]
+                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect") + tolerance_problems(exp)]
                 if not shape and "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
                     problems.append(f"{where}: an empty result satisfies this expectation")
             if st.get("expect") is not None:
@@ -618,6 +654,8 @@ def check_cases(cases):
             for f in (st.get("expect_if_missing") or {}):
                 if f not in FEATURES:
                     problems.append(f"{where}: unknown feature {f!r}")
+        for exp in [c.get("open_expect")] if isinstance(c.get("open_expect"), dict) else []:
+            problems += [f"{cid} open_expect: {p}" for p in tolerance_problems(exp)]
         if compared == 0 and not c.get("matrix"):
             problems.append(f"{cid}: no runner step with an expectation")
         for f in c.get("requires", []):
@@ -1247,7 +1285,8 @@ def main():
         print(f"case files in {cases_dir}: {len(malformed)} malformed case(s) (exit 2)", file=sys.stderr)
         return 2
     try:
-        cases = raw if a.cross else expand(raw)
+        expanded = expand(raw) if not a.cross or a.check_cases else None
+        cases = raw if a.cross else expanded
     except (KeyError, TypeError, AttributeError) as e:
         print(f"case files in {cases_dir}: cannot expand a matrix case: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
@@ -1261,7 +1300,7 @@ def main():
             cases = [c for c in cases if only.search(c["id"])]
     if a.check_cases:
         # non-matrix cases are the same before and after expansion: lint them once
-        problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
+        problems = check_cases(raw) + check_cases([c for c in expanded if "@" in c["id"]])
         try:
             by_op = api_errors(a.api)
         except (OSError, ValueError, KeyError, TypeError) as e:
@@ -1272,16 +1311,17 @@ def main():
             import itertools
             cross_ids = [f"{c['id']}[{'>'.join(p)}]" for c in raw_cross
                          for p in itertools.permutations(CROSS_NAMES, len(c.get("roles") or {}))]
-            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expand(raw)], cross_ids)
+            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expanded], cross_ids)
         n_cross = 0
         if not a.cases:
             problems += check_cases(raw_cross)
             problems += [f"{c['id']}: a cross case needs roles" for c in raw_cross if not c.get("roles")]
             problems += [f"{c['id']}: a case in cases/ must not have roles" for c in raw if c.get("roles")]
+            problems += id_problems(expanded, raw_cross)
             n_cross = len(raw_cross)
         for p in problems:
             print("PROBLEM", p)
-        print(f"case check: {len(raw)} case definitions, {len(expand(raw))} expanded cases, "
+        print(f"case check: {len(raw)} case definitions, {len(expanded)} expanded cases, "
               f"{n_cross} cross-SDK case definitions, {len(problems)} problems")
         return 0 if not problems else 2
     if a.list:

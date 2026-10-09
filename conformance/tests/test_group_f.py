@@ -350,3 +350,61 @@ def test_assert_index_bad_sdk_jsonl_is_a_case_failure(tmp_path, jsonl):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
     assert re.search(r"^FAIL  a  \[step \d+ assert_index\]", r.stdout, re.M), r.stdout[-800:]
     assert "harness error" not in r.stdout and r.returncode == 1, (r.returncode, r.stdout[-800:])
+
+
+# --- R2-140: --check-cases lints an error matcher other than $any_of against api.json, with no traceback
+
+@pytest.mark.parametrize("error,ok", [({"$regex": "^invalid_"}, True), ({"$regex": "^zzz"}, False),
+                                      ({"$any_of": ["invalid_argument", {"$regex": "^zzz"}]}, False),
+                                      ({"$any_of": ["invalid_argument", {"$contains": "release"}]}, True),
+                                      ({"$type": "string"}, True)])
+def test_check_cases_lints_error_matchers(tmp_path, error, ok):
+    st = {"op": "station", "args": {"station_id": "x"}, "expect": {"error": error}}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert "Traceback" not in r.stderr, r.stderr[-800:]
+    if ok:
+        assert r.returncode == 0, (r.returncode, r.stdout[-400:])
+    else:
+        assert r.returncode == 2 and re.search(r"^PROBLEM a step 0: op station expects error .*api\.json", r.stdout, re.M), \
+            (r.returncode, r.stdout[-400:])
+
+
+# --- R2-141: --check-cases lints tolerance (a non-negative finite number)
+
+@pytest.mark.parametrize("tol", ["x", -1e-6, True, None, [1]])
+def test_check_cases_rejects_a_bad_tolerance(tmp_path, tol):
+    st = {"op": "station_count", "expect": {"count": 1, "tolerance": tol}}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and re.search(r"^PROBLEM a step 0: .*tolerance", r.stdout, re.M), (r.returncode, r.stdout[-400:])
+
+
+def test_check_cases_accepts_a_good_tolerance(tmp_path):
+    st = {"op": "station_count", "expect": {"count": 1, "tolerance": 1e-6}}
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 0, (r.returncode, r.stdout[-400:])
+
+
+# --- R2-167: --check-cases --cross expands inside the guard; ids duplicated across raw, expanded and cross cases are found
+
+def test_check_cases_cross_with_a_bad_matrix_exits_2(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "m", "matrix": {"root": "good"}, "steps": []}])   # no release
+    r = run_driver("--check-cases", "--cases", str(cases), "--cross", "a=x", "--cross", "b=y")
+    assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stdout[-400:], r.stderr[-800:])
+
+
+def test_check_cases_finds_a_plain_id_that_a_matrix_case_also_expands_to(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "m", "matrix": {"root": "good", "release": "20991231.2"}, "steps": [OK_STEP]},
+                                   {"id": "m@json", "steps": [OK_STEP]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and re.search(r"^PROBLEM .*duplicate id 'm@json'", r.stdout, re.M), (r.returncode, r.stdout[-400:])
+
+
+def test_check_cases_finds_an_id_in_both_cases_and_cross(monkeypatch):
+    cross = driver.load_cases(driver.CROSS_DIR)
+    plain = [dict(cross[0], roles=None, steps=[OK_STEP])]
+    plain[0].pop("roles")
+    problems = driver.id_problems(plain, cross)
+    assert any("duplicate id" in p and cross[0]["id"] in p for p in problems), problems
