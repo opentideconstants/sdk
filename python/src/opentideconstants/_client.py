@@ -48,14 +48,23 @@ def _has_sha256_row(data: bytes) -> bool:
     return any(_SHA256_ROW.match(line.strip()) for line in data.splitlines())
 
 
-def _parse_sha256(text: str):
+def _parse_sha256(data: bytes, what: str = ".sha256"):
+    """The rows of a .sha256 file: name -> digest. A file that is not UTF-8, or that names a file twice, is
+    invalid_release, so that row order never decides a check (spec §5.3, CR2 DR14)."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise InvalidReleaseError(f"{what}: not UTF-8 ({e})") from e
     rows = {}
     for line in text.splitlines():
         if line.strip():
             parts = line.split(None, 1)
             if len(parts) != 2:
                 raise InvalidReleaseError(f"bad .sha256 line: {line!r}")
-            rows[parts[1].strip().lstrip("*")] = parts[0].lower()
+            name = parts[1].strip().lstrip("*")
+            if name in rows:
+                raise InvalidReleaseError(f"{what}: {name} is listed twice")
+            rows[name] = parts[0].lower()
     return rows
 
 
@@ -202,7 +211,7 @@ class OpenTideConstants:
                 raise FileError(f"cannot open {p}: no such file", path=str(p))
         sha_path = path.with_name(f"OTC_{d}.sha256")
         if sha_path.exists():
-            rows = _parse_sha256(self._read_text(sha_path))
+            rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
             for p in opened:
                 self._check_file(p, rows.get(p.name))
             files = [FileInfo(n, None, (path.parent / n).stat().st_size if (path.parent / n).exists() else None, rows[n])
@@ -216,9 +225,9 @@ class OpenTideConstants:
         self._set(rel, lf)
 
     @staticmethod
-    def _read_text(p: Path) -> str:
+    def _read_bytes(p: Path) -> bytes:
         try:
-            return p.read_text(encoding="utf-8")
+            return p.read_bytes()
         except OSError as e:
             raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
 
@@ -496,10 +505,7 @@ class OpenTideConstants:
         if ent is not None and ent.sha256 is not None and r.sha256 != ent.sha256:
             raise ChecksumError(f"{name}: SHA-256 {r.sha256} does not match the pointer's {ent.sha256}", file=name,
                                 expected=ent.sha256, actual=r.sha256)
-        try:
-            return r.body, _parse_sha256(r.body.decode("utf-8"))
-        except UnicodeDecodeError as e:
-            raise InvalidReleaseError(f"{url}: not text") from e
+        return r.body, _parse_sha256(r.body, name)
 
     @staticmethod
     def _check_pointer(info: Optional[ReleaseInfo], rows) -> None:
@@ -803,7 +809,7 @@ class OpenTideConstants:
             sha_path = self._cache.release_dir(ds) / f"OTC_{ds}.sha256"
         if not sha_path.exists():
             raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
-        rows = _parse_sha256(self._read_text(sha_path))
+        rows = _parse_sha256(self._read_bytes(sha_path), sha_path.name)
         for p in opened:
             if not p.is_file():
                 raise FileError(f"cannot read {p}: no such file", path=str(p))
@@ -870,11 +876,9 @@ class OpenTideConstants:
             sp = cdir / f"{base}.sha256"
             try:
                 sha_body = sp.read_bytes()
-                rows = _parse_sha256(sha_body.decode("utf-8"))
             except OSError as e:
                 raise FileError(f"cannot read {sp}: {e}", path=str(sp), cause=e) from e
-            except UnicodeDecodeError as e:
-                raise InvalidReleaseError(f"{sp}: not text") from e
+            rows = _parse_sha256(sha_body, str(sp))
         elif self._offline:
             raise OfflineError(f"offline, and release {ds} is not in the cache")
         else:

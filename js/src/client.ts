@@ -26,7 +26,6 @@ const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
 });
 
 const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
-const dec = new TextDecoder();
 
 function toInfo(e: PointerEntry): ReleaseInfo {
     return Object.freeze({
@@ -290,7 +289,7 @@ export class OpenTideConstants {
         let files;
         let from: LoadedFrom;
         if (shaBytes) {
-            const rows = parseSha256(dec.decode(shaBytes));
+            const rows = parseSha256(shaBytes, shaPath);
             for (const [n, b] of bytes) checkBytes(n, node.sha256Sync(b), b.length, rows.get(n) ?? null, null);
             files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
             from = "file";
@@ -550,7 +549,7 @@ export class OpenTideConstants {
         const verified = await readVerified(store, d);
         let shaBytes = verified ? node.readIfExists(node.nodePath.join(cdir, n.sha)) : null;
         let rows: Map<string, string>;
-        if (shaBytes) rows = parseSha256(dec.decode(shaBytes));
+        if (shaBytes) rows = parseSha256(shaBytes, n.sha);
         else {
             if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
             ({ bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry));
@@ -594,7 +593,7 @@ export class OpenTideConstants {
         if (f && this.#node) {
             const node = this.#node;
             if (!f.shaPath) throw new ChecksumError("no OTC_{D}.sha256 next to the file", { file: f.path, expected: null, actual: null });
-            const rows = parseSha256(dec.decode(node.readFileOrIo(f.shaPath)));
+            const rows = parseSha256(node.readFileOrIo(f.shaPath), f.shaPath);
             for (const p of f.dataPaths) {
                 const actual = node.sha256Sync(node.readFileOrIo(p));
                 const exp = rows.get(node.nodePath.basename(p)) ?? null;

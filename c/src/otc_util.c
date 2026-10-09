@@ -635,6 +635,11 @@ otc_status otc__sha256_file(const char *path, char hex[65])
     return st;
 }
 
+const char *otc__sha256_rows_what(otc_status st)
+{
+    return st == OTC_E_INVALID_RELEASE ? "a name listed twice, or bytes that are not UTF-8, in" : "cannot read";
+}
+
 void otc__free_rows(char **names, char **digests, size_t n)
 {
     size_t i;
@@ -646,7 +651,34 @@ void otc__free_rows(char **names, char **digests, size_t n)
     free(digests);
 }
 
-/* Parses a sha256sum file: "<64 hex>  <name>" or "<64 hex> *<name>" per line. */
+/* 1 if s[0..n) is well-formed UTF-8 (no overlong form, no surrogate, nothing above U+10FFFF). */
+static int utf8_valid(const unsigned char *s, size_t n)
+{
+    size_t i = 0;
+    while (i < n) {
+        unsigned c = s[i];
+        size_t k, len;
+        unsigned cp, min;
+        if (c < 0x80) { i++; continue; }
+        if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; min = 0x80; }
+        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; min = 0x800; }
+        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; min = 0x10000; }
+        else return 0;
+        if (n - i < len) return 0;
+        for (k = 1; k < len; k++) {
+            if ((s[i + k] & 0xC0) != 0x80) return 0;
+            cp = (cp << 6) | (s[i + k] & 0x3F);
+        }
+        if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0;
+        i += len;
+    }
+    return 1;
+}
+
+/* Parses a sha256sum file: "<64 hex>  <name>" or "<64 hex> *<name>" per line.
+ * A file with a row that is not UTF-8, or that names a file twice, is
+ * OTC_E_INVALID_RELEASE, so that row order never decides a check (spec 5.3,
+ * CR2 DR14). */
 otc_status otc__sha256_rows(const char *sha_path, char ***names_out, char ***digests_out, size_t *n_out)
 {
     char *text = NULL;
@@ -698,6 +730,11 @@ otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***di
                 digests[n] = otc__strndup(p, 64);
                 if (!names[n] || !digests[n]) { free(names[n]); free(digests[n]); st = OTC_E_NOMEM; break; }
                 {
+                    size_t j;
+                    for (j = 0; j < n && strcmp(names[j], names[n]) != 0; j++) {}
+                    if (j < n) { free(names[n]); free(digests[n]); st = OTC_E_INVALID_RELEASE; break; }
+                }
+                {
                     size_t i;
                     for (i = 0; i < 64; i++)
                         if (digests[n][i] >= 'A' && digests[n][i] <= 'F') digests[n][i] = (char)(digests[n][i] + 32);
@@ -708,6 +745,8 @@ otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***di
         if (!eol) break;
         p = eol + 1;
     }
+    /* with no row at all the caller decides (a 200 with no row is a network error, CR2 DR13) */
+    if (st == OTC_OK && n > 0 && !utf8_valid((const unsigned char *)text, strlen(text))) st = OTC_E_INVALID_RELEASE;
     if (st != OTC_OK) { otc__free_rows(names, digests, n); return st; }
     *names_out = names;
     *digests_out = digests;
@@ -763,7 +802,7 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     }
     st = otc__sha256_rows(sha256_path, &names, &digests, &n);
     if (st != OTC_OK) {
-        otc__err_set(err, st, sha256_path, "cannot read %s", sha256_path);
+        otc__err_set(err, st, sha256_path, "%s %s", otc__sha256_rows_what(st), sha256_path);
         free(own);
         return st;
     }

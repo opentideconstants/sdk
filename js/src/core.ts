@@ -430,7 +430,7 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
         const own = entry.files.find((f) => f.name === n.sha);
         if (own) checkBytes(n.sha, await ctx.platform.sha256(res.body), res.body.length, own.sha256, own.size);
     }
-    const rows = parseSha256(dec.decode(res.body));
+    const rows = parseSha256(res.body, n.sha);
     if (rows.size === 0) throw new InvalidReleaseError(`${n.sha} lists no files`);
     if (entry) {
         // the pointer and OTC_{D}.sha256 list the same files with the same digests (spec 5.2 step 4.1)
@@ -703,7 +703,7 @@ export async function verifyCached(ctx: Ctx, d: string): Promise<true> {
     const n = names(d);
     const shaBytes = await store.read(`${dir}/${n.sha}`);
     if (!shaBytes) throw new ChecksumError(`${n.sha} is missing from the cache`, { file: store.describe(`${dir}/${n.sha}`), expected: null, actual: null });
-    const rows = parseSha256(dec.decode(shaBytes));
+    const rows = parseSha256(shaBytes, n.sha);
     const present = new Set(await store.list(dir));
     const needed = ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json];
     let checked = 0;

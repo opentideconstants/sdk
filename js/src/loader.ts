@@ -155,12 +155,23 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null);
 }
 
-/** @internal Parse a `sha256sum` file: name -> digest. */
-export function parseSha256(text: string): Map<string, string> {
+/**
+ * @internal Parse a `sha256sum` file: name -> digest. A file that is not UTF-8, or that names a file twice, is
+ * invalid_release, so that row order never decides a check (spec 5.3, CR2 DR14). `what` names the file.
+ */
+export function parseSha256(bytes: Uint8Array, what = "the .sha256 file"): Map<string, string> {
+    let text: string;
+    try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch (e) {
+        throw new InvalidReleaseError(`${what} is not UTF-8`, { cause: e });
+    }
     const out = new Map<string, string>();
     for (const line of text.split(/\r?\n/)) {
         const m = /^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$/.exec(line);
-        if (m && m[1] && m[2]) out.set(m[2], m[1].toLowerCase());
+        if (!m || !m[1] || !m[2]) continue;
+        if (out.has(m[2])) throw new InvalidReleaseError(`${what} lists ${m[2]} twice`);
+        out.set(m[2], m[1].toLowerCase());
     }
     return out;
 }

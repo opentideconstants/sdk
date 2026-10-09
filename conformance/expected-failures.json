@@ -66,38 +66,6 @@
    "reason": "RED of CR2 DR12: [step 2 releases] expected error 'invalid_release', got a result {\"releases\": [{\"datestamp\": \"20991231.2\", \"format_version\": \"1.0\", \"concept_doi\": \"10.5072/zenodo.1\", \"zenodo_version_doi\": \"10.5072/zenodo.2\", \"content_sh"
   },
   {
-   "case": "rules/r2-pk06/sha256-dup-name-latest",
-   "runners": [
-    "python"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-pinned",
-   "runners": [
-    "python"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-file",
-   "runners": [
-    "python"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-file",
-   "runners": [
-    "python"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'uncaught:UnicodeDecodeError' ('utf-8' codec can't decode byte 0xff in position 424: invalid start byte)"
-  },
-  {
    "case": "rules/r2-pk06/sha256-no-json-row-eager",
    "runners": [
     "python"
@@ -152,54 +120,6 @@
    ],
    "package": "PK-R2-06",
    "reason": "RED of CR2 DR12: [step 2 releases] expected error 'invalid_release', got a result {\"releases\": [{\"datestamp\": \"20991231.2\", \"format_version\": \"1.0\", \"concept_doi\": \"10.5072/zenodo.1\", \"zenodo_version_doi\": \"10.5072/zenodo.2\", \"content_sh"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-latest",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-pinned",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-file",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-latest",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'uncaught:Encoding::CompatibilityError' (invalid byte sequence in UTF-8 ... `strip' | ..."
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-pinned",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'uncaught:Encoding::CompatibilityError' (invalid byte sequence in UTF-8 ... `strip' | ..."
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-file",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'uncaught:Encoding::CompatibilityError' (invalid byte sequence in UTF-8 ... `strip' | ..."
   },
   {
    "case": "rules/r2-pk06/pointer-file-no-sha256-latest",
@@ -266,54 +186,6 @@
    "reason": "RED of CR2 DR12: [step 2 releases] expected error 'invalid_release', got a result {\"releases\": [{\"datestamp\": \"20991231.2\", \"format_version\": \"1.0\", \"concept_doi\": \"10.5072/zenodo.1\", \"zenodo_version_doi\": \"10.5072/zenodo.2\", \"content_sh"
   },
   {
-   "case": "rules/r2-pk06/sha256-dup-name-latest",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-pinned",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-file",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-latest",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'checksum_mismatch' (OTC_20991231.sha256 lists OTC_20991231.?, which the pointer does not)"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-pinned",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-file",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
    "case": "rules/r2-pk06/sha256-no-json-row-eager",
    "runners": [
     "typescript"
@@ -384,70 +256,6 @@
    ],
    "package": "PK-R2-06",
    "reason": "RED of CR2 DR12: [step 2 releases] expected error 'invalid_release', got a result {\"releases\": [{\"datestamp\": \"20991231.2\", \"format_version\": \"1.0\", \"concept_doi\": \"10.5072/zenodo.1\", \"zenodo_version_doi\": \"10.5072/zenodo.2\", \"content_sh"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-latest",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'checksum_mismatch' (OTC_20991231.jsonl: the pointer and the .sha256 file disagree)"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-pinned",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got error 'checksum_mismatch' (OTC_20991231.jsonl: the SHA-256 or size does not match)"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-file",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-latest",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] RunnerError: runner printed a line that is not JSON: b'{\"ok\":false,\"error\":{\"code\":\"checksum_mismatch\",\"message\":\"OTC_20991231.\\xff: the .sha256 file lists a file that the pointer does not\",\"fields\":{\"file\""
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-pinned",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-file",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-dup-name-file",
-   "runners": [
-    "c"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/r2-pk06/sha256-invalid-utf8-file",
-   "runners": [
-    "c"
-   ],
-   "package": "PK-R2-06",
-   "reason": "RED of CR2 DR14: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   }
  ]
 }

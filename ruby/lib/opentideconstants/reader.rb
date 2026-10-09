@@ -34,12 +34,17 @@ class OpenTideConstants
 
         # Parses "<sha256>  <name>" lines into {name => sha256} (lower case).
         # A line in any other form is invalid_release (source names the file).
+        # So is a file that is not UTF-8 or that names a file twice, so that
+        # row order never decides a check (CR2 DR14).
         def parse_sha256(text, source = "the .sha256 file")
+            text = text.dup.force_encoding(Encoding::UTF_8)
+            raise InvalidReleaseError, "#{source} is not UTF-8" unless text.valid_encoding?
             rows = {}
             text.each_line.with_index(1) do |line, n|
                 next if line.strip.empty?
                 m = SHA256_LINE.match(line.chomp)
                 raise InvalidReleaseError, "#{source} line #{n} is not \"<sha256>  <name>\": #{line.chomp[0, 100].inspect}" unless m
+                raise InvalidReleaseError, "#{source} lists #{m[2]} twice (line #{n})" if rows.key?(m[2])
                 rows[m[2]] = m[1].downcase
             end
             rows

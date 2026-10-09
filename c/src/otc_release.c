@@ -1035,7 +1035,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     if (otc__path_size(sha_path) >= 0) {
         char hex[65];
         st = otc__sha256_rows(sha_path, &names, &digests, &n_rows);
-        if (st != OTC_OK) { otc__err_set(err, st, sha_path, "cannot read %s", sha_path); goto done; }
+        if (st != OTC_OK) { otc__err_set(err, st, sha_path, "%s %s", otc__sha256_rows_what(st), sha_path); goto done; }
         if ((st = otc__sha256_handle(r->file, hex)) != OTC_OK) { otc__err_set(err, st, path, "cannot read %s", path); goto done; }
         if ((st = check_digest(path, jsonl_name, hex, names, digests, n_rows, err)) != OTC_OK) goto done;
         otc__sha256_mem(meta_text, meta_len, hex);

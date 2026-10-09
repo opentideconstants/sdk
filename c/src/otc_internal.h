@@ -130,8 +130,10 @@ otc_status otc__sha256_handle(otc__file *f, char hex[65]);
 void otc__sha256_mem(const void *data, size_t len, char hex[65]);
 /* The digest of name in a sha256sum file (malloc'd hex), or NULL. *found_file is 0 if the file does not exist. */
 otc_status otc__sha256_rows(const char *sha_path, char ***names, char ***digests, size_t *n);
-/* The same for the text of a sha256sum file. */
+/* The same for the text of a sha256sum file. Not UTF-8, or a name listed twice: OTC_E_INVALID_RELEASE (CR2 DR14). */
 otc_status otc__sha256_rows_text(const char *text, char ***names, char ***digests, size_t *n);
+/* The start of an error message for a status of the two functions above: "cannot read" or what is wrong. */
+const char *otc__sha256_rows_what(otc_status st);
 void otc__free_rows(char **names, char **digests, size_t n);
 
 /* enum parsing: unknown -> OTHER, NULL -> UNSET */

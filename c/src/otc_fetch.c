@@ -2000,7 +2000,8 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     resp_free(&r);
     if (st != OTC_OK) goto out;
     if ((st = otc__sha256_rows(sha_tmp, &names, &digests, &n_rows)) != OTC_OK) {
-        st = fail(c, st == OTC_E_NOMEM ? st : OTC_E_CACHE, sha_tmp, "cannot read %s", sha_tmp);
+        if (st == OTC_E_INVALID_RELEASE) st = fail(c, st, sha_name, "%s %s", otc__sha256_rows_what(st), sha_name);
+        else st = fail(c, st == OTC_E_NOMEM ? st : OTC_E_CACHE, sha_tmp, "cannot read %s", sha_tmp);
         goto out;
     }
     if (n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row (a captive portal) stands in for the network */
@@ -2767,7 +2768,11 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         free(url);
         if (st != OTC_OK) goto out;
     }
-    if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) { fail(&c, st, NULL, "out of memory"); goto out; }
+    if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) {
+        if (st == OTC_E_INVALID_RELEASE) fail(&c, st, NULL, "%s OTC_%s.sha256", otc__sha256_rows_what(st), ds);
+        else fail(&c, st, NULL, "out of memory");
+        goto out;
+    }
     if (!cached && n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row stands in for the network */
         st = fail(&c, OTC_E_NETWORK, NULL, "OTC_%s.sha256: the 200 response has no \"<sha256>  <name>\" row (a captive portal or proxy page?)",
                   ds);
