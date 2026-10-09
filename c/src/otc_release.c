@@ -1284,7 +1284,7 @@ otc_status otc_release_citation(const otc_release *rel, char *buf, size_t len, s
     vdoi = rel->zenodo_version_doi;
     cap = 256 + 2 * strlen(d) + (doi ? strlen(doi) : 0) + (vdoi ? strlen(vdoi) : 0);
     text = (char *)malloc(cap);
-    if (!text) return OTC_E_NOMEM;
+    if (!text) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (doi)
         snprintf(text, cap, "OpenTideConstants contributors (%.4s). OpenTideConstants, release %s [Data set]. "
                  "https://doi.org/%s", d, d, doi);
@@ -1315,7 +1315,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     char *head, *text;
     size_t head_cap;
     otc_status st;
-    if (!rel || (n_ids && !ids)) return OTC_E_INVALID_ARGUMENT;
+    if (!rel || (n_ids && !ids)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_attribution: ids is NULL");
     if (n_ids == 0) ids = NULL;   /* spec 4.6 (CR D2): an empty list is every licence of the release */
     for (i = 0; ids && i < n_ids; i++)   /* an unknown or removed id is an error, never skipped (CR D2) */
         if (!ids[i] || !otc__find_entry(rel, ids[i]))
@@ -1327,7 +1327,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     seen_att = (const char **)calloc(cap, sizeof *seen_att);
     if (!lic || !seen_prov || !seen_att) {
         free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
-        return OTC_E_NOMEM;
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     }
     if (!ids) {
         for (i = 0; i < rel->n_lic; i++) lic[n_lic++] = rel->lic[i].id;
@@ -1347,7 +1347,10 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     doi = otc__jstr(rel->release_obj, "concept_doi");   /* never the version DOI (spec 4.6) */
     head_cap = 160 + 2 * strlen(d) + (doi ? strlen(doi) : 0);
     head = (char *)malloc(head_cap);
-    if (!head) { free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (!head) {
+        free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    }
     if (doi) snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0. Sources: ", d, doi);
     else snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0. Sources: ", d, d);
     /* one entry per licence id (sorted), then one per provider */
@@ -1369,7 +1372,10 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         total += (prov ? strlen(prov) + 2 : 0) + (att ? strlen(att) : 0) + 2;
     }
     text = (char *)malloc(total);
-    if (!text) { free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att); return OTC_E_NOMEM; }
+    if (!text) {
+        free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
+        return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    }
     strcpy(text, head);
     free(head);
     for (i = 0; i < n_seen; i++) {
@@ -1399,10 +1405,10 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
     otc_stats *s;
     size_t i;
     otc_status st = OTC_OK;
-    if (!rel || !out) return OTC_E_INVALID_ARGUMENT;
-    *out = NULL;
+    if (out) *out = NULL;
+    if (!rel || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_release_stats: NULL argument");
     s = (otc_stats *)calloc(1, sizeof *s);
-    if (!s) return OTC_E_NOMEM;
+    if (!s) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     for (i = 0; i < rel->n_st && st == OTC_OK; i++) {
         const otc__entry *e = &rel->st[i];
         st = otc__kv_add(&s->type, e->type_s, 1);
@@ -1413,7 +1419,7 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
         st = otc__kv_add(&s->source, rel->source_counts.items[i].key, rel->source_counts.items[i].n);
     for (i = 0; i < rel->qc_counts.n && st == OTC_OK; i++)
         st = otc__kv_add(&s->qc_status, rel->qc_counts.items[i].key, rel->qc_counts.items[i].n);
-    if (st != OTC_OK) { otc_stats_free(s); return st; }
+    if (st != OTC_OK) { otc_stats_free(s); return otc__fail(rel, st, "out of memory"); }
     otc__kv_sort(&s->type);
     otc__kv_sort(&s->kind);
     otc__kv_sort(&s->country);
