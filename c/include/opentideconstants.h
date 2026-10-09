@@ -704,7 +704,11 @@ OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, con
 OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major);
 /* If a release newer than current exists, downloads it into the cache, sets
  * *updated and writes the path of its .jsonl; the app then opens it and
- * closes the old handle (C has no automatic update, spec 5.6). */
+ * closes the old handle (C has no automatic update, spec 5.6). path and len
+ * are checked before the download: a buffer too small for the path is
+ * OTC_E_BUFFER_TOO_SMALL (the error message names the size) and downloads
+ * nothing. *updated is true only when the new release is in the cache and
+ * path names it. */
 OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                                     bool *updated);
 /* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":

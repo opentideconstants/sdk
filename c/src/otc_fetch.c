@@ -2490,24 +2490,27 @@ otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, 
     otc_status st = ctx_init(&c, opts);
     if (updated) *updated = false;
     if (path && len) path[0] = '\0';
-    if (st == OTC_OK && (!updated || !valid_datestamp(current)))
-        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; updated must not be NULL");
+    if (st == OTC_OK && (!updated || !valid_datestamp(current) || !path || !len))
+        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; path, len and updated must be set");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = ensure_root(&c);
     if (st == OTC_OK) st = latest_info(&c, &ri, NULL);
     if (st == OTC_OK && ds_cmp(ri->datestamp, current) > 0) {
-        st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
-        otc_close(rel);
+        /* the path is known before the download: a buffer that cannot hold it downloads nothing */
+        char *p = rel_file(&c, ri->datestamp, ".jsonl");
+        size_t need;
+        if (!p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (strlen(p) + 1 > len) st = copy_path(&c, p, path, len, &need);
         if (st == OTC_OK) {
-            char *p = rel_file(&c, ri->datestamp, ".jsonl");
-            size_t need;
-            st = p ? copy_path(&c, p, path, len, &need) : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-            free(p);
-            if (st == OTC_OK) {
-                *updated = true;
-                logf_(&c, 1, "updated from %s to %s", current, ri->datestamp);
-            }
+            st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
+            otc_close(rel);
         }
+        if (st == OTC_OK) st = copy_path(&c, p, path, len, &need);
+        if (st == OTC_OK) {
+            *updated = true;   /* the new release is in the cache and path names it */
+            logf_(&c, 1, "updated from %s to %s", current, ri->datestamp);
+        }
+        free(p);
     }
     otc_release_info_free(ri);
     ctx_free(&c);
