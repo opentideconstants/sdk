@@ -371,3 +371,15 @@ test("T23/D2: attribution prints a provider-less licence alone, counts a subordi
     const other = releaseFromJson(enc(doc), []);
     assert.throws(() => r.attribution([other.station("R")]), isCode("invalid_argument"));
 });
+
+test("D15: OPENTIDECONSTANTS_OFFLINE reads 1, true, yes and on (any case, trimmed) as offline", async () => {
+    const saved = process.env.OPENTIDECONSTANTS_OFFLINE;
+    try {
+        for (const v of [" TRUE ", "yes", "On", "1"]) {
+            process.env.OPENTIDECONSTANTS_OFFLINE = v;
+            await assert.rejects(otc.OpenTideConstants.open({ cacheDir: tmpdir(), baseUrl: "http://127.0.0.1:9/" }), isCode("offline_unavailable"), v);
+        }
+    } finally {
+        if (saved === undefined) delete process.env.OPENTIDECONSTANTS_OFFLINE; else process.env.OPENTIDECONSTANTS_OFFLINE = saved;
+    }
+});

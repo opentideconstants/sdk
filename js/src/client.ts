@@ -167,7 +167,9 @@ export class OpenTideConstants {
         const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
         if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
         if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
-        const offline = optBool(options.offline, "offline") ?? platform.env("OPENTIDECONSTANTS_OFFLINE") === "1";
+        // the environment variable forces offline with 1, true, yes or on, in any case, trimmed (spec 4.2, CR D15)
+        const envOffline = ["1", "true", "yes", "on"].includes((platform.env("OPENTIDECONSTANTS_OFFLINE") ?? "").trim().toLowerCase());
+        const offline = envOffline || (optBool(options.offline, "offline") ?? false);
         let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
         if (!baseUrl.endsWith("/")) baseUrl += "/";
         // network settings are checked here, before any network access (spec 4.2, CR D19)
