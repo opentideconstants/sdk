@@ -78,6 +78,12 @@ ACTIONS = {"status", "short_body", "truncate", "slow", "file", "json"}
 # action -> required fields and their types; then the optional fields of any rule
 _REQUIRED = {"status": {"status": int}, "file": {"file": str}, "json": {"file": str}, "truncate": {"bytes": int}}
 _OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str}
+# the optional fields each action reads (any other key is a typo, and would be ignored without this check)
+_ACTION_OPTIONAL = {"status": {"headers", "body"}, "short_body": {"delta"}, "truncate": set(), "slow": {"delay_s"},
+                    "file": set(), "json": {"pointer"}}
+_COMMON = {"match", "action", "times", "name"}
+# the smallest value of each number field
+_MINIMUM = {"status": 100, "delta": 1, "delay_s": 0, "bytes": 0}
 
 
 def validate_rule(i, r):
@@ -98,11 +104,20 @@ def validate_rule(i, r):
     for k, t in {**_OPTIONAL, **_REQUIRED.get(r["action"], {})}.items():
         if k in r and (isinstance(r[k], bool) or not isinstance(r[k], t)):
             raise ValueError(f"rule {i}: {k} has the wrong type: {r[k]!r}")
+    allowed = _COMMON | set(_REQUIRED.get(r["action"], {})) | _ACTION_OPTIONAL[r["action"]]
+    unknown = sorted(set(r) - allowed)
+    if unknown:
+        raise ValueError(f"rule {i}: action {r['action']!r} has no field(s) {unknown}")
+    for k, low in _MINIMUM.items():
+        if k in r and r[k] < low:
+            raise ValueError(f"rule {i}: {k} must be at least {low}, got {r[k]!r}")
+    if "status" in r and r["status"] > 599:
+        raise ValueError(f"rule {i}: status must be an HTTP status (100-599), got {r['status']!r}")
     if isinstance(r.get("pointer"), str):
         pointer_parts(r["pointer"])  # ValueError for a pointer that is not RFC 6901
     times = r.get("times")
-    if times is not None and (isinstance(times, bool) or not isinstance(times, int)):
-        raise ValueError(f"rule {i}: times must be an integer or null, got {times!r}")
+    if times is not None and (isinstance(times, bool) or not isinstance(times, int) or times < 1):
+        raise ValueError(f"rule {i}: times must be an integer of 1 or more, or null, got {times!r}")
 
 
 def pointer_parts(pointer):

@@ -129,3 +129,21 @@ def test_json_set_rejects_a_pointer_without_a_leading_slash(tmp_path):
     assert problems and json.loads(p.read_text()) == {"a": {"b": 1}, "b": 0}, (problems, p.read_text())
     problems, _ = driver.run_action({"driver": "json_set", "path": str(p), "pointer": "/a/b", "value": 9}, {}, None, None)
     assert not problems and json.loads(p.read_text())["a"]["b"] == 9
+
+
+# --- K14: validate_rule rejects unknown keys, keys of another action and values out of range
+
+@pytest.mark.parametrize("rule", [
+    {"match": "x", "action": "status", "status": 500, "time": 1},          # typo of times
+    {"match": "x", "action": "slow", "delay": 3},                          # typo of delay_s
+    {"match": "x", "action": "status", "status": 500, "pointer": "/a"},    # pointer is for json rules
+    {"match": "x", "action": "status", "status": 500, "times": 0},
+    {"match": "x", "action": "status", "status": 500, "times": -1},
+    {"match": "x", "action": "slow", "delay_s": -1},
+    {"match": "x", "action": "short_body", "delta": -5},
+    {"match": "x", "action": "truncate", "bytes": -1},
+    {"match": "x", "action": "status", "status": 99},
+])
+def test_validate_rule_rejects(rule):
+    with pytest.raises(ValueError):
+        server.validate_rule(0, rule)
