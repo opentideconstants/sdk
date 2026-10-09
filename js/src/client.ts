@@ -166,6 +166,11 @@ export class OpenTideConstants {
             throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
         }
         const suffix = optStr(options.userAgent, "userAgent");
+        // the suffix goes into a header: no control character (C0, DEL, C1), and latin-1 only, the characters Node
+        // can send in a header (a raw TypeError at the first request otherwise) (spec 4.2, 5.7, CR2 DR20)
+        if (suffix !== null && /[\u0000-\u001f\u007f-\u009f]|[^\u0000-\u00ff]/u.test(suffix)) {
+            throw new InvalidArgumentError(`userAgent has a control or non-latin-1 character: ${JSON.stringify(suffix)}`);
+        }
 
         // "#node" is node.ts under the "node" condition and no-node.ts elsewhere (package.json "imports"), so browser code
         // never imports node.ts (CR T64)

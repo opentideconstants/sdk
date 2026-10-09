@@ -403,3 +403,27 @@ test("T65: require() of the package (Node 22.12 or later, require of an ES modul
     assert.equal(viaRequire.OpenTideConstants, viaImport.OpenTideConstants);
     assert.equal(viaRequire.VERSION, otc.VERSION);
 });
+
+// ---- CR2 PK-R2-11: every failure leaves the SDK as an SDK error with the spec 4.8 code
+
+/** A local server that answers 404 to everything and counts the requests. */
+async function counting404() {
+    const s = { requests: 0 };
+    s.srv = http.createServer((req, res) => { s.requests++; res.statusCode = 404; res.end(); });
+    await new Promise((r) => s.srv.listen(0, "127.0.0.1", r));
+    s.url = `http://127.0.0.1:${s.srv.address().port}/`;
+    return s;
+}
+
+test("DR20: a userAgent with a control or non-latin-1 character is invalid_argument at open, before any request", async () => {
+    const s = await counting404();
+    try {
+        for (const ua of ["app\r\nX: 1", "app\u00851", "app€1", "app\u{1F30A}"]) {
+            const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-ua-"));
+            await assert.rejects(otc.OpenTideConstants.open({ baseUrl: s.url, cacheDir, userAgent: ua }), isCode("invalid_argument"), JSON.stringify(ua));
+        }
+        assert.equal(s.requests, 0);
+    } finally {
+        s.srv.close();
+    }
+});
