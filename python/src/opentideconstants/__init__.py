@@ -11,14 +11,15 @@ See https://opentideconstants.org. Code licence: MIT. Data licence: CC BY 4.0.
 from ._client import DEFAULT_BASE_URL, OpenTideConstants, __version__
 from ._enums import (AliasSystem, CanaryStatus, DecisionOutcome, DecisionTier, DroppedReason, Format,
                      HeightAdjustedType, Kind, LoadedFrom, Match, Mode, NodalHandling, OnNetworkError,
-                     PhaseReference, QcFlagName, QcStatus, Quantity, SourceType, StationStatus, StationType)
+                     PhaseReference, QcFlagName, QcStatus, Quantity, RemovedReason, SourceType, StationStatus,
+                     StationType, TimeBaseCode)
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
-                      ReleaseNotFoundError, StationNotFoundError, StationRemovedError, UnsupportedFormatError)
+                      ReaderTooOldError, ReleaseNotFoundError, StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._models import (ConstantSet, Constituent, Convention, Datum, DroppedConstituent, FileInfo, Licence, Nearby,
-                      Provenance, QcFlag, RecordSpan, ReleaseInfo, Station, Stats, SubordinateOffsets, Tombstone,
-                      UpdateResult, Validation)
-from ._release import SUPPORTED_FORMAT_MAJORS, Release
+                      Provenance, ProvenanceBuild, QcFlag, RecordSpan, ReleaseInfo, Station, Stats, SubordinateOffsets,
+                      TimeBase, Tombstone, UpdateResult, Validation)
+from ._release import SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release
 
 CACHE_LAYOUT_VERSION = "v1"
 
@@ -27,16 +28,16 @@ __all__ = [
     "OpenTideConstants", "Release",
     # objects
     "ReleaseInfo", "FileInfo", "Station", "Tombstone", "ConstantSet", "Constituent", "Convention", "Licence",
-    "Provenance", "QcFlag", "DroppedConstituent", "Validation", "SubordinateOffsets", "Nearby", "UpdateResult",
+    "Provenance", "ProvenanceBuild", "TimeBase", "QcFlag", "DroppedConstituent", "Validation", "SubordinateOffsets", "Nearby", "UpdateResult",
     "RecordSpan", "Datum", "Stats",
     # enums
-    "Kind", "StationType", "StationStatus", "SourceType", "Quantity", "QcStatus", "LoadedFrom", "PhaseReference",
-    "NodalHandling", "CanaryStatus", "HeightAdjustedType", "DroppedReason", "QcFlagName", "DecisionTier",
+    "Kind", "StationType", "StationStatus", "RemovedReason", "SourceType", "Quantity", "QcStatus", "LoadedFrom", "PhaseReference",
+    "NodalHandling", "CanaryStatus", "HeightAdjustedType", "DroppedReason", "QcFlagName", "TimeBaseCode", "DecisionTier",
     "DecisionOutcome", "AliasSystem", "Mode", "OnNetworkError", "Format", "Match",
     # errors
     "OpenTideConstantsError", "NetworkError", "ReleaseNotFoundError", "OfflineError", "ChecksumError",
-    "UnsupportedFormatError", "InvalidReleaseError", "StationNotFoundError", "StationRemovedError",
+    "UnsupportedFormatError", "ReaderTooOldError", "InvalidReleaseError", "StationNotFoundError", "StationRemovedError",
     "PinnedReleaseError", "CacheError", "FileExistsError", "FileError", "InvalidArgumentError",
     # constants
-    "SUPPORTED_FORMAT_MAJORS", "DEFAULT_BASE_URL", "CACHE_LAYOUT_VERSION", "__version__",
+    "SUPPORTED_FORMAT_MAJORS", "SUPPORTED_FORMAT_VERSION", "DEFAULT_BASE_URL", "CACHE_LAYOUT_VERSION", "__version__",
 ]

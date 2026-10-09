@@ -40,6 +40,10 @@ class UnsupportedFormatError(OpenTideConstantsError):
     code = "unsupported_format"
 
 
+class ReaderTooOldError(OpenTideConstantsError):
+    code = "reader_too_old"
+
+
 class InvalidReleaseError(OpenTideConstantsError):
     code = "invalid_release"
 
@@ -82,7 +86,7 @@ class InvalidArgumentError(OpenTideConstantsError):
 
 
 ERROR_CLASSES = (
-    NetworkError, ReleaseNotFoundError, OfflineError, ChecksumError, UnsupportedFormatError, InvalidReleaseError,
-    StationNotFoundError, StationRemovedError, PinnedReleaseError, CacheError, FileExistsError, FileError,
-    InvalidArgumentError,
+    NetworkError, ReleaseNotFoundError, OfflineError, ChecksumError, UnsupportedFormatError, ReaderTooOldError,
+    InvalidReleaseError, StationNotFoundError, StationRemovedError, PinnedReleaseError, CacheError, FileExistsError,
+    FileError, InvalidArgumentError,
 )

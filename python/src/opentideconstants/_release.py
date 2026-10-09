@@ -15,16 +15,18 @@ from types import MappingProxyType
 from typing import Iterator, Optional, Sequence, Tuple
 
 from . import _enums as E
-from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, StationNotFoundError,
+from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError, StationNotFoundError,
                       StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, build_station, freeze,
                       parse_time)
 
-SUPPORTED_FORMAT_MAJORS = (0,)
+SUPPORTED_FORMAT_MAJORS = (1,)
+SUPPORTED_FORMAT_VERSION = "1.0"
 EARTH_R_KM = 6371.0088
 INDEX_VERSION = 1
 LRU_SIZE = 256
+_USABLE = ("ok", "flagged")  # qc_status of a set with constants (spec §4.3); QcStatus members compare equal
 DATA_URL = "https://data.opentideconstants.org/"
 
 
@@ -44,7 +46,27 @@ def _json(data: bytes, what: str):
         raise InvalidReleaseError(f"{what}: not JSON: {e}") from e
 
 
-def check_format(fv) -> None:
+def version_key(v):
+    """(MAJOR, MINOR) of a format version string, or None when it is not MAJOR.MINOR."""
+    if not isinstance(v, str):
+        return None
+    major, dot, minor = v.partition(".")
+    if not dot or not major.isdigit() or not minor.isdigit():
+        return None
+    return int(major), int(minor)
+
+
+def readable(format_version, min_reader_version) -> bool:
+    """True when this SDK reads a release with these versions (spec §7.4): a supported major, and a
+    min_reader_version no newer than SUPPORTED_FORMAT_VERSION (a missing one does not block)."""
+    fv = version_key(format_version)
+    if fv is None or fv[0] not in SUPPORTED_FORMAT_MAJORS:
+        return False
+    mr = version_key(min_reader_version)
+    return mr is None or mr <= version_key(SUPPORTED_FORMAT_VERSION)
+
+
+def check_format(fv, min_reader_version=None, datestamp=None) -> None:
     if not isinstance(fv, str) or "." not in fv:
         raise InvalidReleaseError(f"format_version missing or not MAJOR.MINOR: {fv!r}")
     try:
@@ -53,6 +75,10 @@ def check_format(fv) -> None:
         raise InvalidReleaseError(f"format_version not MAJOR.MINOR: {fv!r}") from e
     if major not in SUPPORTED_FORMAT_MAJORS:
         raise UnsupportedFormatError(f"format {fv} is not supported (supported majors: {list(SUPPORTED_FORMAT_MAJORS)})")
+    mr = version_key(min_reader_version)
+    if mr is not None and mr > version_key(SUPPORTED_FORMAT_VERSION):
+        raise ReaderTooOldError(f"release {datestamp or '?'} needs a reader for format {min_reader_version}; "
+                                f"this SDK reads format {SUPPORTED_FORMAT_VERSION}")
 
 
 def meta_path_for(jsonl: Path) -> Path:
@@ -188,7 +214,7 @@ class Release:
 
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
-                 "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed")
+                 "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None):
         self._meta = meta
@@ -228,6 +254,7 @@ class Release:
         self._constituent_names = None
         self._stats = None
         self._closed = False
+        self._zenodo_version_doi = None
         if mode == "stream":
             try:
                 self._fh = open(jsonl, "rb")
@@ -249,12 +276,15 @@ class Release:
         return self._meta.get("format_version")
 
     @property
-    def doi(self):
-        return self._release.get("doi")
+    def concept_doi(self):
+        """The concept DOI (all versions), from the release document."""
+        return self._release.get("concept_doi")
 
     @property
-    def concept_doi(self):
-        return self._release.get("concept_doi")
+    def zenodo_version_doi(self):
+        """This release's own Zenodo version DOI, from the pointer or index entry the SDK read for it (spec
+        §4.3); None when it has none or the SDK read no entry (always None for a file)."""
+        return self._zenodo_version_doi
 
     @property
     def source_versions(self):
@@ -311,17 +341,22 @@ class Release:
                         out[v] = out.get(v, 0) + 1
                 return MappingProxyType(dict(sorted(out.items())))
             sets = [s for e in self._entries for s in e.get("sets") or ()]
+            qc = [E.enum_or_raw(E.QcStatus, s.get("qc_status")) for s in sets]
             self._stats = Stats(count(e.get("type") for e in self._entries),
                                 count(e.get("kind") for e in self._entries),
                                 count(e.get("country") for e in self._entries),
-                                count(s.get("source") for s in sets), count(s.get("qc_status") for s in sets))
+                                count(s.get("source") for s, q in zip(sets, qc) if q in _USABLE),
+                                count(None if q is None else q.value for q in qc))
         return self._stats
 
     @property
     def citation(self) -> str:
         """The dataset citation (spec §4.6); the year is the first four digits of the datestamp."""
-        ident = f"https://doi.org/{self.doi}" if self.doi else f"{DATA_URL}OTC_{self.datestamp}.json"
-        return f"OpenTideConstants contributors ({self.datestamp[:4]}). OpenTideConstants, release {self.datestamp} [Data set]. {ident}"
+        cdoi, vdoi = self.concept_doi, self.zenodo_version_doi
+        link = f"https://doi.org/{cdoi}" if cdoi else f"{DATA_URL}OTC_{self.datestamp}.json"
+        version = f" (version DOI: https://doi.org/{vdoi})" if vdoi else ""
+        return (f"OpenTideConstants contributors ({self.datestamp[:4]}). OpenTideConstants, release {self.datestamp} "
+                f"[Data set]. {link}{version}")
 
     # ---- station access
 
@@ -396,7 +431,7 @@ class Release:
             if kind is not None and e.get("kind") != str(kind):
                 continue
             sets = e.get("sets") or ()
-            if source is not None and not any(s.get("source") == source and s.get("qc_status") != "excluded" for s in sets):
+            if source is not None and not any(s.get("source") == source and s.get("qc_status") in _USABLE for s in sets):
                 continue
             if source_type is not None:
                 rec = [s for s in sets if s.get("set_id") == e.get("recommended_set_id")]
@@ -535,7 +570,7 @@ class Release:
                 continue
             seen.add(lic.provider)
             parts.append(f"{lic.provider}: {lic.attribution}")
-        ident = f"doi:{self.doi}" if self.doi else f"{DATA_URL}OTC_{self.datestamp}.json"
+        ident = f"doi:{self.concept_doi}" if self.concept_doi else f"{DATA_URL}OTC_{self.datestamp}.json"
         return (f"Tidal constants: OpenTideConstants {self.datestamp}, {ident}, CC BY 4.0. Sources: "
                 + "; ".join(parts))
 
@@ -554,7 +589,8 @@ class Release:
 def _check_meta(meta, what):
     if not isinstance(meta, dict):
         raise InvalidReleaseError(f"{what}: not a JSON object")
-    check_format(meta.get("format_version"))
+    rel = meta.get("release") if isinstance(meta.get("release"), dict) else {}
+    check_format(meta.get("format_version"), rel.get("min_reader_version"), rel.get("datestamp"))
 
 
 def _validate_refs(d, conventions, licences):

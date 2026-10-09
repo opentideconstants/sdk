@@ -52,8 +52,11 @@ class FileInfo:
 class ReleaseInfo:
     datestamp: str
     format_version: str
-    doi: Optional[str]
+    concept_doi: Optional[str]
+    zenodo_version_doi: Optional[str]
+    content_sha256: Optional[str]
     files: Tuple[FileInfo, ...]
+    _min_reader_version: Optional[str] = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,12 +126,12 @@ class Constituent:
 @dataclass(frozen=True, slots=True)
 class QcFlag:
     flag: E.QcFlagName
-    verdict: Optional[str]
-    values: Any
+    reason: Optional[str]
+    values: Optional[Mapping[str, Optional[float]]]
 
     @classmethod
     def _parse(cls, d):
-        return cls(E.enum_or_raw(E.QcFlagName, d.get("flag")), d.get("verdict"), freeze(d.get("values")))
+        return cls(E.enum_or_raw(E.QcFlagName, d.get("flag")), d.get("reason"), freeze(d.get("values")))
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,11 +159,29 @@ class Datum:
 
 
 @dataclass(frozen=True, slots=True)
-class Provenance:
+class ProvenanceBuild:
+    """The build-only fields of a set's provenance (``provenance.build``)."""
     build_commit: Optional[str]
+    built_at: Optional[_dt.datetime]
+    fetched_at: Optional[_dt.datetime]
+    run_id: Optional[str]
+    tool_versions: Optional[Mapping[str, str]]
+
+    @classmethod
+    def _parse(cls, d):
+        if not isinstance(d, dict):
+            return None  # format 1.0 requires it; a malformed set still loads (spec §7.3)
+        return cls(d.get("build_commit"), parse_time(d.get("built_at"), "provenance.build.built_at"),
+                   parse_time(d.get("fetched_at"), "provenance.build.fetched_at"), d.get("run_id"),
+                   freeze(d.get("tool_versions")))
+
+
+@dataclass(frozen=True, slots=True)
+class Provenance:
+    build: Optional[ProvenanceBuild]
     adapter_version: Optional[str]
     input_sha256: Optional[Tuple[str, ...]]
-    time_base: Optional[Mapping[str, Any]]
+    carried_from_release: Optional[str]
     selection_reason: Optional[str]
     decision: Optional[Mapping[str, Any]]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
@@ -168,8 +189,40 @@ class Provenance:
     @classmethod
     def _parse(cls, d):
         d = d or {}
-        return cls(d.get("build_commit"), d.get("adapter_version"), freeze(d.get("input_sha256")),
-                   freeze(d.get("time_base")), d.get("selection_reason"), freeze(d.get("decision")), freeze(d))
+        return cls(ProvenanceBuild._parse(d.get("build")), d.get("adapter_version"), freeze(d.get("input_sha256")),
+                   d.get("carried_from_release"), d.get("selection_reason"), freeze(d.get("decision")), freeze(d))
+
+
+_EVIDENCE = ("comparator_kind", "comparator_id", "distance_km", "lag_min", "detail")
+
+
+@dataclass(frozen=True, slots=True)
+class TimeBase:
+    """The time-base annotation of the record behind a set (spec §4.5)."""
+    code: E.TimeBaseCode
+    reason: Optional[str]
+    declared: Optional[str]
+    published: Optional[str]
+    correction: Optional[Mapping[str, Optional[str]]]
+    months_dropped: Tuple[str, ...]
+    decided_in: Optional[str]
+    decided_build_commit: Optional[str]
+    evidence: Tuple[Mapping[str, Any], ...]
+
+    @classmethod
+    def _parse(cls, d):
+        if not isinstance(d, dict):
+            return None
+        corr = d.get("correction")
+        if isinstance(corr, dict):
+            corr = MappingProxyType({"from": corr.get("from"), "to": corr.get("to")})
+        else:
+            corr = None
+        evidence = tuple(MappingProxyType({k: freeze(e.get(k)) for k in _EVIDENCE})
+                         for e in d.get("evidence") or () if isinstance(e, dict))
+        return cls(E.enum_or_raw(E.TimeBaseCode, d.get("code")), d.get("reason"), d.get("declared"),
+                   d.get("published"), corr, tuple(d.get("months_dropped") or ()), d.get("decided_in"),
+                   d.get("decided_build_commit"), evidence)
 
 
 _PREVIOUS = ("time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events",
@@ -233,6 +286,7 @@ class ConstantSet:
     qc_status: E.QcStatus
     qc_flags: Tuple[QcFlag, ...]
     dropped_constituents: Tuple[DroppedConstituent, ...]
+    time_base: Optional[TimeBase]
     _is_recommended: bool
     convention: Convention
     licence: Licence
@@ -267,13 +321,16 @@ class Tombstone:
     name: Optional[str]
     status: E.StationStatus
     removed_in: Optional[str]
-    removed_reason: Optional[str]
+    removed_reason: Optional[E.RemovedReason]
+    merged_into: Optional[str]
+    detail: Optional[str]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
     def _parse(cls, d):
         return cls(d["station_id"], d.get("name"), E.enum_or_raw(E.StationStatus, d.get("status")),
-                   d.get("removed_in"), d.get("removed_reason"), freeze(d))
+                   d.get("removed_in"), E.enum_or_raw(E.RemovedReason, d.get("removed_reason")),
+                   d.get("merged_into"), d.get("detail"), freeze(d))
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,12 +367,13 @@ class Station:
     def is_current(self) -> bool:
         return self.kind == E.Kind.CURRENT
 
-    def constant_sets(self, *, include_excluded: bool = False) -> Tuple[ConstantSet, ...]:
-        """The recommended set first, then the others by set_id. Excluded sets only on request."""
-        if not isinstance(include_excluded, bool):
+    def constant_sets(self, *, include_no_constants: bool = False) -> Tuple[ConstantSet, ...]:
+        """The recommended set first, then the others by set_id. Sets with qc_status no_constants (listed, but
+        with no fitted constants) only with include_no_constants=True."""
+        if not isinstance(include_no_constants, bool):
             from ._errors import InvalidArgumentError
-            raise InvalidArgumentError("include_excluded must be a boolean")
-        return tuple(s for s in self._sets if include_excluded or s.qc_status != E.QcStatus.EXCLUDED)
+            raise InvalidArgumentError("include_no_constants must be a boolean")
+        return tuple(s for s in self._sets if include_no_constants or s.qc_status != E.QcStatus.NO_CONSTANTS)
 
     def constant_set(self, set_id: str) -> Optional[ConstantSet]:
         for s in self._sets:
@@ -370,7 +428,7 @@ def build_station(d, conventions, licences, kind):
                 E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
                 tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
                 tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
-                set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
+                TimeBase._parse(cs.get("time_base")), set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
                 freeze(cs)))
         rec = [s for s in sets if s.set_id == rid]

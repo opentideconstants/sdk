@@ -17,10 +17,11 @@ from ._cache import DATESTAMP_RE, Cache, atomic_write, datestamp_key, default_ro
 from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
-                      ReleaseNotFoundError, UnsupportedFormatError)
+                      ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError)
 from ._http import Http
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
-from ._release import SUPPORTED_FORMAT_MAJORS, Release, file_sha256, load_document, meta_path_for
+from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
+                       meta_path_for, readable)
 
 __version__ = "0.1.0"
 SDK = f"opentideconstants-python/{__version__}"
@@ -31,8 +32,10 @@ _ON_ERR = ("use_cache", "raise")
 
 
 def _major(fv) -> Optional[int]:
+    if not isinstance(fv, str):
+        return None
     try:
-        return int(str(fv).split(".", 1)[0])
+        return int(fv.split(".", 1)[0])
     except ValueError:
         return None
 
@@ -75,6 +78,7 @@ class OpenTideConstants:
         self._release: Optional[Release] = None
         self._loaded_from: Optional[LoadedFrom] = None
         self._last_error: Optional[OpenTideConstantsError] = None
+        self._newer_format_major: Optional[int] = None
         self._closed = False
         if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
             raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
@@ -143,6 +147,12 @@ class OpenTideConstants:
     @property
     def last_error(self) -> Optional[OpenTideConstantsError]:
         return self._last_error
+
+    @property
+    def newer_format_major(self) -> Optional[int]:
+        """Set by check_for_update: the format major of OTC_latest.json when it is newer than every supported
+        major, else None (spec §7.4)."""
+        return self._newer_format_major
 
     # ------------------------------------------------------------------ opening
 
@@ -236,18 +246,50 @@ class OpenTideConstants:
                                     expected=rec.get("sha256"), actual=None)
             if self._verify_on_open:
                 self._check_file(p, rec.get("sha256"))
-        return load_document(path, mode, self._cached_files(datestamp),
-                             index_path=d / "index-v1.json" if mode == "stream" else None,
-                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"))
+        rel = load_document(path, mode, self._cached_files(datestamp),
+                            index_path=d / "index-v1.json" if mode == "stream" else None,
+                            index_sha256=(v["files"].get(path.name) or {}).get("sha256"))
+        rel._zenodo_version_doi = v.get("zenodo_version_doi")
+        return rel
+
+    def _note_entry(self, info: ReleaseInfo) -> None:
+        """Keep the version DOI of a pointer or index entry in the .verified of that cached release (spec §4.3)."""
+        v = self._cache.read_verified(info.datestamp)
+        if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
+            return
+        v["zenodo_version_doi"] = info.zenodo_version_doi
+        try:
+            atomic_write(self._cache.release_dir(info.datestamp) / ".verified",
+                         json.dumps(v, indent=1, sort_keys=True).encode("utf-8"))
+        except OSError as e:
+            self._log.warning("cannot update %s/.verified: %s", info.datestamp, e)
+
+    def _cached_index_entries(self):
+        """datestamp -> (format_version, min_reader_version) from the cached OTC_index.json, if any."""
+        body = self._cache.read_pointer_body("OTC_index.json")
+        try:
+            doc = json.loads(body.decode("utf-8")) if body is not None else None
+            return {e["datestamp"]: (e.get("format_version"), e.get("min_reader_version"))
+                    for e in doc["releases"] if isinstance(e, dict) and isinstance(e.get("datestamp"), str)}
+        except (ValueError, UnicodeDecodeError, KeyError, TypeError):
+            return {}
 
     def _newest_cached(self, mode: str):
+        """The newest verified cached release this SDK reads (spec §5.2 step 1): its format major and
+        min_reader_version come from .verified or the cached index."""
+        index = None
         for ds in self._cache.cached():
             path = self._usable(ds, mode)
             if path is None:
                 continue
             v = self._cache.read_verified(ds) or {}
-            fv = v.get("format_version")
-            if fv is not None and _major(fv) not in SUPPORTED_FORMAT_MAJORS:
+            fv, mr = v.get("format_version"), v.get("min_reader_version")
+            if fv is None or mr is None:
+                if index is None:
+                    index = self._cached_index_entries()
+                ifv, imr = index.get(ds, (None, None))
+                fv, mr = fv or ifv, mr or imr
+            if not readable(fv or SUPPORTED_FORMAT_VERSION, mr):
                 continue
             return ds
         return None
@@ -279,7 +321,9 @@ class OpenTideConstants:
             files = tuple(sorted((FileInfo(f["name"], urljoin(url, f.get("url") or f["name"]), f.get("size"),
                                            f.get("sha256")) for f in entry.get("files") or ()),
                                  key=lambda f: f.name))
-            return ReleaseInfo(entry["datestamp"], entry.get("format_version"), entry.get("doi"), files)
+            return ReleaseInfo(entry["datestamp"], entry.get("format_version"), entry.get("concept_doi"),
+                               entry.get("zenodo_version_doi"), entry.get("content_sha256"), files,
+                               entry.get("min_reader_version"))
         except (KeyError, TypeError, AttributeError) as e:
             raise InvalidReleaseError(f"bad pointer entry: {e!r}") from e
 
@@ -299,28 +343,33 @@ class OpenTideConstants:
         return sorted(infos, key=lambda i: datestamp_key(i.datestamp), reverse=True)
 
     def _latest_info(self) -> ReleaseInfo:
-        """The newest release with a supported format major (spec §5.2 step 2, §7.4)."""
-        got = None
-        for major in SUPPORTED_FORMAT_MAJORS:
-            got = self._get_json_conditional(f"OTC_latest-f{major}.json")
-            if got is not None:
-                break
+        """The newest release this SDK reads (spec §5.2 steps 2 and 2a, §7.4): GET OTC_latest-f{MAJOR}.json,
+        and OTC_latest.json only when that is a 404. When the pointer's release has an unsupported major or a
+        min_reader_version that is too new, one GET of OTC_index.json picks the newest readable entry."""
+        got = self._get_json_conditional(f"OTC_latest-f{max(SUPPORTED_FORMAT_MAJORS)}.json")
         if got is None:
             got = self._get_json_conditional("OTC_latest.json")
             if got is None:
                 raise ReleaseNotFoundError(f"no latest pointer under {self._base_url}")
         doc, url = got
         info = self._info(doc, url)
-        if _major(info.format_version) in SUPPORTED_FORMAT_MAJORS:
+        if readable(info.format_version, info._min_reader_version):
             return info
-        self._log.warning("a newer format (%s) exists; upgrade opentideconstants to read it", info.format_version)
+        if _major(info.format_version) not in SUPPORTED_FORMAT_MAJORS:
+            self._log.warning("a newer format (%s) exists; upgrade opentideconstants to read it",
+                              _major(info.format_version))
         try:
             infos = self._fetch_index()
         except ReleaseNotFoundError:
             infos = []
         for i in infos:
-            if _major(i.format_version) in SUPPORTED_FORMAT_MAJORS:
+            if readable(i.format_version, i._min_reader_version):
                 return i
+        too_new = [i for i in [info] + list(infos) if _major(i.format_version) in SUPPORTED_FORMAT_MAJORS]
+        if too_new:
+            i = too_new[0]
+            raise ReaderTooOldError(f"release {i.datestamp} needs a reader for format {i._min_reader_version}; "
+                                    f"this SDK reads format {SUPPORTED_FORMAT_VERSION}")
         raise UnsupportedFormatError(f"no release with a supported format major {list(SUPPORTED_FORMAT_MAJORS)}")
 
     # ---- downloading into the cache (spec §5.2 step 4)
@@ -448,8 +497,11 @@ class OpenTideConstants:
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"))
+            zdoi = info.zenodo_version_doi if info is not None else old.get("zenodo_version_doi")
+            rel._zenodo_version_doi = zdoi
             verified = {"files": files, "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "by": SDK, "datestamp": datestamp, "format_version": rel.format_version}
+                        "by": SDK, "datestamp": datestamp, "format_version": rel.format_version,
+                        "min_reader_version": rel._release.get("min_reader_version"), "zenodo_version_doi": zdoi}
             try:
                 atomic_write(d / ".verified", json.dumps(verified, indent=1, sort_keys=True).encode("utf-8"))
             except OSError as e:
@@ -479,6 +531,7 @@ class OpenTideConstants:
         try:
             info = self._latest_info()
             if self._usable(info.datestamp, self._mode) is not None:
+                self._note_entry(info)
                 self._set(self._load_cached(info.datestamp, self._mode), "cache")
                 return
             self._set(self._download_to_cache(info.datestamp, self._mode, info), "download")
@@ -503,7 +556,10 @@ class OpenTideConstants:
             except (ValueError, UnicodeDecodeError) as e:
                 raise InvalidReleaseError("cached OTC_index.json: not JSON") from e
             return tuple(self._index_infos(doc, self._url("OTC_index.json")))
-        return tuple(self._fetch_index())
+        infos = tuple(self._fetch_index())
+        for i in infos:
+            self._note_entry(i)
+        return infos
 
     def latest(self) -> ReleaseInfo:
         """The latest release (one conditional GET of the pointer). It does not switch releases."""
@@ -512,10 +568,27 @@ class OpenTideConstants:
         return self._latest_info()
 
     def check_for_update(self) -> Optional[ReleaseInfo]:
+        """A release newer than the loaded one that this SDK reads, or None. Also sets newer_format_major from
+        a conditional GET of OTC_latest.json (spec §7.4)."""
         info = self.latest()
+        self._newer_format_major = self._check_newer_major()
         if datestamp_key(info.datestamp) > datestamp_key(self._release.datestamp):
             return info
         return None
+
+    def _check_newer_major(self) -> Optional[int]:
+        try:
+            got = self._get_json_conditional("OTC_latest.json")
+        except (NetworkError, InvalidReleaseError) as e:
+            self._log.debug("OTC_latest.json: %s", e)
+            return None
+        if got is None or not isinstance(got[0], dict):
+            return None
+        major = _major(got[0].get("format_version"))
+        if major is None or major <= max(SUPPORTED_FORMAT_MAJORS):
+            return None
+        self._log.warning("a newer format (%s) exists; upgrade opentideconstants to read it", major)
+        return major
 
     def update(self) -> UpdateResult:
         """Download a newer release, verify it and swap it in. A Release held from before stays valid."""

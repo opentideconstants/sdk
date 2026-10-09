@@ -45,10 +45,24 @@ class Quantity(_StrEnum):
     OTHER = "other"
 
 
+class RemovedReason(_StrEnum):
+    MERGED = "merged"
+    DUPLICATE = "duplicate"
+    OTHER = "other"
+
+
 class QcStatus(_StrEnum):
-    ACCEPTED = "accepted"
-    FALLBACK = "fallback"
-    EXCLUDED = "excluded"
+    OK = "ok"
+    FLAGGED = "flagged"
+    NO_CONSTANTS = "no_constants"
+    OTHER = "other"
+
+
+class TimeBaseCode(_StrEnum):
+    VERIFIED = "verified"
+    CORRECTED = "corrected"
+    UNVERIFIED = "unverified"
+    DISPUTED = "disputed"
     OTHER = "other"
 
 
@@ -102,6 +116,7 @@ class QcFlagName(_StrEnum):
     NON_TIDAL_SIGNAL = "non_tidal_signal"
     SHORT_RECORD = "short_record"
     SIBLING_DISAGREEMENT = "sibling_disagreement"
+    CARRIED_OVER = "carried_over"
     OTHER = "other"
 
 
@@ -155,11 +170,11 @@ class Match(_StrEnum):
 
 # manifest enum name -> class (used by the API manifest check)
 ENUMS = {
-    "kind": Kind, "station_type": StationType, "station_status": StationStatus, "source_type": SourceType,
-    "quantity": Quantity, "qc_status": QcStatus, "loaded_from": LoadedFrom, "phase_reference": PhaseReference,
-    "nodal_handling": NodalHandling, "canary_status": CanaryStatus, "height_adjusted_type": HeightAdjustedType,
-    "dropped_reason": DroppedReason, "qc_flag": QcFlagName, "decision_tier": DecisionTier,
-    "decision_outcome": DecisionOutcome, "alias_system": AliasSystem, "mode": Mode,
+    "kind": Kind, "station_type": StationType, "station_status": StationStatus, "removed_reason": RemovedReason,
+    "source_type": SourceType, "quantity": Quantity, "qc_status": QcStatus, "loaded_from": LoadedFrom,
+    "phase_reference": PhaseReference, "nodal_handling": NodalHandling, "canary_status": CanaryStatus,
+    "height_adjusted_type": HeightAdjustedType, "dropped_reason": DroppedReason, "qc_flag": QcFlagName,
+    "time_base_code": TimeBaseCode, "decision_tier": DecisionTier, "decision_outcome": DecisionOutcome, "alias_system": AliasSystem, "mode": Mode,
     "on_network_error": OnNetworkError, "format": Format, "match": Match,
 }
 
