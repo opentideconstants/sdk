@@ -387,7 +387,6 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK04",

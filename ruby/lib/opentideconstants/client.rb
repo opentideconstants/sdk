@@ -66,6 +66,7 @@ class OpenTideConstants
         @last_error = nil
         @newer_format_major = nil
         @file = file
+        @loaded = ObjectSpace::WeakMap.new # every Release this client loaded, while a caller holds it
         if file
             @release, @loaded_from = Reader.open_file(file, mode: @mode)
         elsif @requested == :latest
@@ -74,6 +75,7 @@ class OpenTideConstants
             open_pinned(@requested)
         end
         @last_check = monotonic
+        @loaded[@release] = true
         log(:info, "loaded #{@release.datestamp} (#{@loaded_from})")
     end
 
@@ -125,6 +127,7 @@ class OpenTideConstants
                 return UpdateResult.new(false, from, from)
             end
             rel, how = load_from_entry(entry, url)
+            @loaded[rel] = true
             @release = rel
             @loaded_from = how
             @last_error = nil
@@ -155,13 +158,22 @@ class OpenTideConstants
         cache.cached_releases
     end
 
-    # Removes all but the newest keep releases from the cache (never the
-    # loaded one). Returns the datestamps removed, newest first.
+    # Removes all but the newest keep releases from the cache. It never
+    # removes the loaded release, a release this client loaded before an
+    # update that the caller still holds, or a release that another process
+    # holds the lock of. It also removes release directories that never got
+    # a .verified (failed downloads) and that no one holds. Returns the
+    # datestamps removed, newest first; CacheError when one cannot be removed.
     def prune(keep: 3)
         raise InvalidArgumentError, "keep must be an Integer >= 0" unless keep.is_a?(Integer) && keep >= 0
-        all = cache.cached_releases
-        removed = all.drop(keep).reject { |d| d == @release.datestamp && @loaded_from != :file && @loaded_from != :file_unverified }
-        removed.each { |d| cache.remove_release(d) }
+        protect = held_datestamps
+        removed = cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.select do |d|
+            cache.remove_release(d).tap { |ok| log(:info, "prune: #{d} is locked by another process; kept") unless ok }
+        end
+        cache.partial_releases.each do |d|
+            next if protect.include?(d)
+            log(:info, "prune: removed the incomplete release directory #{d}") if cache.remove_release(d)
+        end
         removed
     end
 
@@ -189,7 +201,7 @@ class OpenTideConstants
     attr_reader :http, :base_url, :offline
 
     def cache
-        @cache ||= Cache.new(@cache_dir || Cache.default_root)
+        @cache ||= Cache.new(@cache_dir || Cache.default_root, logger: @logger)
     end
 
     # The latest pointer: [entry, url]. OTC_latest-f1.json, then
@@ -260,6 +272,14 @@ class OpenTideConstants
 
     def monotonic
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    # The datestamps prune must keep: the loaded release and every release
+    # this client loaded that is still reachable (a caller may hold it,
+    # spec §4.3 update). A client on a file keeps no cached release.
+    def held_datestamps
+        return [] if @file
+        ([@release] + @loaded.keys).compact.map(&:datestamp).uniq
     end
 
     def maybe_auto_update
@@ -612,7 +632,8 @@ class OpenTideConstants
                                    "url" => url_of.call(sha_name) }
         end
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
-        info = entry ? %w[format_version min_reader_version zenodo_version_doi].to_h { |k| [k, entry[k]] } : {}
+        # Only the keys the entry has: a missing zenodo_version_doi keeps the stored one.
+        info = entry ? entry.slice(*Cache::VERIFIED_INFO) : {}
         if @mode == :stream
             %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
                 size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],
