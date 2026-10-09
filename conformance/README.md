@@ -13,6 +13,7 @@ The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pa
 | `server.py` | The fixture HTTP server, the recording proxy and the tripwire. |
 | `driver.py` | Runs the cases against one runner and reports PASS / FAIL / SKIP. |
 | `runners/<lang>/` | One runner per SDK. `runners/null/` is the null runner. |
+| `tools/check_supported_formats.py` | Checks each SDK's `supported-formats.json` (`python/`, `ruby/`, `js/`, `c/`; spec §7.4, §8.6): its `language`, its `version` (the package version) and its `supported_format_version` (the SDK's `SUPPORTED_FORMAT_VERSION`; 0.5 for an SDK that does not declare one yet). |
 
 All Python here uses the standard library only (Python 3.10 or later).
 
@@ -103,7 +104,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `hold_release` | `name` | keep `client.release` under `name` | `{}` |
 | `loaded_from` | | `client.loaded_from` | `{loaded_from}` |
 | `last_error` | | `client.last_error` | `{code}` (the error's code, or null) |
-| `release_metadata` | | R: `datestamp`, `created`, `format_version`, `doi`, `concept_doi`, `source_versions`, `build_commit`, `changelog_url` | those 8 keys |
+| `release_metadata` | | R: `datestamp`, `created`, `format_version`, `concept_doi`, `zenodo_version_doi`, `source_versions`, `build_commit`, `changelog_url` | those 8 keys |
 | `release_files` | | R `.files` | `{files: [FileInfo]}`, sorted by `name` |
 | `releases` | | `client.releases` | `{releases: [ReleaseInfo]}`, newest first |
 | `latest` | | `client.latest` | `{release: ReleaseInfo}` |
@@ -137,6 +138,9 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `constituents` | `station_id`, `set_id` | `set.constituents` | `{constituents: [Constituent]}` in file order |
 | `constituent` | `station_id`, `set_id`, `name` | `set.constituent` | `{constituent: Constituent or null}` |
 | `provenance` | `station_id`, `set_id` | `set.provenance` | `{provenance: Provenance, raw: <provenance raw>}` |
+| `provenance_build` | `station_id`, `set_id` | `set.provenance.build` | `{build: ProvenanceBuild or null}` |
+| `carried_from_release` | `station_id`, `set_id` | `set.provenance.carried_from_release` | `{carried_from_release}` (null if none) |
+| `time_base` | `station_id`, `set_id` | `set.time_base` | `{time_base: TimeBase or null}` |
 | `set_validation` | `station_id`, `set_id` | `set.validation` | `{validation: [Validation]}` by `window` |
 | `raw` | `object` (`station`, `tombstone`, `set`, `constituent`, `convention`, `licence`) and its ids | the object's `raw` | `{raw}` |
 
@@ -144,7 +148,7 @@ Filters are `country`, `type`, `kind`, `source`, `source_type` (§4.4).
 
 ## Result encodings
 
-Every object is a JSON object with exactly these keys (the driver fails extra or missing keys inside a result value). A field that the file leaves out is `null`, unless the row says otherwise. Enum values are the schema strings; an enum value the SDK does not know is `"other"` (§7.3). Numbers are JSON numbers (print doubles with enough digits to round-trip). A C `NaN` or a missing count (`-1`) is `null`. **Times** (`created`, `record_span.start`, `record_span.end`) are ISO 8601 UTC strings, `YYYY-MM-DDTHH:MM:SSZ`.
+Every object is a JSON object with exactly these keys (the driver fails extra or missing keys inside a result value). A field that the file leaves out is `null`, unless the row says otherwise. Enum values are the schema strings; an enum value the SDK does not know is `"other"` (§7.3). Numbers are JSON numbers (print doubles with enough digits to round-trip). A C `NaN` or a missing count (`-1`) is `null`. **Times** (`created`, `record_span.start`, `record_span.end`, `built_at`, `fetched_at`) are ISO 8601 UTC strings, `YYYY-MM-DDTHH:MM:SSZ`.
 
 | Object | Keys |
 |---|---|
@@ -154,11 +158,13 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | Constituent | `name`, `source_name`, `doodson`, `speed_deg_per_hour`, `amplitude_m`, `phase_deg`, `amp_uncertainty_m`, `phase_uncertainty_deg`, `kept_reason` |
 | Convention | `convention_id`, `phase_reference`, `utc_offset_hours`, `v0_model`, `nodal_handling`, `nodal_formula_ids` (object), `constituent_table_version`, `tables_sha256`, `canary` (object) |
 | Licence | `licence_id`, `spdx`, `provider`, `citation`, `attribution`, `url` |
-| Provenance | `build_commit`, `adapter_version`, `input_sha256`, `time_base` (object), `selection_reason`, `decision` (object) |
+| Provenance | `build_commit` (the deprecated top-level value, or `build.build_commit`), `adapter_version`, `input_sha256`, `time_base` (object; the 0.5 free text), `selection_reason`, `decision` (object) |
+| ProvenanceBuild | `build_commit`, `built_at`, `fetched_at` (times), `run_id`, `tool_versions` (object or null) |
+| TimeBase | `code`, `reason`, `declared`, `published`, `correction` (`{from, to}` or null), `months_dropped` (`[]` if none), `decided_in`, `decided_build_commit`, `evidence` (`[{comparator_kind, comparator_id, distance_km, lag_min, detail}]`, `[]` if none) |
 | Validation | `set_id`, `reference_source`, `reference_station`, `reference_distance_km`, `window`, `time_mae_min`, `time_p95_min`, `time_bias_min`, `height_mae_m`, `range_error_m`, `missed_events`, `extra_events`, `previous_release` (null, or `{time_mae_min, time_p95_min, time_bias_min, height_mae_m, range_error_m, missed_events, extra_events}`) |
 | SubordinateOffsets | `reference_station_id`, `time_offset_high_min`, `time_offset_low_min`, `height_offset_high`, `height_offset_low`, `height_adjusted_type`, `licence_id` |
 | FileInfo | `name`, `url`, `size`, `sha256` |
-| ReleaseInfo | `datestamp`, `format_version`, `doi`, `files` ([FileInfo] sorted by `name`) |
+| ReleaseInfo | `datestamp`, `format_version`, `concept_doi`, `zenodo_version_doi`, `content_sha256`, `files` ([FileInfo] sorted by `name`) |
 | Stats | `{type: {value: n}, kind: {…}, country: {…}, source: {…}, qc_status: {…}}`; `type`, `kind` and `country` count active stations, `source` and `qc_status` count constant sets; zero counts are left out |
 
 `FileInfo.url` is absolute: the SDK resolves the pointer's `url` against the URL of the pointer it read (RFC 3986), so with `base_url` `http://127.0.0.1:P/good/` the url of `OTC_20991231.2.json` is `http://127.0.0.1:P/good/OTC_20991231.2.json`.
@@ -178,7 +184,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 ```
 
 - **`matrix`**: the driver runs the case once per open variant and puts an `open` step first. The variants are `@json`, `@json.gz` (eager), `@jsonl` (eager), `@jsonl-stream`, each opening `fixtures/<root>/OTC_<release><ext>` with `file:`, and `@server` (eager, `release` pinned, from the fixture server into a new cache; it needs `fs` and `fetch`, because it passes `cache_dir`). The open step expects `loaded_from` `file` (or `download`) and the datestamp, plus the case's `open_expect`.
-- **`expect`**: the keys other than `error`, `error_fields` and `tolerance` must be keys of the result, with equal values. `tolerance` (default 1e-9) is the largest absolute difference allowed for every number in the step. Strings and ids must be exactly equal. `{"error": code}` expects an error with that code; `error_fields` checks the error's `fields`.
+- **`expect`**: the keys other than `error`, `error_fields`, `error_message` and `tolerance` must be keys of the result, with equal values. `tolerance` (default 1e-9) is the largest absolute difference allowed for every number in the step. Strings and ids must be exactly equal. `{"error": code}` expects an error with that code; `error_fields` checks the error's `fields`, and `error_message` (a value or a matcher) its `message`.
 - **Matchers** may stand in for a value: `{"$contains": s}`, `{"$regex": re}`, `{"$type": "object" | "array" | "string" | "number" | "boolean" | "null"}`, `{"$len_min": n}`, `{"$all": [matchers]}`, `{"$any_of": [values or matchers]}` (at least one matches).
 - **Placeholders** in args, expectations and driver steps: `${fixtures}` (the absolute path of `conformance/fixtures`), `${server}` (`http://127.0.0.1:<port>`), `${server_alias}` (`http://otc-fixture.invalid:<port>`: the fixture server under a name that does not resolve; only the recording proxy relays it), `${proxy}` (the recording proxy URL), `${tmp}` (the case's temporary directory), `${cache}` (`${tmp}/cache`).
 
@@ -204,7 +210,7 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | Group | Covers |
 |---|---|
 | `load` | `file:` opens, `loaded_from` `file` / `file_unverified`, `release.files` rows (§4.3.1), bad fixtures from a file, `verify`, datestamp validation |
-| `release` | metadata, counts, `stats`, constituent names, conventions, licences, citation, attribution (exact text, §4.6) |
+| `release` | metadata, counts, `stats`, constituent names, conventions, licences, citation, attribution (exact text, §4.6); the concept DOI and the version DOI (`release/citation-exact-*`, `release/doi-fields-latest`) |
 | `stations` | every station's encoding, sets order, offsets, validation, links; tombstones; `require_station`; every alias system; filters |
 | `sets` | every set's encoding, constituents, provenance (with extra fields), validation by window, constituent lookup |
 | `search` | the fold table and the four ranks (§4.4.1), `limit`, `match: exact`, filters |
@@ -214,6 +220,9 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | `update` | `update` (pinned, file, swap with a held release, no update), `auto_update` |
 | `cache` | `cached_releases`, `prune`, `verify`, the `cache` error, `release.files` from `.verified` |
 | `download` | the §7.1 download cases: then-open, identical, mismatch, from-cache, bad checksum, browser (`expect_if_missing.fs`), plus formats and errors |
+| `v06` | format 0.6 data (`fixtures/v06`): `qc_status` `ok`, `flagged` and `no_constants`; `no_constants` sets left out of `constant_sets()` and of the `source` filter, and never recommended; carried-over sets (`carried_from_release`), the deprecated `accepted` and `fallback`; `time_base` annotations; `provenance.build`; a `merged` tombstone; `stats`, metadata, attribution |
+| `v05` | format 0.5 data (`fixtures/v05`) still loads; `provenance.build` falls back to the top-level `build_commit` |
+| `format` | `release.min_reader_version` (§4.8, §5.2 step 2a, §7.4): `format/reader-too-old` (§7.1), `latest`, `check_for_update`, `update` and `download` skip a release too new for the SDK with one GET of `OTC_index.json`, only in that case; offline with a cached index; errors |
 
 ### Cross-SDK cases
 
@@ -234,7 +243,15 @@ These are written into the cases. Change them here and in `tools/build_cases.py`
 - Word-start rank (§4.4.1): the match starts right after a space in the normalised name. A query that is empty after trimming (`"   "`) is `invalid_argument`.
 - `release.conventions` and `release.licences` are in file order. `station.validation` is in file order. `cached_releases` and `prune` return datestamps newest first.
 - `update` with nothing newer returns `{updated: false, from: D, to: D}`.
-- `attribution` with a null DOI: `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
+- `attribution` with a null concept DOI: `https://data.opentideconstants.org/OTC_{datestamp}.json` replaces `doi:{concept_doi}`. Entries are joined with `"; "`, and each is `{provider}: {attribution}` as the licence gives it.
+- `zenodo_version_doi` is null for a file and for a pinned download (which reads no pointer), and after a download of `latest` it is the value of the entry the SDK used: the pointer's, or the index entry that step 2a chose. A cached release keeps it (`.verified`).
+- A pointer or index entry written before the 0.6 index schema has `doi` and no `zenodo_version_doi` or `content_sha256` (the `good/` and `order/` fixtures). For such an entry `zenodo_version_doi` may be null or the old `doi`; `content_sha256` is null.
+- Sets with no usable constants: `qc_status` `excluded` (format 0.5 and before) and `no_constants` (format 0.6). `constant_sets()` leaves both out by default and `include_excluded: true` lists both; the `source` filter does not count them; `stats` counts every set.
+- A deprecated `qc_status` in 0.6 data (`accepted`, `fallback`): the SDK may give it as it is or as 0.6 reads it (`accepted` is `ok`, or `flagged` with a flag; `fallback` is a carried-over, `flagged` set). Both are accepted, in `constant_set` and in `stats`.
+- `provenance.build` when the data has neither a `build` object nor the top-level `build_commit`: null or an object of nulls (the spec leaves it open).
+- The `time_base` op encodes the 0.6 annotation `constant_set.time_base`. `correction` and the `evidence` entries are plain objects. Data before 0.6 has none (null); its free-text `provenance.time_base` stays in the `provenance` op.
+- `reader_too_old`: the message must contain `0.99` (the fixtures' `min_reader_version`) and one other `0.x` version (the SDK's own `SUPPORTED_FORMAT_VERSION`).
+- QcFlag stays `{flag, verdict, values}`, and Tombstone stays as it was: the 0.6 `qc_flags[].reason`, `record_span.good_hours`, `merged_into` and the other annotation fields are read through `raw` (the spec lists no typed field for them).
 - `user_agent` is added after one space: `opentideconstants-{lang}/{version} (+https://opentideconstants.org) {suffix}`.
 - A body shorter than its `Content-Length` is a `network` error. A consistent but short response is `checksum_mismatch`.
 - A reference that does not resolve is `invalid_release` at open time in stream mode too.

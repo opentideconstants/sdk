@@ -50,7 +50,7 @@ CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
 FEATURES = ["fs", "fetch", "json", "eager", "stream"]
-RESERVED_EXPECT = {"error", "error_fields", "tolerance"}
+RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
 VARIANTS = [
@@ -79,6 +79,8 @@ OPS = {
     "constant_sets": ["station_id", "include_excluded"], "constant_set": ["station_id", "set_id"],
     "constituents": ["station_id", "set_id"], "constituent": ["station_id", "set_id", "name"],
     "provenance": ["station_id", "set_id"], "set_validation": ["station_id", "set_id"],
+    "provenance_build": ["station_id", "set_id"], "carried_from_release": ["station_id", "set_id"],
+    "time_base": ["station_id", "set_id"],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
@@ -216,6 +218,8 @@ def evaluate(expect, reply):
         fields = e.get("fields") or {}
         for k, v in (expect.get("error_fields") or {}).items():
             out += match(v, fields.get(k, _MISSING), tol, f"error.fields.{k}")
+        if "error_message" in expect:
+            out += match(expect["error_message"], e.get("message", _MISSING), tol, "error.message")
         return out
     if not reply["ok"]:
         e = reply["error"]

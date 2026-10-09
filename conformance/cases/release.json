@@ -18,8 +18,8 @@
       "datestamp": "20991231.2",
       "created": "2099-12-31T12:00:00Z",
       "format_version": "0.2",
-      "doi": "10.5072/zenodo.2",
       "concept_doi": "10.5072/zenodo.1",
+      "zenodo_version_doi": null,
       "source_versions": {
        "eot20": "20991231",
        "gesla": "4.1",
@@ -107,7 +107,7 @@
   },
   {
    "id": "release/attribution-all-20991231.2",
-   "title": "attribution with no stations, 20991231.2 (DOI set)",
+   "title": "attribution with no stations, 20991231.2 (concept DOI set)",
    "spec": "4.6",
    "matrix": {
     "root": "good",
@@ -117,7 +117,7 @@
     {
      "op": "attribution",
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     }
    ]
@@ -137,8 +137,8 @@
       "datestamp": "20991231",
       "created": "2099-12-31T00:00:00Z",
       "format_version": "0.2",
-      "doi": null,
       "concept_doi": null,
+      "zenodo_version_doi": null,
       "source_versions": {
        "eot20": "20991231",
        "gesla": "4.1",
@@ -226,7 +226,7 @@
   },
   {
    "id": "release/attribution-all-20991231",
-   "title": "attribution with no stations, 20991231 (DOI null)",
+   "title": "attribution with no stations, 20991231 (concept DOI null)",
    "spec": "4.6",
    "matrix": {
     "root": "good",
@@ -461,7 +461,7 @@
   },
   {
    "id": "release/citation",
-   "title": "citation contains the version DOI and the datestamp",
+   "title": "citation contains the concept DOI and the datestamp, and no version DOI (a file has none)",
    "spec": "4.6",
    "matrix": {
     "root": "good",
@@ -474,7 +474,7 @@
       "citation": {
        "$all": [
         {
-         "$contains": "10.5072/zenodo.2"
+         "$contains": "10.5072/zenodo.1"
         },
         {
          "$contains": "20991231.2"
@@ -487,7 +487,7 @@
   },
   {
    "id": "release/citation-exact-20991231.2",
-   "title": "citation of 20991231.2, exact text (DOI set)",
+   "title": "citation of 20991231.2, exact text (concept DOI set, no version DOI)",
    "spec": "4.6",
    "matrix": {
     "root": "good",
@@ -497,14 +497,14 @@
     {
      "op": "citation",
      "expect": {
-      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.2 [Data set]. https://doi.org/10.5072/zenodo.2"
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.2 [Data set]. https://doi.org/10.5072/zenodo.1"
      }
     }
    ]
   },
   {
    "id": "release/citation-exact-20991231",
-   "title": "citation of 20991231, exact text (DOI null)",
+   "title": "citation of 20991231, exact text (concept DOI null, no version DOI)",
    "spec": "4.6",
    "matrix": {
     "root": "good",
@@ -515,6 +515,313 @@
      "op": "citation",
      "expect": {
       "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231 [Data set]. https://data.opentideconstants.org/OTC_20991231.json"
+     }
+    }
+   ]
+  },
+  {
+   "id": "release/citation-exact-version-doi",
+   "title": "citation after a download of latest whose index entry has a version DOI: concept DOI link plus (version DOI: ...)",
+   "spec": "4.6",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/v06/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.3"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.3 [Data set]. https://doi.org/10.5072/zenodo.1 (version DOI: https://doi.org/10.5072/zenodo.3)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "release/doi-fields-latest",
+   "title": "concept_doi from the release, zenodo_version_doi from the pointer; the attribution uses only the concept DOI; ReleaseInfo carries both and content_sha256",
+   "spec": "3, 4.3, 4.6",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/v06/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.3"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "release_metadata",
+     "expect": {
+      "datestamp": "20991231.3",
+      "created": "2099-12-31T18:00:00Z",
+      "format_version": "0.6",
+      "concept_doi": "10.5072/zenodo.1",
+      "zenodo_version_doi": "10.5072/zenodo.3",
+      "source_versions": {
+       "eot20": "20991231",
+       "gesla": "4.1",
+       "noaa": "20991231"
+      },
+      "build_commit": "89abcdef0123456789abcdef0123456789abcdef",
+      "changelog_url": "https://opentideconstants.org/changelog/#20991231.3"
+     }
+    },
+    {
+     "op": "attribution",
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+     }
+    },
+    {
+     "op": "latest",
+     "expect": {
+      "release": {
+       "datestamp": "20991231.3",
+       "format_version": "0.6",
+       "concept_doi": "10.5072/zenodo.1",
+       "zenodo_version_doi": "10.5072/zenodo.3",
+       "content_sha256": "a9ed7bc7838d987a38e4ac9c444e1ca3797ba79f916978af968eeac5718d9e92",
+       "files": [
+        {
+         "name": "OTC_20991231.3.json",
+         "url": "${server}/v06/OTC_20991231.3.json",
+         "size": 13127,
+         "sha256": "a7b0f65c7ef3b8970b4788c07e8f516667be72678b7371f21f0a37a953821bd4"
+        },
+        {
+         "name": "OTC_20991231.3.json.gz",
+         "url": "${server}/v06/OTC_20991231.3.json.gz",
+         "size": 2613,
+         "sha256": "ea59713c70b6ea4a2fae1752de34eb643c3f06525b9cbd7791a9725d57363ba7"
+        },
+        {
+         "name": "OTC_20991231.3.jsonl",
+         "url": "${server}/v06/OTC_20991231.3.jsonl",
+         "size": 10187,
+         "sha256": "ee6f189be21b6fd41f6d30d9bfb6e88f99745437f203f8b63e3fd102d345601e"
+        },
+        {
+         "name": "OTC_20991231.3.meta.json",
+         "url": "${server}/v06/OTC_20991231.3.meta.json",
+         "size": 2927,
+         "sha256": "abbd0b17248aacbf8e29683dd90ee52820951f6917a461709219c53616f57843"
+        },
+        {
+         "name": "OTC_20991231.3.sha256",
+         "url": "${server}/v06/OTC_20991231.3.sha256",
+         "size": 353,
+         "sha256": "a1489d8ae8c67f3e01bb13997ac6bc7784ea6daa88a16240a34785cd7a3f4cf9"
+        }
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "releases",
+     "expect": {
+      "releases": [
+       {
+        "datestamp": "20991231.3",
+        "format_version": "0.6",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": "10.5072/zenodo.3",
+        "content_sha256": "a9ed7bc7838d987a38e4ac9c444e1ca3797ba79f916978af968eeac5718d9e92",
+        "files": [
+         {
+          "name": "OTC_20991231.3.json",
+          "url": "${server}/v06/OTC_20991231.3.json",
+          "size": 13127,
+          "sha256": "a7b0f65c7ef3b8970b4788c07e8f516667be72678b7371f21f0a37a953821bd4"
+         },
+         {
+          "name": "OTC_20991231.3.json.gz",
+          "url": "${server}/v06/OTC_20991231.3.json.gz",
+          "size": 2613,
+          "sha256": "ea59713c70b6ea4a2fae1752de34eb643c3f06525b9cbd7791a9725d57363ba7"
+         },
+         {
+          "name": "OTC_20991231.3.jsonl",
+          "url": "${server}/v06/OTC_20991231.3.jsonl",
+          "size": 10187,
+          "sha256": "ee6f189be21b6fd41f6d30d9bfb6e88f99745437f203f8b63e3fd102d345601e"
+         },
+         {
+          "name": "OTC_20991231.3.meta.json",
+          "url": "${server}/v06/OTC_20991231.3.meta.json",
+          "size": 2927,
+          "sha256": "abbd0b17248aacbf8e29683dd90ee52820951f6917a461709219c53616f57843"
+         },
+         {
+          "name": "OTC_20991231.3.sha256",
+          "url": "${server}/v06/OTC_20991231.3.sha256",
+          "size": 353,
+          "sha256": "a1489d8ae8c67f3e01bb13997ac6bc7784ea6daa88a16240a34785cd7a3f4cf9"
+         }
+        ]
+       },
+       {
+        "datestamp": "20991230",
+        "format_version": "0.6",
+        "concept_doi": null,
+        "zenodo_version_doi": null,
+        "content_sha256": "5d283df45210d9b0167ce78b5e7dd66be5eecf9eb11c8d19eae3ac65a6cf79fe",
+        "files": [
+         {
+          "name": "OTC_20991230.json",
+          "url": "${server}/v06/OTC_20991230.json",
+          "size": 5567,
+          "sha256": "334e6f8024c07d16f5e065bcacfd5d7505c3e45f9c6be6a4c3ac5a0da0d21ccb"
+         },
+         {
+          "name": "OTC_20991230.json.gz",
+          "url": "${server}/v06/OTC_20991230.json.gz",
+          "size": 1708,
+          "sha256": "eab3b63fb4099a0a3bb8090d67984790b8efca752d9fd91c1f0fd7c459faeae8"
+         },
+         {
+          "name": "OTC_20991230.jsonl",
+          "url": "${server}/v06/OTC_20991230.jsonl",
+          "size": 2782,
+          "sha256": "0c0e87ac45b9274f4af41c2c003dc2de9a986b1b923d1b970c317047b1ba8ec6"
+         },
+         {
+          "name": "OTC_20991230.meta.json",
+          "url": "${server}/v06/OTC_20991230.meta.json",
+          "size": 2772,
+          "sha256": "666e61695212733f1a3c8bcc0d27658d5ee8d9551e16c60619fc6ae9483778c5"
+         },
+         {
+          "name": "OTC_20991230.sha256",
+          "url": "${server}/v06/OTC_20991230.sha256",
+          "size": 345,
+          "sha256": "96df66924c3746e376f70fe94c08f1ee6eaf1b0aea6f3c5050e1ead7cb26ff55"
+         }
+        ]
+       }
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.3",
+      "base_url": "${server}/v06/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.3"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.3",
+      "concept_doi": "10.5072/zenodo.1"
+     }
+    },
+    {
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991231.3 [Data set]. https://doi.org/10.5072/zenodo.1 (version DOI: https://doi.org/10.5072/zenodo.3)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "release/citation-exact-rc",
+   "title": "citation of a release candidate (concept_doi null, no version DOI): the release URL",
+   "spec": "4.6",
+   "matrix": {
+    "root": "v06",
+    "release": "20991230"
+   },
+   "steps": [
+    {
+     "op": "citation",
+     "expect": {
+      "citation": "OpenTideConstants contributors (2099). OpenTideConstants, release 20991230 [Data set]. https://data.opentideconstants.org/OTC_20991230.json"
+     }
+    },
+    {
+     "op": "release_metadata",
+     "expect": {
+      "datestamp": "20991230",
+      "created": "2099-12-31T18:00:00Z",
+      "format_version": "0.6",
+      "concept_doi": null,
+      "zenodo_version_doi": null,
+      "source_versions": {
+       "eot20": "20991231",
+       "gesla": "4.1",
+       "noaa": "20991231"
+      },
+      "build_commit": null,
+      "changelog_url": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "release/attribution-rc",
+   "title": "attribution of a release candidate (concept_doi null): the release URL replaces doi:",
+   "spec": "4.6",
+   "matrix": {
+    "root": "v06",
+    "release": "20991230"
+   },
+   "steps": [
+    {
+     "op": "attribution",
+     "expect": {
+      "attribution": "Tidal constants: OpenTideConstants 20991230, https://data.opentideconstants.org/OTC_20991230.json, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     }
    ]
@@ -536,7 +843,7 @@
       ]
      },
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Mapping Authority: Synthetic test data, Example Mapping Authority."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Mapping Authority: Synthetic test data, Example Mapping Authority."
      }
     }
    ]
@@ -560,7 +867,7 @@
       ]
      },
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority."
      }
     }
    ]
@@ -582,7 +889,7 @@
       ]
      },
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     }
    ]
@@ -604,7 +911,7 @@
       ]
      },
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     }
    ]
@@ -629,7 +936,7 @@
       ]
      },
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.2, CC BY 4.0. Sources: Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
      }
     }
    ]

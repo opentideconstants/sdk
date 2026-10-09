@@ -428,7 +428,7 @@
      "op": "release_metadata",
      "expect": {
       "datestamp": "20991231",
-      "doi": null,
+      "zenodo_version_doi": null,
       "build_commit": "0123456789abcdef0123456789abcdef01234567"
      }
     },
@@ -1212,7 +1212,14 @@
        {
         "datestamp": "20991231.10",
         "format_version": "0.2",
-        "doi": "10.5072/zenodo.2",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          "10.5072/zenodo.2"
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.10.json",
@@ -1249,7 +1256,14 @@
        {
         "datestamp": "20991231.2",
         "format_version": "0.2",
-        "doi": "10.5072/zenodo.2",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          "10.5072/zenodo.2"
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.2.json",
@@ -2122,7 +2136,14 @@
        {
         "datestamp": "20991231.2",
         "format_version": "0.2",
-        "doi": "10.5072/zenodo.2",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          "10.5072/zenodo.2"
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.2.json",
@@ -2159,7 +2180,14 @@
        {
         "datestamp": "20991231",
         "format_version": "0.2",
-        "doi": null,
+        "concept_doi": null,
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          null
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.json",
@@ -2235,7 +2263,14 @@
        {
         "datestamp": "20991231.2",
         "format_version": "0.2",
-        "doi": "10.5072/zenodo.2",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          "10.5072/zenodo.2"
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.2.json",
@@ -2272,7 +2307,14 @@
        {
         "datestamp": "20991231",
         "format_version": "0.2",
-        "doi": null,
+        "concept_doi": null,
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          null
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.json",
@@ -2346,7 +2388,14 @@
        {
         "datestamp": "20991231.2",
         "format_version": "0.2",
-        "doi": "10.5072/zenodo.2",
+        "concept_doi": "10.5072/zenodo.1",
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          "10.5072/zenodo.2"
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.2.json",
@@ -2383,7 +2432,14 @@
        {
         "datestamp": "20991231",
         "format_version": "0.2",
-        "doi": null,
+        "concept_doi": null,
+        "zenodo_version_doi": {
+         "$any_of": [
+          null,
+          null
+         ]
+        },
+        "content_sha256": null,
         "files": [
          {
           "name": "OTC_20991231.json",
@@ -2522,7 +2578,14 @@
       "release": {
        "datestamp": "20991231.2",
        "format_version": "0.2",
-       "doi": "10.5072/zenodo.2",
+       "concept_doi": "10.5072/zenodo.1",
+       "zenodo_version_doi": {
+        "$any_of": [
+         null,
+         "10.5072/zenodo.2"
+        ]
+       },
+       "content_sha256": null,
        "files": [
         {
          "name": "OTC_20991231.2.json",
@@ -2601,7 +2664,14 @@
       "release": {
        "datestamp": "20991231.2",
        "format_version": "0.2",
-       "doi": "10.5072/zenodo.2",
+       "concept_doi": "10.5072/zenodo.1",
+       "zenodo_version_doi": {
+        "$any_of": [
+         null,
+         "10.5072/zenodo.2"
+        ]
+       },
+       "content_sha256": null,
        "files": [
         {
          "name": "OTC_20991231.2.json",
