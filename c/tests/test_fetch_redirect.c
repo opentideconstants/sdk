@@ -1,7 +1,9 @@
 /* PK12 / C93: otc_fetch follows redirects only to http and https (spec 5.7,
  * CR D1). A tiny HTTP server in this process answers every request with a
  * 302 to ftp://127.0.0.1:<port>/, where a second socket counts connections.
- * Before the fix libcurl followed the redirect and connected there. */
+ * Before the fix libcurl followed the redirect and connected there.
+ * PK10 / C50: that failure is permanent (a protocol the library refuses), so
+ * it is not retried: the server sees one request, not three. */
 #include "otc_test.h"
 
 #include <arpa/inet.h>
@@ -9,7 +11,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 
-static int g_http, g_trap, g_trap_port, g_trap_hits;
+static int g_http, g_trap, g_trap_port, g_trap_hits, g_requests;
 
 static int listen_any(int *port)
 {
@@ -37,6 +39,7 @@ static void *http_thread(void *arg)
         int c = accept(g_http, NULL, NULL);
         if (c < 0) return NULL;
         if (recv(c, buf, sizeof buf, 0) > 0) {
+            __sync_fetch_and_add(&g_requests, 1);
             snprintf(resp, sizeof resp,
                      "HTTP/1.1 302 Found\r\nLocation: ftp://127.0.0.1:%d/OTC_20991231.sha256\r\n"
                      "Content-Length: 0\r\nConnection: close\r\n\r\n", g_trap_port);
@@ -79,6 +82,8 @@ int main(void)
     CHECK_STATUS(otc_fetch_release(&fo, "20991231", path, sizeof path, &need), OTC_E_NETWORK);
     printf("error: %s\n", err.message);
     CHECK(g_trap_hits == 0);
+    CHECK(g_requests == 1);
+    if (g_requests != 1) fprintf(stderr, "a permanent failure was retried: %d requests\n", g_requests);
     if (g_trap_hits) fprintf(stderr, "libcurl followed the redirect to ftp:// (%d connections)\n", g_trap_hits);
     free(cache);
     return test_done("test_fetch_redirect");

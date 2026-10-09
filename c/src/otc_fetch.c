@@ -741,6 +741,29 @@ static size_t on_header(char *line, size_t sz, size_t nm, void *user)
 
 enum { GET_OK = 0, GET_NOT_MODIFIED, GET_NOT_FOUND };
 
+/* A libcurl failure that another attempt may cure (spec 5.7: "connection
+ * errors"). A refused protocol, a bad URL, too many redirects or a TLS
+ * certificate failure stay the same, so they are not retried. */
+static int transient(CURLcode rc)
+{
+    switch (rc) {
+    case CURLE_COULDNT_RESOLVE_PROXY:
+    case CURLE_COULDNT_RESOLVE_HOST:
+    case CURLE_COULDNT_CONNECT:
+    case CURLE_PARTIAL_FILE:
+    case CURLE_OPERATION_TIMEDOUT:
+    case CURLE_SSL_CONNECT_ERROR:
+    case CURLE_GOT_NOTHING:
+    case CURLE_SEND_ERROR:
+    case CURLE_RECV_ERROR:
+    case CURLE_HTTP2:
+    case CURLE_HTTP2_STREAM:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 /*
  * GET url with the retries of spec 5.7 (3 attempts on connection errors, 5xx
  * and 429; waits of 1 s and 2 s, or Retry-After up to 60 s). 304 and 404 are
@@ -776,7 +799,7 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         CURL *h;
         CURLcode rc;
         struct curl_slist *hdrs = NULL;
-        int retry = 0;
+        int retry = 0, bad_opt;
         free(r->body);
         memset(r, 0, sizeof *r);
         r->retry_after = -1;
@@ -792,19 +815,20 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             return fail(c, OTC_E_NOMEM, url, "curl_easy_init failed");
         }
         errbuf[0] = '\0';
-        curl_easy_setopt(h, CURLOPT_URL, url);
+        bad_opt = curl_easy_setopt(h, CURLOPT_URL, url) != CURLE_OK;
         curl_easy_setopt(h, CURLOPT_USERAGENT, ua);
         curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
         /* redirects (spec 5.7, CR D1): at most 5, only http and https, and never from
          * https to http */
-        curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
+        bad_opt |= curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L) != CURLE_OK;
 #if LIBCURL_VERSION_NUM >= 0x075500
-        curl_easy_setopt(h, CURLOPT_PROTOCOLS_STR, "http,https");
-        curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https");
+        bad_opt |= curl_easy_setopt(h, CURLOPT_PROTOCOLS_STR, "http,https") != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS_STR, https ? "https" : "http,https") != CURLE_OK;
 #else
-        curl_easy_setopt(h, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
-        curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS, https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+        bad_opt |= curl_easy_setopt(h, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
+        bad_opt |= curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS,
+                                    https ? (long)CURLPROTO_HTTPS : (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS)) != CURLE_OK;
 #endif
         curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(c->connect_s * 1000.0));
         curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
@@ -822,10 +846,17 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
         }
         if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
         if (proxy) {
-            curl_easy_setopt(h, CURLOPT_PROXY, proxy);
-            curl_easy_setopt(h, CURLOPT_NOPROXY, "");
+            bad_opt |= curl_easy_setopt(h, CURLOPT_PROXY, proxy) != CURLE_OK;
+            bad_opt |= curl_easy_setopt(h, CURLOPT_NOPROXY, "") != CURLE_OK;
         }
-        if (ca) curl_easy_setopt(h, CURLOPT_CAINFO, ca);
+        if (ca) bad_opt |= curl_easy_setopt(h, CURLOPT_CAINFO, ca) != CURLE_OK;
+        if (bad_opt) {   /* a limit or a URL that libcurl did not take: no request without it */
+            curl_easy_cleanup(h);
+            curl_slist_free_all(hdrs);
+            if (r->sink) fclose(r->sink);
+            r->sink = NULL;
+            return fail(c, OTC_E_NETWORK, url, "libcurl refused an option the request needs (%s)", url);
+        }
         rc = curl_easy_perform(h);
         curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &r->status);
         curl_easy_cleanup(h);
@@ -844,6 +875,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             snprintf(last_msg, sizeof last_msg, "%s for %s: %s", curl_easy_strerror(rc), url,
                      errbuf[0] ? errbuf : curl_easy_strerror(rc));
             last_status = 0;
+            if (!transient(rc)) {   /* spec 5.7: only connection errors are retried */
+                fail(c, OTC_E_NETWORK, url, "%s", last_msg);
+                return OTC_E_NETWORK;
+            }
             retry = 1;
         } else if (r->status == 200) {
             logf_(c, 0, "GET %s -> 200", url);
