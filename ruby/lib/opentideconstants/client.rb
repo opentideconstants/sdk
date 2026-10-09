@@ -79,7 +79,7 @@ class OpenTideConstants
         @file = file
         @loaded = ObjectSpace::WeakMap.new # every Release this client loaded, while a caller holds it
         if file
-            @release, @loaded_from = Reader.open_file(file, mode: @mode)
+            @release, @loaded_from = Reader.open_file(file, mode: @mode, logger: @logger)
         elsif @requested == :latest
             open_latest
         else
@@ -472,9 +472,10 @@ class OpenTideConstants
     end
 
     # Keeps the version DOI of an entry in the .verified of its cached release.
+    # An entry whose DOI is null never erases a known one (CR2 DR11).
     def note_version_doi(entry)
         d = entry["datestamp"]
-        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && entry.key?("zenodo_version_doi")
+        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && !entry["zenodo_version_doi"].nil?
         cache.note_version_doi(d, entry["zenodo_version_doi"])
     end
 
@@ -704,7 +705,8 @@ class OpenTideConstants
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
-        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open }
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: ver["zenodo_version_doi"], verify: @verify_on_open,
+                 logger: @logger }
         return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
         if index
@@ -822,8 +824,9 @@ class OpenTideConstants
                                    "url" => url_of.call(sha_name) }
         end
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
-        # Only the keys the entry has: a missing zenodo_version_doi keeps the stored one.
+        # Only the keys the entry has: a missing or null zenodo_version_doi keeps the stored one (CR2 DR11).
         info = entry ? entry.slice(*Cache::VERIFIED_INFO) : {}
+        info.delete("zenodo_version_doi") if info["zenodo_version_doi"].nil?
         if @mode == :stream
             %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
                 size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],

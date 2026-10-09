@@ -1751,17 +1751,19 @@ static void jput(cJSON *o, const char *key, cJSON *item, int *ok);
  * The pointer or index entry for a cached release names its version DOI
  * (spec 4.3): .verified keeps the newest one the SDK has read, so a later
  * open from the cache reports it. A failure to write is logged, not raised.
+ * An entry whose DOI is null never erases a known one (CR2 DR11).
  */
 static void note_entry(fctx *c, const otc_release_info *ri)
 {
-    cJSON *v = read_verified(c, ri->datestamp);
+    cJSON *v;
     const cJSON *old;
     char *d = NULL, *p = NULL, *txt = NULL, token[33] = "";
     int held = 0;
+    if (!ri->zenodo_version_doi) return;
+    v = read_verified(c, ri->datestamp);
     if (!v) return;
     old = cJSON_GetObjectItemCaseSensitive(v, "zenodo_version_doi");
-    if (old && (ri->zenodo_version_doi ? (cJSON_IsString(old) && !strcmp(old->valuestring, ri->zenodo_version_doi))
-                                       : cJSON_IsNull(old))) {
+    if (cJSON_IsString(old) && !strcmp(old->valuestring, ri->zenodo_version_doi)) {
         cJSON_Delete(v);
         return;
     }
@@ -1780,8 +1782,7 @@ static void note_entry(fctx *c, const otc_release_info *ri)
     if (v) {
         int ok = 1;
         cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
-        jput(v, "zenodo_version_doi", ri->zenodo_version_doi ? cJSON_CreateString(ri->zenodo_version_doi) : cJSON_CreateNull(),
-             &ok);
+        jput(v, "zenodo_version_doi", cJSON_CreateString(ri->zenodo_version_doi), &ok);   /* never null here (DR11) */
         p = path2(d, ".verified");
         txt = p && ok ? cJSON_Print(v) : NULL;
         if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {

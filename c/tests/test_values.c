@@ -2,11 +2,12 @@
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
  *      never cut to an integer: the open fails with OTC_E_INVALID_RELEASE, as
  *      in every SDK (CR2 PK-R2-05: a known field of the wrong JSON type).
- * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
+ * C98: a line of only ASCII whitespace (SP, HT, VT, FF, CR) is skipped, as
+ *      in the other SDKs (CR2 DR26); a NUL line is not blank;
  *      text after a line's object is invalid_release, not ignored; white
  *      space after it (CRLF, spaces, tabs) is not text.
- * C34: the kind filter "other" is not a kind value: it matches no station,
- *      also not one whose kind is unknown (spec 4.4).
+ * C34: the kind filter "other" matches a station whose kind is unknown, and
+ *      the raw quantity matches nothing (spec 4.4, CR2 DR7).
  * C35: a validation row without previous_release has NaN and -1 there, as
  *      for any missing number and count, not zeros.
  * C13: a string cut to fit a small buffer (BUFFER_TOO_SMALL) ends on a whole
@@ -16,11 +17,22 @@
  * PK-R2-05: a line that is not well-formed UTF-8 fails the open with
  *      OTC_E_INVALID_RELEASE (overlong forms, encoded surrogates, above
  *      U+10FFFF, a cut sequence); a 4-byte character opens.
- * C4:  a recommended set with no quantity gives kind UNSET (null), not OTHER:
- *      OTHER is only for a quantity the library does not know (spec 6.2, 6.4). */
+ * DR8: a line whose status the library does not know is in no query and no
+ *      count, and the open logs it once at level 2 (CR2 DR8).
+ * DR28: a line with no status (or null) is an active station (CR2 DR28).
+ * C4:  a recommended set with no quantity gives kind OTHER, as in every SDK and
+ *      the reference stream index (spec 6.2; orchestrator S3, PK-R2-09). */
 #include "otc_test.h"
 
 #include <math.h>
+
+static int n_warn_retired;
+
+static void count_log(void *user, int level, const char *msg)
+{
+    (void)user;
+    if (level == 2 && strstr(msg, "OTC-X-2") && strstr(msg, "\"retired\"")) n_warn_retired++;
+}
 
 static otc_release *open_lines(const char *lines, char **dir_out)
 {
@@ -76,7 +88,7 @@ int main(void)
     otc_close(rel);
     free(dir);
     /* C98 */
-    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\n \t \n" TEST_STATION("OTC-X-2", "Two") "\n", &dir);
+    rel = open_lines(TEST_STATION("OTC-X-1", "One") "\n \t \n\f\n\v\n \t\v\f \r\n" TEST_STATION("OTC-X-2", "Two") "\n\f", &dir);
     CHECK(rel != NULL && otc_release_station_count(rel) == 2);
     otc_close(rel);
     free(dir);
@@ -112,6 +124,9 @@ int main(void)
         otc_filter_init(&f);
         f.kind = "other";
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
+        CHECK(n == 1);
+        f.kind = "salinity";
+        CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
         CHECK(n == 0);
         f.kind = "tide";
         CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
@@ -139,11 +154,11 @@ int main(void)
         const otc_set *set = NULL;
         char pj[16];
         size_t pn = 0;
-        CHECK(otc_station_kind(st) == OTC_KIND_UNSET);
+        CHECK(otc_station_kind(st) == OTC_KIND_OTHER);
         /* C43: this set has no provenance */
         CHECK_STATUS(otc_station_recommended_set(st, &set), OTC_OK);
         CHECK_STATUS(otc_set_provenance_json(set, pj, sizeof pj, &pn), OTC_E_NOT_FOUND);
-        if (otc_station_kind(st) != OTC_KIND_UNSET) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
+        if (otc_station_kind(st) != OTC_KIND_OTHER) fprintf(stderr, "kind %s\n", otc_kind_name(otc_station_kind(st)));
     }
     otc_station_free(st);
     otc_close(rel);
@@ -188,6 +203,40 @@ int main(void)
         }
         test_write(d2, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "A\xf0\x9f\x8c\x8a\xf4\x8f\xbf\xbf" "B") "\n");
         CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_OK);
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
+    /* DR8, DR28 */
+    {
+        char *d2 = test_tmpdir(), *path;
+        otc_release *r2 = NULL;
+        otc_open_options o;
+        otc_station_t *s2 = NULL;
+        otc_open_options_init(&o);
+        o.log_fn = count_log;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(d2, "OTC_20990101.jsonl",
+                   "{\"station_id\":\"OTC-X-1\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n"
+                   "{\"station_id\":\"OTC-X-2\",\"status\":\"retired\",\"name\":\"B\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n"
+                   "{\"station_id\":\"OTC-X-3\",\"status\":null,\"name\":\"C\",\"lat\":1,\"lon\":1,\"type\":\"reference\",\"constant_sets\":[]}\n");
+        path = test_join(d2, "OTC_20990101.jsonl");
+        CHECK_STATUS(otc_open_file(path, &o, &r2), OTC_OK);
+        CHECK(n_warn_retired == 1);
+        if (r2) {
+            otc_tombstone_t *t = NULL;
+            CHECK(otc_release_station_count(r2) == 2 && otc_release_tombstone_count(r2) == 0);
+            CHECK_STATUS(otc_station(r2, "OTC-X-2", &s2), OTC_E_NOT_FOUND);
+            CHECK_STATUS(otc_tombstone(r2, "OTC-X-2", &t), OTC_E_NOT_FOUND);
+            CHECK_STATUS(otc_station(r2, "OTC-X-1", &s2), OTC_OK);
+            CHECK(otc_station_status(s2) == OTC_STATION_STATUS_ACTIVE);
+            otc_station_free(s2);
+            s2 = NULL;
+            CHECK_STATUS(otc_station(r2, "OTC-X-3", &s2), OTC_OK);
+            CHECK(otc_station_status(s2) == OTC_STATION_STATUS_ACTIVE);
+            otc_station_free(s2);
+            otc_tombstone_free(t);
+        }
         otc_close(r2);
         free(path);
         free(d2);

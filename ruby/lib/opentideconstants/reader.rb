@@ -51,7 +51,7 @@ class OpenTideConstants
         end
 
         # Opens a local file given with file: (spec §4.2, §4.3.1).
-        def open_file(path, mode:)
+        def open_file(path, mode:, logger: nil)
             raise InvalidArgumentError, "file must be a String path" unless path.is_a?(String) && !path.empty?
             path = File.expand_path(path)
             prefix, d, ext = parse_name(path)
@@ -81,10 +81,10 @@ class OpenTideConstants
                     local = File.join(File.dirname(path), name)
                     FileInfo.new(name: name, url: nil, size: File.file?(local) ? File.size(local) : nil, sha256: rows[name])
                 end
-                [load(path, mode: mode, files: files, checks: checks, verify: true), :file]
+                [load(path, mode: mode, files: files, checks: checks, verify: true, logger: logger), :file]
             else
                 files = read.map { |p| FileInfo.new(name: File.basename(p), url: nil, size: File.size(p), sha256: nil) }
-                [load(path, mode: mode, files: files, checks: {}), :file_unverified]
+                [load(path, mode: mode, files: files, checks: {}, logger: logger), :file_unverified]
             end
         end
 
@@ -99,36 +99,37 @@ class OpenTideConstants
         # hashed from the same bytes (or the same open file) that the load
         # then reads, against checks {path => sha256}, so a file swapped
         # after its hash is never used.
+        # logger: where a station with an unknown status is reported (CR2 DR8).
         def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
-                 on_bad_index: nil)
+                 on_bad_index: nil, logger: nil)
             _, _, ext = parse_name(path)
             expect = ->(p) { verify ? checks[p] : nil }
             case ext
             when "json"
                 doc = parse_json(read_text(path, expect.call(path)))
-                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
+                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger)
             when "json.gz"
                 doc = parse_json(gunzip(path, expect.call(path)))
-                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
+                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger)
             when "jsonl"
                 meta_path = files_read(path)[1]
                 meta = parse_json(read_text(meta_path, expect.call(meta_path)))
                 Release.check_format!(meta)
                 load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
                                        zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path),
-                                       on_bad_index: on_bad_index)
+                                       on_bad_index: on_bad_index, logger: logger)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
         end
 
-        def eager_from_doc(doc, files:, checks:, zenodo_version_doi: nil)
+        def eager_from_doc(doc, files:, checks:, zenodo_version_doi: nil, logger: nil)
             Release.check_format!(doc)
             stations = doc["stations"]
             raise InvalidReleaseError, "stations missing" unless stations.is_a?(Array)
             meta = doc.reject { |k, _| k == "stations" }
             Release.new(meta: meta, stations: stations.map { |s| [s, nil, nil] }, mode: :eager,
-                        files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
+                        files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger)
         end
 
         # index: the entries of a fresh index-v1.json (spec §6.2); the stations
@@ -136,7 +137,7 @@ class OpenTideConstants
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
         def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
-                       expected_sha256: nil, on_bad_index: nil)
+                       expected_sha256: nil, on_bad_index: nil, logger: nil)
             io = File.open(path, "rb")
             if expected_sha256
                 digest = Digest::SHA256.new
@@ -158,7 +159,7 @@ class OpenTideConstants
                     pos = 0
                     io.each_line do |line|
                         body = line.chomp
-                        unless line.strip.empty?
+                        unless blank?(line)
                             raw = parse_json(body.force_encoding(Encoding::UTF_8))
                             index_rows << index_entry(raw, pos, body.bytesize) if index_rows && raw.is_a?(Hash)
                             y << [raw, pos, body.bytesize]
@@ -170,7 +171,7 @@ class OpenTideConstants
             begin
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
                                   io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi,
-                                  on_bad_index: index && on_bad_index)
+                                  on_bad_index: index && on_bad_index, logger: logger)
             ensure
                 io.close if mode != :stream || rel.nil?
             end
@@ -287,6 +288,12 @@ class OpenTideConstants
             raise InvalidReleaseError, "bad gzip file #{path}: #{e.message}"
         rescue SystemCallError, IOError => e
             raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+        end
+
+        # True when a .jsonl line holds only ASCII whitespace: SP, HT, LF, VT, FF,
+        # CR (spec 6.2, CR2 DR26). String#strip also drops NUL, which is not blank.
+        def blank?(line)
+            line.b.match?(/\A[ \t\n\v\f\r]*\z/n)
         end
 
         def parse_json(text)

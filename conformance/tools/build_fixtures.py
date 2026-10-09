@@ -995,6 +995,96 @@ BAD = [
 ] + [(name, "invalid_release", defect, docs, tamper) for name, defect, docs, tamper in BAD_R2_05]
 
 
+# Review round 2, PK-R2-09: values the four SDKs gave different answers for.
+def _quantity_null(doc):
+    _station(doc, "OTC-T-0020")["constant_sets"][0]["quantity"] = None
+    del _station(doc, "OTC-T-0019")["constant_sets"][0]["quantity"]
+
+
+def _set_id_across_stations(doc):
+    st = _station(doc, "OTC-T-0002")
+    old, new = "OTC-T-0002/gesla-fit", "OTC-T-0001/gesla-fit"   # not recommended; OTC-T-0001 has a set with this id
+    for cs in st["constant_sets"]:
+        if cs["set_id"] == old:
+            cs["set_id"] = new
+    for v in st.get("validation", []):
+        if v["set_id"] == old:
+            v["set_id"] = new
+
+
+def _jsonl_lines(extra):
+    """A tamper that puts extra lines into the .jsonl: extra maps a line number (0 = before the first station
+    line, -1 = at the end, with no line end after it) to the bytes to insert; the digests stay honest."""
+    def tamper(files, sums, entry, reuse):
+        files = dict(files)
+        name = next(n for n in files if n.endswith(".jsonl"))
+        lines = files[name].split(b"\n")[:-1]   # each station line ends in \n
+        out = b""
+        for i, line in enumerate(lines):
+            out += extra.get(i, b"") + line + b"\n"
+        files[name] = out + extra.get(-1, b"")
+        return rehash(files, sums, entry)
+    return tamper
+
+
+# CR2 DR26: a blank .jsonl line holds only ASCII whitespace (SP, HT, LF, VT, FF, CR), the bytes.strip rule
+BLANK_ASCII = {1: b"\x0c\n" + b"\x0b\n" + b" \t\x0b\x0c \r\n", 5: b"\r\n", -1: b"\x0c"}
+
+
+def unknown_enums_doc():
+    """Format 1.1 (min_reader_version 1.0) with enum values format 1.0 does not have: a 1.0 reader reads each as
+    "other" (spec 7.3), and the filters and stats use that typed value (CR2 DR7)."""
+    doc = release_doc(BASE)
+    doc["format_version"] = "1.1"
+    doc["future_top_level"] = {"note": "added by format 1.1 (test)"}
+    doc["release"]["future_release_field"] = "1.1 release field"
+    _station(doc, "OTC-T-0014")["type"] = "lighthouse"
+    _station(doc, "OTC-T-0015")["constant_sets"][0]["quantity"] = "tidal_stream"
+    _station(doc, "OTC-T-0016")["constant_sets"][0]["source_type"] = "satellite"
+    return [doc]
+
+
+def unknown_status_doc():
+    """Format 1.1 (min_reader_version 1.0) with a station status format 1.0 does not have (CR2 DR8)."""
+    doc = release_doc(BASE)
+    doc["format_version"] = "1.1"
+    doc["future_top_level"] = {"note": "added by format 1.1 (test)"}
+    doc["release"]["future_release_field"] = "1.1 release field"
+    _station(doc, "OTC-T-0016")["status"] = "retired"
+    return [doc]
+
+
+def _no_status(doc):
+    del _station(doc, "OTC-T-0020")["status"]
+    _station(doc, "OTC-T-0019")["status"] = None
+
+
+BAD += [
+    ("unknown-status", "load", "format 1.1: OTC-T-0016's status is retired; a 1.0 reader reads it as other: not a station, not a "
+     "tombstone, in no query and no count (CR2 DR8)",
+     unknown_status_doc, None),
+    ("no-status", "load", "OTC-T-0020's line has no status and OTC-T-0019's has status null (malformed 1.0); both are active "
+     "stations (CR2 DR28)",
+     changed_doc(_no_status), None),
+    ("unknown-enums", "load", "format 1.1: OTC-T-0014's type is lighthouse, OTC-T-0015's recommended set has quantity tidal_stream, "
+     "OTC-T-0016's has source_type satellite; each reads as other, and the filters and stats use other (CR2 DR7)",
+     unknown_enums_doc, None),
+    ("blank-lines", "load", "the .jsonl has lines of only ASCII whitespace (FF, VT, SP HT VT FF SP CR, CR) between station lines "
+     "and a last line of one FF with no line end: blank lines, skipped (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines(BLANK_ASCII)),
+    ("blank-line-nbsp", "invalid_release", "a .jsonl line of one NBSP (U+00A0): not ASCII whitespace, so not blank, and not JSON (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines({1: b"\xc2\xa0\n"})),
+    ("blank-line-nul", "invalid_release", "a .jsonl line of one NUL byte: not whitespace, so not blank, and not JSON (CR2 DR26)",
+     lambda: [release_doc(BASE)], _jsonl_lines({1: b"\x00\n"})),
+    ("set-id-across-stations", "invalid_release", "OTC-T-0002's second set has the set_id OTC-T-0001/gesla-fit, a set_id of "
+     "OTC-T-0001: a set_id is unique across the release, not only within a station (D5)",
+     changed_doc(_set_id_across_stations), None),
+    ("quantity-null", "load", "OTC-T-0020's recommended set has quantity null and OTC-T-0019's has no quantity (malformed 1.0); "
+     "it must load, and both stations have kind other (orchestrator S3)",
+     changed_doc(_quantity_null), None),
+]
+
+
 def no_build_doc():
     doc = release_doc(BASE)
     st = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0004")
@@ -1602,7 +1692,8 @@ def open_release(root, datestamp, schemas):
     try:
         doc = strict_json(body)
         meta = strict_json(read_file(root, f"OTC_{datestamp}.meta.json"))
-        lines = [strict_json(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
+        # one station per line; a line of only ASCII whitespace (bytes.strip) is blank and skipped (spec 6.2, CR2 DR26)
+        lines = [strict_json(l.decode("utf-8")) for l in read_file(root, f"OTC_{datestamp}.jsonl").split(b"\n") if l.strip()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
     if not isinstance(doc, dict):
@@ -1640,6 +1731,27 @@ def sets_of(st):
     return [cs for cs in sets if isinstance(cs, dict)] if isinstance(sets, list) else []
 
 
+def tolerate_values(doc):
+    """The values an SDK reads from a malformed 1.0 station, put right in a copy so that each is the only defect
+    (review round 2, PK-R2-09). A set with no quantity (null or absent) gives the station the kind "other"
+    (orchestrator S3); it is checked as a water_level set, or a current set when it has current_bins. A station
+    line with no status (or null) is an active station (CR2 DR28).
+    Returns (the copy, the tolerances)."""
+    notes = []
+    doc = copy.deepcopy(doc)
+    for st in doc.get("stations") or []:
+        if isinstance(st, dict) and st.get("status") is None:
+            notes.append(f"{st.get('station_id')}: no status (read as active, CR2 DR28)")
+            st["status"] = "active"
+        if not isinstance(st, dict) or not isinstance(st.get("constant_sets"), list):
+            continue
+        for cs in st["constant_sets"]:
+            if isinstance(cs, dict) and cs.get("quantity") is None:
+                notes.append(f"{cs.get('set_id')}: no quantity (kind other, S3)")
+                cs["quantity"] = "current" if "current_bins" in cs else "water_level"
+    return doc, notes
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1650,12 +1762,15 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     version = version_key(doc["format_version"])
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
     tolerated = []
+    if allow_missing_build:   # the general read rules of the SDKs: each is put right in a copy, and listed
+        doc, tolerated = tolerate_values(doc)
+        lines = [tolerate_values({"stations": [l]})[0]["stations"][0] if isinstance(l, dict) else l for l in lines]
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
     # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
     missing = [cs["set_id"] for st in doc["stations"] for cs in sets_of(st)
                if isinstance(cs.get("provenance"), dict) and "build" not in cs["provenance"]]
     if missing and allow_missing_build:
-        tolerated = [f"no provenance.build in {m}" for m in missing]
+        tolerated += [f"no provenance.build in {m}" for m in missing]
         doc = restore_build(doc)
         meta = restore_build(meta)
         lines = [restore_station_build(l) for l in lines]
@@ -1684,6 +1799,26 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                 if cs["qc_status"] not in known_qc:
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
+        # A station whose status the schema does not have is read as "other": it is no station and no tombstone, so
+        # it is not checked (CR2 DR8)
+        known_status = schema["$defs"]["station"]["properties"]["status"]["enum"]
+        for st in [x for x in checked["stations"] if x.get("status") not in known_status]:
+            dropped.append(f"{st['station_id']}: status {st.get('status')!r} (read as other, listed nowhere)")
+            checked["stations"].remove(st)
+        # The same for a station type, a quantity and a source_type (CR2 DR7): checked with a known value in place
+        known_type = schema["$defs"]["active_station"]["properties"]["type"]["enum"]
+        set_enums = schema["$defs"]["constant_set"]["properties"]
+        for st in checked["stations"]:
+            if st.get("status") == "active" and st.get("type") not in known_type:
+                dropped.append(f"{st['station_id']}: type {st.get('type')!r} (read as other)")
+                st["type"] = "subordinate" if "subordinate_offsets" in st else "reference"
+            for cs in st.get("constant_sets", []):
+                if cs.get("quantity") is not None and cs["quantity"] not in set_enums["quantity"]["enum"]:
+                    dropped.append(f"{cs['set_id']}: quantity {cs['quantity']!r} (read as other)")
+                    cs["quantity"] = "current" if "current_bins" in cs else "water_level"
+                if cs.get("source_type") not in set_enums["source_type"]["enum"]:
+                    dropped.append(f"{cs['set_id']}: source_type {cs.get('source_type')!r} (read as other)")
+                    cs["source_type"] = "gauge" if "time_base" in cs else "model"
     errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
     if not errs:   # the cross-references assume the types the schema gives
         errs = cross_ref_errors(checked) + time_range_errors(checked)

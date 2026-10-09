@@ -63,6 +63,10 @@ def file_sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def status_of(s):
+    return "active" if s.get("status") is None else s["status"]
+
+
 class Rel:
     """One fixture release, indexed the way an SDK indexes it (spec §6.1)."""
 
@@ -70,7 +74,9 @@ class Rel:
         self.root = root
         self.datestamp = datestamp
         self.doc = load_release(root, datestamp)
-        self.active = sorted([s for s in self.doc["stations"] if s.get("status") == "active"], key=lambda s: s["station_id"])
+        # a line with no status (or null) is an active station (CR2 DR28); any other status is no station and no
+        # tombstone (CR2 DR8)
+        self.active = sorted([s for s in self.doc["stations"] if status_of(s) == "active"], key=lambda s: s["station_id"])
         self.tombs = sorted([s for s in self.doc["stations"] if s.get("status") == "removed"], key=lambda s: s["station_id"])
         self.by_id = {s["station_id"]: s for s in self.active}
         self.tomb_by_id = {s["station_id"]: s for s in self.tombs}
@@ -88,7 +94,7 @@ class Rel:
     def kind(self, s, seen=()):
         rs = self.rec_set(s)
         if rs is not None:
-            return {"water_level": "tide", "current": "current"}.get(rs["quantity"], "other")
+            return {"water_level": "tide", "current": "current"}.get(rs.get("quantity"), "other")
         if s["type"] == "subordinate" and s.get("subordinate_offsets"):
             ref = self.by_id.get(s["subordinate_offsets"]["reference_station_id"])
             if ref is not None and ref["station_id"] not in seen:
@@ -111,13 +117,23 @@ def g(d, k):
 # --------------------------------------------------------------------------- encodings (README "Result encodings")
 
 
+STATION_TYPES = ("reference", "subordinate")
+QUANTITIES = ("water_level", "current")
+SOURCE_TYPES = ("official", "gauge", "model")
+
+
+def typed(v, known):
+    """An enum value as an SDK reads it: null stays null, a value format 1.0 does not have is "other" (spec 7.3)."""
+    return None if v is None else v if v in known else "other"
+
+
 def enc_station(rel, s):
     k = rel.kind(s)
     rs = rel.rec_set(s)
     return {
         "station_id": s["station_id"], "name": s["name"], "country": s["country"],
-        "lat": s["lat"], "lon": s["lon"], "type": s["type"], "kind": k,
-        "timezone": s.get("timezone"), "aliases": aliases_enc(s), "status": s["status"],
+        "lat": s["lat"], "lon": s["lon"], "type": typed(s["type"], STATION_TYPES), "kind": k,
+        "timezone": s.get("timezone"), "aliases": aliases_enc(s), "status": status_of(s),
         "is_reference": s["type"] == "reference", "is_subordinate": s["type"] == "subordinate",
         "is_tide": k == "tide", "is_current": k == "current",
         "recommended_set_id": rs["set_id"] if rs else None,
@@ -134,7 +150,8 @@ def enc_set(rel, s, cs):
     span = cs.get("record_span")
     datum = cs.get("datum")
     return {
-        "set_id": cs["set_id"], "source": cs["source"], "source_type": cs["source_type"], "quantity": cs["quantity"],
+        "set_id": cs["set_id"], "source": cs["source"], "source_type": typed(cs["source_type"], SOURCE_TYPES),
+        "quantity": typed(cs.get("quantity"), QUANTITIES),
         "source_record_id": cs.get("source_record_id"), "source_version": cs.get("source_version"),
         "record_span": None if span is None else {"start": span.get("start"), "end": span.get("end"), "good_samples": span.get("good_samples")},
         "datum": None if datum is None else {"msl_offset_m": datum.get("msl_offset_m"), "named": dict(datum.get("named") or {})},
@@ -266,7 +283,8 @@ def apply_filters(rel, stations, f):
     for s in stations:
         if "country" in f and s["country"] != f["country"]:
             continue
-        if "type" in f and s["type"] != f["type"]:
+        # the filters compare the typed value: an unknown enum value is "other" (CR2 DR7)
+        if "type" in f and typed(s["type"], STATION_TYPES) != f["type"]:
             continue
         if "kind" in f and rel.kind(s) != f["kind"]:
             continue
@@ -274,7 +292,7 @@ def apply_filters(rel, stations, f):
             continue
         if "source_type" in f:
             rs = rel.rec_set(s)
-            if rs is None or rs["source_type"] != f["source_type"]:
+            if rs is None or typed(rs["source_type"], SOURCE_TYPES) != f["source_type"]:
                 continue
         out.append(s)
     return out
@@ -398,7 +416,7 @@ def stats(rel):
                 out[v] = out.get(v, 0) + 1
         return dict(sorted(out.items()))
     sets = [cs for s in rel.active for cs in s.get("constant_sets", [])]
-    return {"type": count(s["type"] for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
+    return {"type": count(typed(s["type"], STATION_TYPES) for s in rel.active), "kind": count(rel.kind(s) for s in rel.active),
             "country": count(s["country"] for s in rel.active),
             "source": count(cs["source"] for cs in sets if cs["qc_status"] in WITH_CONSTANTS),
             "qc_status": count(read_qc(cs) for cs in sets)}
@@ -1684,7 +1702,32 @@ def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("reader", step("station_count", {"station_count": len(R2.active)})),
                         as_("reader", step("cached_releases", {"datestamps": [d]})), no_requests],
                     roles=roles))
+    out += cross_r2_pk09(R2, roles, rdir)
     return out
+
+
+def cross_r2_pk09(R2, roles, rdir):
+    """Cross-SDK case of review round 2, package PK-R2-09: a null version DOI never erases a known one (spec 4.3,
+    5.4; CR2 DR11)."""
+    d = R2.datestamp
+    G = f"{SRV}/good/"
+    vdoi = pointer_entry("good", d)["zenodo_version_doi"]
+    null_doi = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_latest-f1.json",
+                                          "pointer": "", "set": {"/zenodo_version_doi": None}}])
+    return [case("cross/verified-doi-null-pointer", "the writer caches latest with its version DOI; then the pointer names the same release with zenodo_version_doi null: the reader keeps the known DOI in the session (open, check_for_update) and in .verified (CR2 DR11)", "4.3, 5.4",
+                 [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                  as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("writer", step("close")),
+                  null_doi,
+                  as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                  as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("reader", step("check_for_update", {"release": None})),
+                  as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("reader", step("close")),
+                  drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi}),
+                  as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
+                  as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi}))],
+                 roles=roles)]
 
 
 def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
@@ -2233,6 +2276,7 @@ def group_rules():
     out += r2_pk06_cases(G, d1, d2, info1, info2, pointer_rule, ptr_etag, latest, pinned)
     out += rules_r2_pk05()
     out += rules_r2_pk07()
+    out += rules_r2_pk09()
     return out
 
 
@@ -2385,6 +2429,128 @@ def rules_r2_pk05():
                       step("stations", {"station_ids": [x["station_id"] for x in apply_filters(P, P.active, {"source": "constructor"})]}, source="constructor"),
                       step("stations", {"station_ids": []}, source="toString")],
                      root="bad/proto-keys", release="20991231", open_expect={"format_version": "1.1"}))
+    return out
+
+
+# Review round 2, PK-R2-09: one value for one input in every SDK (orchestrator S3; CR D5; CR2 DR7, DR8, DR11, DR24,
+# DR26, DR28). The fixtures are bad/ roots that load (build_fixtures.py, BAD).
+def rules_r2_pk09():
+    out = []
+    # S3: a recommended set with no quantity (null, or no key) gives the kind "other", in every SDK and in the
+    # stream index each SDK writes
+    Q = Rel("bad/quantity-null", "20991231")
+    q_ids = ["OTC-T-0019", "OTC-T-0020"]
+    out.append(mcase("rules/r2-pk09/quantity-null", "a recommended set with quantity null or no quantity: the station's kind is other, and stats counts it so (orchestrator S3)", "4.4, 6.2",
+                     [step("station", {"station": enc_station(Q, Q.by_id[i])}, station_id=i) for i in q_ids] + [
+                      step("stats", {"stats": stats(Q)}),
+                      step("constant_set", {"set": enc_set(Q, Q.by_id["OTC-T-0020"], Q.rec_set(Q.by_id["OTC-T-0020"]))},
+                           station_id="OTC-T-0020", set_id="OTC-T-0020/noaa")],
+                     root="bad/quantity-null", release="20991231"))
+    qdir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/quantity-null-index", "the stream index of a release with a quantity-null recommended set gives kind other, as the reference index does (orchestrator S3)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/quantity-null/",
+                              cache_dir="${cache}", mode="stream")),
+                     step("station", {"station": enc_station(Q, Q.by_id["OTC-T-0020"])}, station_id="OTC-T-0020"),
+                     step("close"),
+                     drv("assert_index", path=f"{qdir}/index-v1.json", jsonl=f"{qdir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
+    # D5: a set_id appears once in the release, also across stations
+    for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                           (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+        label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+        out.append(case(f"rules/r2-pk09/set-id-across-stations{label}", f"two stations have a set with the same set_id, opened as {ext} ({mode}): invalid_release at open (D5)",
+                        "6.1, 4.8", [step("open", err("invalid_release"), file=f"{FIX}/bad/set-id-across-stations/OTC_20991231{ext}", mode=mode)],
+                        requires=["fs"] + req))
+    # CR2 DR26: a blank .jsonl line holds only ASCII whitespace (SP, HT, LF, VT, FF, CR); NBSP and NUL are not blank
+    B = Rel("bad/blank-lines", "20991231")
+    blank_steps = [step("station_count", {"station_count": len(B.active)}),
+                   step("tombstone_count", {"tombstone_count": len(B.tombs)}),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0002"])}, station_id="OTC-T-0002"),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0006"])}, station_id="OTC-T-0006"),
+                   step("station", {"station": enc_station(B, B.by_id["OTC-T-0021"])}, station_id="OTC-T-0021")]
+    for req, mode in [(["eager"], "eager"), (["stream"], "stream")]:
+        out.append(case(f"rules/r2-pk09/blank-lines-jsonl-{mode}", f"lines of only FF, VT, SP, HT, CR in the .jsonl ({mode}) are blank: skipped, and the stations around them are read (CR2 DR26)", "6.2",
+                        [step("open", {"loaded_from": "file", "datestamp": "20991231"}, file=f"{FIX}/bad/blank-lines/OTC_20991231.jsonl", mode=mode)] + blank_steps,
+                        requires=["fs"] + req))
+        for root, what in [("blank-line-nbsp", "one NBSP (U+00A0)"), ("blank-line-nul", "one NUL byte")]:
+            out.append(case(f"rules/r2-pk09/{root}-jsonl-{mode}", f"a .jsonl line of {what} ({mode}) is not blank: invalid_release at open (CR2 DR26)", "6.2, 4.8",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231.jsonl", mode=mode)],
+                            requires=["fs"] + req))
+    # CR2 DR7: filters and stats use the typed enum value; an unknown value is "other", and the raw string matches nothing
+    U = Rel("bad/unknown-enums", "20991231")
+    ids = lambda f: [s["station_id"] for s in apply_filters(U, U.active, f)]   # noqa: E731
+    u15, u16 = U.by_id["OTC-T-0015"], U.by_id["OTC-T-0016"]
+    out.append(mcase("rules/r2-pk09/unknown-enums", "format 1.1 enum values a 1.0 reader does not know (type lighthouse, quantity tidal_stream, source_type satellite): each reads as other; type, kind and source_type \"other\" match them, the raw strings match nothing, stats counts other (CR2 DR7)", "4.4, 4.5, 7.3",
+                     [step("station", {"station": enc_station(U, U.by_id["OTC-T-0014"])}, station_id="OTC-T-0014"),
+                      step("station", {"station": enc_station(U, u15)}, station_id="OTC-T-0015"),
+                      step("stations", {"station_ids": ids({"type": "other"})}, type="other"),
+                      step("stations", {"station_ids": []}, type="lighthouse"),
+                      step("stations", {"station_ids": ids({"kind": "other"})}, kind="other"),
+                      step("stations", {"station_ids": []}, kind="tidal_stream"),
+                      step("stations", {"station_ids": ids({"source_type": "other"})}, source_type="other"),
+                      step("stations", {"station_ids": []}, source_type="satellite"),
+                      step("search", {"station_ids": search(U, "harbour", type="other")}, name="harbour", type="other"),
+                      step("stats", {"stats": stats(U)}),
+                      step("constant_set", {"set": enc_set(U, u15, U.rec_set(u15))}, station_id="OTC-T-0015", set_id=U.rec_set(u15)["set_id"]),
+                      step("constant_set", {"set": enc_set(U, u16, U.rec_set(u16))}, station_id="OTC-T-0016", set_id=U.rec_set(u16)["set_id"])],
+                     root="bad/unknown-enums", release="20991231", open_expect={"format_version": "1.1"}))
+    # CR2 DR8: a station whose status the SDK does not know is no station and no tombstone, in no query and no count
+    S = Rel("bad/unknown-status", "20991231")
+    out.append(mcase("rules/r2-pk09/unknown-status", "format 1.1: OTC-T-0016's status is retired, which a 1.0 reader does not know: station, tombstone and every query leave it out, and no count includes it (CR2 DR8)", "4.4, 7.3",
+                     [step("station", {"station": None}, station_id="OTC-T-0016"),
+                      step("tombstone", {"tombstone": None}, station_id="OTC-T-0016"),
+                      step("require_station", err("station_not_found"), station_id="OTC-T-0016"),
+                      step("station_count", {"station_count": len(S.active)}),
+                      step("tombstone_count", {"tombstone_count": len(S.tombs)}),
+                      step("stations", {"station_ids": [s["station_id"] for s in apply_filters(S, S.active, {"country": "GBR"})]}, country="GBR"),
+                      step("search", {"station_ids": search(S, "harbour point")}, name="harbour point"),
+                      step("near", {**near(S, 50.7, -1.3, 5), "tolerance": TOL}, lat=50.7, lon=-1.3, radius_km=5),
+                      step("stats", {"stats": stats(S)})],
+                     root="bad/unknown-status", release="20991231", open_expect={"format_version": "1.1"}))
+    # CR2 DR28: a station line with no status (or null) is an active station
+    N = Rel("bad/no-status", "20991231")
+    ns_steps = [step("station", {"station": enc_station(N, N.by_id[i])}, station_id=i) for i in ("OTC-T-0019", "OTC-T-0020")] + [
+                step("station_count", {"station_count": len(N.active)}),
+                step("stations", {"station_ids": [s["station_id"] for s in apply_filters(N, N.active, {"country": "USA"})]}, country="USA"),
+                step("stats", {"stats": stats(N)})]
+    out.append(mcase("rules/r2-pk09/no-status", "OTC-T-0020's line has no status and OTC-T-0019's has status null: both are active stations, with status active (CR2 DR28)", "4.4, 6.2",
+                     ns_steps, root="bad/no-status", release="20991231"))
+    ndir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/no-status-index", "the stream index gives status active for a line with no status, as the reference index does (CR2 DR28)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/no-status/",
+                              cache_dir="${cache}", mode="stream"))] + ns_steps + [
+                     step("close"),
+                     drv("assert_index", path=f"{ndir}/index-v1.json", jsonl=f"{ndir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
+    # CR2 DR24: reference_station and subordinates_of with null, an unknown station or a foreign Station are
+    # invalid_argument. The runner passes station_id null as null, and with station_on looks the station up in a held
+    # release. The held release is good R1 (update keeps it open); its OTC-T-0021 is removed in R2, so it is a Station
+    # of another release that is not in this one.
+    R2 = Rel("good", "20991231.2")
+    G = f"{SRV}/good/"
+    subs = sorted(s["station_id"] for s in R2.active if s["type"] == "subordinate"
+                  and (s.get("subordinate_offsets") or {}).get("reference_station_id") == "OTC-T-0001")
+    link_steps = []
+    for op in ("reference_station", "subordinates_of"):
+        link_steps += [step(op, err("invalid_argument"), station_id=None),
+                       step(op, err("invalid_argument"), station_id="OTC-T-0021", station_on="r1")]
+    out.append(case("rules/r2-pk09/links-bad-station", "reference_station and subordinates_of with a null station, or a Station of another release that is not in this one: invalid_argument, as for attribution (CR2 DR24)", "4.4, 4.8",
+                    [drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}]),
+                     net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, base_url=G, cache_dir="${cache}", mode="stream")),
+                     step("hold_release", None, name="r1"),
+                     drv("server_rules", rules=[]),
+                     net(step("update", {"updated": True, "from": "20991231", "to": "20991231.2"})),
+                     step("reference_station", {"station_id": "OTC-T-0001"}, station_id="OTC-T-0003"),
+                     step("subordinates_of", {"station_ids": subs}, station_id="OTC-T-0001"),
+                     step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0021", on="r1")] + link_steps,
+                    requires=["fs", "stream"]))
+    bdir = "${cache}/v1/releases/20991231"
+    out.append(case("rules/r2-pk09/blank-lines-index", "the stream index of a .jsonl with blank lines has one entry per station line, at the offsets of the reference index (CR2 DR26)", "6.2",
+                    [net(step("open", {"loaded_from": "download", "datestamp": "20991231"}, release="20991231", base_url=f"{SRV}/bad/blank-lines/",
+                              cache_dir="${cache}", mode="stream"))] + blank_steps + [
+                     step("close"),
+                     drv("assert_index", path=f"{bdir}/index-v1.json", jsonl=f"{bdir}/OTC_20991231.jsonl", datestamp="20991231")],
+                    requires=["fs", "stream"]))
     return out
 
 

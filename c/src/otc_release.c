@@ -247,6 +247,10 @@ typedef struct builder {
     size_t       line_no;
     size_t      *cn_slots;   /* open addressing over rel->cnames: index + 1, 0 = empty */
     size_t       cn_slots_cap;
+    char       **set_ids;    /* every set_id of the active stations, checked once across the release */
+    size_t       n_set_ids, cap_set_ids;
+    char       **unknown;    /* "<station_id> <status>" of each line whose status the library does not know */
+    size_t       n_unknown, cap_unknown;
 } builder;
 
 #define GROW(ptr, n, cap)                                                        \
@@ -480,6 +484,7 @@ static const char *line_problem(const otc_release *r, const cJSON *root, char *b
     const char *id = otc__jstr(root, "station_id"), *status = otc__jstr(root, "status"), *why;
     const cJSON *aliases, *a, *sets, *s, *off, *rec_id;
     int rec_found = 0;
+    if (cJSON_IsObject(root) && !otc__jget(root, "status")) status = "active";   /* no status (or null): active (CR2 DR28) */
     if (!cJSON_IsObject(root) || !id || !status) return "not a station object with station_id and status";
     if (strcmp(status, "active") != 0) return NULL;   /* a tombstone, or another status (7.3) */
     aliases = otc__jget(root, "aliases");
@@ -569,7 +574,8 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
             e->n_sources++;
         }
     }
-    if (otc__jstr_same(rec_id, otc__jstr_item(set, "set_id"))) {   /* in full: a NUL inside never matches less */
+    /* the first set with the recommended id (a repeated set_id is refused when every line is in) */
+    if (!e->has_rec && otc__jstr_same(rec_id, otc__jstr_item(set, "set_id"))) {   /* in full: a NUL inside never matches less */
         e->has_rec = 1;
         e->rec_quantity = otc__parse_quantity(otc__jstr(set, "quantity"));
         if (otc__jstr(set, "source_type") && !(e->rec_source_type = otc__strdup(otc__jstr(set, "source_type"))))
@@ -577,6 +583,24 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
         if (!(e->rec_licence = otc__strdup(lic))) return OTC_E_NOMEM;
     }
     return OTC_OK;
+}
+
+/* The key a set_id is compared by across the release, in full (CR2 DR33): the id
+ * itself, or, for one with a NUL inside, 0xff and then its JSON literal (no valid
+ * UTF-8 text has the byte 0xff, so it is no other id's key). NULL: out of memory. */
+static char *set_id_key(const cJSON *sid)
+{
+    size_t n = otc__jstr_len(sid);
+    char *lit, *key;
+    if (n == strlen(sid->valuestring)) return otc__strdup(sid->valuestring);
+    if (!(lit = otc__json_escape_n(sid->valuestring, n))) return NULL;
+    key = (char *)malloc(strlen(lit) + 2);
+    if (key) {
+        key[0] = (char)0xff;
+        memcpy(key + 1, lit, strlen(lit) + 1);
+    }
+    free(lit);
+    return key;
 }
 
 /* Indexes one parsed station line (root is not freed here). */
@@ -590,6 +614,8 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
     if (why) return bad_line(b, why);
     id = otc__jstr(root, "station_id");
     status = otc__jstr(root, "status");
+    /* a line with no status (or null) is an active station, as in the stream index (CR2 DR28) */
+    if (!otc__jget(root, "status")) status = "active";
     if (!strcmp(status, "removed")) {
         GROW(r->tomb, r->n_tomb, b->cap_tomb);
         r->tomb[r->n_tomb].id = otc__strdup(id);
@@ -633,6 +659,12 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             if ((ref && !e->ref_id) || (ol && !e->off_licence)) return OTC_E_NOMEM;
         }
         cJSON_ArrayForEach(s, sets) {
+            const cJSON *sid = otc__jstr_item(s, "set_id");
+            if (sid) {   /* spec 6.1 (CR D5): a set_id once in the release; checked when every line is in */
+                GROW(b->set_ids, b->n_set_ids, b->cap_set_ids);
+                if (!(b->set_ids[b->n_set_ids] = set_id_key(sid))) return OTC_E_NOMEM;
+                b->n_set_ids++;
+            }
             if ((st = index_set(b, s, e, rec_id)) != OTC_OK) break;
         }
         if (st == OTC_OK) {
@@ -648,8 +680,14 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
                 if (st != OTC_OK) break;
             }
         }
+    } else {
+        /* any other status: a newer minor's value (7.3). Not a station, not a tombstone, in no query and
+         * no count; logged once when the open succeeds (CR2 DR8) */
+        size_t n = strlen(id) + strlen(status) + 2;
+        GROW(b->unknown, b->n_unknown, b->cap_unknown);
+        if (!(b->unknown[b->n_unknown] = (char *)malloc(n))) return OTC_E_NOMEM;
+        snprintf(b->unknown[b->n_unknown++], n, "%s %s", id, status);
     }
-    /* any other status: a newer minor's value; the station is not listed (7.3) */
     return st;
 }
 
@@ -668,12 +706,13 @@ static otc_status index_line(builder *b, const char *line, size_t len, uint64_t 
     return st;
 }
 
-/* 1 when a line is empty or only spaces and tabs (the other SDKs skip such lines too). */
+/* 1 when a line is empty or holds only ASCII whitespace: SP, HT, LF, VT, FF, CR
+ * (spec 6.2, CR2 DR26, the reference bytes.strip rule). NUL is not blank. */
 static int blank(const char *line, size_t len)
 {
     size_t i;
     for (i = 0; i < len; i++)
-        if (line[i] != ' ' && line[i] != '\t') return 0;
+        if (line[i] != ' ' && (line[i] < '\t' || line[i] > '\r')) return 0;
     return 1;
 }
 
@@ -957,7 +996,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     cJSON *d, *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
     const cJSON *rec, *name;
-    const char *kind = NULL;
+    const char *kind = NULL, *status;
     int ok = 1;
     otc_status pst = otc__json_parse_st(text, len, &d);
     if (pst != OTC_OK) return pst;
@@ -972,7 +1011,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     put(o, "offset", cJSON_CreateNumber((double)offset), &ok);
     put(o, "length", cJSON_CreateNumber((double)len), &ok);
     put(o, "station_id", jstr_or_null(d, "station_id"), &ok);
-    put(o, "status", jstr_or_null(d, "status"), &ok);
+    status = otc__jget(d, "status") ? otc__jstr(d, "status") : "active";   /* no status: active (CR2 DR28) */
+    put(o, "status", status ? cJSON_CreateString(status) : cJSON_CreateNull(), &ok);
     put(o, "name", name ? otc__json_str_out(name) : cJSON_CreateNull(), &ok);   /* in full: it may hold a NUL */
     {   /* folded in full: a name may hold a NUL (spec 4.4.1); a raw literal then, as for the name */
         size_t fl = 0;
@@ -1000,10 +1040,10 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         put(sets, NULL, s, &ok);
         if (otc__jstr_same(otc__jstr_item(cs, "set_id"), rec)) {
             const char *q = otc__jstr(cs, "quantity");
-            kind = !q ? NULL : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
+            kind = !q ? "other" : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
         }
     }
-    if (otc__jstr(d, "status") && !strcmp(otc__jstr(d, "status"), "active") && otc__jstr(d, "station_id")) {
+    if (status && !strcmp(status, "active") && otc__jstr(d, "station_id")) {
         const otc__entry *e = otc__find_entry(x->rel, otc__jstr(d, "station_id"));
         if (e) kind = e->kind == OTC_KIND_UNSET ? NULL : otc_kind_name(e->kind);
     }
@@ -1075,10 +1115,10 @@ cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const ch
 static otc_kind resolve_kind(const otc_release *r, const otc__entry *e, size_t depth)
 {
     if (e->has_rec) {
-        /* OTHER only for a quantity the library does not know; no quantity is no kind (spec 6.2) */
+        /* any other quantity, also none (null or no key), is OTHER (spec 6.2; orchestrator S3) */
         if (e->rec_quantity == OTC_QUANTITY_WATER_LEVEL) return OTC_KIND_TIDE;
         if (e->rec_quantity == OTC_QUANTITY_CURRENT) return OTC_KIND_CURRENT;
-        return e->rec_quantity == OTC_QUANTITY_UNSET ? OTC_KIND_UNSET : OTC_KIND_OTHER;
+        return OTC_KIND_OTHER;
     }
     if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets && depth < OTC__MAX_LINKS) {
         const otc__entry *ref = otc__find_entry(r, e->ref_id);
@@ -1391,13 +1431,35 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
             goto done;
         }
     }
+    if (b.n_set_ids > 1) qsort(b.set_ids, b.n_set_ids, sizeof *b.set_ids, cname_cmp);
+    for (i = 1; i < b.n_set_ids; i++) {
+        if (!strcmp(b.set_ids[i - 1], b.set_ids[i])) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, path, "the set_id %s appears twice in the release",
+                        b.set_ids[i] + (b.set_ids[i][0] == (char)0xff));   /* a key with a NUL: its JSON literal */
+            st = OTC_E_INVALID_RELEASE;
+            goto done;
+        }
+    }
     if (r->n_cnames > 1) qsort(r->cnames, r->n_cnames, sizeof *r->cnames, cname_cmp);
     for (i = 0; i < r->n_st; i++) r->st[i].kind = resolve_kind(r, &r->st[i], 0);
     otc__kv_sort(&r->source_counts);
     otc__kv_sort(&r->qc_counts);
     st = build_files(r, dir, names, digests, n_rows, jsonl_name, path_base(meta_path));
+    if (st == OTC_OK && opts && opts->log_fn) {
+        for (i = 0; i < b.n_unknown; i++) {
+            char msg[512];
+            const char *sp = strchr(b.unknown[i], ' ');
+            snprintf(msg, sizeof msg, "station %.*s has the status \"%s\", which this library does not know: it is left out of every query",
+                     (int)(sp - b.unknown[i]), b.unknown[i], sp + 1);
+            opts->log_fn(opts->log_user_data, 2, msg);
+        }
+    }
 done:
     free(b.cn_slots);
+    for (i = 0; i < b.n_unknown; i++) free(b.unknown[i]);
+    free(b.unknown);
+    for (i = 0; i < b.n_set_ids; i++) free(b.set_ids[i]);
+    free(b.set_ids);
     otc__free_rows(names, digests, n_rows);
     free(meta_text);
     free(base);
@@ -1707,7 +1769,7 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
     if (!s) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     for (i = 0; i < rel->n_st && st == OTC_OK; i++) {
         const otc__entry *e = &rel->st[i];
-        st = otc__kv_add(&s->type, e->type_s, 1);
+        st = otc__kv_add(&s->type, otc_station_type_name(e->type), 1);   /* typed: unknown is "other" (CR2 DR7) */
         if (st == OTC_OK) st = otc__kv_add(&s->kind, otc_kind_name(e->kind), 1);
         if (st == OTC_OK) st = otc__kv_add(&s->country, e->country, 1);
     }

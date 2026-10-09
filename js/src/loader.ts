@@ -88,7 +88,8 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
 }
 
 /** @internal A release from the full `.json` document (eager). */
-export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null): Release {
+export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
+    warn: (message: string) => void = () => undefined): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -97,7 +98,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -110,6 +111,15 @@ export function headerFromMeta(bytes: Uint8Array): ReleaseHeader {
 /** @internal A stream index read from index-v1.json (spec 6.2). */
 export interface StreamIndex {
     entries: IndexEntry[];
+}
+
+/**
+ * True when a line holds only ASCII whitespace: SP, HT, LF, VT, FF, CR (spec 6.2, CR2 DR26). NBSP and the other
+ * Unicode spaces, and NUL, are not blank, so such a line is read as JSON (and is not JSON).
+ */
+function isBlank(line: Uint8Array): boolean {
+    for (const b of line) if (b !== 0x20 && (b < 0x09 || b > 0x0d)) return false;
+    return true;
 }
 
 /** @internal Index every line of a `.jsonl` file. Returns the index and, if keep, the parsed documents. */
@@ -127,8 +137,8 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         // the length leaves out the line end: \n, or \r\n (spec 6.2)
         const body = end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
         const line = bytes.subarray(start, body);
-        const text = decodeUtf8(line, `line ${lineNo} of the .jsonl file`);
-        if (text.trim() !== "") {
+        if (!isBlank(line)) {
+            const text = decodeUtf8(line, `line ${lineNo} of the .jsonl file`);
             const doc = parseJsonText(text, `line ${lineNo} of the .jsonl file`) as Json;
             entries.push(indexDoc(doc, header, start, body - start, convs, lics));
             if (keep) docs.push(deepFreeze(doc) as JsonObject);
@@ -153,6 +163,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     zenodoVersionDoi?: string | null;
     /** Called when a line read through `index` does not match its entry: delete index-v1.json (spec 6.2, CR D4). */
     dropIndex?: () => void;
+    /** Where a station with an unknown status is reported, once at load (CR2 DR8). */
+    warn?: (message: string) => void;
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -205,7 +217,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn);
 }
 
 /**

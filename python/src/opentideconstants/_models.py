@@ -598,7 +598,7 @@ def build_station(d, conventions, licences, kind):
         return Station(
             sid, d.get("name"), d.get("country"), float(lat), float(lon),
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
-            d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, d.get("status")),
+            d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, "active" if d.get("status") is None else d.get("status")),
             None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
             ordered)
     except InvalidReleaseError:

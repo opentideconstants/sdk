@@ -501,6 +501,29 @@ test("T23/D2: attribution prints a provider-less licence alone, counts a subordi
     assert.throws(() => r.attribution([other.station("R")]), isCode("invalid_argument"));
 });
 
+test("CR2 DR8/DR28: an unknown status is logged once at load and is in no query; a line with no status is active", async () => {
+    const fixtures = new URL("../../conformance/fixtures/bad/", import.meta.url).pathname;
+    const lines = [];
+    const logger = { debug() {}, info() {}, warn: (m) => lines.push(m) };
+    const c = await otc.OpenTideConstants.open({ file: path.join(fixtures, "unknown-status", "OTC_20991231.jsonl"), mode: "stream", logger });
+    try {
+        const hits = lines.filter((m) => m.includes("OTC-T-0016"));
+        assert.equal(hits.length, 1, JSON.stringify(lines));
+        assert.match(hits[0], /"retired"/);
+        assert.equal(c.station("OTC-T-0016"), null);
+        assert.equal(c.tombstone("OTC-T-0016"), null);
+    } finally {
+        await c.close();
+    }
+    const n = await otc.OpenTideConstants.open({ file: path.join(fixtures, "no-status", "OTC_20991231.jsonl") });
+    try {
+        assert.equal(n.station("OTC-T-0020").status, "active");
+        assert.equal(n.station("OTC-T-0019").status, "active");
+    } finally {
+        await n.close();
+    }
+});
+
 test("D15: OPENTIDECONSTANTS_OFFLINE reads 1, true, yes and on (any case, trimmed) as offline", async () => {
     const saved = process.env.OPENTIDECONSTANTS_OFFLINE;
     try {

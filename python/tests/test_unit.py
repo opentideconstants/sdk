@@ -1225,6 +1225,25 @@ class Format10Test(unittest.TestCase):
             self.assertIn(otc.QcStatus.OTHER, [s.qc_status for s in sets])
             self.assertIn("other", c.release.stats.qc_status)
 
+    def test_unknown_status_is_logged_once_at_load(self):
+        """CR2 DR8: a station whose status the SDK does not know is in no query, and one warning names it."""
+        with self.assertLogs("opentideconstants", level="WARNING") as logs:
+            c = otc.OpenTideConstants(file=str(FIXTURES / "bad" / "unknown-status" / "OTC_20991231.jsonl"), mode="stream")
+        try:
+            hits = [m for m in logs.output if "OTC-T-0016" in m]
+            self.assertEqual(len(hits), 1, logs.output)
+            self.assertIn("'retired'", hits[0])
+            self.assertIsNone(c.station("OTC-T-0016"))
+            self.assertIsNone(c.tombstone("OTC-T-0016"))
+        finally:
+            c.close()
+
+    def test_no_status_is_active(self):
+        """CR2 DR28: a line with no status (or null) is an active station."""
+        with otc.OpenTideConstants(file=str(FIXTURES / "bad" / "no-status" / "OTC_20991231.jsonl")) as c:
+            self.assertIs(c.station("OTC-T-0020").status, otc.StationStatus.ACTIVE)
+            self.assertIs(c.station("OTC-T-0019").status, otc.StationStatus.ACTIVE)
+
     def test_reader_too_old(self):
         with self.assertRaises(otc.ReaderTooOldError) as cm:
             otc.OpenTideConstants(file=str(FIXTURES / "reader" / "OTC_20991231.4.json"))

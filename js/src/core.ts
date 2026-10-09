@@ -559,7 +559,8 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
             files, verified_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: SDK_ID, datestamp: d,
             format_version: format?.format_version ?? entry?.format_version ?? verified?.format_version ?? null,
             min_reader_version: format ? format.min_reader_version : entry?.min_reader_version ?? verified?.min_reader_version ?? null,
-            zenodo_version_doi: entry ? entry.zenodo_version_doi : verified?.zenodo_version_doi ?? null,
+            // a null DOI never erases a known one (CR2 DR11)
+            zenodo_version_doi: entry?.zenodo_version_doi ?? verified?.zenodo_version_doi ?? null,
         };
         await store.write(`${dir}/.verified`, enc.encode(JSON.stringify(v)));
         return "download";
@@ -601,7 +602,8 @@ function formatOf(writes: [string, Uint8Array][], n: ReturnType<typeof names>): 
  */
 export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null, held = false): Promise<void> {
     const store = ctx.store;
-    if (!store || !entry) return;
+    // an entry with no DOI never erases a known one, in the session or in .verified (CR2 DR11)
+    if (!store || !entry || entry.zenodo_version_doi === null) return;
     const d = entry.datestamp;
     if ((verified.datestamp ?? d) !== d || (verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
     let unlock: Unlock | null = null;
@@ -655,8 +657,8 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         return b;
     };
     if (mode === "eager") {
-        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo);
-        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo });
+        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn);
+        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn });
     }
     const meta = sized(n.meta);
     const want = verified.files[n.jsonl]?.size;
@@ -703,14 +705,14 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     const lr = dir.lineReader(n.jsonl);
     if (lr) {
         try {
-            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex });
+            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn });
         } catch (e) {
             lr.close();
             throw e;
         }
     }
     const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex });
+    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn });
 }
 
 /** Read a cache directory into a SyncDir (the browser, where storage is async). */

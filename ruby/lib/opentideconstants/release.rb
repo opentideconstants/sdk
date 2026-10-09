@@ -34,8 +34,12 @@ class OpenTideConstants
         # entry of this datestamp (the release document does not hold it).
         # on_bad_index: called (with the message) when a line read through the
         # stream index is not the station its entry names (spec §6.2, CR D4).
-        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil)
+        # logger: where a station with an unknown status is reported, once at
+        # load (CR2 DR8).
+        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
+                       logger: nil)
             @mode = mode
+            @logger = logger
             @io = io
             @on_bad_index = on_bad_index
             @io_lock = Mutex.new
@@ -288,13 +292,13 @@ class OpenTideConstants
         end
 
         def reference_station(station)
-            raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
+            own_station!(station, "reference_station")
             off = station.subordinate_offsets
             off && off.reference_station_id && station(off.reference_station_id)
         end
 
         def subordinates_of(station)
-            raise InvalidArgumentError, "station must be a Station" unless station.is_a?(Station)
+            own_station!(station, "subordinates_of")
             (@subordinates[station.station_id] || []).map { |e| materialize(e) }.freeze
         end
 
@@ -335,6 +339,15 @@ class OpenTideConstants
 
         def default_url
             "https://data.opentideconstants.org/OTC_#{@datestamp}.json"
+        end
+
+        # A Station that is an active station of this release, as attribution
+        # checks it (CR D2 a); nil, an unknown station or another release's
+        # Station is invalid_argument (CR2 DR24).
+        def own_station!(station, what)
+            raise InvalidArgumentError, "#{what}: station must be a Station" unless station.is_a?(Station)
+            return if @by_id.key?(station.station_id) && station.instance_variable_get(:@origin).equal?(self)
+            raise InvalidArgumentError, "#{what}: station #{station.station_id} is not a station of release #{@datestamp}"
         end
 
         def check_id!(id)
@@ -500,10 +513,20 @@ class OpenTideConstants
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
                 # One id across the active stations and the tombstones together (CR D5).
                 raise InvalidReleaseError, "station_id #{sid} appears twice" unless ids.add?(sid)
-                if raw["status"] == "removed"
+                # A line with no status (or null) is an active station, as in the stream index (CR2 DR28).
+                status = raw["status"].nil? ? "active" : raw["status"]
+                if status == "removed"
                     Release.check_tombstone!(raw)
                     tombs << Tombstone.new(raw)
                     tomb_pos << [tombs.last, pos, len]
+                    next
+                end
+                unless status == "active"
+                    # A status this SDK does not know (a newer minor's value): not a
+                    # station, not a tombstone, in no query and no count; said once,
+                    # at load (CR2 DR8).
+                    @logger&.warn("opentideconstants: station #{sid} has the status #{status.inspect}, which this SDK " \
+                                  "does not know: it is left out of every query")
                     next
                 end
                 Release.check_station!(raw)

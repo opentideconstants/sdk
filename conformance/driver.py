@@ -76,7 +76,7 @@ OPS = {
     "station": ["station_id"], "require_station": ["station_id"], "tombstone": ["station_id"],
     "station_by_alias": ["system", "alias_id"], "stations": FILTERS, "iter_stations": FILTERS,
     "search": ["name", "limit", "match"] + FILTERS, "near": ["lat", "lon", "radius_km", "limit"] + FILTERS,
-    "nearest": ["lat", "lon", "max_km"] + FILTERS, "reference_station": ["station_id"], "subordinates_of": ["station_id"],
+    "nearest": ["lat", "lon", "max_km"] + FILTERS, "reference_station": ["station_id", "station_on"], "subordinates_of": ["station_id", "station_on"],
     "station_validation": ["station_id"], "subordinate_offsets": ["station_id"], "recommended_set": ["station_id"],
     "constant_sets": ["station_id", "include_no_constants"], "constant_set": ["station_id", "set_id"],
     "constituents": ["station_id", "set_id"], "constituent": ["station_id", "set_id", "name"],

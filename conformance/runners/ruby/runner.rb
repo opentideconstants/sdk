@@ -194,13 +194,19 @@ class Runner
         when "nearest"
             h = q(target).nearest(**sym_kw(args, %w[lat lon max_km]), **filters(args))
             { "station_id" => h && h.station.station_id, "distance_km" => h && h.distance_km }
-        when "reference_station"
-            st = find_station(args, target)
-            ref = st && q(target).reference_station(st)
-            { "station_id" => ref && ref.station_id }
-        when "subordinates_of"
-            st = find_station(args, target)
-            { "station_ids" => st ? q(target).subordinates_of(st).map(&:station_id) : nil }
+        when "reference_station", "subordinates_of"
+            # station_id null goes to the SDK as nil, and station_on looks the station up in a held release (a
+            # foreign Station): both must be invalid_argument (CR2 DR24)
+            passed = args["station_id"].nil? || args.key?("station_on")
+            st = args["station_id"].nil? ? nil : (args.key?("station_on") ? @held.fetch(args["station_on"]) : rel(target)).station(args["station_id"])
+            if st.nil? && !passed
+                op == "reference_station" ? { "station_id" => nil } : { "station_ids" => nil }
+            elsif op == "reference_station"
+                ref = q(target).reference_station(st)
+                { "station_id" => ref && ref.station_id }
+            else
+                { "station_ids" => q(target).subordinates_of(st).map(&:station_id) }
+            end
         when "station_validation"
             st = find_station(args, target)
             { "validation" => st ? st.validation.map { |v| validation(v) } : nil }

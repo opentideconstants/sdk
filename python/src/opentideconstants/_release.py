@@ -149,6 +149,13 @@ def _limit(limit):
     return limit
 
 
+def _typed(cls, v):
+    """The value of an enum field as the Station reports it: None, a schema value, or "other" for a value this
+    SDK does not know (spec 7.3). Filters and stats use it (CR2 DR7)."""
+    m = E.enum_or_raw(cls, v)
+    return None if m is None else m.value
+
+
 def haversine(lat1, lon1, lat2, lon2):
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dl = math.radians(lon2 - lon1)
@@ -173,12 +180,18 @@ def _n(d, k):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _status(d):
+    """A line's status: a line with no status (or null) is an active station, as in the stream index (CR2 DR28)."""
+    s = d.get("status")
+    return "active" if s is None else s
+
+
 def _entry(d, offset=None, length=None):
     """The stream index entry of one line (spec §6.2): every key, for active stations and tombstones.
     `kind` is the station's own kind here; _resolve_kinds finishes it."""
     if not isinstance(d.get("station_id"), str):
         raise InvalidReleaseError(f"station_id is not a string: {d.get('station_id')!r}")
-    if d.get("status") == "active":
+    if _status(d) == "active":
         for k, bound in (("lat", 90), ("lon", 180)):
             v = d.get(k)
             if not _is_finite(v) or abs(v) > bound:
@@ -193,7 +206,7 @@ def _entry(d, offset=None, length=None):
         raise InvalidReleaseError(f"station {d.get('station_id')!r}: aliases must map a system to a string id or "
                                   f"a list of string ids")
     for cs in d.get("constant_sets") or ():
-        if d.get("status") == "active" and not isinstance(cs.get("set_id"), str):
+        if _status(d) == "active" and not isinstance(cs.get("set_id"), str):
             raise InvalidReleaseError(f"station {d.get('station_id')!r}: a constant set has no set_id")
         sets.append({**{k: _s(cs, k) for k in _SET_KEYS},
                      "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)]})
@@ -201,7 +214,7 @@ def _entry(d, offset=None, length=None):
             kind = {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
     name = _s(d, "name")
     return {
-        "offset": offset, "length": length, "station_id": d["station_id"], "status": d.get("status"),
+        "offset": offset, "length": length, "station_id": d["station_id"], "status": _status(d),
         "name": name, "name_folded": fold(name) if name is not None else None,
         "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"), "kind": kind,
         "aliases": {k: ([v] if isinstance(v, str) else list(v)) for k, v in aliases.items()},
@@ -359,6 +372,12 @@ class Release:
         self._entries = active
         self._by_id = {e["station_id"]: e for e in active}
         self._tombs = {e["station_id"]: e for e in entries if e.get("status") == "removed"}
+        for e in entries:
+            if e.get("status") not in ("active", "removed"):
+                # a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no
+                # query and no count; said once, at load (CR2 DR8)
+                _log.warning("station %s has the status %r, which this SDK does not know: it is left out of every "
+                             "query", e["station_id"], e.get("status"))
         self._alias = {}
         self._subs = {}
         for e in active:
@@ -465,11 +484,8 @@ class Release:
                 return MappingProxyType(dict(sorted(out.items())))
             sets = [s for e in self._entries for s in e.get("sets") or ()]
             qc = [E.enum_or_raw(E.QcStatus, s.get("qc_status")) for s in sets]
-            def norm(cls, v):  # bucket a value as the Station reports it (an unknown one is "other")
-                m = E.enum_or_raw(cls, v)
-                return None if m is None else m.value
-            self._stats = Stats(count(norm(E.StationType, e.get("type")) for e in self._entries),
-                                count(norm(E.Kind, e.get("kind")) for e in self._entries),
+            self._stats = Stats(count(_typed(E.StationType, e.get("type")) for e in self._entries),
+                                count(_typed(E.Kind, e.get("kind")) for e in self._entries),
                                 count(e.get("country") for e in self._entries),
                                 count(s.get("source") for s, q in zip(sets, qc) if q in _USABLE),
                                 count(None if q is None else q.value for q in qc))
@@ -595,16 +611,18 @@ class Release:
         for e in self._entries:
             if country is not None and e.get("country") != country:
                 continue
-            if type is not None and e.get("type") != str(type):
+            # an enum filter compares the typed value: an unknown value in the data is "other", so "other" matches
+            # it and its raw string matches nothing (CR2 DR7)
+            if type is not None and _typed(E.StationType, e.get("type")) != str(type):
                 continue
-            if kind is not None and e.get("kind") != str(kind):
+            if kind is not None and _typed(E.Kind, e.get("kind")) != str(kind):
                 continue
             sets = e.get("sets") or ()
             if source is not None and not any(s.get("source") == source and s.get("qc_status") in _USABLE for s in sets):
                 continue
             if source_type is not None:
                 rec = [s for s in sets if s.get("set_id") == e.get("recommended_set_id")]
-                if not rec or rec[0].get("source_type") != str(source_type):
+                if not rec or _typed(E.SourceType, rec[0].get("source_type")) != str(source_type):
                     continue
             out.append(e)
         return out
@@ -694,17 +712,25 @@ class Release:
                                                       source_type=source_type))
         return Nearby(self._station_from_entry(hits[0][2]), hits[0][0]) if hits else None
 
-    def reference_station(self, station: Station) -> Optional[Station]:
+    def _own_station(self, station, what):
+        """station, checked as attribution checks it (CR D2 a): a Station that is an active station of this
+        release; None, an unknown station or another release's Station is invalid_argument (CR2 DR24)."""
         if not isinstance(station, Station):
-            raise InvalidArgumentError("station must be a Station")
+            raise InvalidArgumentError(f"{what}: station must be a Station")
+        own = self.station(station.station_id)
+        if own is None or (own is not station and own.raw != station.raw):
+            raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
+                                       f"{self.datestamp}")
+
+    def reference_station(self, station: Station) -> Optional[Station]:
+        self._own_station(station, "reference_station")
         off = station.subordinate_offsets
         if not station.is_subordinate or off is None or off.reference_station_id is None:
             return None
         return self.station(off.reference_station_id)
 
     def subordinates_of(self, station: Station) -> Tuple[Station, ...]:
-        if not isinstance(station, Station):
-            raise InvalidArgumentError("station must be a Station")
+        self._own_station(station, "subordinates_of")
         return tuple(self.station(s) for s in sorted(self._subs.get(station.station_id, ())))
 
     def attribution(self, stations: Optional[Sequence[Station]] = None) -> str:
@@ -809,7 +835,7 @@ def _refs(meta, what):
 
 
 def _validate_refs(d, conventions, licences):
-    if d.get("status") == "active":
+    if _status(d) == "active":
         build_station(d, conventions, licences, None)
 
 
@@ -858,9 +884,9 @@ def _eager(meta, docs, files) -> Release:
     kinds = {e["station_id"]: e.get("kind") for e in entries}
     stations, tombs = {}, {}
     for d in docs:
-        if d.get("status") == "active":
+        if _status(d) == "active":
             stations[d["station_id"]] = build_station(d, conv, lic, kinds.get(d["station_id"]))
-        elif d.get("status") == "removed":
+        elif _status(d) == "removed":
             tombs[d["station_id"]] = Tombstone._parse(d)
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs)
 

@@ -58,8 +58,9 @@ def entry(d: dict, offset: int, length: int) -> dict:
         if rec_id is not None and cs.get("set_id") == rec_id:
             kind = {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
     name = _s(d, "name")
+    status = "active" if d.get("status") is None else d["status"]   # a line with no status is active (CR2 DR28)
     return {
-        "offset": offset, "length": length, "station_id": d["station_id"], "status": d["status"],
+        "offset": offset, "length": length, "station_id": d["station_id"], "status": status,
         "name": name, "name_folded": fold(name) if name is not None else None,
         "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"),
         "kind": kind, "aliases": aliases,

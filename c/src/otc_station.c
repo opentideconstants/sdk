@@ -233,7 +233,9 @@ otc_kind otc_station_kind(const otc_station_t *st) { return st ? st->kind : OTC_
 
 otc_station_status_t otc_station_status(const otc_station_t *st)
 {
-    return st ? otc__parse_station_status(otc__jstr(st->root, "status")) : OTC_STATION_STATUS_UNSET;
+    if (!st) return OTC_STATION_STATUS_UNSET;
+    /* a line with no status (or null) is an active station (CR2 DR28) */
+    return otc__jget(st->root, "status") ? otc__parse_station_status(otc__jstr(st->root, "status")) : OTC_STATION_STATUS_ACTIVE;
 }
 
 bool otc_station_is_reference(const otc_station_t *st) { return otc_station_type(st) == OTC_STATION_TYPE_REFERENCE; }

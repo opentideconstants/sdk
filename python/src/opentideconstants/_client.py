@@ -720,7 +720,9 @@ class OpenTideConstants:
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"))
-            zdoi = info.zenodo_version_doi if info is not None else old.get("zenodo_version_doi")
+            # a null DOI never erases a known one (CR2 DR11)
+            zdoi = info.zenodo_version_doi if info is not None and info.zenodo_version_doi is not None \
+                else old.get("zenodo_version_doi")
             rel._zenodo_version_doi = zdoi
             rel._opened = (d / data_name,) + ((d / f"{base}.meta.json",) if data_name.endswith(".jsonl") else ())
             verified = {"files": files, "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

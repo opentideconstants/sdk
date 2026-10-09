@@ -3326,6 +3326,128 @@
      "count": 0
     }
    ]
+  },
+  {
+   "id": "cross/verified-doi-null-pointer",
+   "title": "the writer caches latest with its version DOI; then the pointer names the same release with zenodo_version_doi null: the reader keeps the known DOI in the session (open, check_for_update) and in .verified (CR2 DR11)",
+   "spec": "4.3, 5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_latest-f1.json",
+       "pointer": "",
+       "set": {
+        "/zenodo_version_doi": null
+       }
+      }
+     ]
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "check_for_update",
+     "expect": {
+      "release": null
+     }
+    },
+    {
+     "as": "reader",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    }
+   ]
   }
  ]
 }
