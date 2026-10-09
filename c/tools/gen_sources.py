@@ -122,8 +122,10 @@ def main():
     if a.symbols:
         return check_symbols(a.symbols)
     files = {
-        C / "src/otc_cjson_rename.h": rename_header("OTC_CJSON_RENAME_H", cjson_names(), "c/vendor/cjson/cJSON.h"),
-        C / "src/otc_sha256_rename.h": rename_header("OTC_SHA256_RENAME_H", sha_names(), "c/vendor/sha256/sha-256.h"),
+        C / "src/otc_cjson_rename.h": rename_header("OTC_CJSON_RENAME_H", cjson_names(),
+                                                   "c/vendor/cjson/cJSON.h and cJSON.c"),
+        C / "src/otc_sha256_rename.h": rename_header("OTC_SHA256_RENAME_H", sha_names(),
+                                                    "c/vendor/sha256/sha-256.h and sha-256.c"),
         C / "src/otc_fold_table.c": fold_table(),
     }
     bad = 0
