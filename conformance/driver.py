@@ -51,7 +51,10 @@ FIXTURES = HERE / "fixtures"
 CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
-FEATURES = ["fs", "fetch", "json", "eager", "stream"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum"]
+# The features of Python, Ruby and TypeScript on Node. require_checksum is the C open option (otc_open_options), which
+# no other SDK has (CR2 DR34).
+LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
@@ -65,7 +68,8 @@ VARIANTS = [
 
 FILTERS = ["country", "type", "kind", "source", "source_type"]
 OPEN_ARGS = ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file", "user_agent",
-             "on_network_error", "auto_update", "update_interval", "verify_on_open"]
+             "on_network_error", "auto_update", "update_interval", "verify_on_open",
+             "require_checksum"]   # require_checksum: C only, so a step that passes it needs that feature (CR2 DR34)
 # op -> allowed argument names (README "Operations")
 OPS = {
     "open": OPEN_ARGS, "close": [], "hold_release": ["name"], "loaded_from": [], "last_error": [],
@@ -114,9 +118,9 @@ SERVER_ALIAS = "otc-fixture.invalid"
 # The features each SDK must claim (spec: Python, Ruby and TypeScript on Node have every feature).
 # The profile is the hello's "runner" name, or --profile.
 PROFILES = {
-    "python": FEATURES, "ruby": FEATURES, "typescript": FEATURES,
+    "python": LANG_FEATURES, "ruby": LANG_FEATURES, "typescript": LANG_FEATURES,
     "typescript-browser": ["fetch", "json", "eager", "stream"],
-    "c": ["fs", "stream"], "c-fetch": ["fs", "fetch", "stream"],
+    "c": ["fs", "stream", "require_checksum"], "c-fetch": ["fs", "fetch", "stream", "require_checksum"],
     "none": [],
 }
 
@@ -553,6 +557,8 @@ def step_needs(st):
             need.add("fetch")   # no file: the release comes from the network module
         if "cache_dir" in a:
             need.add("fs")      # README "Hello": cache_dir is a file-system option
+        if "require_checksum" in a:
+            need.add("require_checksum")   # the C open option (CR2 DR34)
     if op in FETCH_OPS:
         need.add("fetch")
     if op == "download":

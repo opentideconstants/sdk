@@ -2133,6 +2133,378 @@
      }
     }
    ]
+  },
+  {
+   "id": "cache/no-sha256-offline-kept",
+   "title": "offline, the cached OTC_{D}.sha256 is gone: the pinned and the latest open load the release from the cache (C: unverified), and nothing is deleted",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ],
+     "absent": [
+      "OTC_20991231.2.sha256"
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ],
+     "absent": [
+      "OTC_20991231.2.sha256"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/require-checksum-no-sha256-offline-kept",
+   "title": "offline with require_checksum, the newest cached OTC_{D}.sha256 is gone: the pinned and the latest open fail with checksum_mismatch, and the release is kept (it cannot be fetched again)",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream",
+    "require_checksum"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true,
+      "require_checksum": true
+     },
+     "expect": {
+      "error": "checksum_mismatch"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ],
+     "absent": [
+      "OTC_20991231.2.sha256"
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true,
+      "require_checksum": true
+     },
+     "expect": {
+      "error": "checksum_mismatch"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ],
+     "absent": [
+      "OTC_20991231.2.sha256"
+     ]
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231",
+     "present": [
+      ".verified",
+      "OTC_20991231.sha256"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/require-checksum-no-sha256-network-error-kept",
+   "title": "the pointer answers 503, require_checksum is on and the newest cached OTC_{D}.sha256 is gone: the network error, and the release is kept",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream",
+    "require_checksum"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 503
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "require_checksum": true
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 503
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ],
+     "absent": [
+      "OTC_20991231.2.sha256"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/require-checksum-no-sha256-online-heals",
+   "title": "online with require_checksum, the pinned cached OTC_{D}.sha256 is gone: the release is healed and downloaded again, with its .sha256",
+   "spec": "5.2, 5.3",
+   "requires": [
+    "fs",
+    "stream",
+    "require_checksum"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "require_checksum": true
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl"
+     ]
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    }
+   ]
   }
  ]
 }

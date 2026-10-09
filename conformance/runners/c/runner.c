@@ -77,6 +77,7 @@ static size_t g_n_held;
 static struct {
     char    *cache_dir, *base_url, *proxy, *ca_file, *user_agent;
     bool     offline;
+    bool     require_checksum;           /* otc_open_options.require_checksum, for every open (CR2 DR34) */
     double   timeout_s;
     otc_on_network_error on_network_error;
     unsigned formats;
@@ -870,6 +871,15 @@ static void fetch_options(otc_fetch_options *fo, otc_error *err)
     fo->formats = g_client.formats;
 }
 
+/* The open options of every open (otc_open_file, and the open of the cached file in otc_fetch_open): the client's
+ * require_checksum (CR2 DR34). err is the caller's error struct; it is not reset here. */
+static void open_options(otc_open_options *oo, otc_error *err)
+{
+    otc_open_options_init(oo);
+    oo->error = err;
+    oo->require_checksum = g_client.require_checksum;
+}
+
 static void op_open(request *q, reply *r)
 {
     const char *file = arg_str(&q->a, "file"), *release = arg_str(&q->a, "release");
@@ -898,6 +908,7 @@ static void op_open(request *q, reply *r)
         const char *proxy = arg_str(&q->a, "proxy"), *ca_file = arg_str(&q->a, "ca_file");
         const char *user_agent = arg_str(&q->a, "user_agent");
         bool offline = arg_bool(&q->a, "offline", false), auto_update = arg_bool(&q->a, "auto_update", false);
+        bool require_checksum = arg_bool(&q->a, "require_checksum", false);
         /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it
          * is, so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails
          * loudly */
@@ -917,6 +928,7 @@ static void op_open(request *q, reply *r)
         g_client.ca_file = dup_or_null(ca_file);
         g_client.user_agent = dup_or_null(user_agent);
         g_client.offline = offline;
+        g_client.require_checksum = require_checksum;
         g_client.timeout_s = timeout_s;
         g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
         /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */
@@ -930,8 +942,7 @@ static void op_open(request *q, reply *r)
     if (file) {
         otc_open_options opts;
         otc_release *rel = NULL;
-        otc_open_options_init(&opts);
-        opts.error = &err;
+        open_options(&opts, &err);
         rc = otc_open_file(file, &opts, &rel);
         if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
         g_current = rel;
@@ -939,10 +950,12 @@ static void op_open(request *q, reply *r)
     } else {
         /* No file: the release comes from the otc_fetch module (download or cache). */
         otc_fetch_options fo;
+        otc_open_options oo;
         char path[4096];
         size_t need = 0;
         fetch_options(&fo, &err);
-        rc = otc_fetch_open(&fo, release, NULL, &g_current);
+        open_options(&oo, &err);
+        rc = otc_fetch_open(&fo, release, &oo, &g_current);
         if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
         rc = otc_release_datestamp(g_current, path, sizeof path, &need);
         g_current_path = current_jsonl_path(rc == OTC_OK ? path : NULL, rc);
@@ -1628,11 +1641,13 @@ static otc_status list_strings(const otc_fetch_options *fo, char ***v, size_t *c
 static otc_status swap_to(const char *ds, otc_error *err)
 {
     otc_fetch_options fo;
+    otc_open_options oo;
     otc_release *rel = NULL;
     otc_status rc;
     char *path;
     fetch_options(&fo, err);   /* the caller's error struct: the detail of a failed open reaches the reply */
-    rc = otc_fetch_open(&fo, fault("swap") ? "20000101" : ds, NULL, &rel);   /* fault: the open fails */
+    open_options(&oo, err);
+    rc = otc_fetch_open(&fo, fault("swap") ? "20000101" : ds, &oo, &rel);   /* fault: the open fails */
     if (rc != OTC_OK) return rc;
     path = current_jsonl_path(ds, OTC_OK);
     if (g_current && !is_held(g_current)) otc_close(g_current);
@@ -2061,7 +2076,8 @@ int main(void)
     g_fault = getenv("OTC_RUNNER_FAULT");
     printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s]}}\n",
            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
-           OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\"" : "\"fs\", \"stream\"");
+           OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\", \"require_checksum\""
+                            : "\"fs\", \"stream\", \"require_checksum\"");
     fflush(stdout);
     while ((got = read_line(stdin, &line)) != 0) {
         char *out;

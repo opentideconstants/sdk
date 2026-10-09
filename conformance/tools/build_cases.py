@@ -1516,7 +1516,51 @@ def group_cache():
                     [open_latest_step(G), drv("restart_runner"), drv("server_stop"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
                      step("release_files", {"files": enc_release_info("good", d2, G)["files"]})], requires=["fs"]))
-    return out + corrupt_cache_cases()
+    return out + corrupt_cache_cases() + missing_sha256_cases()
+
+
+def missing_sha256_cases():
+    """A cached release whose OTC_{D}.sha256 is gone (CR2 DR34 x DR16, orchestrator decision 2026-10-09). Only C reads
+    the cached .sha256 to open a release, and only with require_checksum; the other SDKs open it from .verified. Offline,
+    and when the cache stands in for the network, a release that only lacks its checksum list is not corrupt: it is
+    kept, never deleted, because it cannot be fetched again. Online, the open heals it and downloads it again."""
+    out = []
+    G = f"{SRV}/good/"
+    d2, d1 = "20991231.2", "20991231"
+    r2 = "${cache}/v1/releases/" + d2
+    kept = drv("assert_files", dir=r2, present=[".verified", f"OTC_{d2}.jsonl", f"OTC_{d2}.meta.json"], absent=[f"OTC_{d2}.sha256"])
+    no_sha = drv("delete", path=f"{r2}/OTC_{d2}.sha256")
+    p503 = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 503}])
+
+    def pin(d, expect=None, **kw):
+        return net(step("open", expect or {"datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode="stream", **kw))
+
+    def latest(expect, **kw):
+        return net(step("open", expect, base_url=G, cache_dir="${cache}", mode="stream", **kw))
+
+    no_sum = err("checksum_mismatch")
+    out.append(case("cache/no-sha256-offline-kept", "offline, the cached OTC_{D}.sha256 is gone: the pinned and the latest open load the release from the cache (C: unverified), and nothing is deleted", "5.2, 5.3",
+                    [pin(d2), drv("restart_runner"), no_sha, drv("server_stop"),
+                     pin(d2, {"loaded_from": "cache", "datestamp": d2}, offline=True), kept,
+                     latest({"loaded_from": "cache", "datestamp": d2}, offline=True), kept],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/require-checksum-no-sha256-offline-kept", "offline with require_checksum, the newest cached OTC_{D}.sha256 is gone: the pinned and the latest open fail with checksum_mismatch, and the release is kept (it cannot be fetched again)", "5.2, 5.3",
+                    [pin(d1), pin(d2), drv("restart_runner"), no_sha, drv("server_stop"),
+                     pin(d2, no_sum, offline=True, require_checksum=True), kept,
+                     latest(no_sum, offline=True, require_checksum=True), kept,
+                     drv("assert_files", dir="${cache}/v1/releases/" + d1, present=[".verified", f"OTC_{d1}.sha256"])],
+                    requires=["fs", "stream", "require_checksum"]))
+    out.append(case("cache/require-checksum-no-sha256-network-error-kept", "the pointer answers 503, require_checksum is on and the newest cached OTC_{D}.sha256 is gone: the network error, and the release is kept", "5.2, 5.3",
+                    [pin(d2), drv("restart_runner"), no_sha, p503,
+                     latest(err("network", status=503), require_checksum=True), kept],
+                    requires=["fs", "stream", "require_checksum"], timeout_s=90))
+    out.append(case("cache/require-checksum-no-sha256-online-heals", "online with require_checksum, the pinned cached OTC_{D}.sha256 is gone: the release is healed and downloaded again, with its .sha256", "5.2, 5.3",
+                    [pin(d2), drv("restart_runner"), no_sha,
+                     pin(d2, {"loaded_from": "download", "datestamp": d2}, require_checksum=True),
+                     drv("assert_files", dir=r2, present=[".verified", f"OTC_{d2}.sha256", f"OTC_{d2}.jsonl"]),
+                     drv("assert_sha256", path=f"{r2}/OTC_{d2}.jsonl", equals=f"{FIX}/good/OTC_{d2}.jsonl")],
+                    requires=["fs", "stream", "require_checksum"]))
+    return out
 
 
 def corrupt_cache_cases():

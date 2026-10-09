@@ -2456,6 +2456,25 @@ static otc_status open_cached(fctx *c, const char *ds, otc_release **out)
 static int corrupt_status(otc_status st) { return st == OTC_E_CHECKSUM || st == OTC_E_INVALID_RELEASE; }
 
 /*
+ * st is the require_checksum failure of release ds: the caller asked for
+ * require_checksum and the cached OTC_{D}.sha256 is not there (CR2 DR34). The
+ * release is not corrupt, only unverifiable, so offline and when the cache
+ * stands in for the network it is kept, never deleted: it cannot be fetched
+ * again (CR2 DR34 x DR16, spec 5.2 step 6). Out of memory counts as missing,
+ * so a doubt never deletes data.
+ */
+static int checksum_list_missing(fctx *c, const char *ds, otc_status st)
+{
+    char *p;
+    int missing;
+    if (st != OTC_E_CHECKSUM || !c->oo || !c->oo->require_checksum) return 0;
+    p = rel_file(c, ds, ".sha256");
+    missing = !p || otc__path_size(p) < 0;
+    free(p);
+    return missing;
+}
+
+/*
  * Removes a corrupt cached release (spec 5.2 step 6): .verified first, so it is
  * no longer trusted, then its data files. A failure to delete is logged; it
  * never hides the error that found the release corrupt.
@@ -2481,7 +2500,8 @@ static void heal(fctx *c, const char *ds, const char *why)
  * candidate that fails its check or does not parse is healed and the next
  * older one is tried; one whose format C cannot read is skipped. OTC_OK with
  * *rel NULL when none loads (the caller reports its own error); OTC_E_CACHE or
- * OTC_E_NOMEM when the cache cannot be read.
+ * OTC_E_NOMEM when the cache cannot be read; OTC_E_CHECKSUM, with the
+ * release kept, when require_checksum finds no cached .sha256 (CR2 DR34).
  */
 static otc_status open_newest_cached(fctx *c, char **ds_out, otc_release **rel)
 {
@@ -2505,6 +2525,8 @@ static otc_status open_newest_cached(fctx *c, char **ds_out, otc_release **rel)
                 *rel = NULL;
                 st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
             }
+        } else if (checksum_list_missing(c, list[i], ost)) {
+            st = ost;   /* kept, and the open fails with the checksum error: nothing to try instead (CR2 DR34) */
         } else if (corrupt_status(ost)) {
             heal(c, list[i], c->err->message);
             otc_error_init(c->err);
@@ -2581,7 +2603,9 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
                 return fail(c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", release);
             *lf = OTC_LOADED_FROM_CACHE;
             st = open_cached(c, release, rel);
-            if (corrupt_status(st)) {   /* spec 5.2 step 6: healed; the error stays the check's */
+            /* spec 5.2 step 6: healed; the error stays the check's. A release that only lacks the
+             * .sha256 that require_checksum needs is kept: offline it cannot be fetched again (CR2 DR34) */
+            if (corrupt_status(st) && !checksum_list_missing(c, release, st)) {
                 otc_error keep = *c->err;
                 heal(c, release, keep.message);
                 *c->err = keep;

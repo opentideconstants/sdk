@@ -11,7 +11,7 @@ against it; that is the proof that the suite catches a runner that does nothing.
     ... --runner "python3 conformance/runners/null/runner.py --features none"
 
 --features sets the features it claims (comma-separated; "none" for no
-features; default: all of fs, fetch, json, eager, stream). With fewer features
+features; default: all of fs, fetch, json, eager, stream, require_checksum). With fewer features
 the driver takes the cases' expect_if_missing paths (not_built, unsupported)
 and skips cases that need a missing feature.
 """
@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-ALL = ["fs", "fetch", "json", "eager", "stream"]
+ALL = ["fs", "fetch", "json", "eager", "stream", "require_checksum"]
 
 
 def main():
