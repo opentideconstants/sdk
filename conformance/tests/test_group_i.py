@@ -168,3 +168,32 @@ def test_wrong_sha256_files_keep_their_size():
         g, b = (good / f"OTC_20991231{ext}").read_bytes(), (bad / f"OTC_20991231{ext}").read_bytes()
         assert len(g) == len(b) and g != b, (ext, len(g), len(b))
         assert sum(x != y for x, y in zip(g, b)) == 1, ext
+
+
+# --- K49: writing the fixtures replaces them all or none: a failure part-way leaves the old fixtures in place
+
+def test_fixture_write_is_all_or_nothing(tmp_path, monkeypatch):
+    import os as _os
+    import shutil as _shutil
+    fx = tmp_path / "fixtures"
+    _shutil.copytree(CONF / "fixtures", fx)
+    before = {p.relative_to(fx).as_posix(): p.read_bytes() for p in fx.rglob("*") if p.is_file()}
+    monkeypatch.setattr(bf, "FIXTURES", fx)
+    calls = {"n": 0}
+    real_copytree, real_replace = _shutil.copytree, _os.replace
+
+    def failing(real):
+        def f(*a, **k):
+            if a and str(fx) in str(a[-1] if real is real_copytree else a[1]):
+                calls["n"] += 1
+                if calls["n"] == 2:
+                    raise OSError(28, "No space left on device (test)")
+            return real(*a, **k)
+        return f
+    monkeypatch.setattr(_shutil, "copytree", failing(real_copytree))
+    monkeypatch.setattr(_os, "replace", failing(real_replace))
+    monkeypatch.setattr(sys, "argv", ["build_fixtures.py"])
+    with pytest.raises(OSError):
+        bf.main()
+    after = {p.relative_to(fx).as_posix(): p.read_bytes() for p in fx.rglob("*") if p.is_file()}
+    assert after == before, sorted(set(before) ^ set(after))[:10]

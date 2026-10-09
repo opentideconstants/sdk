@@ -33,6 +33,7 @@ import copy
 import gzip
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -1239,18 +1240,30 @@ def main():
     args = parser.parse_args()
     if args.check:
         return check(args.schema_dir)
-    with tempfile.TemporaryDirectory() as tmp:
-        build(Path(tmp), FIXTURES if FIXTURES.exists() else None)
-        for name in GENERATED:
-            target = FIXTURES / name
-            if target.is_dir():
-                shutil.rmtree(target)
-            elif target.exists():
-                target.unlink()
-        FIXTURES.mkdir(parents=True, exist_ok=True)
-        for name in GENERATED:
-            src = Path(tmp) / name
-            (shutil.copytree if src.is_dir() else shutil.copy2)(src, FIXTURES / name)
+    FIXTURES.mkdir(parents=True, exist_ok=True)
+    # Build next to the fixtures (the same file system), then swap each generated target in with a rename. If a
+    # swap fails part-way, the targets already moved are put back: the fixtures are all new or all old.
+    with tempfile.TemporaryDirectory(dir=FIXTURES.parent, prefix=".fixtures-") as tmp:
+        new, old = Path(tmp) / "new", Path(tmp) / "old"
+        build(new, FIXTURES)
+        old.mkdir()
+        moved, placed = [], []
+        try:
+            for name in GENERATED:
+                target = FIXTURES / name
+                if target.exists():
+                    os.replace(target, old / name)
+                    moved.append(name)
+                os.replace(new / name, target)
+                placed.append(name)
+        except BaseException:
+            for name in placed:
+                target = FIXTURES / name
+                (shutil.rmtree if target.is_dir() else os.unlink)(target)
+            for name in moved:
+                os.replace(old / name, FIXTURES / name)
+            print(f"could not write the fixtures; the old ones are back under {FIXTURES}", file=sys.stderr)
+            raise
     print(f"wrote fixtures under {FIXTURES}")
     return 0
 
