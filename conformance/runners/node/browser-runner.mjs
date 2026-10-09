@@ -27,7 +27,6 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
         : process.platform === "win32" ? path.join(home, "AppData", "Local", "ms-playwright") : path.join(home, ".cache", "ms-playwright");
 }
 const require = createRequire(path.join(jsDir, "package.json"));
-const { chromium } = require("playwright");
 
 const TYPES = { ".js": "text/javascript", ".mjs": "text/javascript", ".html": "text/html", ".json": "application/json" };
 
@@ -64,37 +63,76 @@ const out = (obj) => {
     process.stdout.write(line + "\n");
 };
 
-const server = await serve();
-const origin = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext();
-const page = await context.newPage();
-page.on("console", (m) => process.stderr.write(`[page ${m.type()}] ${m.text()}\n`));
-// An error that escapes in the page (outside the op's promise) fails the step it happened in, or the next one.
-const pageErrors = [];
-page.on("pageerror", (e) => {
-    process.stderr.write(`[page error] ${e.stack || e}\n`);
-    pageErrors.push(String(e && e.stack ? e.stack : e));
-});
-await page.goto(origin + "/");
-const version = await page.evaluate(async () => {
-    const sdk = await import("/sdk/index.js");
-    const { makeRunner } = await import("/ops.mjs");
-    if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "string") return null;
-    const runner = makeRunner(sdk);
-    window.__otc = { runner, isNodeVisible: typeof process !== "undefined" };
-    return sdk.VERSION;
-});
-
-if (version === null) {   // no error base class or no version: fail the handshake (exit 3)
-    process.stderr.write("cannot load the SDK: it has no OpenTideConstantsError class or no VERSION string\n");
-    await browser.close();
-    server.close();
+// A start-up failure fails the handshake: no hello, a line on stderr that says what to do, and exit 3 (as in
+// runner.mjs), never an unhandled rejection with exit 1.
+let browser = null;
+let server = null;
+async function failStart(what, e, hint) {
+    const detail = e === undefined ? "" : `: ${e && e.stack ? e.stack : e}`;
+    process.stderr.write(`cannot start the browser runner: ${what}${detail}${hint ? `\n${hint}` : ""}\n`);
+    if (browser) await browser.close().catch(() => {});
+    if (server) server.close();
     process.exit(3);
 }
 
+let chromium;
+try {
+    ({ chromium } = require("playwright"));
+} catch (e) {
+    await failStart("cannot load Playwright", e, "Install the devDependencies: cd js && npm ci");
+}
+server = await serve();
+const origin = `http://127.0.0.1:${server.address().port}`;
+try {
+    browser = await chromium.launch({ headless: true });
+} catch (e) {
+    await failStart("cannot launch Chromium", e, "Install it: cd js && npx playwright install chromium");
+}
+let page;
+// An error that escapes in the page (outside the op's promise) fails the step it happened in, or the next one.
+const pageErrors = [];
+try {
+    const context = await browser.newContext();
+    page = await context.newPage();
+    page.on("console", (m) => process.stderr.write(`[page ${m.type()}] ${m.text()}\n`));
+    page.on("pageerror", (e) => {
+        process.stderr.write(`[page error] ${e.stack || e}\n`);
+        pageErrors.push(String(e && e.stack ? e.stack : e));
+    });
+    await page.goto(origin + "/");
+} catch (e) {
+    await failStart(`cannot open the page ${origin}/`, e);
+}
+// let the page run what an evaluate left pending (timers, rejected promises), so escaped errors are seen
+const settle = () => page.evaluate(() => new Promise((r) => setTimeout(() => setTimeout(r, 0), 0)));
+let loaded;
+try {
+    loaded = await page.evaluate(async () => {
+        const sdk = await import("/sdk/index.js");
+        const { makeRunner } = await import("/ops.mjs");
+        if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "string") return null;
+        window.__otc = { runner: makeRunner(sdk) };
+        // D28: the browser profile must not test a Node-like environment, so a page that can see process fails
+        return { version: sdk.VERSION, isNodeVisible: typeof process !== "undefined" };
+    });
+    await settle();
+} catch (e) {
+    await failStart(`cannot load the SDK from ${distDir} or ops.mjs in the page`, e, "Build the SDK first: cd js && npm run build");
+}
+if (loaded === null) {   // no error base class or no version: fail the handshake (exit 3)
+    await failStart("cannot load the SDK: it has no OpenTideConstantsError class or no VERSION string");
+}
+if (pageErrors.length) {   // an error that escaped while the SDK loaded belongs to the handshake, not to step 1
+    await failStart("an error escaped in the page while the SDK loaded", pageErrors.splice(0).join("\n"));
+}
+if (loaded.isNodeVisible) {
+    await failStart("the page can see process, so it is not a browser environment (CR D28)");
+}
+const version = loaded.version;
+
 out({ hello: { runner: "typescript-browser", version, origin, features: ["fetch", "json", "eager", "stream"] } });
 
+let pageGone = null;
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
     if (!line.trim()) continue;
@@ -107,15 +145,26 @@ for await (const line of rl) {
         out({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `bad request line: ${e.message}` } });
         continue;
     }
-    let reply = await page.evaluate((m) => window.__otc.runner.handle(m), msg);
-    // let the page run what the op left pending (timers, rejected promises), then look for escaped errors
-    await page.evaluate(() => new Promise((r) => setTimeout(() => setTimeout(r, 0), 0)));
+    if (pageGone) {   // the page and its state are gone: every later step fails too, and the exit status is 1
+        out({ ok: false, error: { code: "uncaught:PageGone", message: `the page is gone: ${pageGone}` } });
+        continue;
+    }
+    let reply;
+    try {
+        reply = await page.evaluate((m) => window.__otc.runner.handle(m), msg);
+        // let the page run what the op left pending (timers, rejected promises), then look for escaped errors
+        await settle();
+    } catch (e) {   // the page crashed or navigated, or the reply could not be passed back: the step fails
+        process.stderr.write(`page.evaluate failed: ${e && e.stack ? e.stack : e}\n`);
+        pageGone = String(e && e.message ? e.message : e).slice(0, 2000);
+        reply = { ok: false, error: { code: `uncaught:${e && e.constructor ? e.constructor.name : typeof e}`, message: pageGone } };
+    }
     if (pageErrors.length) {
         reply = { ok: false, error: { code: "uncaught:PageError", message: pageErrors.splice(0).join("\n").slice(0, 2000) } };
     }
     out(reply);
 }
-const closed = await page.evaluate(() => window.__otc.runner.shutdown()).catch((e) => {
+const closed = !pageGone && await page.evaluate(() => window.__otc.runner.shutdown()).catch((e) => {
     process.stderr.write(`close failed at shutdown: ${e && e.stack ? e.stack : e}\n`);
     return false;
 });
