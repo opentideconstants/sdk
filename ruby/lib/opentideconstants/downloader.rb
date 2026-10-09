@@ -1,6 +1,7 @@
 require "fileutils"
 require "digest"
 require "zlib"
+require "securerandom"
 
 class OpenTideConstants
     # Fetching and checking release files (spec §5.2 step 4) and
@@ -161,8 +162,9 @@ class OpenTideConstants
 
             pointer_files = entry ? Array(entry["files"]).to_h { |f| [f["name"], f] } : {}
             # Every file is made and checked as a temporary file in to first;
-            # only when all of them are there are they renamed into place, so a
-            # failure (offline, a network error, a bad checksum) writes nothing.
+            # only when all of them are there are they renamed into place, all
+            # or nothing (CR2 DR17), so a failure (offline, a network error, a
+            # bad checksum, a failed rename) leaves to as it was.
             staged = [] # [temporary file, final path], in the order of todo
             begin
                 todo.each do |n|
@@ -185,11 +187,7 @@ class OpenTideConstants
                     end
                 end
                 # OTC_{D}.sha256 is last in todo, so it goes into place last.
-                staged.each do |tmp, final|
-                    File.rename(tmp, final)
-                rescue SystemCallError => e
-                    raise FileError.new("cannot rename into #{final}: #{e.message}", path: final)
-                end
+                rename_all_in(staged)
             ensure
                 staged.each { |tmp, _| FileUtils.rm_f(tmp) }
             end
@@ -197,6 +195,69 @@ class OpenTideConstants
         end
 
         private
+
+        # Renames each [temporary file, final path] into place, all or nothing
+        # (spec §4.3.2, CR2 DR17). Each original that a new file replaces is
+        # first renamed aside to a .tmp-bak- name in to. If any rename fails,
+        # every original is restored and the new files renamed in are removed,
+        # so to is as it was: FileError. If a restore fails too, the error
+        # lists the paths that changed.
+        def rename_all_in(staged)
+            aside = {} # final path => its original, renamed aside
+            placed = [] # final paths a new file was renamed into
+            final = nil
+            begin
+                staged.each do |_, f|
+                    final = f
+                    next unless File.symlink?(f) || (File.exist?(f) && !File.directory?(f))
+                    bak = File.join(File.dirname(f), ".tmp-bak-#{Process.pid}-#{SecureRandom.hex(6)}")
+                    File.rename(f, bak)
+                    aside[f] = bak
+                end
+                staged.each do |tmp, f|
+                    final = f
+                    File.rename(tmp, f)
+                    placed << f
+                end
+            rescue SystemCallError => e
+                changed = restore(placed, aside)
+                msg = "cannot rename into #{final}: #{e.message}"
+                unless changed.empty?
+                    msg += "; these paths changed and could not be restored: #{changed.join(', ')} " \
+                           "(an original that is not back is in a .tmp-bak- file next to it)"
+                end
+                raise FileError.new(msg, path: final)
+            end
+            aside.each do |f, bak|
+                File.delete(bak)
+            rescue SystemCallError => e # the new file is in place; only the old copy is left over
+                @client.send(:log, :warn, "download: cannot remove #{bak} (the replaced #{f}): #{e.message}")
+            end
+        end
+
+        # Undoes rename_all_in after a failure. Returns the paths that could
+        # not be restored.
+        def restore(placed, aside)
+            changed = []
+            placed.reverse_each do |f|
+                if aside.key?(f)
+                    File.rename(aside.delete(f), f)
+                else
+                    File.delete(f)
+                end
+            rescue SystemCallError => e
+                @client.send(:log, :warn, "download: cannot restore #{f}: #{e.message}")
+                changed << f
+            end
+            aside.each do |f, bak|
+                next if changed.include?(f)
+                File.rename(bak, f)
+            rescue SystemCallError => e
+                @client.send(:log, :warn, "download: cannot restore #{f} from #{bak}: #{e.message}")
+                changed << f
+            end
+            changed
+        end
 
         def resolve_release
             if @release == :latest
@@ -206,7 +267,18 @@ class OpenTideConstants
                     return [d, nil, nil]
                 end
                 # The newest release this SDK reads, as for opening latest (spec §4.3.2, §5.2 step 2a).
-                entry, url = @client.send(:resolve_latest)
+                begin
+                    entry, url = @client.send(:resolve_latest)
+                rescue NetworkError => e
+                    # on_network_error as when a client opens latest (spec
+                    # §4.3.2, CR D22): use_cache writes the newest cached
+                    # readable release; raise, or nothing usable cached,
+                    # raises the network error.
+                    d = @client.send(:on_network_error) == :use_cache ? @client.send(:newest_cached, usable: false) : nil
+                    raise unless d
+                    @client.send(:log, :warn, "#{e.message}; writing the cached release #{d}")
+                    return [d, nil, nil]
+                end
                 d = entry["datestamp"]
                 raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
                 return [d, entry, url]

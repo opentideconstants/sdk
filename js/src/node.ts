@@ -48,19 +48,24 @@ function tmpName(dir: string): string {
     return path.join(dir, `.tmp-${process.pid}-${randomBytes(6).toString("hex")}`);
 }
 
+/** Write a new file and fsync it. */
+function writeFsyncSync(file: string, bytes: Uint8Array): void {
+    const fd = fs.openSync(file, "w", 0o644);
+    try {
+        // writeSync may write less than asked (PK10 T11): loop until every byte is written
+        let done = 0;
+        while (done < bytes.length) done += fs.writeSync(fd, bytes, done, bytes.length - done);
+        fs.fsyncSync(fd);
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
 /** Write a file atomically: temporary file in the same directory, fsync, rename (spec 5.4). */
 export function writeAtomicSync(file: string, bytes: Uint8Array): void {
     const tmp = tmpName(path.dirname(file));
     try {
-        const fd = fs.openSync(tmp, "w", 0o644);
-        try {
-            // writeSync may write less than asked (PK10 T11): loop until every byte is written
-            let done = 0;
-            while (done < bytes.length) done += fs.writeSync(fd, bytes, done, bytes.length - done);
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
+        writeFsyncSync(tmp, bytes);
         fs.renameSync(tmp, file);
     } catch (e) {
         try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
@@ -556,15 +561,97 @@ export function removeDirSync(dir: string): void {
     if (fs.existsSync(dir)) throw new Error(`${dir} is still there after the removal`);
 }
 
-/** Write into a caller's folder: temporary file, fsync, rename (spec 4.3.2). */
-export function writeInto(dir: string, name: string, bytes: Uint8Array): string {
-    const p = path.join(dir, name);
+/**
+ * Write files into a caller's folder, all or nothing (spec 4.3.2, CR2 DR17). Each file goes to a temporary file in
+ * `dir` (fsynced); only when all of them are there are they renamed into place, in the order given. Each original that
+ * a new file replaces is first renamed aside to a `.tmp-bak-` name in `dir`. If any rename fails, every original is
+ * restored and the new files renamed in are removed, so `dir` is as it was: FileError. If a restore fails too, the
+ * error lists the paths that changed. Returns the paths written.
+ */
+export function writeAllInto(dir: string, files: readonly (readonly [string, Uint8Array])[], warn: (message: string) => void): string[] {
+    const staged: [string, string][] = [];
     try {
-        writeAtomicSync(p, bytes);
-    } catch (e) {
-        throw new FileError(`cannot write ${p}`, { path: p, cause: e });
+        for (const [name, bytes] of files) {
+            const dest = path.join(dir, name);
+            const tmp = tmpName(dir);
+            staged.push([tmp, dest]);
+            try {
+                writeFsyncSync(tmp, bytes);
+            } catch (e) {
+                throw new FileError(`cannot write ${dest}`, { path: dest, cause: e });
+            }
+        }
+        renameAllIn(staged, warn);
+        const written = staged.map(([, dest]) => dest);
+        staged.length = 0;
+        return written;
+    } finally {
+        for (const [tmp] of staged) {
+            try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+        }
     }
-    return p;
+}
+
+function renameAllIn(staged: readonly (readonly [string, string])[], warn: (message: string) => void): void {
+    const aside = new Map<string, string>(); // destination -> its original, renamed aside
+    const placed: string[] = []; // destinations a new file was renamed into
+    let dest = "";
+    const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
+    try {
+        for (const [, d] of staged) {
+            dest = d;
+            let st: fs.Stats | null = null;
+            try {
+                st = fs.lstatSync(d);
+            } catch (e) {
+                if (!isErrno(e, "ENOENT")) throw e;
+            }
+            if (st && !st.isDirectory()) {
+                const bak = path.join(path.dirname(d), `.tmp-bak-${process.pid}-${randomBytes(6).toString("hex")}`);
+                fs.renameSync(d, bak);
+                aside.set(d, bak);
+            }
+        }
+        for (const [tmp, d] of staged) {
+            dest = d;
+            fs.renameSync(tmp, d);
+            placed.push(d);
+        }
+    } catch (e) {
+        const changed: string[] = [];
+        for (const p of [...placed].reverse()) {
+            try {
+                const bak = aside.get(p);
+                if (bak === undefined) fs.unlinkSync(p);
+                else {
+                    fs.renameSync(bak, p);
+                    aside.delete(p);
+                }
+            } catch (x) {
+                warn(`download: cannot restore ${p}: ${why(x)}`);
+                changed.push(p);
+            }
+        }
+        for (const [p, bak] of aside) {
+            if (changed.includes(p)) continue;
+            try {
+                fs.renameSync(bak, p);
+            } catch (x) {
+                warn(`download: cannot restore ${p} from ${bak}: ${why(x)}`);
+                changed.push(p);
+            }
+        }
+        const more = changed.length === 0 ? ""
+            : `; these paths changed and could not be restored: ${changed.join(", ")} (an original that is not back is in a .tmp-bak- file next to it)`;
+        throw new FileError(`cannot write ${dest}${more}`, { path: dest, cause: e });
+    }
+    for (const [p, bak] of aside) {
+        try {
+            fs.rmSync(bak, { force: true });
+        } catch (x) { // the new file is in place; only the old copy is left over
+            warn(`download: cannot remove ${bak} (the replaced ${p}): ${why(x)}`);
+        }
+    }
 }
 
 // ------------------------------------------------------------------ blocking helper for autoUpdate (spec 5.6)
@@ -610,5 +697,5 @@ import(url).catch((e) => {
 /** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
 export const nodeApi: NodeMod = {
     nodePlatform, nodePath, sha256Sync, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
-    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeInto, runBlocking,
+    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeAllInto, runBlocking,
 };

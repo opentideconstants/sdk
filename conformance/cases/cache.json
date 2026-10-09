@@ -642,6 +642,353 @@
    ]
   },
   {
+   "id": "cache/prune-partial-failure",
+   "title": "prune(keep: 0) removes 20991231.2, then cannot remove 20991231 (read-only): cache error whose removed is [20991231.2]",
+   "spec": "4.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.10",
+      "base_url": "${server}/order/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.10"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231",
+     "mode": "555"
+    },
+    {
+     "op": "prune",
+     "args": {
+      "keep": 0
+     },
+     "expect": {
+      "error": "cache",
+      "error_fields": {
+       "removed": [
+        "20991231.2"
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231",
+     "mode": "755"
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.10",
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases",
+     "absent": [
+      "20991231.2"
+     ],
+     "present": [
+      "20991231.10",
+      "20991231"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/file-client-uses-cache-dir",
+   "title": "a client opened with file and cache_dir: cached_releases and prune use cache_dir, not the file's folder",
+   "spec": "4.3",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json",
+      "${fixtures}/good/OTC_20991231.2.sha256"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2",
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "prune",
+     "args": {
+      "keep": 1
+     },
+     "expect": {
+      "removed": [
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases",
+     "absent": [
+      "20991231"
+     ],
+     "present": [
+      "20991231.2"
+     ]
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/rel",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cache/file-client-uses-default-cache",
+   "title": "a client opened with file and no cache_dir: cached_releases and prune use the default cache, not the file's folder",
+   "spec": "4.3",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json",
+      "${fixtures}/good/OTC_20991231.2.sha256"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2",
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "prune",
+     "args": {
+      "keep": 1
+     },
+     "expect": {
+      "removed": [
+       "20991231"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "cached_releases",
+     "expect": {
+      "datestamps": [
+       "20991231.2"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/rel",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ]
+    }
+   ]
+  },
+  {
    "id": "cache/files-from-verified",
    "title": "loaded_from cache: release.files comes from .verified",
    "spec": "4.3.1",

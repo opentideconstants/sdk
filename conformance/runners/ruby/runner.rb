@@ -264,7 +264,7 @@ class Runner
 
     def encode_error(e)
         fields = {}
-        %i[url status file expected actual path].each do |f|
+        %i[url status file expected actual path removed].each do |f|
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
         code = e.code.to_s

@@ -198,12 +198,23 @@ class OpenTideConstants
         check_open!
         raise InvalidArgumentError, "keep must be an Integer >= 0" unless keep.is_a?(Integer) && keep >= 0
         protect = held_datestamps
-        removed = cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.select do |d|
-            cache.remove_release(d).tap { |ok| log(:info, "prune: #{d} is locked by another process; kept") unless ok }
-        end
-        cache.partial_releases.each do |d|
-            next if protect.include?(d)
-            log(:info, "prune: removed the incomplete release directory #{d}") if cache.remove_release(d)
+        removed = []
+        begin
+            cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.each do |d|
+                if cache.remove_release(d)
+                    removed << d
+                else
+                    log(:info, "prune: #{d} is locked by another process; kept")
+                end
+            end
+            cache.partial_releases.each do |d|
+                next if protect.include?(d)
+                log(:info, "prune: removed the incomplete release directory #{d}") if cache.remove_release(d)
+            end
+        rescue CacheError => e
+            # Stop at the first failure and report the releases removed
+            # before it (spec §4.3, CR2 DR18).
+            raise CacheError.new(e.message, removed: removed)
         end
         removed
     end
@@ -237,7 +248,7 @@ class OpenTideConstants
 
     # ---- internals shared with Downloader (private: Downloader calls them with send)
 
-    attr_reader :http, :base_url, :offline
+    attr_reader :http, :base_url, :offline, :on_network_error
 
     def cache
         @cache ||= Cache.new(@cache_dir || Cache.default_root, logger: @logger)
@@ -304,7 +315,7 @@ class OpenTideConstants
         @logger&.public_send(level, "opentideconstants: #{msg}")
     end
 
-    private :http, :base_url, :offline, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,
+    private :http, :base_url, :offline, :on_network_error, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,
             :resolve, :log
 
     private

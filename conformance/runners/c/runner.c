@@ -1695,6 +1695,15 @@ static void op_fetch(request *q, reply *r)
         }
         rc = otc_fetch_prune(&fo, (size_t)keep, ds[0] ? ds : NULL, v, 256, &count);
         if (rc == OTC_OK) cJSON_AddItemToObject(r->result, "removed", take_strings(v, count, 0, 0));
+        else if (rc == OTC_E_CACHE) {
+            /* CR2 DR18: a failed prune reports the releases removed before the failure in the array and count */
+            size_t n = count < 256 ? count : 256, i;
+            set_error_struct(r, rc, &err);
+            cJSON_AddItemToObject(r->fields, "removed", take_strings(v, n, 0, 0));
+            for (i = 0; i < n; i++) v[i] = NULL;   /* taken (and freed) above */
+            free_strings(v, 256);
+            return;
+        }
         else free_strings(v, 256);
         if (rc == OTC_E_BUFFER_TOO_SMALL) {   /* the releases are removed and the call cannot be repeated */
             set_error(r, "uncaught:ListTooSmall", "prune: the runner's list of 256 datestamps is too small");

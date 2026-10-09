@@ -731,6 +731,315 @@
   },
   {
    "id": "download/latest-network-error-use-cache",
+   "title": "download of latest when the pointer answers 500, with use_cache and a cached release: writes the newest cached release",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/latest-network-error-raise",
+   "title": "download of latest when the pointer answers 500, with on_network_error raise: network error, and nothing is written",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "absent": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true,
+     "may_be_missing": true
+    }
+   ]
+  },
+  {
+   "id": "download/latest-network-error-no-cache",
+   "title": "download of latest when the pointer answers 500 and the cache is empty: network error even with use_cache",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file"
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 500
+      }
+     ]
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "absent": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true,
+     "may_be_missing": true
+    }
+   ]
+  },
+  {
+   "id": "download/rename-failure-restores",
+   "title": "a rename that fails after another file was renamed in: io error, the replaced original is restored, and no temporary file is left",
+   "spec": "4.3.2",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "corrupt",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "offset": 10
+    },
+    {
+     "driver": "delete",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "mkdir",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json"
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle",
+      "overwrite": true
+     },
+     "expect": {
+      "error": "io"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl",
+     "negate": true
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/latest-network-error-use-cache-stream",
    "title": "download with no release when the pointer answers 503, with the release cached and on_network_error use_cache (the default): the newest cached readable release is written (D22)",
    "spec": "4.3.2",
    "requires": [
@@ -814,7 +1123,7 @@
    ]
   },
   {
-   "id": "download/latest-network-error-raise",
+   "id": "download/latest-network-error-raise-stream",
    "title": "the same with on_network_error raise: network error, and nothing is written (D22)",
    "spec": "4.3.2",
    "requires": [

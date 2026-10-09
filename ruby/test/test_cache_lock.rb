@@ -118,6 +118,26 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    # CR2 DR18: prune stops at the first release it cannot remove, and the
+    # CacheError reports the releases removed before it, newest first.
+    def test_prune_failure_reports_what_was_removed
+        posix_only
+        srv = serve
+        cache = tmpdir
+        %w[20991231 20991231.2].each { |d| OTC.new(release: d, base_url: srv.url("/"), cache_dir: cache).close }
+        # a third release, older than 20991231, that cannot be removed
+        old = File.join(cache, "v1", "releases", "20991230")
+        FileUtils.cp_r(File.join(cache, "v1", "releases", "20991231"), old)
+        c = OTC.new(release: "20991231.2", base_url: srv.url("/"), cache_dir: cache)
+        FileUtils.chmod(0o555, old)
+        e = assert_raises(OTC::CacheError) { c.prune(keep: 0) }
+        FileUtils.chmod(0o755, old)
+        assert_equal %w[20991231], e.removed
+        assert_equal %w[20991231.2 20991230], c.cached_releases
+    ensure
+        c&.close
+    end
+
     # R23b: prune skips a release whose lock another process holds.
     def test_prune_skips_a_locked_release
         srv = serve

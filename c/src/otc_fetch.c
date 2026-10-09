@@ -390,7 +390,8 @@ static int fs_mkdir_p(const char *path)
 }
 
 /* <dir>/.tmp-<pid>-<12 hex> */
-static char *tmp_path(const char *dir)
+/* <dir>/<prefix><pid>-<random>: prefix ".tmp-" for a new file, ".tmp-bak-" for an original set aside */
+static char *tmp_path_p(const char *dir, const char *prefix)
 {
     static const char digits[] = "0123456789abcdef";
     char name[64];
@@ -406,12 +407,14 @@ static char *tmp_path(const char *dir)
     x ^= x >> 33;
     x *= 0xff51afd7ed558ccdULL;
     x ^= x >> 33;
-    i = snprintf(name, sizeof name, ".tmp-%ld-", get_pid());
-    if (i < 0) return NULL;
+    i = snprintf(name, sizeof name, "%s%ld-", prefix, get_pid());
+    if (i < 0 || i > (int)sizeof name - 13) return NULL;
     for (c = 0; c < 12; c++) name[i++] = digits[(x >> (4 * c)) & 15];
     name[i] = '\0';
     return path2(dir, name);
 }
+
+static char *tmp_path(const char *dir) { return tmp_path_p(dir, ".tmp-"); }
 
 /* --------------------------------------------------------------------- context */
 
@@ -2755,16 +2758,20 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
     if (st == OTC_OK && (!count || (cap && !removed))) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "count is NULL");
     if (st == OTC_OK) st = cached_list(&c, &list, &n);
     for (i = keep; st == OTC_OK && i < n; i++) {
-        char *d, *v, token[33];
+        char *d, *v, *name = NULL, token[33];
         int held = 0, rm;
         if (current && !strcmp(current, list[i])) continue;
         d = rel_dir(&c, list[i]);
         v = d ? path2(d, ".verified") : NULL;
-        if (!d || !v) { free(d); free(v); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); break; }
+        /* the name the caller gets is allocated before the delete, so a release is never
+         * removed and then left out of the list for want of memory (R2-025) */
+        if (d && v && k < cap) name = otc__strdup(list[i]);
+        if (!d || !v || (k < cap && !name)) { free(d); free(v); st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); break; }
         /* a release whose .lock another process holds (a download or an index build) is
          * left alone; with the lock taken, the removal below takes the lock with it */
         if ((st = lock_try(&c, d, &held, token)) != OTC_OK || !held) {
             if (st == OTC_OK) logf_(&c, 1, "not pruning %s: another process holds its lock", list[i]);
+            free(name);
             free(d);
             free(v);
             continue;
@@ -2780,8 +2787,11 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
             lock_release(&c, d, token);
         } else {
             logf_(&c, 1, "pruned %s", list[i]);
-            st = put_string(&c, removed, cap, k++, list[i]);
+            if (k < cap) removed[k] = name;
+            name = NULL;
+            k++;
         }
+        free(name);
         free(d);
         free(v);
     }
@@ -2796,6 +2806,75 @@ otc_status otc_fetch_prune(const otc_fetch_options *opts, size_t keep, const cha
 
 static otc_status file_sha(const char *path, char hex[65]) { return otc__sha256_file(path, hex); }
 
+static void add_changed(char *buf, size_t cap, const char *path)
+{
+    size_t used = strlen(buf);
+    if (used < cap) snprintf(buf + used, cap - used, "%s%s", used ? ", " : "", path);
+}
+
+/* spec 4.3.2 (CR2 DR17): renames staged[i] to dest[i] for every i, all or nothing. Each
+ * original that a new file replaces is first renamed aside to <dir>/.tmp-bak-*. If any
+ * rename fails, every original is restored and the new files renamed in are removed, so
+ * dir is as it was: OTC_E_IO. If a restore fails too, the message lists the paths that
+ * changed (an original that is not back stays in its .tmp-bak- file). */
+static otc_status rename_all_in(fctx *c, const char *dir, char *const *staged, char *const *dest, size_t n)
+{
+    char *bak[8], changed[400];
+    const char *bad = NULL;
+    size_t i, placed = 0;
+    otc_status st = OTC_OK;
+    memset(bak, 0, sizeof bak);
+    changed[0] = '\0';
+    for (i = 0; i < n && st == OTC_OK; i++) {
+        if (fs_kind_nofollow(dest[i]) != 2) continue;   /* nothing there, or a directory: its rename below fails */
+        bak[i] = tmp_path_p(dir, ".tmp-bak-");
+        if (!bak[i]) {
+            st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
+        } else if (fs_rename(dest[i], bak[i]) != 0) {
+            free(bak[i]);
+            bak[i] = NULL;
+            bad = dest[i];
+            st = OTC_E_IO;
+        }
+    }
+    for (i = 0; i < n && st == OTC_OK; i++) {
+        if (fs_rename(staged[i], dest[i]) != 0) {
+            bad = dest[i];
+            st = OTC_E_IO;
+        } else {
+            placed = i + 1;
+        }
+    }
+    if (st == OTC_OK) {
+        for (i = 0; i < n; i++) {
+            if (bak[i] && fs_unlink(bak[i]) != 0)   /* the new file is in place; only the old copy is left over */
+                logf_(c, 2, "download: cannot remove %s (the replaced %s)", bak[i], dest[i]);
+            free(bak[i]);
+        }
+        return OTC_OK;
+    }
+    for (i = placed; i-- > 0;) {   /* the new files that went in: put the original back, or remove the file */
+        if (bak[i] ? fs_rename(bak[i], dest[i]) != 0 : fs_unlink(dest[i]) != 0) {
+            logf_(c, 2, "download: cannot restore %s", dest[i]);
+            add_changed(changed, sizeof changed, dest[i]);
+        }
+        free(bak[i]);
+        bak[i] = NULL;
+    }
+    for (i = 0; i < n; i++) {   /* the originals set aside whose new file never went in */
+        if (bak[i] && fs_rename(bak[i], dest[i]) != 0) {
+            logf_(c, 2, "download: cannot restore %s from %s", dest[i], bak[i]);
+            add_changed(changed, sizeof changed, dest[i]);
+        }
+        free(bak[i]);
+    }
+    if (st != OTC_E_IO) return st;
+    if (changed[0])
+        return fail(c, OTC_E_IO, bad, "cannot write %s; these paths changed and could not be restored: %s (an original that "
+                    "is not back is in a .tmp-bak- file next to it)", bad, changed);
+    return fail(c, OTC_E_IO, bad, "cannot write %s", bad);
+}
+
 otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, const char *dir, unsigned formats,
                             bool overwrite, char **paths, size_t cap, size_t *count)
 {
@@ -2803,7 +2882,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         {OTC_FORMAT_JSON, ".json"}, {OTC_FORMAT_JSON_GZ, ".json.gz"}, {OTC_FORMAT_JSONL, ".jsonl"}, {0, NULL}};
     fctx c;
     otc_release_info *info = NULL;
-    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8], *staged[8];
+    char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8], *staged[8], *dests[8];
     char sha_digest[65], targets[8][NAME_CAP];
     const char *target_sha[8];
     size_t n_rows = 0, n_t = 0, n_todo = 0, i, written = 0, sha_len = 0;
@@ -2812,6 +2891,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     if (count) *count = 0;
     memset(todo_name, 0, sizeof todo_name);
     memset(staged, 0, sizeof staged);
+    memset(dests, 0, sizeof dests);
     if (st != OTC_OK) goto out;
     if (!count || !dir || (cap && !paths)) { st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "dir and count must not be NULL"); goto out; }
     if (formats == OTC_FORMATS_DEFAULT) formats = OTC_FORMAT_JSONL;
@@ -2943,8 +3023,9 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         }
     }
     /* spec 4.3.2 "check, then rename": every file goes to a temporary file in dir first;
-     * only when all of them are there and checked are they renamed into place, so a
-     * failure (network, offline, checksum) leaves nothing in dir */
+     * only when all of them are there and checked are they renamed into place, all or
+     * nothing (CR2 DR17), so a failure (network, offline, checksum, a rename) leaves dir
+     * as it was */
     for (i = 0; i < n_todo; i++) {
         const char *name = todo_name[i];
         const char *sha = row_of(names, digests, n_rows, name);
@@ -2971,17 +3052,17 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         if (st != OTC_OK) goto out;
     }
     for (i = 0; i < n_todo; i++) {
-        char *dest = path2(dir, todo_name[i]);
-        if (!dest) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
-        if (fs_rename(staged[i], dest) != 0) {
-            st = fail(&c, OTC_E_IO, dest, "cannot write %s", dest);
-            free(dest);
-            goto out;
-        }
+        dests[i] = path2(dir, todo_name[i]);
+        if (!dests[i]) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
+    }
+    /* all or nothing (CR2 DR17): a failure here leaves dir as it was */
+    if ((st = rename_all_in(&c, dir, staged, dests, n_todo)) != OTC_OK) goto out;
+    for (i = 0; i < n_todo; i++) {
         free(staged[i]);
         staged[i] = NULL;
-        if (written < cap) paths[written] = dest;
-        else free(dest);
+        if (written < cap) paths[written] = dests[i];
+        else free(dests[i]);
+        dests[i] = NULL;
         written++;
     }
     *count = written;
@@ -2990,6 +3071,7 @@ out:
     for (i = 0; i < 8; i++) {   /* a failure leaves no temporary file behind */
         if (staged[i]) fs_unlink(staged[i]);
         free(staged[i]);
+        free(dests[i]);
     }
     if (st != OTC_OK && st != OTC_E_BUFFER_TOO_SMALL) {   /* nothing is reported on a failure */
         for (i = 0; i < written && i < cap; i++) {

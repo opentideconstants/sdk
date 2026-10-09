@@ -44,6 +44,6 @@ export interface NodeMod {
     removeDirSync(dir: string): void;
     /** Take `<dir>/.lock` without waiting (spec 5.4, CR2 DR3); false when another process holds a young lock. */
     tryLockSync(dir: string): boolean;
-    writeInto(dir: string, name: string, bytes: Uint8Array): string;
+    writeAllInto(dir: string, files: readonly (readonly [string, Uint8Array])[], warn: (message: string) => void): string[];
     runBlocking(url: URL, data: unknown, timeoutMs?: number): BlockingResult;
 }

@@ -901,6 +901,133 @@ class DownloadTest(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in out.iterdir()) if out.exists() else [], [])
 
 
+class DownloadAllOrNothingTest(unittest.TestCase):
+    """download(): the network-error fallback of latest (CR D22) and all-or-nothing renames (CR2 DR17; spec §4.3.2)."""
+
+    D = "20991231.2"
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.cache = str(self.root / "cache")
+        self.out = self.root / "out"
+        # a 200 pointer that is not JSON is a network error at once (spec §5.2 step 5), with no retry
+        self.script = {"/not-used": (404, {}, b"")}  # not empty: _Server keeps this dict, and fail_pointer adds to it
+        self.srv = _Server(script=self.script)
+
+    def tearDown(self):
+        self.srv.close()
+        self.tmp.cleanup()
+
+    def names(self):
+        return [f"OTC_{self.D}.jsonl", f"OTC_{self.D}.meta.json", f"OTC_{self.D}.sha256"]
+
+    def fail_pointer(self):
+        for n in ("/OTC_latest-f1.json", "/OTC_latest.json"):
+            self.script[n] = (200, {"Content-Type": "text/html"}, b"<html>captive portal</html>")
+
+    def test_latest_with_a_network_error_writes_the_newest_cached_release(self):
+        with otc.OpenTideConstants(base_url=self.srv.url, cache_dir=self.cache) as c:
+            self.fail_pointer()
+            written = c.download(to=str(self.out))
+        self.assertEqual(sorted(Path(p).name for p in written), self.names())
+        for n in self.names():
+            self.assertEqual((self.out / n).read_bytes(), (GOOD / n).read_bytes())
+
+    def test_latest_with_a_network_error_and_raise_raises(self):
+        with otc.OpenTideConstants(base_url=self.srv.url, cache_dir=self.cache, on_network_error="raise") as c:
+            self.fail_pointer()
+            with self.assertRaises(otc.NetworkError):
+                c.download(to=str(self.out))
+        self.assertFalse(self.out.exists() and any(self.out.iterdir()))
+
+    def test_latest_with_a_network_error_and_no_cached_release_raises(self):
+        with otc.OpenTideConstants(file=str(GOOD / f"OTC_{self.D}.jsonl"), base_url=self.srv.url,
+                                   cache_dir=self.cache) as c:
+            self.fail_pointer()
+            with self.assertRaises(otc.NetworkError):
+                c.download(to=str(self.out))
+
+    def _replaced_originals(self, c):
+        """Download, then change the .jsonl and the .meta.json in `out`; returns their changed bytes."""
+        c.download(self.D, to=str(self.out))
+        before = {}
+        for n in self.names()[:2]:
+            (self.out / n).write_bytes(b"changed " + n.encode())
+            before[n] = (self.out / n).read_bytes()
+        return before
+
+    def test_a_rename_that_fails_restores_every_original(self):
+        from unittest import mock
+        real = os.replace
+        meta = f"OTC_{self.D}.meta.json"
+
+        def replace(src, dst):
+            # the new .meta.json cannot be renamed in (the .jsonl went first)
+            if Path(dst).name == meta and Path(src).name.startswith(".tmp-") and not Path(src).name.startswith(".tmp-bak-"):
+                raise PermissionError(13, "injected", str(dst))
+            return real(src, dst)
+        with otc.OpenTideConstants(base_url=self.srv.url, cache_dir=self.cache) as c:
+            before = self._replaced_originals(c)
+            with mock.patch("os.replace", replace), self.assertRaises(otc.FileError) as cm:
+                c.download(self.D, to=str(self.out), overwrite=True)
+        self.assertEqual(cm.exception.path, str(self.out / meta))
+        for n, data in before.items():
+            self.assertEqual((self.out / n).read_bytes(), data, f"{n} was not restored")
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()), self.names())
+
+    def test_a_restore_that_fails_too_lists_the_paths_that_changed(self):
+        from unittest import mock
+        real = os.replace
+        jsonl, meta = f"OTC_{self.D}.jsonl", f"OTC_{self.D}.meta.json"
+
+        def replace(src, dst):
+            s, d = Path(src).name, Path(dst).name
+            if d == meta and s.startswith(".tmp-") and not s.startswith(".tmp-bak-"):
+                raise PermissionError(13, "injected", str(dst))
+            if d == jsonl and s.startswith(".tmp-bak-"):  # the original .jsonl cannot be put back
+                raise PermissionError(13, "injected restore", str(dst))
+            return real(src, dst)
+        with otc.OpenTideConstants(base_url=self.srv.url, cache_dir=self.cache) as c:
+            before = self._replaced_originals(c)
+            with mock.patch("os.replace", replace), self.assertRaises(otc.FileError) as cm:
+                c.download(self.D, to=str(self.out), overwrite=True)
+        self.assertIn(str(self.out / jsonl), str(cm.exception))
+        self.assertEqual((self.out / meta).read_bytes(), before[meta])
+
+
+class PrunePartialFailureTest(unittest.TestCase):
+    """prune stops at the first release it cannot remove; CacheError.removed lists the ones removed before it
+    (CR2 DR18; spec §4.3)."""
+
+    def test_the_cache_error_reports_what_was_removed(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            srv = _Server()
+            try:
+                for d in ("20991231", "20991231.2"):
+                    otc.OpenTideConstants(release=d, base_url=srv.url, cache_dir=tmp).close()
+                with otc.OpenTideConstants(release="20991231.2", base_url=srv.url, cache_dir=tmp) as c:
+                    listed = ["20991231.2", "20991230", "20991231", "20991229"]
+                    calls = []
+
+                    def remove(ds):
+                        calls.append(ds)
+                        if ds == "20991231":
+                            raise otc.CacheError("cannot remove 20991231")
+                        return True
+                    with mock.patch.object(c._cache, "cached", return_value=listed), \
+                            mock.patch.object(c._cache, "remove_release", side_effect=remove), \
+                            self.assertRaises(otc.CacheError) as cm:
+                        c.prune(keep=0)
+            finally:
+                srv.close()
+        self.assertEqual(calls, ["20991230", "20991231"])  # stops at the first failure
+        self.assertEqual(list(cm.exception.removed), ["20991230"])
+
+
 class AttributionTest(RepeatedIdsTest):
     """Attribution edge cases (spec §4.6, CR D2; review PK15)."""
 
