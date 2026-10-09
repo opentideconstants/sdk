@@ -555,7 +555,6 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     c->o = o;
     if (o && otc__err_usable(o->error)) c->err = o->error;   /* else the detail stays in own: never written past */
     otc_error_init(c->err);
-    if (!g_curl_ok) return fail(c, OTC_E_NETWORK, NULL, "curl_global_init failed");
     if (o && o->cache_dir) root = otc__strdup(o->cache_dir);
     else if ((v = env_get("OPENTIDECONSTANTS_CACHE_DIR")) != NULL) root = otc__strdup(v);
     else if (!(root = default_root()) && !default_root_env()) {
@@ -862,6 +861,11 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
     const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : NULL;
     const char *ca = (c->o && c->o->ca_file) ? c->o->ca_file : env_get("SSL_CERT_FILE");
     *result = GET_OK;
+    /* only a request needs libcurl: offline and cache-only calls work without it (R2-108) */
+    if (!g_curl_ok) {
+        fail(c, OTC_E_NETWORK, url, "curl_global_init failed: no request can be sent (%s)", url);
+        return OTC_E_NETWORK;
+    }
     if (strncmp(url, "http://", 7) != 0 && !https) {
         fail(c, OTC_E_NETWORK, url, "not an http(s) URL: %s", url);
         return OTC_E_NETWORK;
