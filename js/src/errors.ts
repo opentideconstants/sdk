@@ -26,13 +26,32 @@ interface CauseOption {
     cause?: unknown;
 }
 
-/** The base class of every SDK error. */
+/**
+ * The userinfo of a URL in free text: "scheme://" and the authority up to its last "@". The authority ends at "/",
+ * "?", "#", white space or a quote, so a JSON-quoted URL is handled too (spec 5.7, CR2 DR21).
+ */
+const USERINFO = /([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/?#\s'"<>`]*@/g;
+
+/** @internal `text` with the user and password of every URL in it replaced by `***` (spec 5.7, CR2 DR21). */
+export function redactCredentials(text: string): string {
+    return text.replace(USERINFO, "$1***@");
+}
+
+/** @internal One URL (a proxy from the environment may have no scheme) with its user and password redacted. */
+export function redactUrl(url: string): string {
+    if (url.includes("://")) return redactCredentials(url);
+    const at = url.lastIndexOf("@");
+    return at < 0 || url.slice(0, at).includes("/") ? url : `***${url.slice(at)}`;
+}
+
+/** The base class of every SDK error. A URL in the message never carries its user and password (CR2 DR21). */
 export class OpenTideConstantsError extends Error {
     /** The stable error code (spec 4.8). */
     readonly code: ErrorCode;
 
     constructor(code: ErrorCode, message: string, options?: CauseOption) {
-        super(message, options && options.cause !== undefined ? { cause: options.cause } : undefined);
+        super(typeof message === "string" ? redactCredentials(message) : message,
+            options && options.cause !== undefined ? { cause: options.cause } : undefined);
         this.code = code;
         this.name = new.target.name;
     }

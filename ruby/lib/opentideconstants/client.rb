@@ -320,7 +320,7 @@ class OpenTideConstants
     end
 
     def log(level, msg)
-        @logger&.public_send(level, "opentideconstants: #{msg}")
+        @logger&.public_send(level, "opentideconstants: #{Redact.text(msg)}") # no URL user or password (CR2 DR21)
     end
 
     private :http, :base_url, :offline, :on_network_error, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,

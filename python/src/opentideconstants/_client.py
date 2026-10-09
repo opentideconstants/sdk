@@ -10,6 +10,7 @@ import re
 import secrets
 import threading
 import time
+import traceback
 import weakref
 import zlib
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from ._cache import DATESTAMP_RE, Cache, atomic_write, datestamp_key, default_ro
 from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
-                      ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError)
+                      ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError, redact_credentials)
 from ._http import Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
 from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, file_sha256, load_document,
@@ -142,7 +143,7 @@ def _auto_update_error(e: Exception) -> OpenTideConstantsError:
     import socket
     import ssl
     import urllib.error
-    msg = f"automatic update failed: {type(e).__name__}: {e}"
+    msg = f"automatic update failed: {type(e).__name__}: {redact_credentials(str(e))}"
     if isinstance(e, (ConnectionError, TimeoutError, socket.gaierror, socket.herror, http.client.HTTPException,
                       ssl.SSLError, urllib.error.URLError)):
         err: OpenTideConstantsError = NetworkError(msg)
@@ -900,9 +901,11 @@ class OpenTideConstants:
             try:
                 self._update()
             except Exception as e:  # noqa: BLE001 - an automatic update never breaks the caller's query
-                # keep the current release; log the failure with its stack and record it (spec §5.6, CR2 DR5)
+                # keep the current release; log the failure with its stack and record it (spec §5.6, CR2 DR5),
+                # with the user and password of every URL in it replaced (CR2 DR21)
                 self._last_error = _auto_update_error(e)
-                self._log.warning("automatic update failed: %s", self._last_error, exc_info=e)
+                self._log.warning("automatic update failed: %s\n%s", redact_credentials(str(self._last_error)),
+                                  redact_credentials("".join(traceback.format_exception(type(e), e, e.__traceback__))))
 
     def verify(self) -> bool:
         """Hash the loaded release's files again in full and compare them with OTC_{D}.sha256 (spec §4.3). A

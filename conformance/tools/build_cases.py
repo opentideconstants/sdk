@@ -41,6 +41,7 @@ TOL = 1e-6
 FIX = "${fixtures}"
 SRV = "${server}"
 SRV_ALIAS = "${server_alias}"  # the fixture server under a name only the recording proxy resolves
+CRED_USER, CRED_PASS = "otcpk12user", "Pk12S3cretPW"  # distinctive credentials for the DR21 redaction cases
 D10 = "20991231.10"            # fixtures/order: newer than 20991231.2 by counter, older by string order
 
 # --------------------------------------------------------------------------- fixtures
@@ -1202,6 +1203,26 @@ def group_network():
                     [drv("restart_runner", env={"HTTP_PROXY": "${proxy}", "http_proxy": "${proxy}", "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}),
                      open_latest(), drv("assert_requests", source="proxy", count=0), drv("assert_requests", source="server", min=2)],
                     requires=["fs"]))
+    # Credentials (spec 5.7, CR2 DR21): the user and password of a URL never appear in an error message. The URLs
+    # fail (a socks5 proxy, a closed port 1), so the message is the SDK's own, not a server's.
+    no_creds = {"$regex": r"^(?![\s\S]*(" + CRED_USER + "|" + CRED_PASS + "))"}
+    out.append(case("net/proxy-credentials-redacted", "a proxy option that is not an http(s) URL: its user and password are not in the message (DR21)", "5.7",
+                    [open_latest({"error": "invalid_argument", "error_message": no_creds},
+                                 proxy=f"socks5://{CRED_USER}:{CRED_PASS}@proxy.invalid:1080", on_network_error="raise")],
+                    requires=["fs"]))
+    out.append(case("net/proxy-env-credentials-redacted", "an http_proxy that refuses the connection: its user and password are not in the message (DR21)", "5.7",
+                    [drv("restart_runner", env={"HTTP_PROXY": f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1",
+                                                "http_proxy": f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1"}),
+                     open_latest({"error": "network", "error_message": no_creds}, base_url=GA, on_network_error="raise")],
+                    requires=["fs"], timeout_s=120))
+    out.append(case("net/proxy-unreachable-credentials-redacted", "an http proxy that refuses the connection: its user and password are not in the message (DR21)", "5.7",
+                    [open_latest({"error": "network", "error_message": no_creds},
+                                 proxy=f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1", on_network_error="raise")],
+                    requires=["fs"], timeout_s=120))
+    out.append(case("net/base-url-credentials-redacted", "a base_url with a user and password that fails: they are not in the message (DR21)", "4.2, 5.7",
+                    [open_latest({"error": "network", "error_message": no_creds},
+                                 base_url=f"http://{CRED_USER}:{CRED_PASS}@127.0.0.1:1/good/", on_network_error="raise")],
+                    requires=["fs"], timeout_s=120))
     # releases / latest / check_for_update
     out.append(case("net/releases", "releases(): every release from OTC_index.json, newest first", "4.3",
                     [open_latest(), net(step("releases", {"releases": [info2, info1]}))], requires=["fs"]))

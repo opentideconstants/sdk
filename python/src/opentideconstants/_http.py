@@ -17,7 +17,7 @@ from typing import Optional
 from urllib.parse import unquote, urljoin, urlsplit
 from urllib.request import proxy_bypass_environment
 
-from ._errors import FileError, InvalidArgumentError, NetworkError
+from ._errors import FileError, InvalidArgumentError, NetworkError, redact_credentials, redact_url
 
 CONNECT_TIMEOUT_S = 10.0
 READ_TIMEOUT_S = 60.0
@@ -56,7 +56,8 @@ def check_http_url(name: str, url) -> None:
     except ValueError:
         ok = False
     if not ok:
-        raise InvalidArgumentError(f"{name} must be an absolute http or https URL, not {url!r}")
+        shown = redact_url(url) if isinstance(url, str) else url  # no user or password in the message (CR2 DR21)
+        raise InvalidArgumentError(f"{name} must be an absolute http or https URL, not {shown!r}")
 
 
 class _Retry(Exception):
@@ -133,7 +134,7 @@ class Http:
             p = urlsplit(proxy if "://" in proxy else "http://" + proxy) if proxy else None
             if p is not None:
                 if p.scheme not in ("http", "https") or not p.hostname:
-                    raise ValueError(f"bad proxy {proxy!r}")
+                    raise ValueError(f"bad proxy {redact_url(proxy)!r}")
                 ph, pp = p.hostname, p.port or (443 if p.scheme == "https" else 80)
                 if p.scheme == "https" and u.scheme == "https":
                     raise ValueError("an https proxy for an https URL is not supported; use an http proxy")
@@ -250,7 +251,7 @@ class Http:
             nxt = urljoin(url, loc)
             if urlsplit(url).scheme == "https" and urlsplit(nxt).scheme != "https":
                 raise NetworkError(f"refused a redirect from https to {nxt}", url=url, status=r.status)
-            self.log.debug("GET %s -> %s %s", url, r.status, nxt)
+            self.log.debug("GET %s -> %s %s", redact_credentials(url), r.status, redact_credentials(nxt))
             url = nxt
         raise NetworkError(f"more than {MAX_REDIRECTS} redirects for {url}", url=url, status=r.status)
 
@@ -270,7 +271,7 @@ class Http:
                 sink.truncate()
             try:
                 r = self._follow(url, h, sink, accept_gzip)
-                self.log.debug("GET %s -> %s", url, r.status)
+                self.log.debug("GET %s -> %s", redact_credentials(url), r.status)
                 return r
             except _SinkError as e:
                 raise e.error from None  # a local write failed (ENOSPC, EIO): the caller's io/cache error
@@ -280,7 +281,7 @@ class Http:
                     wait = BACKOFF_S[attempt]
                     if e.retry_after is not None:
                         wait = max(wait, e.retry_after)
-                    self.log.debug("GET %s failed (%s); retry in %.1f s", url, e.error, wait)
+                    self.log.debug("GET %s failed (%s); retry in %.1f s", redact_credentials(url), e.error, wait)
                     time.sleep(wait)
         raise last
 

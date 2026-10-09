@@ -185,3 +185,44 @@ end
 Dir[File.join(__dir__, "test_*.rb")].sort.each do |f|
     require f unless File.expand_path(f) == File.expand_path(__FILE__)
 end
+
+# The user and password of a URL never appear in an error message or a log
+# line (spec §5.7, CR2 DR21).
+class CredentialsRedactedTest < Minitest::Test
+    require "logger"
+    require "stringio"
+    require "tmpdir"
+
+    SECRET = "Pk12S3cretPW".freeze
+
+    def assert_redacted(text)
+        refute_includes text, SECRET
+        refute_includes text, "otcuser"
+        assert_includes text, "***@"
+    end
+
+    def test_bad_proxy_option_message
+        ["socks5://otcuser:#{SECRET}@proxy.invalid:1080", "otcuser:#{SECRET}@proxy invalid"].each do |proxy|
+            e = assert_raises(OpenTideConstants::InvalidArgumentError) do
+                OpenTideConstants.new(proxy: proxy, cache_dir: Dir.mktmpdir)
+            end
+            assert_redacted(e.message)
+        end
+    end
+
+    def test_refused_base_url_message_and_log
+        buf = StringIO.new
+        e = assert_raises(OpenTideConstants::NetworkError) do
+            OpenTideConstants::HTTP.new(logger: Logger.new(buf), sleeper: ->(_) {})
+                                   .get("http://otcuser:#{SECRET}@127.0.0.1:1/OTC_x.json")
+        end
+        assert_redacted(e.message)
+        assert_includes buf.string, "retry"
+        assert_redacted(buf.string)
+    end
+
+    def test_any_error_message_is_redacted
+        e = OpenTideConstants::CacheError.new("cannot read https://u:#{SECRET}@h.example/x and ftp://a@b/c")
+        assert_equal "cannot read https://***@h.example/x and ftp://***@b/c", e.message
+    end
+end

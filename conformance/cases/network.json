@@ -2311,6 +2311,134 @@
    ]
   },
   {
+   "id": "net/proxy-credentials-redacted",
+   "title": "a proxy option that is not an http(s) URL: its user and password are not in the message (DR21)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "proxy": "socks5://otcpk12user:Pk12S3cretPW@proxy.invalid:1080",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/proxy-env-credentials-redacted",
+   "title": "an http_proxy that refuses the connection: its user and password are not in the message (DR21)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "driver": "restart_runner",
+     "env": {
+      "HTTP_PROXY": "http://otcpk12user:Pk12S3cretPW@127.0.0.1:1",
+      "http_proxy": "http://otcpk12user:Pk12S3cretPW@127.0.0.1:1"
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server_alias}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_message": {
+       "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/proxy-unreachable-credentials-redacted",
+   "title": "an http proxy that refuses the connection: its user and password are not in the message (DR21)",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "proxy": "http://otcpk12user:Pk12S3cretPW@127.0.0.1:1",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_message": {
+       "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/base-url-credentials-redacted",
+   "title": "a base_url with a user and password that fails: they are not in the message (DR21)",
+   "spec": "4.2, 5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 120,
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "http://otcpk12user:Pk12S3cretPW@127.0.0.1:1/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_message": {
+       "$regex": "^(?![\\s\\S]*(otcpk12user|Pk12S3cretPW))"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "net/releases",
    "title": "releases(): every release from OTC_index.json, newest first",
    "spec": "4.3",

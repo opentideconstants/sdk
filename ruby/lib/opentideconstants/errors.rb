@@ -1,8 +1,38 @@
 class OpenTideConstants
+    # The user and password of a URL never go into an error message or a log
+    # line: they are replaced by "***" (spec §5.7, CR2 DR21).
+    module Redact
+        # "scheme://" and then the authority up to its last "@". The authority
+        # ends at "/", "?", "#", white space or a quote.
+        USERINFO = %r{([A-Za-z][A-Za-z0-9+.\-]*://)[^/?#\s'"<>]*@}.freeze
+
+        module_function
+
+        # text with the userinfo of every URL in it redacted.
+        def text(text)
+            text.gsub(USERINFO, '\1***@')
+        end
+
+        # One URL (a proxy may have no scheme) with its userinfo redacted.
+        def url(url)
+            s = url.to_s
+            return text(s) if s.include?("://")
+
+            head, at, tail = s.rpartition("@")
+            at.empty? || head.include?("/") ? s : "***@#{tail}"
+        end
+    end
+    private_constant :Redact
+
     # The base class of every SDK error (spec §4.8). Every error has a stable
-    # string #code; every error class is a direct subclass of this one.
+    # string #code; every error class is a direct subclass of this one. A URL
+    # in the message never carries its user and password (CR2 DR21).
     class Error < StandardError
         CODE = "error".freeze
+
+        def initialize(message = nil)
+            super(message.is_a?(String) ? Redact.text(message) : message)
+        end
 
         def code
             self.class::CODE

@@ -897,6 +897,55 @@ class HttpTest(unittest.TestCase):
             srv.close()
 
 
+class CredentialsRedactedTest(unittest.TestCase):
+    """The user and password of a URL never appear in an error message or a log line (spec §5.7, CR2 DR21)."""
+
+    SECRET = "Pk12S3cretPW"
+
+    def test_bad_proxy_option_message(self):
+        for proxy in (f"socks5://otcuser:{self.SECRET}@proxy.invalid:1080", f"otcuser:{self.SECRET}@proxy.invalid"):
+            with self.assertRaises(otc.InvalidArgumentError) as cm:
+                otc.OpenTideConstants(proxy=proxy, cache_dir=os.devnull)
+            self.assertNotIn(self.SECRET, str(cm.exception))
+            self.assertNotIn("otcuser", str(cm.exception))
+            self.assertIn("***@proxy.invalid", str(cm.exception))
+
+    def test_failed_request_message_and_log(self):
+        import io
+        import logging
+        from opentideconstants import _http
+        buf = io.StringIO()
+        log = logging.getLogger("otc-test-dr21")
+        log.setLevel(logging.DEBUG)
+        log.addHandler(logging.StreamHandler(buf))
+        saved = _http.BACKOFF_S
+        _http.BACKOFF_S = (0.0, 0.0)
+        env = {k: os.environ.pop(k) for k in ("http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY") if k in os.environ}
+        os.environ["http_proxy"] = f"socks5://otcuser:{self.SECRET}@proxy.invalid:1080"
+        try:
+            for url, proxy in ((f"http://otcuser:{self.SECRET}@127.0.0.1:1/OTC_x.json", None),   # a refused connection
+                               ("http://127.0.0.1:1/OTC_x.json", "env")):                        # a bad environment proxy
+                if proxy is None:
+                    os.environ.pop("http_proxy")
+                with self.assertRaises(otc.NetworkError) as cm:
+                    _http.Http(user_agent="t", logger=log).get(url)
+                self.assertNotIn(self.SECRET, str(cm.exception))
+                self.assertNotIn("otcuser", str(cm.exception))
+                self.assertIn("***@", str(cm.exception))
+                os.environ["http_proxy"] = f"socks5://otcuser:{self.SECRET}@proxy.invalid:1080"
+            self.assertIn("retry", buf.getvalue())
+            self.assertNotIn(self.SECRET, buf.getvalue())
+            self.assertNotIn("otcuser", buf.getvalue())
+        finally:
+            _http.BACKOFF_S = saved
+            os.environ.pop("http_proxy", None)
+            os.environ.update(env)
+
+    def test_any_error_message_is_redacted(self):
+        e = otc.CacheError(f"cannot read https://u:{self.SECRET}@h.example/x and ftp://a@b/c")
+        self.assertEqual(str(e), "cannot read https://***@h.example/x and ftp://***@b/c")
+
+
 class LifecycleTest(unittest.TestCase):
     """close(), swapped-out releases and the automatic update (spec §4.2, §4.3, §5.6, CR D21; review PK13)."""
 

@@ -987,3 +987,33 @@ test("R2-128: a close while update() downloads the new release wins: update is i
         srv.close();
     }
 });
+
+test("DR21: the user and password of a URL are not in an error message or a log line", async () => {
+    const SECRET = "Pk12S3cretPW";
+    const clean = (s) => {
+        assert.ok(!s.includes(SECRET), s);
+        assert.ok(!s.includes("otcuser"), s);
+        assert.ok(s.includes("***@"), s);
+    };
+    for (const proxy of [`socks5://otcuser:${SECRET}@proxy.invalid:1080`]) {
+        await assert.rejects(otc.OpenTideConstants.open({ proxy, offline: false, cacheDir: "/nonexistent-dr21", onNetworkError: "raise" }),
+            (e) => { assert.equal(e.code, "invalid_argument"); clean(e.message); return true; });
+    }
+    const { nodePlatform } = await import("../dist/node.js");
+    const saved = process.env.http_proxy;
+    process.env.http_proxy = `otcuser:${SECRET}@proxy invalid`; // an environment proxy with no scheme
+    try {
+        await assert.rejects(nodePlatform().get("http://example.invalid/OTC_latest.json", { headers: {}, timeout: 5, proxy: null, caFile: null }),
+            (e) => { assert.equal(e.code, "invalid_argument"); clean(e.message); return true; });
+    } finally {
+        if (saved === undefined) delete process.env.http_proxy; else process.env.http_proxy = saved;
+    }
+    const e = new otc.CacheError(`cannot read https://u:${SECRET}@h.example/x and ftp://a@b/c`);
+    assert.equal(e.message, "cannot read https://***@h.example/x and ftp://***@b/c");
+    const { log } = await import("../dist/core.js");
+    const lines = [];
+    log({ logger: { debug: (m) => lines.push(m), info: (m) => lines.push(m), warn: (m) => lines.push(m) } }, "debug",
+        `GET http://otcuser:${SECRET}@127.0.0.1:1/good/OTC_latest-f1.json 200`);
+    assert.equal(lines.length, 1);
+    clean(lines[0]);
+});
