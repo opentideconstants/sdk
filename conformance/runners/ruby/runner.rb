@@ -268,15 +268,18 @@ class Runner
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
         code = e.code.to_s
+        message = e.message.to_s
         if e.respond_to?(:tombstone) && e.tombstone
-            # a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails)
-            fields["tombstone"] = begin
-                tombstone(e.tombstone)
+            # a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails), and the
+            # message says why
+            begin
+                fields["tombstone"] = tombstone(e.tombstone)
             rescue StandardError, ScriptError => te
-                code = "uncaught:#{te.class}"
+                fields["tombstone"] = code = "uncaught:#{te.class}"
+                message = "#{message} (the runner cannot encode the tombstone: #{te.class}: #{te.message})"
             end
         end
-        { "code" => code, "message" => e.message.to_s, "fields" => finite(fields) }
+        { "code" => code, "message" => message, "fields" => finite(fields) }
     end
 
     def file_info(f)
