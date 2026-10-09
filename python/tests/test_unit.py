@@ -91,6 +91,93 @@ class CacheDatestampTest(unittest.TestCase):
                 datestamp_key(bad)
 
 
+class _Server:
+    """A local HTTP server for unit tests: serves conformance/fixtures/<sub> (always 200, no ETag); `script` maps a
+    path to (status, headers, body) for special answers."""
+
+    def __init__(self, sub="good", script=None):
+        import functools
+        import http.server
+        import threading
+        script = script or {}
+        root = str(FIXTURES / sub)
+        self.requests = []
+        outer = self
+
+        class H(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                outer.requests.append((self.path, dict(self.headers)))
+                if self.path in script:
+                    status, headers, body = script[self.path]
+                    self.send_response(status)
+                    for k, v in headers.items():
+                        self.send_header(k, v)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                super().do_GET()
+
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(H, directory=root))
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/"
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+class PointerCacheTest(unittest.TestCase):
+    """The cached pointer (spec §5.2 step 2 and 5, §5.4; review PK02 P80, P81, P32)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "cache"
+
+    def tearDown(self):
+        for p in self.cache.rglob("*"):
+            if p.is_dir():
+                p.chmod(0o755)
+        self.tmp.cleanup()
+
+    def test_unconditional_304_with_no_cached_pointer_is_not_a_raw_error(self):
+        srv = _Server(script={"/OTC_latest-f1.json": (304, {}, b"")})
+        try:
+            with self.assertRaises(otc.NetworkError):  # a 304 to a request with no If-None-Match is a server fault
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache))
+        finally:
+            srv.close()
+
+    def test_a_pointer_cache_that_cannot_be_written_is_not_fatal(self):
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            (self.cache / "v1" / "pointer").chmod(0o555)
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as c:
+                self.assertEqual(c.release.datestamp, "20991231.2")
+        finally:
+            srv.close()
+
+    def test_body_is_not_replaced_when_the_old_etag_cannot_be_removed(self):
+        from opentideconstants._cache import Cache
+        c = Cache(self.cache)
+        c.write_pointer("OTC_latest-f1.json", b'{"a": 1}', '"e1"')
+        d = self.cache / "v1" / "pointer"
+        (d / "OTC_latest-f1.json.etag").unlink()
+        (d / "OTC_latest-f1.json.etag").mkdir()  # cannot be unlinked as a file
+        (d / "OTC_latest-f1.json.etag" / "x").write_text("y")
+        try:
+            c.write_pointer("OTC_latest-f1.json", b'{"a": 2}', None)
+        except otc.CacheError:
+            pass
+        self.assertEqual((d / "OTC_latest-f1.json").read_bytes(), b'{"a": 1}')
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

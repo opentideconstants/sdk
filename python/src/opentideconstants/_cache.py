@@ -137,25 +137,35 @@ class Cache:
             return None
 
     def write_pointer(self, name: str, body: bytes, etag) -> None:
+        """Store a pointer or index body and its ETag. The old ETag is removed first, so a body is never paired
+        with an ETag of another body (a crash in between leaves no ETag: the next GET is unconditional). A lock
+        on the pointer directory keeps two writers of this SDK from interleaving."""
         d = self.pointer_dir(create=True)
         try:
-            atomic_write(d / name, body)
-            if etag:
-                atomic_write(d / (name + ".etag"), etag.encode("utf-8"))
-            else:
+            with lock_dir(d, "opentideconstants-python", name=f".lock-{name}"):
                 try:
                     (d / (name + ".etag")).unlink()
-                except OSError:
+                except FileNotFoundError:
                     pass
+                atomic_write(d / name, body)
+                if etag:
+                    atomic_write(d / (name + ".etag"), etag.encode("utf-8"))
         except OSError as e:
             raise CacheError(f"cannot write {d / name}: {e}") from e
 
+    def drop_pointer(self, name: str) -> None:
+        for n in (name + ".etag", name):
+            try:
+                (self.pointer_dir() / n).unlink()
+            except OSError:
+                pass
+
 
 @contextmanager
-def lock_dir(directory: Path, sdk: str, done=None):
+def lock_dir(directory: Path, sdk: str, done=None, name=".lock"):
     """Take <directory>/.lock (spec §5.4 Locks). Yields True when the lock is held, or False when
     ``done()`` became true while waiting (another process finished the work)."""
-    lock = directory / ".lock"
+    lock = directory / name
     waited = 0.0
     held = False
     while True:

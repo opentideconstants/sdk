@@ -281,7 +281,6 @@
    "case": "rules/pk02/pointer-200-not-json",
    "runners": [
     "c-fetch",
-    "python",
     "ruby",
     "typescript"
    ],
@@ -292,7 +291,6 @@
    "case": "rules/pk02/releases-use-cache",
    "runners": [
     "c-fetch",
-    "python",
     "typescript"
    ],
    "package": "PK02",

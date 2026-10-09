@@ -292,24 +292,40 @@ class OpenTideConstants:
     # ---- pointer and index
 
     def _get_json_conditional(self, name: str):
-        """GET a changing file (pointer or index) with If-None-Match; returns (doc, url) or None on 404."""
+        """GET a changing file (pointer or index) with If-None-Match; returns (doc, url) or None on 404.
+
+        A 200 body is parsed before it is cached, so a body that is not JSON (a captive portal) never replaces a
+        good cached copy; it is a network error (spec §5.2 step 5, CR D8). A failure to write the cache is logged,
+        not raised (CR D8)."""
         url = self._url(name)
         body, etag = self._cache.read_pointer(name)
         headers = {"If-None-Match": etag} if body is not None and etag else {}
         r = self._http.get(url, headers=headers, accept_gzip=True)
+        if r.status == 304 and not headers:
+            raise NetworkError(f"HTTP 304 for {url} with no If-None-Match", url=url, status=304)
         if r.status == 404:
             return None
         if r.status == 304:
             self._log.debug("pointer %s: 304", name)
-        else:
-            self._log.debug("pointer %s: 200", name)
-            body = r.body
-            ensure_dir(self._cache.root)
-            self._cache.write_pointer(name, body, r.headers.get("etag"))
+            try:
+                return json.loads(body.decode("utf-8")), url
+            except (ValueError, UnicodeDecodeError):
+                # the cached copy is broken: drop it and read the file again with no If-None-Match
+                self._log.warning("cached %s is not JSON; reading it again", name)
+                self._cache.drop_pointer(name)
+                return self._get_json_conditional(name)
+        self._log.debug("pointer %s: 200", name)
         try:
-            return json.loads(body.decode("utf-8")), url
+            doc = json.loads(r.body.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as e:
-            raise InvalidReleaseError(f"{name}: not JSON") from e
+            raise NetworkError(f"{url}: the 200 body is not JSON (a captive portal or a proxy page?)", url=url,
+                               status=r.status) from e
+        try:
+            ensure_dir(self._cache.root)
+            self._cache.write_pointer(name, r.body, r.headers.get("etag"))
+        except CacheError as e:
+            self._log.warning("cannot cache %s: %s", name, e)
+        return doc, url
 
     def _info(self, entry, url, what="the pointer") -> ReleaseInfo:
         ds = entry.get("datestamp") if isinstance(entry, dict) else None
@@ -557,7 +573,18 @@ class OpenTideConstants:
             except (ValueError, UnicodeDecodeError) as e:
                 raise InvalidReleaseError("cached OTC_index.json: not JSON") from e
             return tuple(self._index_infos(doc, self._url("OTC_index.json")))
-        infos = tuple(self._fetch_index())
+        try:
+            infos = tuple(self._fetch_index())
+        except NetworkError as e:
+            body = self._cache.read_pointer_body("OTC_index.json") if self._on_network_error == "use_cache" else None
+            if body is None:
+                raise
+            try:
+                doc = json.loads(body.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                raise e from None
+            self._log.warning("network error (%s); using the cached release index", e)
+            return tuple(self._index_infos(doc, self._url("OTC_index.json")))
         for i in infos:
             self._note_entry(i)
         return infos
