@@ -33,6 +33,7 @@ import copy
 import gzip
 import hashlib
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -790,6 +791,21 @@ def version_key(v):
     return major, minor
 
 
+def checked_version(v, what):
+    """A MAJOR.MINOR version from a release (spec 7.4); anything else is invalid_release (D9), never a raw error."""
+    if not isinstance(v, str) or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", v):
+        raise Fail("invalid_release", f"{what} {v!r} is not MAJOR.MINOR")
+    return version_key(v)
+
+
+def read_file(root, name):
+    """A file the release names. A missing one is what an SDK sees as a 404 for a listed file (D32: network)."""
+    try:
+        return (root / name).read_bytes()
+    except FileNotFoundError:
+        raise Fail("network", f"{name} is listed but missing") from None
+
+
 def resolve(schema, node):
     while isinstance(node, dict) and "$ref" in node:
         node = schema["$defs"][node["$ref"].split("/")[-1]]
@@ -919,13 +935,15 @@ def open_release(root, datestamp, schemas):
         raise Fail("release_not_found", datestamp)
     sums_path = root / f"OTC_{datestamp}.sha256"
     sums = {}
-    for line in sums_path.read_text(encoding="utf-8").splitlines():
-        digest, name = line.split("  ", 1)
-        sums[name] = digest
+    for line in read_file(root, sums_path.name).decode("utf-8", "replace").splitlines():
+        m = re.fullmatch(r"([0-9a-f]{64})  (\S.*)", line)
+        if not m:
+            raise Fail("checksum_mismatch", f"{sums_path.name}: a line that is not '<sha256>  <name>': {line[:80]!r}")
+        sums[m.group(2)] = m.group(1)
     # Spec 5.2 step 4.1: the pointer and the .sha256 file must agree.
     for f in entry["files"]:
         if f["name"] == sums_path.name:
-            if sha(sums_path.read_bytes()) != f["sha256"]:
+            if sha(read_file(root, sums_path.name)) != f["sha256"]:
                 raise Fail("checksum_mismatch", f"{f['name']}: pointer and file differ")
             continue
         if sums.get(f["name"]) != f["sha256"]:
@@ -934,26 +952,32 @@ def open_release(root, datestamp, schemas):
         raise Fail("checksum_mismatch", "pointer and .sha256 list different files")
     # Step 4.2: size and SHA-256 of every file.
     for f in entry["files"]:
-        data = (root / f["name"]).read_bytes()
+        data = read_file(root, f["name"])
         if len(data) != f["size"]:
             raise Fail("checksum_mismatch", f"{f['name']}: size {len(data)} vs {f['size']}")
         if sha(data) != f["sha256"]:
             raise Fail("checksum_mismatch", f"{f['name']}: sha256 {sha(data)} vs {f['sha256']}")
-    body = (root / f"OTC_{datestamp}.json").read_bytes()
-    if gzip.decompress((root / f"OTC_{datestamp}.json.gz").read_bytes()) != body:
+    body = read_file(root, f"OTC_{datestamp}.json")
+    try:
+        unzipped = gzip.decompress(read_file(root, f"OTC_{datestamp}.json.gz"))
+    except (OSError, EOFError, zlib.error) as e:
+        raise Fail("checksum_mismatch", f".json.gz is not gzip: {type(e).__name__}: {e}") from None
+    if unzipped != body:
         raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
     try:
         doc = json.loads(body)
-        meta = json.loads((root / f"OTC_{datestamp}.meta.json").read_bytes())
-        lines = [json.loads(l) for l in (root / f"OTC_{datestamp}.jsonl").read_text(encoding="utf-8").splitlines()]
+        meta = json.loads(read_file(root, f"OTC_{datestamp}.meta.json"))
+        lines = [json.loads(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
+    if not isinstance(doc, dict):
+        raise Fail("invalid_release", "the release is not a JSON object")
     # Spec 7.4: the major must be supported, and release.min_reader_version must be readable.
-    major, minor = version_key(doc.get("format_version", ""))
+    major, minor = checked_version(doc.get("format_version"), "format_version")
     if major not in SUPPORTED_MAJORS:
         raise Fail("unsupported_format", f"format_version {doc['format_version']}")
     min_reader = (doc.get("release") or {}).get("min_reader_version")
-    if min_reader is not None and version_key(min_reader) > READER_FORMAT:
+    if min_reader is not None and checked_version(min_reader, "release.min_reader_version") > READER_FORMAT:
         raise Fail("reader_too_old", f"release {datestamp} needs a reader for format {min_reader}; "
                                      f"this reader reads format {'%d.%d' % READER_FORMAT}")
     checked, dropped = validate_release(doc, meta, lines, schemas,
