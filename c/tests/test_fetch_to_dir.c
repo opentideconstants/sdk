@@ -1,6 +1,8 @@
 /* otc_fetch_to_dir (spec 4.3.2).
  * C55: an existing file that cannot be read is OTC_E_IO, not "exists with a
- *      different SHA-256" (file_exists). */
+ *      different SHA-256" (file_exists).
+ * C54: "latest" on a network error honours on_network_error (CR D22): with
+ *      use_cache it writes the newest cached release; with raise it fails. */
 #include "otc_test.h"
 
 int main(void)
@@ -33,6 +35,22 @@ int main(void)
     }
     chmod(p, 0644);
     free(p);
+    /* C54 */
+    {
+        char *to2 = test_tmpdir(), *to3 = test_tmpdir(), path[4096];
+        size_t need;
+        CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_OK);   /* the release is cached */
+        fo.base_url = "http://127.0.0.1:9/";   /* the network is down */
+        memset(paths, 0, sizeof paths);
+        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to2, 0, false, paths, 8, &n), OTC_OK);
+        CHECK(n == 3);
+        for (i = 0; i < n && i < 8; i++) otc_free(paths[i]);
+        fo.on_network_error = OTC_ON_NETWORK_ERROR_RAISE;
+        memset(paths, 0, sizeof paths);
+        CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to3, 0, false, paths, 8, &n), OTC_E_NETWORK);
+        free(to2);
+        free(to3);
+    }
     free(cache);
     free(to);
     return test_done("test_fetch_to_dir");

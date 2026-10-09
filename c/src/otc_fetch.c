@@ -2623,8 +2623,19 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
             if ((st = newest_cached(&c, &ds)) != OTC_OK) goto out;
             if (!ds) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and no release is in the cache"); goto out; }
         } else {
-            if ((st = latest_info(&c, &info, NULL)) != OTC_OK) goto out;
-            ds = otc__strdup(info->datestamp);
+            st = latest_info(&c, &info, NULL);
+            if (st == OTC_E_NETWORK && !c.raise) {
+                /* spec 4.3.2 (CR D22): use_cache writes the newest cached readable release */
+                otc_error net = *c.err;
+                if (newest_cached(&c, &ds) != OTC_OK || !ds) { *c.err = net; goto out; }
+                logf_(&c, 2, "network error (%s); writing the cached release %s", net.message, ds);
+                otc_error_init(c.err);
+                st = OTC_OK;
+            } else if (st != OTC_OK) {
+                goto out;
+            } else {
+                ds = otc__strdup(info->datestamp);
+            }
         }
     } else {
         ds = otc__strdup(release);

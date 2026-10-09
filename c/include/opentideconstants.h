@@ -702,9 +702,11 @@ OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, i
 OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
                                     bool *updated);
 /* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":
- * the latest. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL. paths gets
- * the full paths written (a file left alone because it was identical is not
- * listed). */
+ * the latest; on a network error with on_network_error USE_CACHE, the newest
+ * readable cached release. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL.
+ * paths gets the full paths written (a file left alone because it was
+ * identical is not listed). Every file is checked before any is renamed into
+ * dir, so a failure writes nothing there. */
 OTC_API otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, const char *dir,
                                     unsigned formats, bool overwrite, char **paths, size_t cap, size_t *count);
 /* Datestamps of the verified cached releases, newest first. */
