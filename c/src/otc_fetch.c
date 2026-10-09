@@ -413,7 +413,21 @@ typedef struct fctx {
     double      connect_s, read_s;
     int         raise;     /* on_network_error RAISE */
     otc_error   own;       /* the error detail when the caller passed none */
+    const otc_open_options *oo;   /* otc_fetch_open's caller options (log_fn, require_checksum), or NULL */
 } fctx;
+
+/* The options of an open of a cached file: the caller's (otc_fetch_open), with
+ * the error detail going to the fetch context. */
+static void cache_open_options(const fctx *c, otc_open_options *oo)
+{
+    otc_open_options_init(oo);
+    if (c->oo) {
+        oo->require_checksum = c->oo->require_checksum;
+        oo->log_fn = c->oo->log_fn;
+        oo->log_user_data = c->oo->log_user_data;
+    }
+    oo->error = c->err;
+}
 
 static void logf_(const fctx *c, int level, const char *fmt, ...)
 {
@@ -2013,8 +2027,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     if (!jsonl_path) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
     {
         otc_open_options oo;
-        otc_open_options_init(&oo);
-        oo.error = c->err;
+        cache_open_options(c, &oo);
         st = otc_open_file(jsonl_path, &oo, &rel);
         if (st != OTC_OK) goto out;
     }
@@ -2111,8 +2124,7 @@ static otc_status open_cached(fctx *c, const char *ds, otc_release **out)
     *out = NULL;
     if (!p) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     if ((st = check_cached_sizes(c, ds)) == OTC_OK) {
-        otc_open_options_init(&oo);
-        oo.error = c->err;
+        cache_open_options(c, &oo);
         st = otc_open_file(p, &oo, out);
         if (st == OTC_OK) write_stream_index(c, ds, *out);
     }
@@ -2288,6 +2300,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     if (st == OTC_OK && !out) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "out is NULL");
     if (st == OTC_OK && oopts && oopts->struct_size < sizeof *oopts)
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
+    if (st == OTC_OK) c.oo = oopts;   /* require_checksum and log_fn apply to the open of the cached file (C25) */
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
     if (st == OTC_OK) {
         otc_file_info *files = NULL;
