@@ -270,7 +270,15 @@ export async function readPointer(ctx: Ctx): Promise<PointerRead> {
     } else {
         log(ctx, "warn", `release ${entry.datestamp} needs a reader for format ${entry.min_reader_version}; looking for the newest release this SDK reads`);
     }
-    const index = await getIndex(ctx);
+    // no index (a 404) means no other release to choose: the error is then about the pointer's release, as in the
+    // other SDKs (reader_too_old or unsupported_format), never release_not_found (R2-098)
+    let index: PointerEntry[];
+    try {
+        index = await getIndex(ctx);
+    } catch (e) {
+        if (!(e instanceof ReleaseNotFoundError)) throw e;
+        index = [];
+    }
     const best = newestReadable(index);
     if (best) return out(best);
     const tooNew = [entry, ...index].filter((e) => supportedFormat(e.format_version))
