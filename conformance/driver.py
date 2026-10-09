@@ -515,6 +515,10 @@ def check_cases(cases):
 
 # --------------------------------------------------------------------------- runner process
 
+def _not_json(token):
+    raise ValueError(f"{token} is not JSON")
+
+
 class Runner:
     def __init__(self, cmd, env, stderr_path, cwd):
         self.cmd = cmd
@@ -541,8 +545,8 @@ class Runner:
                 status = None
             raise EOFError(f"runner closed its stdout (exit status {status})")
         try:
-            return json.loads(line)
-        except json.JSONDecodeError:
+            return json.loads(line, parse_constant=_not_json)
+        except ValueError:  # JSONDecodeError, or NaN / Infinity, which are not JSON
             raise RunnerError(f"runner printed a line that is not JSON: {line[:200]!r}")
 
     def send(self, msg):

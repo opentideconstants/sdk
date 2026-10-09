@@ -145,6 +145,23 @@ function encStats(s) {
     return { type: s.type, kind: s.kind, country: s.country, source: s.source, qc_status: s.qc_status };
 }
 
+// The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded
+// (JSON.stringify would print null and hide it).
+function finite(v) {
+    if (typeof v === "number") {
+        if (Number.isNaN(v)) return null;
+        if (!Number.isFinite(v)) throw new RangeError(`the SDK returned ${v}, which JSON cannot carry`);
+        return v;
+    }
+    if (Array.isArray(v)) return v.map(finite);
+    if (v !== null && typeof v === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(v))) {
+        const out = {};
+        for (const [k, x] of Object.entries(v)) out[k] = finite(x);
+        return out;
+    }
+    return v;
+}
+
 const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path"];
 
 export function makeRunner(sdk) {
@@ -318,7 +335,7 @@ export function makeRunner(sdk) {
         const fn = ops[msg.op];
         try {
             if (!fn) throw new Error(`unknown op ${msg.op}`);
-            const result = await fn(msg.args || {}, msg);
+            const result = finite(await fn(msg.args || {}, msg));
             return { ok: true, result };
         } catch (e) {
             if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {

@@ -345,6 +345,21 @@ class Runner:
         raise ValueError(f"unknown op {op!r}")
 
 
+def finite(v):
+    """The reply as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded."""
+    if isinstance(v, float):
+        if math.isnan(v):
+            return None
+        if math.isinf(v):
+            raise ValueError(f"the SDK returned {v}, which JSON cannot carry")
+        return v
+    if isinstance(v, dict):
+        return {k: finite(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [finite(x) for x in v]
+    return v
+
+
 ERROR_FIELDS = ("url", "status", "file", "expected", "actual", "path")
 
 
@@ -371,7 +386,7 @@ def main():
             out.flush()
             continue
         try:
-            reply = {"ok": True, "result": runner.handle(req)}
+            reply = {"ok": True, "result": finite(runner.handle(req))}
         except Exception as e:  # noqa: BLE001 - the protocol reports every exception
             base = None
             try:
@@ -393,7 +408,7 @@ def main():
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)
                 reply = {"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": str(e)}}
-        out.write(json.dumps(reply) + "\n")
+        out.write(json.dumps(reply, allow_nan=False) + "\n")
         out.flush()
     if runner.client is not None:
         runner.client.close()

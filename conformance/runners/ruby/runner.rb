@@ -36,7 +36,7 @@ class Runner
         op = req["op"]
         args = req["args"] || {}
         target = req["on"] ? @held.fetch(req["on"]) : nil
-        { "ok" => true, "result" => dispatch(op, args, target) }
+        { "ok" => true, "result" => finite(dispatch(op, args, target)) }
     rescue SDK_ERROR => e
         { "ok" => false, "error" => encode_error(e) }
     rescue StandardError, ScriptError => e
@@ -50,6 +50,18 @@ class Runner
     end
 
     private
+
+    # The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded.
+    def finite(v)
+        case v
+        when Float
+            raise FloatDomainError, "the SDK returned #{v}, which JSON cannot carry" if v.infinite?
+            v.nan? ? nil : v
+        when Hash then v.to_h { |k, x| [k, finite(x)] }
+        when Array then v.map { |x| finite(x) }
+        else v
+        end
+    end
 
     def sym_kw(args, names)
         out = {}

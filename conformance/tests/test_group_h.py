@@ -62,3 +62,27 @@ def test_bad_request_line_gets_an_error_reply(lang):
     first = strict(out[0])
     assert first["ok"] is False and first["error"]["code"].startswith("uncaught:"), first
     assert strict(out[2]) == {"ok": True, "result": {"station_count": 20}}, out
+
+
+# --- a non-finite number from the SDK is an error reply, never Infinity (not JSON) or a silent null; NaN is null
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_infinity_is_an_error_reply(lang):
+    rc, hello, out, err = talk(lang, [OPEN, {"op": "station_count"}, {"op": "station_count"}], mode="inf")
+    assert len(out) == 3, (rc, out, err[-500:])
+    reply = strict(out[1])
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_nan_is_null(lang):
+    rc, hello, out, err = talk(lang, [OPEN, {"op": "station_count"}], mode="nan")
+    assert len(out) == 2 and strict(out[1]) == {"ok": True, "result": {"station_count": None}}, (rc, out, err[-500:])
+
+
+def test_driver_rejects_non_json_numbers_from_a_runner(tmp_path):
+    from _util import run_driver, write_cases, write_fake_runner
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "station_count", "expect": {"count": 1}}]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases),
+                   env={"FAKE_REPLY": '{"ok": true, "result": {"count": Infinity}}'})
+    assert "FAIL  a" in r.stdout and "not JSON" in r.stdout, r.stdout[-500:]
