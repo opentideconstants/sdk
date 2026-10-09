@@ -83,7 +83,8 @@ function retryAfter(res: HttpResponse): number | null {
  */
 export async function httpGet(ctx: Ctx, url: string, etag: string | null = null): Promise<HttpResponse> {
     const headers: Record<string, string> = { "User-Agent": ctx.userAgent };
-    if (!url.endsWith(".gz")) headers["Accept-Encoding"] = "gzip";
+    // a .gz file is fetched as it is: no transfer encoding on top (spec 5.7)
+    headers["Accept-Encoding"] = new URL(url).pathname.endsWith(".gz") ? "identity" : "gzip";
     if (etag) headers["If-None-Match"] = etag;
     const backoff = [1, 2];
     let last: NetworkError | null = null;

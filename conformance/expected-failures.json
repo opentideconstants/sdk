@@ -1190,8 +1190,7 @@
    "case": "rules/pk12/gz-with-content-encoding",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK12",
    "reason": "step 1 open: expected a result, got error 'checksum_mismatch' (OTC_20991231.2.json.gz: SHA-256 3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e (size 29814) does not match 0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698b"
@@ -1200,8 +1199,7 @@
    "case": "rules/pk12/http-proxy-uppercase-cgi",
    "runners": [
     "c-fetch",
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK12",
    "reason": "step 1 open: expected error 'network', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
@@ -1210,8 +1208,7 @@
    "case": "rules/pk12/redirect-five-hops",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK12",
    "reason": "step 1 open: expected a result, got error 'network' (HTTP 302 for http://127.0.0.1:51319/good/OTC_20991231.2.sha256)"

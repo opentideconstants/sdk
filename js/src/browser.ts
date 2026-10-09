@@ -98,10 +98,12 @@ async function browserGet(url: string, o: HttpOptions): Promise<HttpResponse> {
     const ms = (o.timeout ?? 60) * 1000;
     let timer = setTimeout(() => ctl.abort(), (o.timeout ?? 10) * 1000);
     try {
-        // A browser sets User-Agent and Accept-Encoding itself; only If-None-Match is sent (CORS-safe).
-        const headers: Record<string, string> = {};
-        for (const [k, v] of Object.entries(o.headers)) if (k.toLowerCase() === "if-none-match") headers[k] = v;
-        const res = await fetch(url, { headers, signal: ctl.signal, cache: "no-store" });
+        // No request header is sent (PK12 T8): a browser sets User-Agent and Accept-Encoding itself, and
+        // If-None-Match is not CORS-safelisted, so it would force a preflight; the ETag is not readable either
+        // unless the server exposes it. The browser's HTTP cache makes the request conditional instead
+        // ("no-cache": revalidate every time), and answers a 304 with the stored body as a 200.
+        void o.headers;
+        const res = await fetch(url, { signal: ctl.signal, cache: "no-cache" });
         clearTimeout(timer);
         timer = setTimeout(() => ctl.abort(), ms);
         const body = new Uint8Array(await res.arrayBuffer());

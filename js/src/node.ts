@@ -250,13 +250,17 @@ class NodeCache implements CacheStore {
     }
 }
 
-function noProxy(host: string): boolean {
+/** @internal True when NO_PROXY names this host. */
+export function noProxy(host: string): boolean {
     const np = envAnyCase("NO_PROXY");
     if (!np) return false;
     const h = host.toLowerCase().replace(/^\[|\]$/g, "");
     for (let rule of np.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)) {
         if (rule === "*") return true;
-        rule = rule.replace(/:\d+$/, "");
+        // strip a port: "[::1]:8080" and "host:8080", but not the colons of a bare IPv6 address (PK12 T89)
+        const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(rule);
+        if (bracketed && bracketed[1]) rule = bracketed[1];
+        else if ((rule.match(/:/g) ?? []).length === 1) rule = rule.replace(/:\d+$/, "");
         if (rule.startsWith("*.")) rule = rule.slice(1);
         if (h === rule.replace(/^\./, "") || (rule.startsWith(".") ? h.endsWith(rule) : h.endsWith("." + rule))) return true;
     }
@@ -284,14 +288,54 @@ function proxyFor(target: URL, explicit: string | null): URL | null {
     }
     if (noProxy(target.hostname)) return null;
     const name = target.protocol === "https:" ? "HTTPS_PROXY" : "HTTP_PROXY";
-    const v = envAnyCase(name);
+    // httpoxy (CR D7): in a CGI process (REQUEST_METHOD set) HTTP_PROXY may come from a request header; use only
+    // the lower-case http_proxy then
+    const v = name === "HTTP_PROXY" && env("REQUEST_METHOD") !== null ? env("http_proxy") : envAnyCase(name);
     if (!v) return null;
     const u = httpUrl(v, true);
     if (!u) throw new InvalidArgumentError(`the ${name} environment variable is not a proxy URL: ${v}`);
     return u;
 }
 
-function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
+
+/**
+ * One GET that follows up to 5 redirects (spec 5.7, CR D1). A 6th redirect, a redirect from https to http and a
+ * redirect with no usable Location are network errors.
+ */
+async function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
+    let current = url;
+    for (let hop = 0; ; hop++) {
+        const res = await nodeGetOnce(current, o);
+        if (!REDIRECTS.has(res.status)) return res;
+        const loc = res.header("location");
+        let next: URL;
+        try {
+            if (!loc) throw new Error("no Location header");
+            next = new URL(loc, current);
+        } catch (e) {
+            throw new NetworkError(`HTTP ${res.status} with no usable Location: ${current}`, { url: current, status: res.status, cause: e });
+        }
+        if (next.protocol !== "http:" && next.protocol !== "https:") {
+            throw new NetworkError(`redirect to ${next.protocol} refused: ${current}`, { url: current, status: res.status });
+        }
+        if (new URL(current).protocol === "https:" && next.protocol === "http:") {
+            throw new NetworkError(`redirect from https to http refused: ${current} -> ${next.href}`, { url: current, status: res.status });
+        }
+        if (hop + 1 > MAX_REDIRECTS) throw new NetworkError(`more than ${MAX_REDIRECTS} redirects: ${url}`, { url, status: res.status });
+        current = next.href;
+    }
+}
+
+/** Proxy-Authorization from the user and password of a proxy URL (percent-decoded), or none (PK12 T7). */
+function proxyAuth(proxy: URL): Record<string, string> {
+    if (!proxy.username && !proxy.password) return {};
+    const cred = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    return { "Proxy-Authorization": `Basic ${Buffer.from(cred, "utf8").toString("base64")}` };
+}
+
+function nodeGetOnce(url: string, o: HttpOptions): Promise<HttpResponse> {
     const target = new URL(url);
     const proxy = proxyFor(target, o.proxy);
     const connectMs = (o.timeout ?? 10) * 1000;
@@ -330,7 +374,8 @@ function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
                 if (!res.complete) return finish(fail("the connection closed before the body was complete"));
                 let body: Uint8Array = Buffer.concat(chunks);
                 const enc = (res.headers["content-encoding"] ?? "").toLowerCase();
-                if (enc === "gzip" || enc === "x-gzip") {
+                // a .gz file sent with Content-Encoding: gzip (some CDNs) is the file itself: keep the bytes (T10)
+                if ((enc === "gzip" || enc === "x-gzip") && !target.pathname.endsWith(".gz")) {
                     try {
                         body = zlib.gunzipSync(body);
                     } catch (e) {
@@ -354,12 +399,19 @@ function nodeGet(url: string, o: HttpOptions): Promise<HttpResponse> {
         if (!proxy) {
             req = mod.get(target, { headers: o.headers, ca }, onResponse);
         } else if (target.protocol === "http:") {
-            req = http.get({
-                host: proxy.hostname, port: proxy.port || 80, path: target.href,
-                headers: { ...o.headers, Host: target.host },
+            // an https:// proxy is reached over TLS; an http:// one in the clear (PK12 T7)
+            const pmod = proxy.protocol === "https:" ? https : http;
+            req = pmod.get({
+                host: proxy.hostname, port: proxy.port || (proxy.protocol === "https:" ? 443 : 80), path: target.href,
+                headers: { ...o.headers, Host: target.host, ...proxyAuth(proxy) }, ca,
             }, onResponse);
         } else {
-            const c = http.request({ host: proxy.hostname, port: proxy.port || 80, method: "CONNECT", path: `${target.hostname}:${target.port || 443}`, headers: { Host: `${target.hostname}:${target.port || 443}` } });
+            const pmod = proxy.protocol === "https:" ? https : http;
+            const c = pmod.request({
+                host: proxy.hostname, port: proxy.port || (proxy.protocol === "https:" ? 443 : 80), method: "CONNECT",
+                path: `${target.hostname}:${target.port || 443}`, ca,
+                headers: { Host: `${target.hostname}:${target.port || 443}`, ...proxyAuth(proxy) },
+            });
             req = c;
             c.on("connect", (res: http.IncomingMessage, socket: Duplex) => {
                 if (res.statusCode !== 200) {

@@ -297,3 +297,35 @@ test("T30/T31: no Cache Storage and no DecompressionStream are unsupported, not 
         globalThis.DecompressionStream = saved;
     }
 });
+
+import * as http from "node:http";
+
+test("T7: a proxy's user and password (percent-decoded) are sent as Proxy-Authorization", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    let seen = null;
+    const srv = http.createServer((req, res) => { seen = req.headers["proxy-authorization"] ?? null; res.end("{}"); });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    try {
+        const port = srv.address().port;
+        const res = await nodePlatform().get("http://example.invalid/OTC_latest.json",
+            { headers: {}, timeout: 5, proxy: `http://us%40er:p%3Ass@127.0.0.1:${port}`, caFile: null });
+        assert.equal(res.status, 200);
+        assert.equal(seen, `Basic ${Buffer.from("us@er:p:ss").toString("base64")}`);
+    } finally {
+        srv.close();
+    }
+});
+
+test("T89: NO_PROXY keeps bare IPv6 addresses whole, and strips the port of [v6]:port and host:port", async () => {
+    const { noProxy } = await import("../dist/node.js");
+    const saved = process.env.NO_PROXY;
+    try {
+        process.env.NO_PROXY = "::1, [fe80::2]:8080, example.org:443";
+        assert.equal(noProxy("[::1]"), true);
+        assert.equal(noProxy("[fe80::2]"), true);
+        assert.equal(noProxy("example.org"), true);
+        assert.equal(noProxy("[::]"), false);
+    } finally {
+        if (saved === undefined) delete process.env.NO_PROXY; else process.env.NO_PROXY = saved;
+    }
+});
