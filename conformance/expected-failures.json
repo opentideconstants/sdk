@@ -26,52 +26,12 @@
    "reason": "step 3 assert_index: index-v1.json: stations[1] (OTC-T-0151): name is 'Me', expected 'Me\\x00da'"
   },
   {
-   "case": "cross/index-nul-name[ruby>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
-   "case": "cross/index-nul-name[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
-   "case": "cross/index-nul-name[ruby>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
-  },
-  {
-   "case": "cross/index-offset-past-eof[c>ruby]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
-  },
-  {
    "case": "cross/index-offset-past-eof[c>typescript]",
    "runners": [
     "cross"
    ],
    "package": "PK05",
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
-  },
-  {
-   "case": "cross/index-offset-past-eof[python>ruby]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
   },
   {
    "case": "cross/index-offset-past-eof[python>typescript]",
@@ -90,22 +50,6 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
-   "case": "cross/index-offset-past-eof[typescript>ruby]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
-  },
-  {
-   "case": "cross/index-station-id-swapped[c>ruby]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[c>typescript]",
    "runners": [
     "cross"
@@ -115,14 +59,6 @@
   },
   {
    "case": "cross/index-station-id-swapped[python>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
-   "case": "cross/index-station-id-swapped[python>ruby]",
    "runners": [
     "cross"
    ],
@@ -162,18 +98,9 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[typescript>ruby]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "rules/pk01/counter-too-long",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK01",
@@ -182,7 +109,6 @@
   {
    "case": "rules/pk01/file-bad-name",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK01",
@@ -191,7 +117,6 @@
   {
    "case": "rules/pk01/index-bad-datestamp",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK01",
@@ -233,7 +158,6 @@
    "case": "rules/pk02/pointer-200-not-json",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK02",
@@ -294,7 +218,6 @@
   {
    "case": "rules/pk03/check-for-update-only-newer-major",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK03",
@@ -304,7 +227,6 @@
    "case": "rules/pk04/prune-reports-only-removed",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK04",
@@ -313,7 +235,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -322,7 +243,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -331,7 +251,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -342,7 +261,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -351,7 +269,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -360,7 +277,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -369,7 +285,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -380,7 +295,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -389,7 +303,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -398,7 +311,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -407,7 +319,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -418,7 +329,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -427,7 +337,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -436,7 +345,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -445,7 +353,6 @@
   {
    "case": "rules/pk06/bad-duplicate-set-id-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -456,7 +363,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -465,7 +371,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -474,7 +379,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -483,7 +387,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -492,7 +395,6 @@
   {
    "case": "rules/pk06/bad-duplicate-station-id-jsonl-stream",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -544,7 +446,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -553,7 +454,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -562,7 +462,6 @@
   {
    "case": "rules/pk06/bad-unresolved-reference-station-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -573,7 +472,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -582,7 +480,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -591,7 +488,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -600,7 +496,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -609,7 +504,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl-stream",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -618,7 +512,6 @@
   {
    "case": "rules/pk07/bad-created-not-string-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -627,7 +520,6 @@
   {
    "case": "rules/pk07/bad-created-not-string-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -636,7 +528,6 @@
   {
    "case": "rules/pk07/bad-created-not-string-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -647,40 +538,7 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-string-json",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-string-json-gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-string-jsonl",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK07",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk07/bad-lat-string-jsonl-stream",
-   "runners": [
-    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -688,7 +546,6 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -697,7 +554,6 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -706,7 +562,6 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -717,7 +572,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -726,7 +580,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -735,7 +588,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -744,7 +596,6 @@
   {
    "case": "rules/pk07/bad-source-versions-not-object-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -755,7 +606,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -773,7 +623,6 @@
   {
    "case": "rules/pk07/limit-zero@json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -782,7 +631,6 @@
   {
    "case": "rules/pk07/limit-zero@json.gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -791,7 +639,6 @@
   {
    "case": "rules/pk07/limit-zero@jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -802,7 +649,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -811,7 +657,6 @@
   {
    "case": "rules/pk07/limit-zero@server",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -896,43 +741,10 @@
    "reason": "step 1 search: result.station_ids: expected 1 items, got 0: []"
   },
   {
-   "case": "rules/pk08/fold-nul@json",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@json.gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@jsonl",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
    "case": "rules/pk08/fold-nul@jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
-  },
-  {
-   "case": "rules/pk08/fold-nul@server",
-   "runners": [
-    "ruby"
+    "c-fetch"
    ],
    "package": "PK08",
    "reason": "step 2 search: result.station_ids: expected 0 items, got 1: [\"OTC-T-0152\"]"
@@ -945,46 +757,6 @@
    ],
    "package": "PK08",
    "reason": "step 0 open: expected a result, got error 'invalid_release' (/Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/conformance/fixtures/values-kept-reason/OTC_20991231.2.jsonl line 1: a constituent string is longer than its sche"
-  },
-  {
-   "case": "rules/pk08/previous-release-non-number@json",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
-  },
-  {
-   "case": "rules/pk08/previous-release-non-number@json.gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
-  },
-  {
-   "case": "rules/pk08/previous-release-non-number@jsonl",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
-  },
-  {
-   "case": "rules/pk08/previous-release-non-number@jsonl-stream",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
-  },
-  {
-   "case": "rules/pk08/previous-release-non-number@server",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK08",
-   "reason": "step 1 station_validation: result.validation[0].previous_release.time_mae_min: expected null, got \"n/a\""
   },
   {
    "case": "rules/pk08/source-name-long@jsonl-stream",
@@ -1006,7 +778,6 @@
   {
    "case": "rules/pk09/update-offline-no-socket",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK09",
@@ -1016,27 +787,10 @@
    "case": "rules/pk10/bad-ca-file-no-retry",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK10",
    "reason": "step 0 open: expected error {'$any_of': ['io', 'invalid_argument']}, got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk10/readonly-to-is-io",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK10",
-   "reason": "step 3 download: expected error 'io', got error 'uncaught:PermissionError' ([Errno 13] Permission denied: '/tmp/otc-conf-c7w1amaa/bundle/.tmp-39094-94e77aea7e8e')"
-  },
-  {
-   "case": "rules/pk10/unpublished-format-is-release-not-found",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK10",
-   "reason": "step 0 open: expected a result, got error 'release_not_found' (http://127.0.0.1:51342/nogz/OTC_20991231.2.json.gz: HTTP 404)"
   },
   {
    "case": "rules/pk11/bad-sha256-file-differs-latest",
@@ -1051,7 +805,6 @@
    "case": "rules/pk11/bad-sums-extra-file-latest",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK11",
@@ -1061,27 +814,10 @@
    "case": "rules/pk11/corrupt-same-size-heals-online",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK11",
    "reason": "step 3 open: expected a result, got error 'checksum_mismatch' (SHA-256 of OTC_20991231.2.jsonl does not match its .sha256 row)"
-  },
-  {
-   "case": "rules/pk11/eager-json-without-gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK11",
-   "reason": "step 0 open: expected a result, got error 'release_not_found' (http://127.0.0.1:51342/nogz/OTC_20991231.2.json.gz: HTTP 404)"
-  },
-  {
-   "case": "rules/pk11/pointer-sha256-uppercase",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK11",
-   "reason": "step 1 open: expected a result, got error 'checksum_mismatch' (OTC_20991231.2.sha256 does not match the pointer)"
   },
   {
    "case": "rules/pk11/sha256-absolute-url",
@@ -1103,8 +839,7 @@
    "case": "rules/pk11/verify-unverified-file",
    "runners": [
     "c",
-    "c-fetch",
-    "ruby"
+    "c-fetch"
    ],
    "package": "PK11",
    "reason": "step 2 verify: expected error 'checksum_mismatch', got error 'io' (cannot read /tmp/otc-conf-l65mpecj/rel/OTC_20991231.2.sha256)"
@@ -1112,7 +847,6 @@
   {
    "case": "rules/pk12/gz-with-content-encoding",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK12",
@@ -1130,7 +864,6 @@
   {
    "case": "rules/pk12/redirect-five-hops",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK12",
@@ -1140,7 +873,6 @@
    "case": "rules/pk13/auto-update-failure-sets-last-error",
    "runners": [
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK13",
@@ -1149,8 +881,7 @@
   {
    "case": "rules/pk14/network-fails-second-file-writes-nothing",
    "runners": [
-    "c-fetch",
-    "ruby"
+    "c-fetch"
    ],
    "package": "PK14",
    "reason": "step 3 assert_tree: /tmp/otc-conf-bv2gtazx/bundle: paths outside []: ['OTC_20991231.jsonl']"
@@ -1158,7 +889,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1167,7 +897,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@json.gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1176,7 +905,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1187,7 +915,6 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
     "typescript"
    ],
    "package": "PK15",
@@ -1196,7 +923,6 @@
   {
    "case": "rules/pk15/attribution-empty-list@server",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK15",

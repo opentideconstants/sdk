@@ -16,31 +16,48 @@ class OpenTideConstants
             raise ReleaseNotFoundError, "release #{d} not found (#{url}: HTTP 404)" if res.status == 404
             raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status) unless res.status == 200
             bytes = res.body
-            rows = Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8))
-            if pf && pf["sha256"] && pf["sha256"] != res.sha256
+            # The file itself is checked against the pointer before it is parsed.
+            if pf && pf["sha256"] && pf["sha256"].downcase != res.sha256
                 raise ChecksumError.new("#{name} does not match the pointer", file: name, expected: pf["sha256"], actual: res.sha256)
             end
-            if entry
-                Array(entry["files"]).each do |f|
-                    next if f["name"] == name || f["sha256"].nil?
-                    listed = rows[f["name"]]
-                    next if listed == f["sha256"]
-                    raise ChecksumError.new("the pointer and #{name} disagree on #{f['name']}", file: f["name"],
-                                            expected: f["sha256"], actual: listed)
-                end
-            end
+            rows = Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8), name)
+            check_agreement(entry, name, rows) if entry
             [rows, bytes]
+        end
+
+        # The pointer (or index) entry and OTC_{D}.sha256 must give the same
+        # SHA-256 for every file (compared without regard to case), and the
+        # same files (spec §5.2 step 4.1).
+        def self.check_agreement(entry, sha_name, rows)
+            listed = Array(entry["files"]).reject { |f| f["name"] == sha_name }
+            listed.each do |f|
+                next if f["sha256"].nil?
+                got = rows[f["name"]]
+                next if got == f["sha256"].downcase
+                raise ChecksumError.new("the pointer and #{sha_name} disagree on #{f['name']}", file: f["name"],
+                                        expected: f["sha256"].downcase, actual: got)
+            end
+            return if listed.none? { |f| f["sha256"] }
+            extra = rows.keys - listed.map { |f| f["name"] }
+            return if extra.empty?
+            raise ChecksumError.new("#{sha_name} lists #{extra.first}, which the pointer does not", file: extra.first,
+                                    expected: nil, actual: rows[extra.first])
         end
 
         # Downloads url to a temporary file in dir and checks its size and
         # SHA-256; then renames it to final (or leaves it at keep_tmp).
         # Returns the size. A bad file is deleted.
-        def self.fetch_checked(client, url, dir, final, name, expected_sha, expected_size, keep_tmp: nil)
+        # error_class: CacheError for the cache, FileError for the caller's
+        # folder (spec §4.8): what a local write failure is.
+        def self.fetch_checked(client, url, dir, final, name, expected_sha, expected_size, keep_tmp: nil,
+                               error_class: CacheError)
             tmp = keep_tmp || Cache.tmp_path(dir)
             begin
                 res = client.send(:http).get_to_file(url, tmp)
                 if res.status == 404
-                    raise ReleaseNotFoundError, "#{url}: HTTP 404"
+                    # The release exists (its .sha256 lists the file): a server inconsistency (CR D32).
+                    raise NetworkError.new("#{url}: HTTP 404 for a file that OTC_#{name[/\AOTC_([^.]+(?:\.[0-9]+)?)\./, 1]}.sha256 " \
+                                           "lists; it is missing on the server", url: url, status: 404)
                 elsif res.status != 200
                     raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status)
                 end
@@ -54,20 +71,25 @@ class OpenTideConstants
                 FileUtils.rm_f(tmp)
                 raise
             end
-        rescue SystemCallError => e
-            raise CacheError, "cannot write #{final || tmp}: #{e.message}"
+        rescue SystemCallError, HTTP::SinkError => e
+            raise local_error(error_class, "cannot write #{final || tmp}: #{e.message}", final || tmp)
+        end
+
+        def self.local_error(error_class, msg, path)
+            error_class == FileError ? FileError.new(msg, path: path) : error_class.new(msg)
         end
 
         # Decompresses gz into a temporary file in dir, checks the SHA-256 of
         # the result and renames it to final. Returns its size.
-        def self.gunzip_checked(gz, dir, final, name, expected_sha)
+        def self.gunzip_checked(gz, dir, final, name, expected_sha, error_class: CacheError)
             tmp = Cache.tmp_path(dir)
             digest = Digest::SHA256.new
             size = 0
             begin
                 File.open(tmp, "wb") do |out|
-                    Zlib::GzipReader.open(gz) do |zr|
-                        while (chunk = zr.read(1 << 16))
+                    File.open(gz, "rb") do |zin|
+                        # zcat reads every gzip member, not only the first.
+                        Zlib::GzipReader.zcat(zin) do |chunk|
                             out.write(chunk)
                             digest << chunk
                             size += chunk.bytesize
@@ -86,6 +108,9 @@ class OpenTideConstants
             rescue Zlib::Error => e
                 FileUtils.rm_f(tmp)
                 raise ChecksumError.new("#{name}: bad gzip data (#{e.message})", file: gz, expected: expected_sha, actual: nil)
+            rescue SystemCallError, IOError => e
+                FileUtils.rm_f(tmp)
+                raise local_error(error_class, "cannot decompress #{gz} into #{final}: #{e.message}", final)
             rescue Exception # rubocop:disable Lint/RescueException
                 FileUtils.rm_f(tmp)
                 raise
@@ -112,7 +137,8 @@ class OpenTideConstants
             sha_name = "OTC_#{d}.sha256"
             sha_digest = Digest::SHA256.hexdigest(sha_bytes)
             names.each do |n|
-                raise ChecksumError.new("#{n} is not listed in #{sha_name}", file: n, expected: nil, actual: nil) unless rows[n]
+                # A format that the release does not publish (spec §4.8 release_not_found).
+                raise ReleaseNotFoundError, "release #{d} does not publish #{n} (#{sha_name} does not list it)" unless rows[n]
             end
 
             # Check every existing file before writing any file.
@@ -134,25 +160,40 @@ class OpenTideConstants
             end
 
             pointer_files = entry ? Array(entry["files"]).to_h { |f| [f["name"], f] } : {}
-            written = []
-            todo.each do |n|
-                path = File.join(@to, n)
-                if n == sha_name
-                    write_bytes(path, sha_bytes)
-                elsif ver && cache.file_ok?(d, n, ver) && cached_sha_ok?(cache, d, n, rows[n])
-                    copy_checked(File.join(cache.release_dir(d), n), path, n, rows[n])
-                elsif n.end_with?(".json") && !n.end_with?(".meta.json") && ver && cache.file_ok?(d, "#{n}.gz", ver)
-                    gunzip_into(File.join(cache.release_dir(d), "#{n}.gz"), path, n, rows[n])
-                else
-                    raise OfflineError, "offline and #{n} is not cached" if @client.send(:offline)
-                    pf = pointer_files[n]
-                    url = pf && pf["url"] ? @client.send(:resolve, pointer_url, pf["url"]) : @client.send(:base_url) + n
-                    Downloader.fetch_checked(@client, url, @to, path, n, rows[n], pf && pf["size"])
+            # Every file is made and checked as a temporary file in to first;
+            # only when all of them are there are they renamed into place, so a
+            # failure (offline, a network error, a bad checksum) writes nothing.
+            staged = [] # [temporary file, final path], in the order of todo
+            begin
+                todo.each do |n|
+                    tmp = Cache.tmp_path(@to)
+                    staged << [tmp, File.join(@to, n)]
+                    fetch = lambda do
+                        raise OfflineError, "offline and #{n} is not cached" if @client.send(:offline)
+                        pf = pointer_files[n]
+                        url = pf && pf["url"] ? @client.send(:resolve, pointer_url, pf["url"]) : @client.send(:base_url) + n
+                        Downloader.fetch_checked(@client, url, @to, tmp, n, rows[n], pf && pf["size"], error_class: FileError)
+                    end
+                    if n == sha_name
+                        write_bytes(tmp, sha_bytes)
+                    elsif ver && cache.file_ok?(d, n, ver) && cached_sha_ok?(cache, d, n, rows[n])
+                        from_cache(cache, File.join(cache.release_dir(d), n), fetch) { |src| copy_checked(src, tmp, n, rows[n]) }
+                    elsif n.end_with?(".json") && !n.end_with?(".meta.json") && ver && cache.file_ok?(d, "#{n}.gz", ver)
+                        from_cache(cache, File.join(cache.release_dir(d), "#{n}.gz"), fetch) { |src| gunzip_into(src, tmp, n, rows[n]) }
+                    else
+                        fetch.call
+                    end
                 end
-                written << path
+                # OTC_{D}.sha256 is last in todo, so it goes into place last.
+                staged.each do |tmp, final|
+                    File.rename(tmp, final)
+                rescue SystemCallError => e
+                    raise FileError.new("cannot rename into #{final}: #{e.message}", path: final)
+                end
+            ensure
+                staged.each { |tmp, _| FileUtils.rm_f(tmp) }
             end
-            # OTC_{D}.sha256 goes into place last.
-            written.sort_by { |p| File.basename(p) == sha_name ? 1 : 0 }
+            staged.map(&:last)
         end
 
         private
@@ -177,15 +218,26 @@ class OpenTideConstants
             path = File.join(@client.send(:cache).release_dir(d), "OTC_#{d}.sha256")
             if ver && File.file?(path)
                 bytes = File.binread(path)
-                return [Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8)), bytes]
+                return [Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8), File.basename(path)), bytes]
             end
             raise OfflineError, "offline and release #{d} is not cached" if @client.send(:offline)
             Downloader.fetch_sha256(@client, d, entry, pointer_url)
         end
 
+        # Copies a file from the cache with the block. A cached copy that fails
+        # its check is deleted from the cache (spec §4.8 checksum_mismatch) and
+        # the file is downloaded instead (fetch).
+        def from_cache(cache, src, fetch)
+            yield src
+        rescue ChecksumError => e
+            @client.send(:log, :warn, "#{e.message}; deleting the cached #{File.basename(src)} and downloading it again")
+            cache.remove_file(src)
+            fetch.call
+        end
+
         def cached_sha_ok?(cache, d, n, sha)
-            row = cache.verified(d)["files"][n]
-            row && row["sha256"] == sha
+            row = cache.verified(d)&.dig("files", n)
+            row.is_a?(Hash) && row["sha256"] == sha
         end
 
         def write_bytes(path, bytes)
@@ -217,7 +269,7 @@ class OpenTideConstants
         end
 
         def gunzip_into(gz, dest, name, sha)
-            Downloader.gunzip_checked(gz, @to, dest, name, sha)
+            Downloader.gunzip_checked(gz, @to, dest, name, sha, error_class: FileError)
         end
     end
 end

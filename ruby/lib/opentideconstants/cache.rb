@@ -17,6 +17,9 @@ class OpenTideConstants
         LOCK_POLL_S = 0.5
         LOCK_STALE_S = 120
 
+        # A stale lock that cannot be removed this many times is a cache error (CR D3).
+        LOCK_REMOVE_ATTEMPTS = 3
+
         attr_reader :root
 
         def self.default_root
@@ -24,15 +27,27 @@ class OpenTideConstants
                 return dir
             end
             if Gem.win_platform?
-                base = ENV["LOCALAPPDATA"] || File.join(Dir.home, "AppData", "Local")
+                base = ENV["LOCALAPPDATA"]
+                base = File.join(home, "AppData", "Local") if base.nil? || base.empty?
                 File.join(base, "opentideconstants", "Cache")
             elsif RUBY_PLATFORM.include?("darwin")
-                File.join(Dir.home, "Library", "Caches", "opentideconstants")
+                File.join(home, "Library", "Caches", "opentideconstants")
             else
                 base = ENV["XDG_CACHE_HOME"]
-                base = File.join(Dir.home, ".cache") if base.nil? || base.empty?
+                base = File.join(home, ".cache") if base.nil? || base.empty?
                 File.join(base, "opentideconstants")
             end
+        end
+
+        # The home directory for the default cache root, or CacheError when
+        # there is none that can be used.
+        def self.home
+            dir = Dir.home
+            raise ArgumentError, "it is #{dir.inspect}" unless dir.is_a?(String) && !dir.empty? && File.absolute_path?(dir)
+            dir
+        rescue ArgumentError => e
+            raise CacheError, "cannot find the home directory for the default cache (#{e.message}); " \
+                              "pass cache_dir or set OPENTIDECONSTANTS_CACHE_DIR"
         end
 
         def self.datestamp_key(d)
@@ -40,9 +55,14 @@ class OpenTideConstants
             [date.to_i, (counter || "1").to_i]
         end
 
-        def initialize(root)
+        # logger: where lock and cleanup problems that are not raised are
+        # logged. lock_stale_s and lock_poll_s are the §5.4 lock times.
+        def initialize(root, logger: nil, lock_stale_s: LOCK_STALE_S, lock_poll_s: LOCK_POLL_S)
             @root = File.expand_path(root)
             @base = File.join(@root, CACHE_LAYOUT_VERSION)
+            @logger = logger
+            @lock_stale_s = lock_stale_s
+            @lock_poll_s = lock_poll_s
         end
 
         def pointer_dir
@@ -94,37 +114,61 @@ class OpenTideConstants
 
         # ---- pointer files
 
+        # [body, etag] of a cached pointer or index file, or nil when it is not
+        # cached. A file that exists but cannot be read is io (spec §4.8).
         def read_pointer(name)
             path = File.join(pointer_dir, name)
-            return nil unless File.file?(path)
-            etag_path = "#{path}.etag"
-            body = File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)
-            etag = File.file?(etag_path) ? File.read(etag_path).strip : nil
-            [body, etag]
-        rescue SystemCallError, IOError
-            nil
+            body = read_file(path)
+            return nil unless body
+            etag = read_file("#{path}.etag")
+            [body.force_encoding(Encoding::UTF_8), etag&.strip]
         end
 
+        # The bytes of a cache file, nil when it is not there, FileError when
+        # it cannot be read.
+        def read_file(path)
+            File.binread(path)
+        rescue Errno::ENOENT, Errno::ENOTDIR
+            nil
+        rescue SystemCallError, IOError => e
+            raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+        end
+
+        # Writes a pointer or index file and its ETag as a pair, under
+        # pointer/.lock (spec §5.4). The old ETag goes first, so a reader
+        # between the steps sees a body with no ETag (and asks without one),
+        # never a body with another body's ETag.
         def write_pointer(name, body, etag)
             path = File.join(pointer_dir, name)
-            write_atomic(path, body)
-            if etag
-                write_atomic("#{path}.etag", etag)
-            else
-                FileUtils.rm_f("#{path}.etag")
+            with_lock(pointer_dir) do
+                remove_file("#{path}.etag")
+                write_atomic(path, body)
+                write_atomic("#{path}.etag", etag) if etag
             end
+        end
+
+        # Deletes a file if it is there; CacheError if it cannot.
+        def remove_file(path)
+            File.delete(path)
+        rescue Errno::ENOENT
+            nil
+        rescue SystemCallError => e
+            raise CacheError, "cannot remove #{path}: #{e.message}"
         end
 
         # ---- releases
 
         # The parsed .verified of a release, or nil when the directory is not
         # trusted.
+        # The parsed .verified of a release, or nil when the directory is not
+        # trusted (no .verified, or one that is not a JSON object with files).
+        # A .verified that cannot be read is io (spec §4.8).
         def verified(datestamp)
-            path = File.join(release_dir(datestamp), ".verified")
-            return nil unless File.file?(path)
-            doc = JSON.parse(File.read(path))
+            text = read_file(File.join(release_dir(datestamp), ".verified"))
+            return nil unless text
+            doc = JSON.parse(text.force_encoding(Encoding::UTF_8))
             doc.is_a?(Hash) && doc["files"].is_a?(Hash) ? doc : nil
-        rescue JSON::ParserError, SystemCallError, IOError
+        rescue JSON::ParserError, EncodingError
             nil
         end
 
@@ -141,6 +185,7 @@ class OpenTideConstants
         # The release-level values .verified keeps next to the files: what the
         # pointer or index entry said (format_version, min_reader_version,
         # zenodo_version_doi). A key that info leaves out keeps its old value.
+        # .verified also has the datestamp (spec §5.4, CR D26).
         VERIFIED_INFO = %w[format_version min_reader_version zenodo_version_doi].freeze
 
         def write_verified(datestamp, files, info = {})
@@ -152,7 +197,7 @@ class OpenTideConstants
                 merged[name] = { "sha256" => row["sha256"] || old["sha256"], "size" => row["size"] || old["size"],
                                  "url" => row["url"] || old["url"] }
             end
-            doc = { "files" => merged.sort.to_h, "verified_at" => Time.now.utc.iso8601,
+            doc = { "datestamp" => datestamp, "files" => merged.sort.to_h, "verified_at" => Time.now.utc.iso8601,
                     "by" => "opentideconstants-ruby/#{VERSION}" }
             VERIFIED_INFO.each do |k|
                 doc[k] = info.key?(k) ? info[k] : prev&.dig(k)
@@ -167,8 +212,8 @@ class OpenTideConstants
             return if ver.nil? || (ver.key?("zenodo_version_doi") && ver["zenodo_version_doi"] == doi)
             ver["zenodo_version_doi"] = doi
             write_atomic(File.join(release_dir(datestamp), ".verified"), JSON.pretty_generate(ver) + "\n")
-        rescue CacheError
-            nil
+        rescue CacheError, FileError => e
+            log(:warn, "cannot note the version DOI of #{datestamp}: #{e.message}")
         end
 
         # Datestamps of trusted release directories, newest first.
@@ -181,50 +226,152 @@ class OpenTideConstants
             []
         end
 
+        # Datestamp directories that have no .verified: a download that failed
+        # or is still running.
+        def partial_releases
+            return [] unless File.directory?(releases_dir)
+            Dir.children(releases_dir)
+               .select { |d| d.match?(DATESTAMP_RE) && !File.exist?(File.join(releases_dir, d, ".verified")) }
+        rescue SystemCallError
+            []
+        end
+
+        # Removes a release directory (spec §4.3 prune). It takes the release
+        # lock without waiting, so a release that another process is
+        # downloading into is left alone: then it returns false. .verified
+        # goes first, so a directory that cannot be removed in full is no
+        # longer trusted, and any failure is a CacheError. True when removed.
         def remove_release(datestamp)
-            FileUtils.rm_rf(release_dir(datestamp))
+            dir = release_dir(datestamp)
+            return true unless File.directory?(dir)
+            taken = try_lock(dir) do
+                remove_file(File.join(dir, ".verified"))
+                Dir.children(dir).each do |name|
+                    next if name == ".lock"
+                    FileUtils.rm_r(File.join(dir, name))
+                end
+            end
+            return false unless taken
+            begin
+                Dir.rmdir(dir)
+            rescue Errno::ENOENT, Errno::ENOTEMPTY, Errno::EEXIST
+                nil # another process started a download into it after the lock was released
+            end
+            true
         rescue SystemCallError => e
-            raise CacheError, "cannot remove #{release_dir(datestamp)}: #{e.message}"
+            raise CacheError, "cannot remove #{dir}: #{e.message}"
         end
 
         # ---- the lock directory (spec §5.4 Locks)
 
         # Runs the block while holding <dir>/.lock. Returns early (without the
-        # block) when done.call becomes true while waiting.
+        # block) with :done when done.call becomes true while waiting. A lock
+        # held for longer than the stale time is removed and taken; a stale
+        # lock that cannot be removed 3 times is a CacheError (CR D3).
         def with_lock(dir, done: -> { false })
             ensure_dir(dir)
             lock = File.join(dir, ".lock")
             waited = 0.0
+            failures = 0
             loop do
                 begin
                     Dir.mkdir(lock)
                     break
                 rescue Errno::EEXIST
                     return :done if done.call
-                    if waited >= LOCK_STALE_S
-                        FileUtils.rm_rf(lock)
-                        waited = 0.0
-                        next
+                    if waited >= @lock_stale_s
+                        if remove_stale_lock(lock)
+                            waited = 0.0
+                            next
+                        end
+                        failures += 1
+                        raise CacheError, "cannot remove the stale lock #{lock} after #{failures} attempts" if failures >= LOCK_REMOVE_ATTEMPTS
                     end
-                    sleep(LOCK_POLL_S)
-                    waited += LOCK_POLL_S
+                    sleep(@lock_poll_s)
+                    waited += @lock_poll_s
                 rescue SystemCallError => e
                     raise CacheError, "cannot take the lock #{lock}: #{e.message}"
                 end
             end
+            hold(lock) { yield }
+        end
+
+        # Takes <dir>/.lock only if it is free, runs the block and returns
+        # true; returns false (without the block) when the lock is held.
+        def try_lock(dir)
+            lock = File.join(dir, ".lock")
+            begin
+                Dir.mkdir(lock)
+            rescue Errno::EEXIST
+                return false
+            rescue SystemCallError => e
+                raise CacheError, "cannot take the lock #{lock}: #{e.message}"
+            end
+            hold(lock) { yield }
+            true
+        end
+
+        private
+
+        # Writes owner.json with a fresh token, runs the block, and releases
+        # the lock only while the token is still ours (spec §5.4 Release).
+        def hold(lock)
+            token = SecureRandom.hex(16)
+            owner_path = File.join(lock, "owner.json")
             begin
                 owner = { "pid" => Process.pid, "host" => Socket.gethostname, "sdk" => "opentideconstants-ruby/#{VERSION}",
-                          "started_at" => Time.now.utc.iso8601 }
-                File.write(File.join(lock, "owner.json"), JSON.generate(owner))
+                          "started_at" => Time.now.utc.iso8601, "token" => token }
+                File.write(owner_path, JSON.generate(owner))
+            rescue SystemCallError, IOError => e
+                release_lock(lock, owner_path, nil)
+                raise CacheError, "cannot write #{owner_path}: #{e.message}"
+            end
+            begin
                 yield
             ensure
-                FileUtils.rm_f(File.join(lock, "owner.json"))
-                begin
-                    Dir.rmdir(lock)
-                rescue SystemCallError
+                release_lock(lock, owner_path, token)
+            end
+        end
+
+        # Deletes owner.json and the lock directory, unless another process
+        # has taken the lock as stale (its token differs). A failure is logged:
+        # the work is done, and a leftover lock only delays others.
+        def release_lock(lock, owner_path, token)
+            if token
+                current = begin
+                    JSON.parse(File.read(owner_path))["token"]
+                rescue JSON::ParserError, SystemCallError, IOError, TypeError, NoMethodError
                     nil
                 end
+                if current != token
+                    log(:warn, "the lock #{lock} is now held by another process; leaving it")
+                    return
+                end
             end
+            begin
+                File.delete(owner_path)
+            rescue Errno::ENOENT
+                nil
+            end
+            Dir.rmdir(lock)
+        rescue SystemCallError => e
+            log(:warn, "cannot release the lock #{lock}: #{e.message}")
+        end
+
+        # Removes a stale lock directory; false when it is still there.
+        def remove_stale_lock(lock)
+            log(:warn, "taking the stale lock #{lock}")
+            FileUtils.rm_r(lock)
+            true
+        rescue Errno::ENOENT
+            true
+        rescue SystemCallError => e
+            log(:warn, "cannot remove the stale lock #{lock}: #{e.message}")
+            !File.exist?(lock)
+        end
+
+        def log(level, msg)
+            @logger&.public_send(level, "opentideconstants: #{msg}")
         end
     end
 end

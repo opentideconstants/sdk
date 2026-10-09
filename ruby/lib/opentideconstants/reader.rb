@@ -1,11 +1,14 @@
 require "json"
 require "zlib"
+require "digest"
+require "stringio"
 
 class OpenTideConstants
     # Reads release files from disk: .json, .json.gz, or .jsonl with its
     # .meta.json sidecar (spec §4.2, §6).
     module Reader
-        NAME_RE = /\A(OTC_(\d{8}(?:\.\d+)?))\.(json\.gz|jsonl|json)\z/.freeze
+        # OTC_<D>.<ext>, with <D> a valid datestamp (DATESTAMP_RE).
+        NAME_RE = /\A(OTC_([0-9]{8}(?:\.[2-9]|\.[1-9][0-9]{1,8})?))\.(json\.gz|jsonl|json)\z/.freeze
 
         module_function
 
@@ -26,15 +29,18 @@ class OpenTideConstants
             [path]
         end
 
-        # Parses "<sha256>  <name>" lines into {name => sha256}.
-        def parse_sha256(text)
+        # One sha256sum line: 64 hex digits, white space, an optional "*", the name.
+        SHA256_LINE = /\A(\h{64})\s+\*?(\S.*?)\s*\z/.freeze
+
+        # Parses "<sha256>  <name>" lines into {name => sha256} (lower case).
+        # A line in any other form is invalid_release (source names the file).
+        def parse_sha256(text, source = "the .sha256 file")
             rows = {}
-            text.each_line do |line|
-                line = line.strip
-                next if line.empty?
-                digest, name = line.split(/\s+/, 2)
-                next if name.nil?
-                rows[name.delete_prefix("*").strip] = digest.downcase
+            text.each_line.with_index(1) do |line, n|
+                next if line.strip.empty?
+                m = SHA256_LINE.match(line.chomp)
+                raise InvalidReleaseError, "#{source} line #{n} is not \"<sha256>  <name>\": #{line.chomp[0, 100].inspect}" unless m
+                rows[m[2]] = m[1].downcase
             end
             rows
         end
@@ -43,15 +49,16 @@ class OpenTideConstants
         def open_file(path, mode:)
             raise InvalidArgumentError, "file must be a String path" unless path.is_a?(String) && !path.empty?
             path = File.expand_path(path)
-            prefix, _, ext = parse_name(path)
-            unless %w[json json.gz jsonl].include?(ext)
-                raise InvalidArgumentError, "file must end in .json, .json.gz or .jsonl"
+            prefix, d, ext = parse_name(path)
+            unless d
+                raise InvalidArgumentError, "file must be named OTC_<datestamp>.json, .json.gz or .jsonl, " \
+                                            "not #{File.basename(path).inspect}"
             end
             read = files_read(path)
             read.each { |p| raise FileError.new("no such file: #{p}", path: p) unless File.file?(p) }
             sha_path = File.join(File.dirname(path), "#{prefix}.sha256")
             if File.file?(sha_path)
-                rows = parse_sha256(read_text(sha_path))
+                rows = parse_sha256(read_text(sha_path), File.basename(sha_path))
                 checks = {}
                 read.each do |p|
                     name = File.basename(p)
@@ -66,38 +73,42 @@ class OpenTideConstants
                     local = File.join(File.dirname(path), name)
                     FileInfo.new(name: name, url: nil, size: File.file?(local) ? File.size(local) : nil, sha256: rows[name])
                 end
-                verify_checks(checks)
-                [load(path, mode: mode, files: files, checks: checks), :file]
+                [load(path, mode: mode, files: files, checks: checks, verify: true), :file]
             else
                 files = read.map { |p| FileInfo.new(name: File.basename(p), url: nil, size: File.size(p), sha256: nil) }
                 [load(path, mode: mode, files: files, checks: {}), :file_unverified]
             end
         end
 
-        def verify_checks(checks)
-            checks.each do |p, expected|
-                actual = Release.sha256_file(p)
-                next if actual == expected
-                raise ChecksumError.new("#{File.basename(p)}: SHA-256 mismatch", file: p, expected: expected, actual: actual)
-            end
+        # Raises ChecksumError unless the SHA-256 of bytes (read from path) is expected.
+        def check_bytes!(path, bytes, expected)
+            actual = Digest::SHA256.hexdigest(bytes)
+            return if actual == expected
+            raise ChecksumError.new("#{File.basename(path)}: SHA-256 mismatch", file: path, expected: expected, actual: actual)
         end
 
-        # Loads a release from a data file whose checks are already done.
-        def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil)
+        # Loads a release from a data file. With verify: true each file is
+        # hashed from the same bytes (or the same open file) that the load
+        # then reads, against checks {path => sha256}, so a file swapped
+        # after its hash is never used.
+        def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
+                 on_bad_index: nil)
             _, _, ext = parse_name(path)
+            expect = ->(p) { verify ? checks[p] : nil }
             case ext
             when "json"
-                doc = parse_json(read_text(path))
+                doc = parse_json(read_text(path, expect.call(path)))
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
             when "json.gz"
-                doc = parse_json(gunzip(path))
+                doc = parse_json(gunzip(path, expect.call(path)))
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
             when "jsonl"
                 meta_path = files_read(path)[1]
-                meta = parse_json(read_text(meta_path))
+                meta = parse_json(read_text(meta_path, expect.call(meta_path)))
                 Release.check_format!(meta)
                 load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
-                                       zenodo_version_doi: zenodo_version_doi)
+                                       zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path),
+                                       on_bad_index: on_bad_index)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
@@ -116,8 +127,22 @@ class OpenTideConstants
         # then come from it, and only the tombstone lines are read. Otherwise
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
-        def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil)
+        def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
+                       expected_sha256: nil, on_bad_index: nil)
             io = File.open(path, "rb")
+            if expected_sha256
+                digest = Digest::SHA256.new
+                while (chunk = io.read(1 << 16))
+                    digest << chunk
+                end
+                io.rewind
+                actual = digest.hexdigest
+                unless actual == expected_sha256
+                    io.close
+                    raise ChecksumError.new("#{File.basename(path)}: SHA-256 mismatch", file: path, expected: expected_sha256,
+                                                                                         actual: actual)
+                end
+            end
             lines = Enumerator.new do |y|
                 if index
                     index.each { |e| y << [raw_from_index(e, io), e["offset"], e["length"]] }
@@ -136,7 +161,8 @@ class OpenTideConstants
             end
             begin
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
-                                  io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi)
+                                  io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi,
+                                  on_bad_index: index && on_bad_index)
             ensure
                 io.close if mode != :stream || rel.nil?
             end
@@ -169,7 +195,10 @@ class OpenTideConstants
             aliases = (raw["aliases"].is_a?(Hash) ? raw["aliases"] : {}).transform_values do |v|
                 v.is_a?(String) ? [v] : Array(v).grep(String)
             end
-            { "offset" => pos, "length" => len, "station_id" => raw["station_id"], "status" => raw["status"],
+            # A line with no status is an active station to the load, so its entry says so (a nil
+            # status would make the index stale on every open).
+            status = raw["status"].is_a?(String) ? raw["status"] : "active"
+            { "offset" => pos, "length" => len, "station_id" => raw["station_id"], "status" => status,
               "name" => name, "name_folded" => name && Fold.fold(name), "country" => str.call(raw, "country"),
               "type" => str.call(raw, "type"), "lat" => num.call("lat"), "lon" => num.call("lon"), "kind" => kind,
               "aliases" => aliases, "reference_station_id" => str.call(off, "reference_station_id"),
@@ -195,7 +224,11 @@ class OpenTideConstants
         def raw_from_index(e, io)
             if e["status"] == "removed"
                 io.seek(e["offset"])
-                return parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
+                raw = parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
+                unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]
+                    raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} is not #{e['station_id']}"
+                end
+                return raw
             end
             raw = e.slice("station_id", "status", "name", "country", "type", "lat", "lon", "recommended_set_id", "aliases")
             raw["constant_sets"] = e["sets"].map do |cs|
@@ -208,14 +241,22 @@ class OpenTideConstants
             raw
         end
 
-        def read_text(path)
-            File.read(path, mode: "rb").force_encoding(Encoding::UTF_8)
+        # The bytes of path as UTF-8; checked against expected_sha256 when given.
+        def read_text(path, expected_sha256 = nil)
+            bytes = File.binread(path)
+            check_bytes!(path, bytes, expected_sha256) if expected_sha256
+            bytes.force_encoding(Encoding::UTF_8)
         rescue SystemCallError, IOError => e
             raise FileError.new("cannot read #{path}: #{e.message}", path: path)
         end
 
-        def gunzip(path)
-            Zlib::GzipReader.open(path) { |gz| gz.read }.force_encoding(Encoding::UTF_8)
+        # The decompressed text of a .gz file; the compressed bytes are
+        # checked against expected_sha256 when given.
+        def gunzip(path, expected_sha256 = nil)
+            bytes = File.binread(path)
+            check_bytes!(path, bytes, expected_sha256) if expected_sha256
+            # zcat reads every gzip member, not only the first.
+            Zlib::GzipReader.zcat(StringIO.new(bytes)).force_encoding(Encoding::UTF_8)
         rescue Zlib::Error => e
             raise InvalidReleaseError, "bad gzip file #{path}: #{e.message}"
         rescue SystemCallError, IOError => e
@@ -223,6 +264,7 @@ class OpenTideConstants
         end
 
         def parse_json(text)
+            raise InvalidReleaseError, "not valid UTF-8" unless text.valid_encoding?
             JSON.parse(text)
         rescue JSON::ParserError, EncodingError => e
             raise InvalidReleaseError, "not valid JSON: #{e.message[0, 200]}"

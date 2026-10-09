@@ -2,6 +2,7 @@ require "net/http"
 require "openssl"
 require "uri"
 require "digest"
+require "time"
 
 class OpenTideConstants
     # Net::HTTP with the SDK's rules (spec §5.7): timeouts, three attempts with
@@ -16,16 +17,36 @@ class OpenTideConstants
         READ_TIMEOUT = 60
         USER_AGENT = "opentideconstants-ruby/#{VERSION} (+https://opentideconstants.org)".freeze
         NETWORK_ERRORS = [SocketError, SystemCallError, IOError, EOFError, Timeout::Error, OpenSSL::SSL::SSLError,
-                          Net::ProtocolError, Net::OpenTimeout, Net::ReadTimeout, Zlib::Error].freeze
+                          Net::ProtocolError, Net::OpenTimeout, Net::ReadTimeout, Net::HTTPBadResponse,
+                          Net::HTTPHeaderSyntaxError, Zlib::Error].freeze
 
         # The result of one GET: status, headers we use, and (for a 200 to a
         # file) the size and SHA-256 of the decoded body.
         Response = Struct.new(:status, :etag, :body, :size, :sha256, keyword_init: true)
 
+        # A local file that a body is written to cannot be written. It is not a
+        # network error: it is not retried, and the caller turns it into a
+        # cache or io error (spec §4.8). #cause is the system error.
+        class SinkError < StandardError; end
+
+        # An absolute http or https URL (spec §4.2 base_url, §5.7 proxy), or
+        # InvalidArgumentError (CR D19).
+        def self.check_url!(value, name)
+            uri = URI(value)
+            raise URI::InvalidURIError, "not absolute" unless %w[http https].include?(uri.scheme) && uri.host && !uri.host.empty?
+            uri
+        rescue URI::Error, ArgumentError => e
+            raise InvalidArgumentError, "#{name} must be an absolute http or https URL, not #{value.inspect} (#{e.message})"
+        end
+
         def initialize(timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, logger: nil, sleeper: nil)
             @open_timeout = timeout || CONNECT_TIMEOUT
             @read_timeout = timeout || READ_TIMEOUT
-            @proxy = proxy && URI(proxy)
+            @proxy = proxy && HTTP.check_url!(proxy, "proxy")
+            # A ca_file that does not exist or cannot be read is io, at construction (CR D19).
+            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
+                raise FileError.new("ca_file #{ca_file} does not exist or cannot be read", path: ca_file)
+            end
             @ca_file = ca_file || ENV["SSL_CERT_FILE"]
             @user_agent = user_agent ? "#{USER_AGENT} #{user_agent}" : USER_AGENT
             @logger = logger
@@ -49,14 +70,21 @@ class OpenTideConstants
             request(url) do |res|
                 digest = Digest::SHA256.new
                 size = 0
-                File.open(path, "wb") do |f|
+                # Only the file operations are local errors; a failure while the
+                # body is read stays a network error.
+                f = sink(path) { File.open(path, "wb") }
+                begin
                     res.read_body do |chunk|
-                        f.write(chunk)
+                        sink(path) { f.write(chunk) }
                         digest << chunk
                         size += chunk.bytesize
                     end
-                    f.flush
-                    f.fsync
+                    sink(path) do
+                        f.flush
+                        f.fsync
+                    end
+                ensure
+                    f.close unless f.closed?
                 end
                 Response.new(status: 200, etag: res["etag"], size: size, sha256: digest.hexdigest)
             end
@@ -64,24 +92,54 @@ class OpenTideConstants
 
         private
 
+        # Runs one local file operation on path; a system error becomes SinkError.
+        def sink(path)
+            yield
+        rescue SystemCallError, IOError => e
+            raise SinkError, "cannot write #{path}: #{e.message}"
+        end
+
+        # A certificate that does not verify does not get better on a retry.
+        def tls_verify_failure?(e)
+            e.is_a?(OpenSSL::SSL::SSLError) && e.message.include?("certificate verify failed")
+        end
+
+        REDIRECTS = [301, 302, 303, 307, 308].freeze
+        MAX_REDIRECTS = 5
+
+        # Sends the GET with the retries of §5.7, following up to 5 redirects
+        # (CR D1). Each attempt is independent: no state is kept on the
+        # instance, so one HTTP can serve several threads.
         def request(url, etag: nil, &on_ok)
             uri = URI(url)
             attempt = 0
+            redirects = 0
             loop do
                 attempt += 1
                 wait = nil
+                cause = nil
                 begin
-                    result = once(uri, etag, &on_ok)
-                    return result unless result.is_a?(Integer)
-                    status = result
+                    kind, value, retry_wait = once(uri, etag, &on_ok)
+                    return value if kind == :ok
+                    if kind == :redirect
+                        redirects += 1
+                        uri = follow(uri, value, url, redirects)
+                        attempt = 0
+                        next
+                    end
+                    status = value
                     return Response.new(status: status) if [304, 404].include?(status)
-                    err = NetworkError.new("GET #{url}: HTTP #{status}", url: url, status: status)
+                    err = NetworkError.new("GET #{uri}: HTTP #{status}", url: uri.to_s, status: status)
                     raise err unless status >= 500 || status == 429
-                    wait = @retry_after
-                rescue NetworkError
+                    wait = retry_wait
+                rescue NetworkError, SinkError
                     raise
                 rescue *NETWORK_ERRORS => e
-                    err = NetworkError.new("GET #{url}: #{e.class}: #{e.message}", url: url, status: nil)
+                    if tls_verify_failure?(e)
+                        raise NetworkError.new("GET #{uri}: the server's TLS certificate does not verify (#{e.message}); " \
+                                               "check ca_file or SSL_CERT_FILE", url: uri.to_s, status: nil), cause: e
+                    end
+                    err = NetworkError.new("GET #{uri}: #{e.class}: #{e.message}", url: uri.to_s, status: nil)
                     cause = e
                 end
                 if attempt >= ATTEMPTS
@@ -94,36 +152,65 @@ class OpenTideConstants
             end
         end
 
-        # One request. Returns the block's value for a 200, else the status.
+        # The URI a redirect goes to, or NetworkError: a 6th redirect, a
+        # missing or bad Location, a scheme other than http or https, or a
+        # redirect from https to http (spec §5.7, CR D1).
+        def follow(from, location, url, count)
+            raise NetworkError.new("GET #{url}: more than #{MAX_REDIRECTS} redirects", url: url, status: nil) if count > MAX_REDIRECTS
+            if location.nil? || location.strip.empty?
+                raise NetworkError.new("GET #{from}: a redirect with no Location", url: url, status: nil)
+            end
+            to = from + location.strip
+            unless %w[http https].include?(to.scheme)
+                raise NetworkError.new("GET #{from}: a redirect to #{to} is not http or https", url: url, status: nil)
+            end
+            if from.scheme == "https" && to.scheme == "http"
+                raise NetworkError.new("GET #{from}: a redirect from https to http (#{to}) is not followed", url: url, status: nil)
+            end
+            to
+        rescue URI::Error => e
+            raise NetworkError.new("GET #{from}: a redirect to a bad Location #{location.inspect} (#{e.message})", url: url, status: nil)
+        end
+
+        # One request: [:ok, the block's value] for a 200, [:redirect, the
+        # Location], or [:status, the code, the Retry-After wait or nil].
         def once(uri, etag)
-            @retry_after = nil
             http = connection(uri)
             http.start do |conn|
                 req = Net::HTTP::Get.new(uri)
                 req["User-Agent"] = @user_agent
                 req["If-None-Match"] = etag if etag
+                # A .gz file is kept as it is sent: its SHA-256 is over the gzip
+                # bytes, also when a server adds Content-Encoding: gzip (spec §5.7).
+                req["Accept-Encoding"] = "identity" if uri.path.end_with?(".gz")
                 conn.request(req) do |res|
                     code = res.code.to_i
                     if code == 200
-                        expected = expected_length(res)
+                        expected = expected_length(uri, res)
                         result = yield(res)
                         check_length!(uri, expected, result.size)
-                        return result
+                        return [:ok, result]
                     end
-                    @retry_after = retry_after(res["retry-after"]) if code == 429 || code >= 500
                     res.read_body { |_| } if code != 304
-                    return code
+                    return [:redirect, res["location"]] if REDIRECTS.include?(code)
+                    return [:status, code, code == 429 || code >= 500 ? retry_after(res["retry-after"]) : nil]
                 end
             end
         end
 
-        # The Content-Length of a body that is not content-encoded (read before
-        # Net::HTTP decodes a gzip body), or nil.
-        def expected_length(res)
+        # The Content-Length of the body as it is read, or nil: there is none,
+        # or Net::HTTP decodes a content-encoded body. Content-Length values
+        # that differ, or are not numbers, are a bad response (network).
+        def expected_length(uri, res)
+            values = Array(res.get_fields("content-length")).flat_map { |v| v.split(",") }.map(&:strip)
+            return nil if values.empty?
+            nums = values.map { |v| Integer(v, 10, exception: false) }
+            if nums.include?(nil) || nums.uniq.size > 1
+                raise Net::HTTPBadResponse, "#{uri}: Content-Length #{values.join(', ')}"
+            end
             enc = res["content-encoding"].to_s.strip.downcase
-            return nil unless enc.empty? || enc == "identity"
-            cl = res["content-length"]
-            cl && Integer(cl.strip, exception: false)
+            return nil if res.decode_content && !(enc.empty? || enc == "identity")
+            nums.first
         end
 
         # Net::HTTP accepts a body that ends before its Content-Length; the
@@ -133,15 +220,32 @@ class OpenTideConstants
             raise EOFError, "#{uri}: body ended after #{got} of #{expected} bytes"
         end
 
+        # Retry-After in seconds (a number, or an HTTP date), at most 60; nil
+        # when it is missing or malformed.
         def retry_after(value)
             return nil if value.nil?
-            s = Integer(value.strip, exception: false)
-            s && s >= 0 ? [s, MAX_RETRY_AFTER].min : nil
+            v = value.strip
+            s = Integer(v, 10, exception: false)
+            if s.nil?
+                t = begin
+                    Time.httpdate(v)
+                rescue ArgumentError
+                    nil
+                end
+                return nil if t.nil?
+                s = [(t - Time.now).ceil, 0].max
+            end
+            s >= 0 ? [s, MAX_RETRY_AFTER].min : nil
+        end
+
+        def unescape(part)
+            part && URI::DEFAULT_PARSER.unescape(part)
         end
 
         def connection(uri)
             http = if @proxy
-                       Net::HTTP.new(uri.host, uri.port, @proxy.host, @proxy.port, @proxy.user, @proxy.password)
+                       # The URL's user and password are percent-encoded; the proxy wants them decoded.
+                       Net::HTTP.new(uri.host, uri.port, @proxy.host, @proxy.port, unescape(@proxy.user), unescape(@proxy.password))
                    else
                        Net::HTTP.new(uri.host, uri.port) # :ENV proxy: http(s)_proxy and no_proxy
                    end

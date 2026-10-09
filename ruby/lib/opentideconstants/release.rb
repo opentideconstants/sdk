@@ -29,9 +29,12 @@ class OpenTideConstants
         # {path => expected sha256} for #verify. io: the open .jsonl file in
         # stream mode (or nil). zenodo_version_doi: from the pointer or index
         # entry of this datestamp (the release document does not hold it).
-        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil)
+        # on_bad_index: called (with the message) when a line read through the
+        # stream index is not the station its entry names (spec §6.2, CR D4).
+        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil)
             @mode = mode
             @io = io
+            @on_bad_index = on_bad_index
             @io_lock = Mutex.new
             @files = files.sort_by(&:name).freeze
             @checks = checks.freeze
@@ -41,6 +44,17 @@ class OpenTideConstants
             raise InvalidReleaseError, "release object missing" unless rel.is_a?(Hash) && rel["datestamp"].is_a?(String)
             @datestamp = rel["datestamp"]
             @created = Util.time(rel["created"])
+            unless rel["source_versions"].nil? || rel["source_versions"].is_a?(Hash)
+                raise InvalidReleaseError, "release.source_versions is not an object"
+            end
+            %w[conventions licences].each do |k|
+                list = meta[k]
+                next if list.nil?
+                id = k == "conventions" ? "convention_id" : "licence_id"
+                unless list.is_a?(Array) && list.all? { |x| x.is_a?(Hash) && x[id].is_a?(String) }
+                    raise InvalidReleaseError, "#{k} must be a list of objects with a #{id}"
+                end
+            end
             @format_version = meta["format_version"]
             @concept_doi = rel["concept_doi"]
             @zenodo_version_doi = zenodo_version_doi
@@ -49,6 +63,8 @@ class OpenTideConstants
             @changelog_url = rel["changelog_url"]
             @conventions = Array(meta["conventions"]).map { |c| Convention.new(c) }.freeze
             @licences = Array(meta["licences"]).map { |l| Licence.new(l) }.freeze
+            Release.no_repeats!(@conventions.map(&:convention_id), "convention_id")
+            Release.no_repeats!(@licences.map(&:licence_id), "licence_id")
             @convention_by_id = @conventions.to_h { |c| [c.convention_id, c] }.freeze
             @licence_by_id = @licences.to_h { |l| [l.licence_id, l] }.freeze
             load_stations(stations)
@@ -72,6 +88,14 @@ class OpenTideConstants
             return if Release.readable_version?(mrv)
             d = rel["datestamp"]
             raise ReaderTooOldError, "release #{d} needs a reader for format #{mrv}; this SDK reads format #{SUPPORTED_FORMAT_VERSION}"
+        end
+
+        # invalid_release when a value appears twice (spec §6.1, CR D5).
+        def self.no_repeats!(values, what)
+            seen = Set.new
+            values.each do |v|
+                raise InvalidReleaseError, "#{what} #{v.inspect} appears twice" unless seen.add?(v)
+            end
         end
 
         # [major, minor] of a "MAJOR.MINOR" format version, or nil.
@@ -110,7 +134,7 @@ class OpenTideConstants
         end
 
         def stats
-            count = ->(values) { values.compact.tally.sort.to_h.freeze }
+            count = ->(values) { values.compact.tally.sort_by { |k, _| k.to_s }.to_h.freeze }
             Stats.new(type: count.call(@entries.map(&:type)), kind: count.call(@entries.map(&:kind)),
                       country: count.call(@entries.map(&:country)), source: count.call(@set_sources),
                       qc_status: count.call(@set_qc))
@@ -125,17 +149,23 @@ class OpenTideConstants
             "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{link}#{version}"
         end
 
-        # The CC BY 4.0 attribution text for what an app shows (spec §4.6).
+        # The CC BY 4.0 attribution text for what an app shows (spec §4.6). With
+        # no stations, or an empty list, every licence in the release. A
+        # Station that is not one of this release's is invalid_argument, never
+        # skipped (CR D2). A licence with no provider prints its attribution
+        # alone and is never merged with another.
         def attribution(stations = nil)
-            ids = if stations.nil?
+            raise InvalidArgumentError, "stations must be an Array of Station" unless stations.nil? || stations.is_a?(Array)
+            ids = if stations.nil? || stations.empty?
                       @licences.map(&:licence_id)
                   else
-                      raise InvalidArgumentError, "stations must be an Array of Station" unless stations.is_a?(Array)
                       out = Set.new
                       stations.each do |st|
                           raise InvalidArgumentError, "stations must be an Array of Station" unless st.is_a?(Station)
                           e = @by_id[st.station_id]
-                          next unless e
+                          unless e && st.instance_variable_get(:@origin).equal?(self)
+                              raise InvalidArgumentError, "station #{st.station_id} is not a station of release #{@datestamp}"
+                          end
                           out << e.rec_licence_id if e.rec_licence_id
                           if e.type == :subordinate
                               out << e.offsets_licence_id if e.offsets_licence_id
@@ -149,7 +179,12 @@ class OpenTideConstants
             parts = []
             ids.uniq.sort.each do |lid|
                 lic = @licence_by_id[lid]
-                next if lic.nil? || seen.include?(lic.provider)
+                next if lic.nil?
+                if lic.provider.nil?
+                    parts << lic.attribution.to_s
+                    next
+                end
+                next if seen.include?(lic.provider)
                 seen << lic.provider
                 parts << "#{lic.provider}: #{lic.attribution}"
             end
@@ -205,7 +240,7 @@ class OpenTideConstants
             unless match.nil? || match.to_s == "exact"
                 raise InvalidArgumentError, "match must be nil or :exact"
             end
-            q = Fold.fold(name)
+            q = Fold.fold(utf8_query(name))
             raise InvalidArgumentError, "the query is empty" if q.empty?
             exact = !match.nil?
             ranked = []
@@ -226,7 +261,7 @@ class OpenTideConstants
 
         def near(lat: nil, lon: nil, radius_km: nil, limit: nil, **filters)
             check_point!(lat, lon)
-            unless radius_km.is_a?(Numeric) && radius_km.finite? && radius_km >= 0
+            unless real?(radius_km) && radius_km >= 0
                 raise InvalidArgumentError, "radius_km must be a number >= 0"
             end
             check_limit!(limit)
@@ -237,7 +272,7 @@ class OpenTideConstants
 
         def nearest(lat: nil, lon: nil, max_km: nil, **filters)
             check_point!(lat, lon)
-            unless max_km.nil? || (max_km.is_a?(Numeric) && max_km.finite? && max_km >= 0)
+            unless max_km.nil? || (real?(max_km) && max_km >= 0)
                 raise InvalidArgumentError, "max_km must be nil or a number >= 0"
             end
             d, e = distances(lat, lon, filters).first
@@ -299,18 +334,33 @@ class OpenTideConstants
             raise InvalidArgumentError, "station_id must be a String" unless id.is_a?(String)
         end
 
+        # limit: nil for no limit, else an Integer of 1 or more (spec §4.4, CR D36).
         def check_limit!(limit)
             return if limit.nil?
-            raise InvalidArgumentError, "limit must be an Integer >= 0" unless limit.is_a?(Integer) && limit >= 0
+            raise InvalidArgumentError, "limit must be nil or an Integer >= 1" unless limit.is_a?(Integer) && limit >= 1
+        end
+
+        # A finite real number (not a Complex, NaN or infinity).
+        def real?(v)
+            Release.real?(v)
+        end
+
+        def self.real?(v)
+            v.is_a?(Numeric) && v.real? && v.finite?
         end
 
         def check_point!(lat, lon)
-            unless lat.is_a?(Numeric) && lat.finite? && lat >= -90 && lat <= 90
-                raise InvalidArgumentError, "lat must be a number in [-90, 90]"
-            end
-            unless lon.is_a?(Numeric) && lon.finite? && lon >= -180 && lon <= 180
-                raise InvalidArgumentError, "lon must be a number in [-180, 180]"
-            end
+            raise InvalidArgumentError, "lat must be a number in [-90, 90]" unless real?(lat) && lat >= -90 && lat <= 90
+            raise InvalidArgumentError, "lon must be a number in [-180, 180]" unless real?(lon) && lon >= -180 && lon <= 180
+        end
+
+        # The query as a valid UTF-8 String; invalid_argument when it is not one.
+        def utf8_query(name)
+            q = name.encoding == Encoding::UTF_8 ? name : name.encode(Encoding::UTF_8)
+            raise InvalidArgumentError, "name is not valid UTF-8" unless q.valid_encoding?
+            q
+        rescue EncodingError
+            raise InvalidArgumentError, "name cannot be converted to UTF-8"
         end
 
         def word_start?(n, q)
@@ -347,12 +397,14 @@ class OpenTideConstants
                 f[k] = v.to_s
             end
             return @entries if f.empty?
+            # A field that is null matches no filter value, also not "".
+            same = ->(value, want) { !value.nil? && value.to_s == want }
             @entries.select do |e|
-                (!f.key?(:country) || e.country == f[:country]) &&
-                    (!f.key?(:type) || e.type.to_s == f[:type]) &&
-                    (!f.key?(:kind) || e.kind.to_s == f[:kind]) &&
+                (!f.key?(:country) || same.call(e.country, f[:country])) &&
+                    (!f.key?(:type) || same.call(e.type, f[:type])) &&
+                    (!f.key?(:kind) || same.call(e.kind, f[:kind])) &&
                     (!f.key?(:source) || e.sources.include?(f[:source])) &&
-                    (!f.key?(:source_type) || e.rec_source_type.to_s == f[:source_type])
+                    (!f.key?(:source_type) || same.call(e.rec_source_type, f[:source_type]))
             end
         end
 
@@ -363,15 +415,29 @@ class OpenTideConstants
                 @io.seek(e.pos)
                 @io.read(e.len)
             end
-            build_station(parse_station(line), e.kind)
+            raw = line && line.bytesize == e.len ? parse_station(line) : nil
+            unless raw.is_a?(Hash) && raw["station_id"] == e.station_id
+                bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : "is not a station line")
+            end
+            build_station(raw, e.kind)
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
         end
 
+        # A line that is not the station its entry names: invalid_release. When
+        # the entry came from index-v1.json, the client deletes that index so
+        # the next open rebuilds it (spec §6.2, CR D4).
+        def bad_line!(e, what)
+            source = @on_bad_index ? "index-v1.json" : "the .jsonl"
+            msg = "#{source}: the line at byte #{e.pos} for #{e.station_id} #{what}"
+            @on_bad_index&.call(msg)
+            raise InvalidReleaseError, msg
+        end
+
         def parse_station(line)
-            JSON.parse(line)
-        rescue JSON::ParserError => err
-            raise InvalidReleaseError, "bad station line: #{err.message}"
+            JSON.parse(line.force_encoding(Encoding::UTF_8))
+        rescue JSON::ParserError, EncodingError
+            nil
         end
 
         def build_station(raw, kind)
@@ -384,7 +450,7 @@ class OpenTideConstants
                                     licence: @licence_by_id.fetch(cs["licence_id"]),
                                     validation: set_validation, recommended: !rec_id.nil? && cs["set_id"] == rec_id)
             end
-            Station.new(raw, sets: sets, kind: kind, validation: all_validation)
+            Station.new(raw, sets: sets, kind: kind, validation: all_validation, origin: self)
         end
 
         # Checks every station and builds the indexes. In stream mode no
@@ -395,22 +461,34 @@ class OpenTideConstants
             tomb_pos = []
             raws = {}
             names = Set.new
+            ids = Set.new
+            @set_ids = Set.new
             @set_sources = []
             @set_qc = []
             stations.each do |raw, pos, len|
                 raise InvalidReleaseError, "a station is not an object" unless raw.is_a?(Hash)
                 sid = raw["station_id"]
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
+                # One id across the active stations and the tombstones together (CR D5).
+                raise InvalidReleaseError, "station_id #{sid} appears twice" unless ids.add?(sid)
                 if raw["status"] == "removed"
+                    Release.check_tombstone!(raw)
                     tombs << Tombstone.new(raw)
                     tomb_pos << [tombs.last, pos, len]
                     next
                 end
+                Release.check_station!(raw)
                 entries << entry_for(raw, pos, len, names)
                 raws[sid] = raw if @mode == :eager
             end
             entries.sort_by!(&:station_id)
             @by_id = entries.to_h { |e| [e.station_id, e] }
+            entries.each do |e|
+                next if e.reference_id.nil? || (e.reference_id.is_a?(String) && @by_id.key?(e.reference_id))
+                raise InvalidReleaseError, "station #{e.station_id}: reference_station_id #{e.reference_id.inspect} " \
+                                           "names no active station"
+            end
+            @set_ids = nil
             entries.each { |e| e.kind = kind_of(e, []) }
             if @mode == :eager
                 entries.each { |e| e.station = build_station(raws[e.station_id], e.kind) }
@@ -442,6 +520,7 @@ class OpenTideConstants
             sources = Set.new
             sets.each do |cs|
                 raise InvalidReleaseError, "station #{sid}: a set is not an object" unless cs.is_a?(Hash)
+                raise InvalidReleaseError, "set_id #{cs['set_id'].inspect} appears twice" unless @set_ids.add?(cs["set_id"])
                 unless @convention_by_id.key?(cs["convention_id"])
                     raise InvalidReleaseError, "set #{cs['set_id']}: convention #{cs['convention_id'].inspect} does not resolve"
                 end
@@ -475,6 +554,76 @@ class OpenTideConstants
                       pos: pos, len: len, station: nil)
         end
 
+        STRING_KEYS = %w[name country type timezone status recommended_set_id].freeze
+        SET_STRING_KEYS = %w[source source_type quantity qc_status source_record_id source_version].freeze
+        OFFSET_NUMBERS = %w[time_offset_high_min time_offset_low_min height_offset_high height_offset_low].freeze
+
+        # The shape checks of a tombstone line: its fields are strings or null.
+        def self.check_tombstone!(raw)
+            %w[name removed_in removed_reason merged_into detail].each do |k|
+                next if raw[k].nil? || raw[k].is_a?(String)
+                raise InvalidReleaseError, "tombstone #{raw['station_id']}: #{k} is not a string"
+            end
+        end
+
+        # The shape checks of an active station line (spec §6.1, §7.3): every
+        # field that the SDK reads has the type of the format, also the nested
+        # ones, so a malformed station fails the load with invalid_release in
+        # eager and stream mode alike, never a raw error at the first query.
+        def self.check_station!(raw)
+            sid = raw["station_id"]
+            bad = ->(what) { raise InvalidReleaseError, "station #{sid}: #{what}" }
+            str = ->(v) { v.nil? || v.is_a?(String) }
+            num = ->(v) { v.nil? || real?(v) }
+            list = ->(v, what) { v.nil? || (v.is_a?(Array) && v.all?(Hash)) or bad.call("#{what} is not a list of objects") }
+            bad.call("name is not a string") unless raw["name"].is_a?(String)
+            STRING_KEYS.each { |k| bad.call("#{k} is not a string") unless str.call(raw[k]) }
+            bad.call("lat is not a number in [-90, 90]") unless real?(raw["lat"]) && raw["lat"].between?(-90, 90)
+            bad.call("lon is not a number in [-180, 180]") unless real?(raw["lon"]) && raw["lon"].between?(-180, 180)
+            off = raw["subordinate_offsets"]
+            unless off.nil?
+                bad.call("subordinate_offsets is not an object") unless off.is_a?(Hash)
+                %w[licence_id height_adjusted_type].each { |k| bad.call("subordinate_offsets.#{k} is not a string") unless str.call(off[k]) }
+                OFFSET_NUMBERS.each { |k| bad.call("subordinate_offsets.#{k} is not a number") unless num.call(off[k]) }
+            end
+            list.call(raw["validation"], "validation")
+            Array(raw["validation"]).each do |v|
+                %w[set_id reference_source reference_station window].each { |k| bad.call("validation #{k} is not a string") unless str.call(v[k]) }
+            end
+            Array(raw["constant_sets"]).each { |cs| check_set!(cs, bad, str, list) }
+        end
+
+        def self.check_set!(cs, bad, str, list)
+            bad.call("a set has no set_id") unless cs["set_id"].is_a?(String)
+            what = ->(k) { "set #{cs['set_id']}: #{k}" }
+            SET_STRING_KEYS.each { |k| bad.call("#{what.call(k)} is not a string") unless str.call(cs[k]) }
+            list.call(cs["qc_flags"], what.call("qc_flags"))
+            list.call(cs["dropped_constituents"], what.call("dropped_constituents"))
+            list.call(cs["constituents"], what.call("constituents"))
+            Array(cs["constituents"]).each { |c| bad.call("#{what.call('a constituent')} has no name") unless c["name"].is_a?(String) }
+            span = cs["record_span"]
+            unless span.nil?
+                bad.call("#{what.call('record_span')} is not an object") unless span.is_a?(Hash)
+                Util.time(span["start"])
+                Util.time(span["end"])
+            end
+            datum = cs["datum"]
+            unless datum.nil?
+                named = datum.is_a?(Hash) ? datum["named"] : nil
+                unless datum.is_a?(Hash) && (named.nil? || (named.is_a?(Hash) && named.values.all? { |x| x.nil? || real?(x) }))
+                    bad.call("#{what.call('datum')} is not an object of numbers")
+                end
+            end
+            tb = cs["time_base"]
+            unless tb.nil?
+                bad.call("#{what.call('time_base')} is not an object") unless tb.is_a?(Hash)
+                months = tb["months_dropped"]
+                bad.call("#{what.call('time_base.months_dropped')} is not a list of strings") unless months.nil? || (months.is_a?(Array) && months.all?(String))
+                bad.call("#{what.call('time_base.evidence')} is not a list") unless tb["evidence"].nil? || tb["evidence"].is_a?(Array)
+            end
+            bad.call("#{what.call('provenance')} is not an object") unless cs["provenance"].nil? || cs["provenance"].is_a?(Hash)
+        end
+
         def quantity_kind(q)
             case q
             when "water_level" then :tide
@@ -493,11 +642,23 @@ class OpenTideConstants
             kind_of(ref, seen + [e.station_id])
         end
 
+        # Indexes a station's aliases. They map a system to a String id or an
+        # Array of String ids, and a (system, id) pair names one station only
+        # (spec §4.4, CR D5); anything else is invalid_release.
         def index_aliases(sid, aliases)
             @aliases ||= Hash.new { |h, k| h[k] = {} }
-            return unless aliases.is_a?(Hash)
+            return if aliases.nil?
+            raise InvalidReleaseError, "station #{sid}: aliases is not an object" unless aliases.is_a?(Hash)
             aliases.each do |system, ids|
-                (ids.is_a?(Array) ? ids : [ids]).each { |id| @aliases[system.to_s][id] = sid }
+                list = ids.is_a?(Array) ? ids : [ids]
+                unless list.all?(String)
+                    raise InvalidReleaseError, "station #{sid}: alias #{system} must be a String id or a list of them"
+                end
+                list.each do |id|
+                    other = @aliases[system.to_s][id]
+                    raise InvalidReleaseError, "alias #{system} #{id} appears twice (#{other} and #{sid})" if other
+                    @aliases[system.to_s][id] = sid
+                end
             end
         end
     end
