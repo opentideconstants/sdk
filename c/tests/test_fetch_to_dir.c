@@ -3,8 +3,25 @@
  *      different SHA-256" (file_exists).
  * C54: "latest" on a network error honours on_network_error (CR D22): with
  *      use_cache it writes the newest cached release; with raise it fails.
- * CR 4c: formats OTC_FORMATS_DEFAULT is jsonl; formats 0 is invalid_argument. */
+ * CR 4c: formats OTC_FORMATS_DEFAULT is jsonl; formats 0 is invalid_argument.
+ * CR2 DR17: the renames are all or nothing. A directory where the .meta.json
+ *      goes makes its rename fail after the .jsonl (overwrite: its original
+ *      is set aside) was renamed in; the original .jsonl comes back, no
+ *      temporary file is left, and nothing is reported. */
 #include "otc_test.h"
+
+#include <dirent.h>
+
+static int tmp_left(const char *dir)
+{
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    int n = 0;
+    if (!d) return -1;
+    while ((e = readdir(d)) != NULL) if (!strncmp(e->d_name, ".tmp-", 5)) n++;
+    closedir(d);
+    return n;
+}
 
 int main(void)
 {
@@ -54,6 +71,33 @@ int main(void)
         CHECK_STATUS(otc_fetch_to_dir(&fo, NULL, to3, OTC_FORMATS_DEFAULT, false, paths, 8, &n), OTC_E_NETWORK);
         free(to2);
         free(to3);
+    }
+    /* CR2 DR17 */
+    {
+        static const char changed[] = "changed jsonl";
+        char *jl = test_join(to, "OTC_20991231.2.jsonl"), *meta = test_join(to, "OTC_20991231.2.meta.json"), got[64];
+        FILE *f = fopen(jl, "wb");
+        size_t len;
+        fo.base_url = base;
+        fo.on_network_error = OTC_ON_NETWORK_ERROR_USE_CACHE;
+        CHECK(f != NULL);
+        if (f) { fputs(changed, f); fclose(f); }
+        CHECK(unlink(meta) == 0 && mkdir(meta, 0777) == 0);
+        memset(paths, 0, sizeof paths);
+        n = 77;
+        CHECK_STATUS(otc_fetch_to_dir(&fo, "20991231.2", to, OTC_FORMATS_DEFAULT, true, paths, 8, &n), OTC_E_IO);
+        CHECK(n == 0 && paths[0] == NULL);
+        CHECK(strstr(err.file, "OTC_20991231.2.meta.json") != NULL);
+        f = fopen(jl, "rb");
+        len = f ? fread(got, 1, sizeof got - 1, f) : 0;
+        if (f) fclose(f);
+        got[len] = '\0';
+        if (strcmp(got, changed) != 0) fprintf(stderr, "DR17: the original .jsonl was not restored (it has %lu bytes)\n", (unsigned long)len);
+        CHECK(strcmp(got, changed) == 0);
+        CHECK(tmp_left(to) == 0);
+        rmdir(meta);
+        free(jl);
+        free(meta);
     }
     free(cache);
     free(to);

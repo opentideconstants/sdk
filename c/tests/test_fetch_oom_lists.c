@@ -99,11 +99,21 @@ int main(void)
         CHECK(st == OTC_OK || st == OTC_E_NOMEM);
         for (i = 0; i < 8; i++) if (out[i]) set++;
         CHECK(set <= n);
-        /* every release reported as removed is gone */
-        for (i = 0; i < n && i < 8; i++) {
-            if (!out[i]) continue;
-            snprintf(p, sizeof p, "%s/v1/releases/%s", cache, out[i]);
-            CHECK(access(p, F_OK) != 0);
+        /* a release that prune may remove is gone exactly when it is reported:
+         * never deleted and then left out of the list (R2-025) */
+        {
+            static const char *const cand[] = {"20990102", "20990101"};
+            size_t j;
+            for (j = 0; j < 2; j++) {
+                int gone, reported = 0;
+                snprintf(p, sizeof p, "%s/v1/releases/%s", cache, cand[j]);
+                gone = access(p, F_OK) != 0;
+                for (i = 0; i < n && i < 8; i++) if (out[i] && !strcmp(out[i], cand[j])) reported = 1;
+                if (gone != reported)
+                    fprintf(stderr, "prune, allocation %ld fails: %s is %s but %s\n", k, cand[j], gone ? "removed" : "there",
+                            reported ? "reported" : "not reported");
+                CHECK(gone == reported);
+            }
         }
         for (i = 0; i < 8; i++) otc_free(out[i]);
         if (oom_live != base) fprintf(stderr, "prune, allocation %ld fails: %ld blocks leak\n", k, oom_live - base);
