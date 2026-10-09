@@ -1472,12 +1472,18 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
 
 # --------------------------------------------------------------------------- review round 1: cross-SDK rules
 
-def fold_d12(name):
-    """The fold of spec 4.4.1 with the D12 changes (final sigma, h/t/n/k with stroke or eng or kra, the middle dot,
-    NBSP as a space). The fold table does not have them yet, so these cases are written out by this rule."""
-    extra = {"ς": "σ", "ħ": "h", "Ħ": "h", "ŧ": "t", "Ŧ": "t", "ŋ": "n", "Ŋ": "n",
-             "ĸ": "k", "·": "", " ": " "}
-    return fold("".join(extra.get(ch, ch) for ch in name))
+# D12 (spec 4.4.1), written out by hand from the rule and not from name_fold.json: each query of the fold root and
+# the stations it must find, in rank order. The build checks the table-driven oracle (search) against it, so a fold
+# table without a D12 row stops the build instead of being checked against itself (R2-163).
+FOLD_D12 = [
+    ("hamrun", {}, ["OTC-T-0161"]),                      # Ħamrun: H with stroke -> h
+    ("torvik", {}, ["OTC-T-0162"]),                      # Ŧorvik: T with stroke -> t
+    ("naliq", {}, ["OTC-T-0163"]),                       # Ŋaliq: eng -> n
+    ("kimmik", {}, ["OTC-T-0164"]),                      # ĸimmik: kra -> k
+    ("ΠΟΡΟΣ", {"match": "exact"}, ["OTC-T-0165"]),       # Πόρος: final sigma = sigma, accent removed
+    ("parallel", {}, ["OTC-T-0166"]),                    # Paral·lel: the middle dot is removed
+    ("saint malo", {"match": "exact"}, ["OTC-T-0167"]),  # Saint<NBSP>Malo: NBSP is a space
+]
 
 
 def group_rules():
@@ -1612,10 +1618,11 @@ def group_rules():
                          root=root, release="20991231.2"))
     F = Rel("fold", "20991231.2")
     fold_steps = []
-    for q, kw in [("hamrun", {}), ("torvik", {}), ("naliq", {}), ("kimmik", {}), ("ΠΟΡΟΣ", {"match": "exact"}),
-                  ("parallel", {}), ("saint malo", {"match": "exact"})]:
-        want = sorted(s["station_id"] for s in F.active if (fold_d12(s["name"]) == fold_d12(q) if kw else fold_d12(q) in fold_d12(s["name"])))
-        assert want, q
+    for q, kw, want in FOLD_D12:
+        got = search(F, q, **kw)
+        if got != want:
+            raise SystemExit(f"rules/pk08/fold-d12: search {q!r} with the fold table gives {got}, D12 needs {want} "
+                             f"(conformance/name_fold.json lacks a D12 row?)")
         fold_steps.append(step("search", {"station_ids": want}, name=q, **kw))
     out.append(mcase("rules/pk08/fold-d12", "the fold rules of D12: final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP", "4.4.1",
                      fold_steps, root="fold", release="20991231.2"))
