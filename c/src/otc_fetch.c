@@ -1085,6 +1085,15 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     memset(&r, 0, sizeof r);
     if (!dir || !path || !etag_path || !url) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto done; }
     body = slurp(path);
+    if (body) {   /* a cached copy that is not JSON is never revalidated (a 304 would keep it): fetch it again */
+        cJSON *probe = otc__json_parse(body, strlen(body));
+        if (!probe) {
+            logf_(c, 2, "the cached %s is not JSON; fetching it again", path);
+            free(body);
+            body = NULL;
+        }
+        cJSON_Delete(probe);
+    }
     etag = body ? slurp(etag_path) : NULL;
     if (etag) {
         size_t n = strlen(etag);
