@@ -677,7 +677,8 @@ OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, con
 /* The format major of the newest release on the server when it is newer than
  * every major this library reads (spec 7.4): the value the last
  * otc_fetch_check_for_update on this cache found (it reads the cached
- * OTC_latest.json; no network access). OTC_E_NOT_FOUND when there is none. */
+ * OTC_latest.json; no network access). OTC_E_NOT_FOUND when there is none;
+ * OTC_E_INVALID_RELEASE when the cached OTC_latest.json is corrupt. */
 OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major);
 /* If a release newer than current exists, downloads it into the cache, sets
  * *updated and writes the path of its .jsonl; the app then opens it and

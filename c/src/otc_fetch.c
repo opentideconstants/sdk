@@ -2130,12 +2130,20 @@ otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *majo
     if (major) *major = 0;
     if (st == OTC_OK && !major) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "major is NULL");
     if (st == OTC_OK) {
-        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = p ? slurp(p) : NULL;
-        cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
-        int m = format_major(otc__jstr(doc, "format_version"));
+        char *dir = pointer_dir(&c), *p = dir ? path2(dir, "OTC_latest.json") : NULL, *t = NULL;
+        cJSON *doc = NULL;
+        int m = -1;
         if (!dir || !p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
+        else if (fs_kind(p) != 2)
+            st = fail(&c, OTC_E_NOT_FOUND, p, "no newer format major is known: %s is not cached (otc_fetch_check_for_update reads it)", p);
+        else if (otc__read_all(p, &t, NULL) != OTC_OK)
+            st = fail(&c, OTC_E_IO, p, "cannot read %s", p);
+        else if (!(doc = otc__json_parse(t, strlen(t))))
+            st = fail(&c, OTC_E_INVALID_RELEASE, p, "%s: not JSON", p);
+        else if ((m = format_major(otc__jstr(doc, "format_version"))) < 0)
+            st = fail(&c, OTC_E_INVALID_RELEASE, p, "%s: format_version is missing or not MAJOR.MINOR", p);
         else if (m > OTC_FORMAT_MAJOR) *major = m;
-        else st = OTC_E_NOT_FOUND;
+        else st = fail(&c, OTC_E_NOT_FOUND, p, "no newer format major: the latest release has format major %d", m);
         cJSON_Delete(doc);
         free(t);
         free(p);
