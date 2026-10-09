@@ -17,6 +17,12 @@ defaults:
   run:
     shell: bash
 
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   conformance:
     name: conformance (${{ matrix.os }}, Python ${{ matrix.python }})
