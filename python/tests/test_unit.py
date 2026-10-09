@@ -91,7 +91,12 @@ class Format10Test(unittest.TestCase):
         """spec §7.4: supported-formats.json is inside every package; read it as package data."""
         from importlib.resources import files
         res = files(otc) / "supported-formats.json"
-        doc = json.loads(res.read_text(encoding="utf-8"))
+        if res.is_file():
+            doc = json.loads(res.read_text(encoding="utf-8"))
+        elif os.environ.get("OTC_TEST_INSTALLED"):
+            self.fail("supported-formats.json is not in the installed package")
+        else:  # the source tree: the build copies python/supported-formats.json into the package
+            doc = json.loads((ROOT / "python" / "supported-formats.json").read_text(encoding="utf-8"))
         self.assertEqual(doc, {"language": "python", "version": otc.__version__,
                                "supported_format_version": otc.SUPPORTED_FORMAT_VERSION})
         self.assertEqual(doc, json.loads((ROOT / "python" / "supported-formats.json").read_text(encoding="utf-8")))
