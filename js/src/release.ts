@@ -725,6 +725,8 @@ function countBy(values: Iterable<string | null>): Record<string, number> {
 }
 
 const LRU_SIZE = 256;
+// The reference links a walk follows (spec 6.2 kind, 4.6 attribution).
+const MAX_LINKS = 16;
 
 /** One loaded release. It is immutable and has every query method. */
 export class Release {
@@ -1062,6 +1064,33 @@ export class Release {
     }
 
     /**
+     * The licences of a station's reference chain (spec 4.6, CR2 DR1). The walk follows reference_station_id through
+     * at most 16 links (the kind rule of 6.2). It takes the offsets licence of each station on the path, and the
+     * licence of the first recommended set it reaches, where it stops. A loop or a missing station ends the walk:
+     * the load has checked the links.
+     */
+    #chainLicences(start: IndexEntry): string[] {
+        const out: string[] = [];
+        const seen = new Set<string>([start.station_id]);
+        let e = start;
+        let links = 0;
+        while (e.type === "subordinate" && (e.reference_station_id !== null || e.offsets_licence_id !== null)) {
+            if (e.offsets_licence_id) out.push(e.offsets_licence_id);
+            if (links === MAX_LINKS) break;
+            const ref = e.reference_station_id === null ? undefined : this.#byId.get(e.reference_station_id);
+            if (!ref || seen.has(ref.station_id)) break;
+            links++;
+            seen.add(ref.station_id);
+            if (ref.recommended_licence_id) {
+                out.push(ref.recommended_licence_id);
+                break;
+            }
+            e = ref;
+        }
+        return out;
+    }
+
+    /**
      * The CC BY 4.0 attribution text for the given stations, or for the whole release (spec 4.6). An empty list is the
      * whole release. A station that is not an active Station of this release (null, unknown, removed, from another
      * release) is invalid_argument, never skipped (CR D2).
@@ -1081,13 +1110,7 @@ export class Release {
                 const e = this.#byId.get(s.station_id);
                 if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
                 if (e.recommended_licence_id) ids.add(e.recommended_licence_id);
-                if (e.type === "subordinate") {
-                    // a subordinate's tides come from its offsets and its reference station (spec 4.6), also with
-                    // offsets only
-                    if (e.offsets_licence_id) ids.add(e.offsets_licence_id);
-                    const ref = e.reference_station_id === null ? undefined : this.#byId.get(e.reference_station_id);
-                    if (ref && ref.recommended_licence_id) ids.add(ref.recommended_licence_id);
-                }
+                for (const id of this.#chainLicences(e)) ids.add(id);
             }
         }
         const parts: string[] = [];

@@ -92,6 +92,16 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "subordinate stations two and three links from their reference station, for the attribution (CR2 DR1)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "chain"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"

@@ -348,13 +348,24 @@ def attribution(rel, station_ids=None):
             rs = rel.rec_set(s)
             if rs:
                 lic_ids.add(rs["licence_id"])
-            off = s.get("subordinate_offsets")
-            if s["type"] == "subordinate" and off:
+            # CR2 DR1: walk the reference chain (at most 16 links, the kind rule of §6.2): every offsets licence on
+            # the path, and the licence of the first recommended set reached, where the walk stops
+            cur, seen, links = s, {s["station_id"]}, 0
+            while cur["type"] == "subordinate" and cur.get("subordinate_offsets"):
+                off = cur["subordinate_offsets"]
                 if off.get("licence_id"):
                     lic_ids.add(off["licence_id"])
-                ref = rel.by_id.get(off["reference_station_id"])
-                if ref and rel.rec_set(ref):
+                if links == 16:
+                    break
+                ref = rel.by_id.get(off.get("reference_station_id"))
+                if ref is None or ref["station_id"] in seen:
+                    break
+                links += 1
+                seen.add(ref["station_id"])
+                if rel.rec_set(ref):
                     lic_ids.add(rel.rec_set(ref)["licence_id"])
+                    break
+                cur = ref
     parts, seen = [], set()
     for lid in sorted(lic_ids):
         lic = rel.licences[lid]
@@ -1746,6 +1757,13 @@ def group_rules():
                      [step("attribution", err("invalid_argument"), station_ids=["OTC-T-9999"])]))
     out.append(mcase("rules/pk15/attribution-empty-list", "attribution with an empty list is the full-release text, as with no argument (D2 c)", "4.6",
                      [step("attribution", {"attribution": attribution(R2)}, station_ids=[])]))
+    # PK-R2-01 (CR2 DR1): the attribution follows the reference chain, not one link
+    CH = Rel("chain", "20991231.2")
+    chain_steps = [step("attribution", {"attribution": attribution(CH, ids)}, station_ids=ids)
+                   for ids in (["OTC-T-0172"], ["OTC-T-0173"], ["OTC-T-0174"], ["OTC-T-0175"], ["OTC-T-0176"],
+                               ["OTC-T-0176", "OTC-T-0174"])]
+    out.append(mcase("rules/pk15/attribution-chain", "attribution of subordinate stations 1, 2 and 3 links from their reference station: every offsets licence on the path and the first recommended set's licence, where the walk stops (CR2 DR1)", "4.6",
+                     chain_steps, root="chain", release="20991231.2"))
     return out
 
 

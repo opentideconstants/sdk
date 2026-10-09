@@ -115,4 +115,5 @@ Roots for the cross-SDK value rules of review round 1 (each loads):
 | `values-kept-reason/` | a constituent `kept_reason` of 48 bytes (the schema sets no maxLength) |
 | `values-source-name/` | a constituent `source_name` of 31 characters that are 62 UTF-8 bytes |
 | `fold/` | station names for the fold rules of D12 (final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP) |
+| `chain/` | release `20991231.2`: subordinate stations with offsets only one, two and three links from their reference station `OTC-T-0171`, each link with its own offsets licence (`harbour-c` has the provider of `harbour-a`); `OTC-T-0175`, a subordinate with its own recommended set on that chain; `OTC-T-0176`, whose reference station is `OTC-T-0175`, where the attribution walk stops (CR2 DR1) |
 | `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |

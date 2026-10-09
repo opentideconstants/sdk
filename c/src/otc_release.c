@@ -5,6 +5,9 @@
 
 #include <stddef.h>
 
+/* the reference links a walk follows (spec 6.2 kind, 4.6 attribution) */
+#define OTC__MAX_LINKS 16
+
 /* --------------------------------------------------------------- options */
 
 void otc_open_options_init(otc_open_options *opts)
@@ -821,7 +824,7 @@ static otc_kind resolve_kind(const otc_release *r, const otc__entry *e, size_t d
         if (e->rec_quantity == OTC_QUANTITY_CURRENT) return OTC_KIND_CURRENT;
         return e->rec_quantity == OTC_QUANTITY_UNSET ? OTC_KIND_UNSET : OTC_KIND_OTHER;
     }
-    if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets && depth < 16) {
+    if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets && depth < OTC__MAX_LINKS) {
         const otc__entry *ref = otc__find_entry(r, e->ref_id);
         if (ref && ref != e) return resolve_kind(r, ref, depth + 1);
     }
@@ -1305,7 +1308,9 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         if (!ids[i] || !otc__find_entry(rel, ids[i]))
             return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_attribution: %s is not an active station of this release",
                              ids[i] ? ids[i] : "(NULL)");
-    cap = ids ? n_ids * 3 + 1 : rel->n_lic + 1;
+    /* per station: its own set, every offsets licence of the chain and the set that ends it */
+    if (ids && n_ids > ((size_t)-1 - 1) / (OTC__MAX_LINKS + 3)) return OTC_E_NOMEM;
+    cap = ids ? n_ids * (OTC__MAX_LINKS + 3) + 1 : rel->n_lic + 1;
     lic = (const char **)calloc(cap, sizeof *lic);
     seen_prov = (const char **)calloc(cap, sizeof *seen_prov);
     seen_att = (const char **)calloc(cap, sizeof *seen_att);
@@ -1318,11 +1323,30 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     } else {
         for (i = 0; i < n_ids; i++) {
             const otc__entry *e = otc__find_entry(rel, ids[i]);
+            const otc__entry *path[OTC__MAX_LINKS + 1];
+            size_t links = 0;
             if (e->has_rec && e->rec_licence) lic[n_lic++] = e->rec_licence;
-            if (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets) {
-                const otc__entry *ref = otc__find_entry(rel, e->ref_id);
+            /* spec 4.6 (CR2 DR1): walk the reference chain through at most OTC__MAX_LINKS links (the kind rule of
+             * 6.2). Take the offsets licence of each station on the path, and the licence of the first recommended
+             * set reached, where the walk stops. A loop or a missing station ends the walk: the load checked the
+             * links. */
+            path[0] = e;
+            while (e->type == OTC_STATION_TYPE_SUBORDINATE && e->has_offsets) {
+                const otc__entry *ref;
+                size_t k;
+                int loop = 0;
                 if (e->off_licence) lic[n_lic++] = e->off_licence;
-                if (ref && ref->has_rec && ref->rec_licence) lic[n_lic++] = ref->rec_licence;
+                if (links == OTC__MAX_LINKS) break;
+                ref = e->ref_id ? otc__find_entry(rel, e->ref_id) : NULL;
+                for (k = 0; ref && k <= links; k++)
+                    if (path[k] == ref) loop = 1;
+                if (!ref || loop) break;
+                path[++links] = ref;
+                if (ref->has_rec) {
+                    if (ref->rec_licence) lic[n_lic++] = ref->rec_licence;
+                    break;
+                }
+                e = ref;
             }
         }
     }

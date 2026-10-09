@@ -15,6 +15,8 @@ class OpenTideConstants
         FILTER_KEYS = %i[country type kind source source_type].freeze
         # The qc_status values of a set with constants.
         USABLE_QC = %i[ok flagged].freeze
+        # The reference links a walk follows (spec §6.2 kind, §4.6 attribution).
+        MAX_LINKS = 16
 
         # A small per-station summary, used by the filters and the indexes.
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
@@ -167,11 +169,7 @@ class OpenTideConstants
                               raise InvalidArgumentError, "station #{st.station_id} is not a station of release #{@datestamp}"
                           end
                           out << e.rec_licence_id if e.rec_licence_id
-                          if e.type == :subordinate
-                              out << e.offsets_licence_id if e.offsets_licence_id
-                              ref = e.reference_id && @by_id[e.reference_id]
-                              out << ref.rec_licence_id if ref && ref.rec_licence_id
-                          end
+                          out.merge(chain_licences(e))
                       end
                       out.to_a
                   end
@@ -630,6 +628,32 @@ class OpenTideConstants
             when "current" then :current
             else :other
             end
+        end
+
+        # The licences of a station's reference chain (spec §4.6, CR2 DR1).
+        # The walk follows reference_station_id through at most 16 links
+        # (the kind rule of §6.2). It takes the offsets licence of each
+        # station on the path, and the licence of the first recommended set
+        # it reaches, where it stops. A loop or a missing station ends the
+        # walk: the load has checked the links.
+        def chain_licences(e)
+            out = []
+            seen = Set[e.station_id]
+            links = 0
+            while e.type == :subordinate && (e.reference_id || e.offsets_licence_id)
+                out << e.offsets_licence_id if e.offsets_licence_id
+                break if links == MAX_LINKS
+                ref = @by_id[e.reference_id]
+                break if ref.nil? || seen.include?(ref.station_id)
+                links += 1
+                seen << ref.station_id
+                if ref.rec_licence_id
+                    out << ref.rec_licence_id
+                    break
+                end
+                e = ref
+            end
+            out
         end
 
         # A station's kind comes from its recommended set, or from its

@@ -82,7 +82,7 @@ NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
-GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "nogz",
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "chain", "nogz",
              "bad", "fixtures.json"]
 
 BASE = "20991231"
@@ -961,6 +961,47 @@ def fold_doc():
     return doc
 
 
+CHAIN_D = "20991231.2"
+
+
+def chain_doc():
+    """Subordinate chains for the attribution (CR2 DR1): offsets-only stations two and three links from their
+    reference station, each link with its own offsets licence; a subordinate with its own set on such a chain; and one
+    whose reference station is a subordinate with a recommended set, where the walk stops."""
+    doc = small_doc(CHAIN_D)
+    doc["licences"] = doc["licences"] + [
+        {"licence_id": "harbour-a", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board A",
+         "attribution": "Offsets: Example Harbour Board A, test data.", "commercial_use": True},
+        {"licence_id": "harbour-b", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board B",
+         "attribution": "Offsets: Example Harbour Board B, test data.", "commercial_use": True},
+        # the provider of harbour-a again: one entry per provider, the first by licence_id
+        {"licence_id": "harbour-c", "spdx": "CC-BY-4.0", "provider": "Example Harbour Board A",
+         "attribution": "Offsets: Example Harbour Board A, second licence.", "commercial_use": True},
+    ]
+
+    def sub(sid, name, lat, ref, licence=None, sets=(), recommended=None):
+        off = {"reference_station_id": ref, "time_offset_high_min": 6, "time_offset_low_min": 9,
+               "height_offset_high": 1.02, "height_offset_low": 0.97, "height_adjusted_type": "R"}
+        if licence:
+            off["licence_id"] = licence
+        st = active(sid, name, "MLT", lat, 14.6, "Europe/Malta", list(sets), type_="subordinate", subordinate_offsets=off)
+        st["recommended_set_id"] = recommended
+        return st
+
+    doc["stations"] += [
+        gauge_station("OTC-T-0171", "Chain Reference", "MLT", 35.71, 14.6, "Europe/Malta", 0.5),
+        sub("OTC-T-0172", "Chain Pier One", 35.72, "OTC-T-0171", "harbour-a"),
+        sub("OTC-T-0173", "Chain Pier Two", 35.73, "OTC-T-0172", "harbour-b"),
+        sub("OTC-T-0174", "Chain Pier Three", 35.74, "OTC-T-0173", "harbour-c"),
+        sub("OTC-T-0175", "Chain Model Pier", 35.75, "OTC-T-0173",
+            sets=[cset("OTC-T-0175", "eot20", "eot20", "model", "otc-greenwich-v1", "eot20", simple_constituents(0.5))],
+            recommended="OTC-T-0175/eot20"),
+        sub("OTC-T-0176", "Chain Outer Pier", 35.76, "OTC-T-0175", "kartverket"),
+    ]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
 def no_gz(files, sums, entry, reuse):
     """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
     files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
@@ -994,6 +1035,9 @@ ROOTS = [
      {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a source_name of 31 characters, 62 bytes"}),
     ("fold", lambda: [fold_doc()], {}, (),
      {"releases": [FOLD_D], "latest": FOLD_D, "expect": "load", "defect": None, "note": "station names for the D12 fold rules"}),
+    ("chain", lambda: [chain_doc()], {}, (),
+     {"releases": [CHAIN_D], "latest": CHAIN_D, "expect": "load", "defect": None,
+      "note": "subordinate stations two and three links from their reference station, for the attribution (CR2 DR1)"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
