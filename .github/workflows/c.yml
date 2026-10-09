@@ -166,8 +166,21 @@ jobs:
           test "$count" -gt 400
           echo "every valgrind log is empty"
 
+  # The single-file bundle with the C99 compilers people use: gcc and clang on
+  # Linux, Apple clang on macOS. The runner on it also runs every query in 8
+  # threads, as the CMake build does.
   amalgamation:
-    runs-on: ubuntu-24.04
+    name: amalgamation ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc }
+          - { os: ubuntu-24.04, cc: clang }
+          - { os: macos-14, cc: clang }
+    env:
+      CC: ${{ matrix.cc }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -178,16 +191,19 @@ jobs:
       - name: The bundle carries supported-formats.json (spec 7.4)
         run: cmp c/supported-formats.json dist/supported-formats.json
       - name: Build with only cc -std=c99
-        run: cc -std=c99 -c dist/opentideconstants.c -o dist/otc.o
+        run: $CC -std=c99 -c dist/opentideconstants.c -o dist/otc.o
       - name: No warnings with -Wall -Wextra -pedantic
-        run: cc -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
+        run: $CC -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
       - name: The runner on the amalgamation passes the suite
         run: |
-          cc -std=c99 -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
+          $CC -std=c99 -pthread -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
           python conformance/driver.py --runner dist/otc_runner --profile c
+      - name: The runner on the amalgamation passes the suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner dist/otc_runner --profile c
       - name: Vendored files match their recorded SHA-256
         run: |
-          cd c && sha256sum -c <<'SUMS'
+          cd c && shasum -a 256 -c <<'SUMS'
           298581a04a36c0165da4b0aade235c23088cb2faa58651d720ea2f3706ed0b0d  vendor/cjson/cJSON.c
           25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee  vendor/cjson/cJSON.h
           a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c  vendor/cjson/LICENSE
