@@ -86,6 +86,7 @@ static void free_sets(otc_station_t *st)
         free((void *)st->sets[i].val);
         free(st->sets[i].flags);
         free(st->sets[i].drops);
+        free(st->sets[i].tb.ev);
     }
     free(st->sets);
 }
@@ -113,7 +114,7 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     s->conv = otc__find_convention(rel, otc__jstr(j, "convention_id"));
     s->lic = otc__find_licence(rel, otc__jstr(j, "licence_id"));
     s->recommended = rec_id && set_id && !strcmp(rec_id, set_id);
-    s->excluded = otc__parse_qc_status(otc__jstr(j, "qc_status")) == OTC_QC_STATUS_EXCLUDED;
+    s->no_constants = otc__parse_qc_status(otc__jstr(j, "qc_status")) == OTC_QC_STATUS_NO_CONSTANTS;
     s->n_cons = cJSON_IsArray(cons) ? (size_t)cJSON_GetArraySize(cons) : 0;
     s->cons = (otc_constituent_t *)calloc(s->n_cons ? s->n_cons : 1, sizeof *s->cons);
     if (!s->cons) return OTC_E_NOMEM;
@@ -133,6 +134,18 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     s->has_span = cJSON_IsObject(s->span.json);
     s->datum.json = otc__jget(j, "datum");
     s->has_datum = cJSON_IsObject(s->datum.json);
+    s->tb.json = otc__jget(j, "time_base");
+    s->has_tb = cJSON_IsObject(s->tb.json);
+    if (s->has_tb) {
+        const cJSON *ev = otc__jget(s->tb.json, "evidence");
+        s->tb.n_ev = cJSON_IsArray(ev) ? (size_t)cJSON_GetArraySize(ev) : 0;
+        s->tb.ev = (otc_time_base_evidence *)calloc(s->tb.n_ev ? s->tb.n_ev : 1, sizeof *s->tb.ev);
+        if (!s->tb.ev) return OTC_E_NOMEM;
+        i = 0;
+        if (cJSON_IsArray(ev)) cJSON_ArrayForEach(x, ev) s->tb.ev[i++].json = x;
+    }
+    s->build.json = otc__jget(otc__jget(j, "provenance"), "build");
+    s->has_build = cJSON_IsObject(s->build.json);
     /* the station's validation rows for this set, by window */
     s->val = (const otc_validation_t **)calloc(st->n_val ? st->n_val : 1, sizeof *s->val);
     if (!s->val) return OTC_E_NOMEM;
@@ -180,7 +193,7 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
     st->n_all = st->n_sets;
     if (st->n_all > 1) qsort(st->order_all, st->n_all, sizeof *st->order_all, set_ptr_cmp);
     for (i = 0; i < st->n_all; i++)
-        if (!st->order_all[i]->excluded) st->order_usable[st->n_usable++] = st->order_all[i];
+        if (!st->order_all[i]->no_constants) st->order_usable[st->n_usable++] = st->order_all[i];
     *out = st;
     return OTC_OK;
 }
@@ -270,16 +283,16 @@ otc_status otc_station_recommended_set(const otc_station_t *st, const otc_set **
     return st->rec ? OTC_OK : OTC_E_NOT_FOUND;
 }
 
-size_t otc_station_set_count(const otc_station_t *st, bool include_excluded)
+size_t otc_station_set_count(const otc_station_t *st, bool include_no_constants)
 {
     if (!st) return 0;
-    return include_excluded ? st->n_all : st->n_usable;
+    return include_no_constants ? st->n_all : st->n_usable;
 }
 
-otc_status otc_station_set_at(const otc_station_t *st, bool include_excluded, size_t i, const otc_set **out)
+otc_status otc_station_set_at(const otc_station_t *st, bool include_no_constants, size_t i, const otc_set **out)
 {
-    if (!st || !out || i >= otc_station_set_count(st, include_excluded)) return OTC_E_INVALID_ARGUMENT;
-    *out = include_excluded ? st->order_all[i] : st->order_usable[i];
+    if (!st || !out || i >= otc_station_set_count(st, include_no_constants)) return OTC_E_INVALID_ARGUMENT;
+    *out = include_no_constants ? st->order_all[i] : st->order_usable[i];
     return OTC_OK;
 }
 
@@ -330,7 +343,13 @@ otc_status otc_station_validation_at(const otc_station_t *st, size_t i, const ot
 TB_STR(otc_tombstone_station_id, "station_id")
 TB_STR(otc_tombstone_name, "name")
 TB_STR(otc_tombstone_removed_in, "removed_in")
-TB_STR(otc_tombstone_removed_reason, "removed_reason")
+TB_STR(otc_tombstone_merged_into, "merged_into")
+TB_STR(otc_tombstone_detail, "detail")
+
+otc_removed_reason otc_tombstone_removed_reason(const otc_tombstone_t *t)
+{
+    return t ? otc__parse_removed_reason(otc__jstr(t->root, "removed_reason")) : OTC_REMOVED_REASON_UNSET;
+}
 
 otc_station_status_t otc_tombstone_status(const otc_tombstone_t *t)
 {
@@ -422,9 +441,9 @@ otc_qc_flag_kind otc_qc_flag_flag(const otc_qc_flag *f)
 {
     return f ? otc__parse_qc_flag(otc__jstr(f->json, "flag")) : OTC_QC_FLAG_UNSET;
 }
-otc_status otc_qc_flag_verdict(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
+otc_status otc_qc_flag_reason(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
 {
-    return f ? otc__copy_str(otc__jstr(f->json, "verdict"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+    return f ? otc__copy_str(otc__jstr(f->json, "reason"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
 }
 otc_status otc_qc_flag_values_json(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
 {
@@ -498,12 +517,121 @@ otc_status otc_set_provenance_json(const otc_set *s, char *buf, size_t len, size
     {                                                                                          \
         return s ? otc__copy_json(otc__jget(prov_of(s), KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
-PROV_STR(otc_set_provenance_build_commit, "build_commit")
 PROV_STR(otc_set_provenance_adapter_version, "adapter_version")
 PROV_STR(otc_set_provenance_selection_reason, "selection_reason")
+PROV_STR(otc_set_provenance_carried_from_release, "carried_from_release")
 PROV_JSON(otc_set_provenance_input_sha256_json, "input_sha256")
-PROV_JSON(otc_set_provenance_time_base_json, "time_base")
 PROV_JSON(otc_set_provenance_decision_json, "decision")
+
+otc_status otc_set_provenance_build(const otc_set *s, const otc_provenance_build **out)
+{
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_build ? &s->build : NULL;
+    return s->has_build ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+#define BUILD_STR(NAME, KEY)                                                                   \
+    otc_status NAME(const otc_provenance_build *b, char *buf, size_t len, size_t *needed)      \
+    {                                                                                          \
+        return b ? otc__copy_str(otc__jstr(b->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+BUILD_STR(otc_provenance_build_build_commit, "build_commit")
+BUILD_STR(otc_provenance_build_built_at, "built_at")
+BUILD_STR(otc_provenance_build_fetched_at, "fetched_at")
+BUILD_STR(otc_provenance_build_run_id, "run_id")
+
+otc_status otc_provenance_build_tool_versions_json(const otc_provenance_build *b, char *buf, size_t len,
+                                                   size_t *needed)
+{
+    return b ? otc__copy_json(otc__jget(b->json, "tool_versions"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+/* ---------------------------------------------------------------- time base */
+
+/* time_base.correction, or NULL when it is null or absent */
+static const cJSON *correction_of(const otc_time_base_t *tb)
+{
+    const cJSON *c = tb ? otc__jget(tb->json, "correction") : NULL;
+    return cJSON_IsObject(c) ? c : NULL;
+}
+
+otc_status otc_set_time_base(const otc_set *s, const otc_time_base_t **out)
+{
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_tb ? &s->tb : NULL;
+    return s->has_tb ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+otc_time_base_code_t otc_time_base_code(const otc_time_base_t *tb)
+{
+    return tb ? otc__parse_time_base_code(otc__jstr(tb->json, "code")) : OTC_TIME_BASE_CODE_UNSET;
+}
+
+#define TIMEBASE_STR(NAME, OBJ, KEY)                                                           \
+    otc_status NAME(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed)          \
+    {                                                                                          \
+        return tb ? otc__copy_str(otc__jstr(OBJ, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+TIMEBASE_STR(otc_time_base_reason, tb->json, "reason")
+TIMEBASE_STR(otc_time_base_declared, tb->json, "declared")
+TIMEBASE_STR(otc_time_base_published, tb->json, "published")
+TIMEBASE_STR(otc_time_base_decided_in, tb->json, "decided_in")
+TIMEBASE_STR(otc_time_base_decided_build_commit, tb->json, "decided_build_commit")
+TIMEBASE_STR(otc_time_base_correction_from, correction_of(tb), "from")
+TIMEBASE_STR(otc_time_base_correction_to, correction_of(tb), "to")
+
+otc_status otc_time_base_correction_json(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed)
+{
+    return tb ? otc__copy_json(correction_of(tb), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+static const cJSON *months_of(const otc_time_base_t *tb)
+{
+    const cJSON *m = tb ? otc__jget(tb->json, "months_dropped") : NULL;
+    return cJSON_IsArray(m) ? m : NULL;
+}
+
+size_t otc_time_base_months_dropped_count(const otc_time_base_t *tb)
+{
+    const cJSON *m = months_of(tb);
+    return m ? (size_t)cJSON_GetArraySize(m) : 0;
+}
+
+otc_status otc_time_base_months_dropped_at(const otc_time_base_t *tb, size_t i, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *x;
+    if (!tb || i >= otc_time_base_months_dropped_count(tb)) return OTC_E_INVALID_ARGUMENT;
+    x = cJSON_GetArrayItem(months_of(tb), (int)i);
+    return cJSON_IsString(x) ? otc__copy_str(x->valuestring, buf, len, needed) : otc__copy_json(x, buf, len, needed);
+}
+
+size_t otc_time_base_evidence_count(const otc_time_base_t *tb) { return tb ? tb->n_ev : 0; }
+
+otc_status otc_time_base_evidence_at(const otc_time_base_t *tb, size_t i, const otc_time_base_evidence **out)
+{
+    if (!tb || !out || i >= tb->n_ev) return OTC_E_INVALID_ARGUMENT;
+    *out = &tb->ev[i];
+    return OTC_OK;
+}
+
+#define EVIDENCE_STR(NAME, KEY)                                                                \
+    otc_status NAME(const otc_time_base_evidence *ev, char *buf, size_t len, size_t *needed)   \
+    {                                                                                          \
+        return ev ? otc__copy_str(otc__jstr(ev->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+EVIDENCE_STR(otc_time_base_evidence_comparator_kind, "comparator_kind")
+EVIDENCE_STR(otc_time_base_evidence_comparator_id, "comparator_id")
+EVIDENCE_STR(otc_time_base_evidence_detail, "detail")
+
+double otc_time_base_evidence_distance_km(const otc_time_base_evidence *ev)
+{
+    return ev ? otc__jnum(ev->json, "distance_km") : NAN;
+}
+
+double otc_time_base_evidence_lag_min(const otc_time_base_evidence *ev)
+{
+    return ev ? otc__jnum(ev->json, "lag_min") : NAN;
+}
 
 size_t otc_set_validation_count(const otc_set *s) { return s ? s->n_val : 0; }
 otc_status otc_set_validation_at(const otc_set *s, size_t i, const otc_validation_t **out)

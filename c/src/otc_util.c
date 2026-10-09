@@ -35,6 +35,7 @@ const char *otc_status_code(otc_status status)
     case OTC_E_NOMEM: return "out_of_memory";
     case OTC_E_NOT_BUILT: return "not_built";
     case OTC_E_UNSUPPORTED_CONVENTION: return "unsupported_convention";
+    case OTC_E_READER_TOO_OLD: return "reader_too_old";
     }
     return "unknown";
 }
@@ -66,6 +67,41 @@ void otc__err_set(otc_error *err, otc_status st, const char *file, const char *f
     va_start(ap, fmt);
     vsnprintf(err->message, sizeof err->message, fmt, ap);
     va_end(ap);
+}
+
+/* ----------------------------------------------------------- format versions */
+
+static void version_parse(const char *v, long *major, long *minor)
+{
+    char *end = NULL;
+    *major = 0;
+    *minor = 0;
+    if (!v) return;
+    *major = strtol(v, &end, 10);
+    if (end == v || *end != '.') { *major = 0; return; }
+    v = end + 1;
+    *minor = strtol(v, &end, 10);
+    if (end == v) { *major = 0; *minor = 0; }
+}
+
+int otc__version_cmp(const char *a, const char *b)
+{
+    long am, an, bm, bn;
+    version_parse(a, &am, &an);
+    version_parse(b, &bm, &bn);
+    if (am != bm) return am < bm ? -1 : 1;
+    if (an != bn) return an < bn ? -1 : 1;
+    return 0;
+}
+
+int otc__readable(const char *fv, const char *mrv)
+{
+    long major, minor;
+    if (fv) {
+        version_parse(fv, &major, &minor);
+        if (major != OTC_FORMAT_MAJOR) return 0;
+    }
+    return !mrv || otc__version_cmp(mrv, OTC_FORMAT_VERSION) <= 0;
 }
 
 /* ------------------------------------------------------------------- enums */
@@ -100,8 +136,13 @@ static const name_row SRCTYPE[] = {{OTC_SOURCE_TYPE_OFFICIAL, "official"}, {OTC_
                                    {OTC_SOURCE_TYPE_MODEL, "model"}, {0, NULL}};
 static const name_row QTY[] = {{OTC_QUANTITY_WATER_LEVEL, "water_level"}, {OTC_QUANTITY_CURRENT, "current"},
                                {0, NULL}};
-static const name_row QCS[] = {{OTC_QC_STATUS_ACCEPTED, "accepted"}, {OTC_QC_STATUS_FALLBACK, "fallback"},
-                               {OTC_QC_STATUS_EXCLUDED, "excluded"}, {0, NULL}};
+static const name_row QCS[] = {{OTC_QC_STATUS_OK, "ok"}, {OTC_QC_STATUS_FLAGGED, "flagged"},
+                               {OTC_QC_STATUS_NO_CONSTANTS, "no_constants"}, {0, NULL}};
+static const name_row REMOVED[] = {{OTC_REMOVED_REASON_MERGED, "merged"}, {OTC_REMOVED_REASON_DUPLICATE, "duplicate"},
+                                   {0, NULL}};
+static const name_row TBCODE[] = {{OTC_TIME_BASE_CODE_VERIFIED, "verified"}, {OTC_TIME_BASE_CODE_CORRECTED, "corrected"},
+                                  {OTC_TIME_BASE_CODE_UNVERIFIED, "unverified"},
+                                  {OTC_TIME_BASE_CODE_DISPUTED, "disputed"}, {0, NULL}};
 static const name_row LOADED[] = {{OTC_LOADED_FROM_DOWNLOAD, "download"}, {OTC_LOADED_FROM_CACHE, "cache"},
                                   {OTC_LOADED_FROM_CACHE_AFTER_ERROR, "cache_after_error"},
                                   {OTC_LOADED_FROM_FILE, "file"}, {OTC_LOADED_FROM_FILE_UNVERIFIED, "file_unverified"},
@@ -119,7 +160,8 @@ static const name_row QCF[] = {{OTC_QC_FLAG_TIME_BASE, "time_base"}, {OTC_QC_FLA
                                {OTC_QC_FLAG_MICROTIDAL, "microtidal"},
                                {OTC_QC_FLAG_NON_TIDAL_SIGNAL, "non_tidal_signal"},
                                {OTC_QC_FLAG_SHORT_RECORD, "short_record"},
-                               {OTC_QC_FLAG_SIBLING_DISAGREEMENT, "sibling_disagreement"}, {0, NULL}};
+                               {OTC_QC_FLAG_SIBLING_DISAGREEMENT, "sibling_disagreement"},
+                               {OTC_QC_FLAG_CARRIED_OVER, "carried_over"}, {0, NULL}};
 
 #define ENUM_FUNCS(T, ROWS, OTHER, NAME, PARSE)                                                   \
     const char *NAME(T v) { return enum_name(ROWS, OTHER, (int)v); }                              \
@@ -132,6 +174,9 @@ ENUM_FUNCS(otc_station_status_t, SSTATUS, OTC_STATION_STATUS_OTHER, otc_station_
 ENUM_FUNCS(otc_source_type, SRCTYPE, OTC_SOURCE_TYPE_OTHER, otc_source_type_name, otc__parse_source_type)
 ENUM_FUNCS(otc_quantity, QTY, OTC_QUANTITY_OTHER, otc_quantity_name, otc__parse_quantity)
 ENUM_FUNCS(otc_qc_status, QCS, OTC_QC_STATUS_OTHER, otc_qc_status_name, otc__parse_qc_status)
+ENUM_FUNCS(otc_removed_reason, REMOVED, OTC_REMOVED_REASON_OTHER, otc_removed_reason_name, otc__parse_removed_reason)
+ENUM_FUNCS(otc_time_base_code_t, TBCODE, OTC_TIME_BASE_CODE_OTHER, otc_time_base_code_name,
+           otc__parse_time_base_code)
 ENUM_FUNCS(otc_phase_reference, PHASE, OTC_PHASE_REFERENCE_OTHER, otc_phase_reference_name,
            otc__parse_phase_reference)
 ENUM_FUNCS(otc_nodal_handling, NODAL, OTC_NODAL_HANDLING_OTHER, otc_nodal_handling_name,

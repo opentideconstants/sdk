@@ -55,7 +55,26 @@ otc_status otc_require_station(const otc_release *rel, const char *id, otc_stati
 {
     otc_status st = otc_station(rel, id, out);
     if (st != OTC_E_NOT_FOUND) return st;
-    if (otc__find_tomb(rel, id)) return otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed", id);
+    if (otc__find_tomb(rel, id)) {
+        /* the error carries the tombstone (spec 4.4): its fields are in the message, and
+         * otc_tombstone(rel, id, &t) gives the object */
+        otc_tombstone_t *t = NULL;
+        const char *in = NULL, *reason = NULL, *into = NULL;
+        otc_status st2;
+        if (otc_tombstone(rel, id, &t) == OTC_OK) {
+            in = otc__jstr(t->root, "removed_in");
+            reason = otc__jstr(t->root, "removed_reason");
+            into = otc__jstr(t->root, "merged_into");
+        }
+        if (into)
+            st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s), merged into %s", id,
+                            in ? in : "?", reason ? reason : "?", into);
+        else
+            st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s)", id, in ? in : "?",
+                            reason ? reason : "?");
+        otc_tombstone_free(t);
+        return st2;
+    }
     return otc__fail(rel, OTC_E_STATION_NOT_FOUND, "no station %s", id);
 }
 

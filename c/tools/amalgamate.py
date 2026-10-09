@@ -7,7 +7,8 @@
 
 writes <out>/opentideconstants.h (the public header) and <out>/opentideconstants.c
 (the library, the fold table, the vendored SHA-256 and cJSON, with cJSON and
-SHA-256 renamed to otc__*). Copy both files into a project and compile them
+SHA-256 renamed to otc__*), plus <out>/supported-formats.json (spec 7.4: it
+ships in every C release artifact, so the bundle carries it too). Copy both files into a project and compile them
 with any C99 compiler: cc -std=c99 -c opentideconstants.c (link with -lm, and
 -pthread on an old glibc).
 """
@@ -79,7 +80,8 @@ def main():
         chunks.append(f"\n/* ======================================== {part} */\n" + "\n".join(lines) + "\n")
     (out / "opentideconstants.c").write_text("".join(chunks))
     (out / "opentideconstants.h").write_text(header)
-    print(f"wrote {out / 'opentideconstants.c'} and {out / 'opentideconstants.h'}")
+    (out / "supported-formats.json").write_bytes((C / "supported-formats.json").read_bytes())
+    print(f"wrote {out / 'opentideconstants.c'}, {out / 'opentideconstants.h'} and {out / 'supported-formats.json'}")
 
 
 if __name__ == "__main__":

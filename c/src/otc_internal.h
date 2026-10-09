@@ -105,6 +105,14 @@ otc_station_status_t otc__parse_station_status(const char *s);
 otc_source_type otc__parse_source_type(const char *s);
 otc_quantity otc__parse_quantity(const char *s);
 otc_qc_status otc__parse_qc_status(const char *s);
+otc_removed_reason otc__parse_removed_reason(const char *s);
+otc_time_base_code_t otc__parse_time_base_code(const char *s);
+/* Compares two "MAJOR.MINOR" format versions numerically (-1, 0, 1); an
+ * unparsable version sorts as 0.0. */
+int otc__version_cmp(const char *a, const char *b);
+/* 1 when this library reads a release of format_version fv whose
+ * release.min_reader_version is mrv (either may be NULL). */
+int otc__readable(const char *fv, const char *mrv);
 otc_phase_reference otc__parse_phase_reference(const char *s);
 otc_nodal_handling otc__parse_nodal_handling(const char *s);
 otc_height_adjusted_type otc__parse_height_adjusted_type(const char *s);
@@ -133,7 +141,10 @@ struct otc_file_info {
 struct otc_release_info {
     char          *datestamp;
     char          *format_version;
-    char          *doi;
+    char          *min_reader_version; /* gates latest (spec 7.4); not an accessor */
+    char          *concept_doi;
+    char          *zenodo_version_doi;
+    char          *content_sha256;
     otc_file_info *files;
     size_t         n_files;
 };
@@ -168,7 +179,7 @@ typedef struct otc__entry {
     int                has_offsets;
     char              *ref_id;          /* subordinate_offsets.reference_station_id */
     char              *off_licence;     /* subordinate_offsets.licence_id */
-    char             **sources;         /* sources of usable (not excluded) sets */
+    char             **sources;         /* sources of sets with constants (qc_status ok or flagged) */
     size_t             n_sources;
     uint64_t           offset;
     size_t             length;
@@ -205,6 +216,7 @@ struct otc_release {
     size_t          n_cnames;
     otc_file_info  *files;
     size_t          n_files;
+    char           *zenodo_version_doi; /* set by otc_fetch_open from .verified (spec 4.3) */
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
     otc__kvlist     source_counts;
@@ -231,6 +243,13 @@ int otc__filter_match(const otc_filter *f, const otc__entry *e);
 /* ---------------------------------------------------------------- stations */
 
 struct otc_qc_flag { const cJSON *json; };
+struct otc_time_base_evidence { const cJSON *json; };
+struct otc_time_base {
+    const cJSON            *json;
+    otc_time_base_evidence *ev;
+    size_t                  n_ev;
+};
+struct otc_provenance_build { const cJSON *json; };
 struct otc_dropped { const cJSON *json; };
 struct otc_record_span { const cJSON *json; };
 struct otc_datum { const cJSON *json; };
@@ -252,8 +271,12 @@ struct otc_set {
     int                     has_span;
     otc_datum               datum;
     int                     has_datum;
+    otc_time_base_t         tb;
+    int                     has_tb;
+    otc_provenance_build    build;
+    int                     has_build;
     bool                    recommended;
-    bool                    excluded;
+    bool                    no_constants;
 };
 
 struct otc_station {
@@ -264,7 +287,7 @@ struct otc_station {
     size_t            n_sets;
     otc_set         **order_all;     /* recommended first, then by set_id */
     size_t            n_all;
-    otc_set         **order_usable;  /* the same without excluded sets */
+    otc_set         **order_usable;  /* the same without no_constants sets */
     size_t            n_usable;
     otc_set          *rec;
     otc_validation_t *val;
