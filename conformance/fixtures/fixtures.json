@@ -83,6 +83,16 @@
    "defect": null,
    "expect": "load",
    "latest": "20991231.2",
+   "note": "a NUL inside alias ids, set_ids and the recommended_set_id of OTC-T-0001",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "values-nul"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
    "note": "station names for the D12 fold rules",
    "releases": [
     "20991231.2"

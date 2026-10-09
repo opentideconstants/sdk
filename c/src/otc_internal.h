@@ -46,15 +46,30 @@ char *otc__fold(const char *s);
 /* The same for n bytes that may hold a NUL; *out_len (may be NULL) gets the length. */
 char *otc__fold_n(const char *s, size_t n, size_t *out_len);
 
-/* JSON strings with a NUL inside (cJSON's decoded strings end at the first NUL). */
+/* JSON strings with a NUL inside (spec 6.4, CR2 DR33). cJSON decodes \u0000 to a
+ * NUL byte but keeps no length, so its strings seem to end at the first NUL.
+ * otc__json_parse records the full length of every such string in the node's
+ * valuedouble (cJSON does not use it for strings; cJSON_Duplicate copies it),
+ * and every string the library reads, compares or copies out goes through the
+ * helpers below. */
 /* 1 when the JSON text has a \u0000 escape. */
 int otc__json_has_nul(const char *text, size_t len);
-/* The string member key of the top-level object in text, decoded with its full
- * length: 1 found (*out malloc'd, NUL-terminated after *out_len bytes), 0 absent
- * or not a string, -1 out of memory. */
-int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len);
 /* n bytes as a JSON string literal (quotes included; control characters as \u00XX). */
 char *otc__json_escape_n(const char *s, size_t n);
+/* The full length of a string node (NULs inside included). */
+size_t otc__jstr_len(const cJSON *s);
+/* The string member key as a node, or NULL when absent or not a string. */
+const cJSON *otc__jstr_item(const cJSON *obj, const char *key);
+/* 1 when the string node s is the C string str in full (a NUL inside s never matches). */
+int otc__jstr_is(const cJSON *s, const char *str);
+/* 1 when both are string nodes with the same bytes. */
+int otc__jstr_same(const cJSON *a, const cJSON *b);
+/* A deep copy of v whose strings keep their full length (cJSON_Duplicate cuts
+ * them at a NUL, so the library never calls it directly). NULL: no memory. */
+cJSON *otc__json_dup(const cJSON *v);
+/* A new node for the string node s, for a document that is only printed: a raw
+ * JSON literal when s holds a NUL, else a plain string. NULL: no memory. */
+cJSON *otc__json_str_out(const cJSON *s);
 
 /* ---------------------------------------------------------------- platform */
 
@@ -107,7 +122,13 @@ otc_status otc__json_parse_st(const char *text, size_t len, cJSON **out);
 char *otc__strdup(const char *s);
 char *otc__strndup(const char *s, size_t n);
 otc_status otc__copy_str(const char *src, char *buf, size_t len, size_t *needed);
-/* The JSON text of a value (NULL value: OTC_E_NOT_FOUND). */
+/* The same for n bytes that may hold a NUL (needed is n + 1). */
+otc_status otc__copy_strn(const char *src, size_t n, char *buf, size_t len, size_t *needed);
+/* The same for a string node in full (NULL or not a string: OTC_E_NOT_FOUND). */
+otc_status otc__copy_jstr(const cJSON *s, char *buf, size_t len, size_t *needed);
+/* The string member key of obj, in full. */
+otc_status otc__copy_member(const cJSON *obj, const char *key, char *buf, size_t len, size_t *needed);
+/* The JSON text of a value, strings with a NUL in full (NULL value: OTC_E_NOT_FOUND). */
 otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed);
 /* A string member, or NULL when absent or not a string. */
 const char *otc__jstr(const cJSON *obj, const char *key);
@@ -124,6 +145,8 @@ void otc__err_reset(otc_error *err);
 /* Records an error in a usable err; else nothing. */
 void otc__err_set(otc_error *err, otc_status st, const char *file, const char *fmt, ...);
 int otc__strcmp_null(const char *a, const char *b);
+/* Orders two byte strings that may hold a NUL: by their bytes, then the shorter first. */
+int otc__bytes_cmp(const char *a, size_t an, const char *b, size_t bn);
 int otc__ends_with(const char *s, const char *suffix);
 char *otc__join(const char *a, const char *b);
 
@@ -244,6 +267,7 @@ typedef struct otc__tomb {
 typedef struct otc__alias {
     char  *system;
     char  *alias;
+    size_t alias_len; /* an alias id may hold a NUL (CR2 DR33) */
     char  *station;   /* the station_id that owns it */
 } otc__alias;
 

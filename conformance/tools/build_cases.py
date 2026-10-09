@@ -1729,16 +1729,56 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     V = f"{SRV}/values/"
     vd = "20991231.2"
     vdir = f"${{cache}}/v1/releases/{vd}"
-    out.append(case("cross/index-nul-name", "a station name with a NUL inside: the writer's stream index keeps it, and the reader's search finds the station by its full name", "6.2, 4.4.1",
+    # "da" is after the NUL: a reader that cut the name at the NUL ("Me") does not find it (PK-R2-08, R2-149)
+    RV = Rel("values", vd)
+    out.append(case("cross/index-nul-name", "a station name with a NUL inside: the writer's stream index keeps it, and the reader's search finds the station by the part after the NUL", "6.2, 4.4.1",
                     [as_("writer", step("open", {"loaded_from": "download", "datestamp": vd}, release=vd, base_url=V, cache_dir="${cache}", mode="stream")),
-                     as_("writer", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")),
+                     as_("writer", step("search", {"station_ids": search(RV, "Me\u0000da")}, name="Me\u0000da")),
+                     as_("writer", step("search", {"station_ids": search(RV, "da")}, name="da")),
                      as_("writer", step("close")),
                      drv("assert_index", path=f"{vdir}/index-v1.json", jsonl=f"{vdir}/OTC_{vd}.jsonl", datestamp=vd)] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": vd}, release=vd, cache_dir="${cache}", offline=True, mode="stream")),
-                        as_("reader", step("search", {"station_ids": ["OTC-T-0151"]}, name="Me\u0000da")),
+                        as_("reader", step("search", {"station_ids": search(RV, "Me\u0000da")}, name="Me\u0000da")),
                         # past the NUL: a reader that cuts the name at the NUL ("Me") finds nothing (R2-149)
-                        as_("reader", step("search", {"station_ids": search(Rel("values", vd), "da")}, name="da")), no_requests],
+                        as_("reader", step("search", {"station_ids": search(RV, "da")}, name="da")), no_requests],
                     roles=roles))
+    # A NUL inside alias ids and set_ids (PK-R2-08, DR33): the writer's index keeps every string in full, the
+    # reader uses that fresh index as it is (no rebuild, spec 6.2), and no lookup matches the part before a NUL.
+    # Each SDK answers from the .jsonl (the writer), from another SDK's index (the reader) and from its own index
+    # (the writer again).
+    RN = Rel("values-nul", d)
+    N = f"{SRV}/values-nul/"
+    s1n = RN.by_id["OTC-T-0001"]
+
+    def nul_case(cid, title, reads):
+        def ask(who):
+            return [as_(who, step(op, expect, **args)) for op, expect, args in reads]
+        return case(cid, title, "6.2, 4.4, 6.4",
+                    [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, release=d, base_url=N, cache_dir="${cache}", mode="stream"))]
+                    + ask("writer") + [
+                        as_("writer", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d),
+                        drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream"))]
+                    + ask("reader") + [
+                        as_("reader", step("close")),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"),
+                        as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream"))]
+                    + ask("writer") + [
+                        as_("writer", step("close")),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"), no_requests],
+                    roles=roles)
+    out.append(nul_case("cross/index-nul-alias", "alias ids with a NUL inside: the station reads them in full, and the part before the NUL finds no station, from the .jsonl and from any SDK's stream index", [
+        ("station", {"station": enc_station(RN, s1n)}, {"station_id": "OTC-T-0001"}),
+        ("station_by_alias", {"station_id": None}, {"system": "xtide", "alias_id": "San"}),
+        ("station_by_alias", {"station_id": None}, {"system": "gesla", "alias_id": "test-gesla"}),
+        ("station_by_alias", {"station_id": "OTC-T-0001"}, {"system": "gesla", "alias_id": "test-gesla-0001b"})]))
+    out.append(nul_case("cross/index-nul-set-id", "set_ids with a NUL inside (the recommended one too): the sets read them in full, and the part before the NUL is no set, from the .jsonl and from any SDK's stream index", [
+        ("recommended_set", {"set_id": RN.rec_set(s1n)["set_id"]}, {"station_id": "OTC-T-0001"}),
+        ("constant_set", {"set": None}, {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/no"}),
+        ("constant_set", {"set": None}, {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/gesla"}),
+        ("stations", {"station_ids": [s["station_id"] for s in apply_filters(RN, RN.active, {"source_type": "official"})]}, {"source_type": "official"}),
+        ("stations", {"station_ids": [s["station_id"] for s in apply_filters(RN, RN.active, {"kind": "tide", "country": "USA"})]}, {"kind": "tide", "country": "USA"})]))
     latest_writer = [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
                      as_("writer", step("close"))]

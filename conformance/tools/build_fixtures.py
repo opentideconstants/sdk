@@ -84,7 +84,7 @@ NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
-GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "aliases", "chain", "nogz",
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "values-nul", "fold", "aliases", "chain", "nogz",
              "bad", "fixtures.json"]
 
 BASE = "20991231"
@@ -1139,6 +1139,23 @@ def source_name_doc():
     return doc
 
 
+def nul_doc():
+    """A NUL inside alias ids and set_ids, which the schema allows (review round 2, PK-R2-08): OTC-T-0001 of good/'s
+    20991231.2 with the xtide alias and the first gesla alias, and both set_ids (so the recommended_set_id and the
+    validation rows), holding a NUL. The part before each NUL is another value, which no lookup may match."""
+    doc = release_doc(SECOND)
+    s1 = next(s for s in doc["stations"] if s["station_id"] == "OTC-T-0001")
+    s1["aliases"]["xtide"] = "San\u0000Francisco"
+    s1["aliases"]["gesla"][0] = "test-gesla\u00000001a"
+    renamed = {"OTC-T-0001/noaa": "OTC-T-0001/no\u0000aa", "OTC-T-0001/gesla-fit": "OTC-T-0001/gesla\u0000fit"}
+    for cs in s1["constant_sets"]:
+        cs["set_id"] = renamed[cs["set_id"]]
+    for v in s1["validation"]:
+        v["set_id"] = renamed[v["set_id"]]
+    s1["recommended_set_id"] = renamed[s1["recommended_set_id"]]
+    return doc
+
+
 FOLD_NAMES = [("OTC-T-0161", "\u0126amrun"), ("OTC-T-0162", "\u0166orvik"), ("OTC-T-0163", "\u014aaliq"),
               ("OTC-T-0164", "\u0138immik"), ("OTC-T-0165", "\u03a0\u03cc\u03c1\u03bf\u03c2"),
               ("OTC-T-0166", "Paral\u00b7lel"), ("OTC-T-0167", "Saint\u00a0Malo")]
@@ -1239,6 +1256,9 @@ ROOTS = [
      {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a kept_reason of 48 bytes"}),
     ("values-source-name", lambda: [source_name_doc()], {}, (),
      {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a source_name of 31 characters, 62 bytes"}),
+    ("values-nul", lambda: [nul_doc()], {}, (),
+     {"releases": [SECOND], "latest": SECOND, "expect": "load", "defect": None,
+      "note": "a NUL inside alias ids, set_ids and the recommended_set_id of OTC-T-0001"}),
     ("fold", lambda: [fold_doc()], {}, (),
      {"releases": [FOLD_D], "latest": FOLD_D, "expect": "load", "defect": None, "note": "station names for the D12 fold rules"}),
     ("aliases", lambda: [aliases_doc()], {}, (),

@@ -2256,7 +2256,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         if (!ver || !files) ok = 0;
         if (old && cJSON_IsObject(otc__jget(old, "files"))) {
             const cJSON *f;
-            cJSON_ArrayForEach(f, otc__jget(old, "files")) jput(files, f->string, cJSON_Duplicate(f, 1), &ok);
+            cJSON_ArrayForEach(f, otc__jget(old, "files")) jput(files, f->string, otc__json_dup(f), &ok);
         }
         /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
          * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */

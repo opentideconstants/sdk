@@ -80,7 +80,7 @@ static int alias_cmp(const void *a, const void *b)
 {
     const otc__alias *x = (const otc__alias *)a, *y = (const otc__alias *)b;
     int c = strcmp(x->system, y->system);
-    return c ? c : strcmp(x->alias, y->alias);
+    return c ? c : otc__bytes_cmp(x->alias, x->alias_len, y->alias, y->alias_len);
 }
 
 const otc__entry *otc__find_entry(const otc_release *rel, const char *id)
@@ -302,12 +302,14 @@ static otc_status add_cname(builder *b, const char *name)
     return OTC_OK;
 }
 
-static otc_status add_alias(builder *b, const char *system, const char *alias, const char *station)
+/* alias: the id's string node, kept in full (an alias id may hold a NUL, CR2 DR33). */
+static otc_status add_alias(builder *b, const char *system, const cJSON *alias, const char *station)
 {
     otc_release *r = b->rel;
     GROW(r->alias, r->n_alias, b->cap_alias);
     r->alias[r->n_alias].system = otc__strdup(system);
-    r->alias[r->n_alias].alias = otc__strdup(alias);
+    r->alias[r->n_alias].alias_len = otc__jstr_len(alias);
+    r->alias[r->n_alias].alias = otc__strndup(alias->valuestring, r->alias[r->n_alias].alias_len);
     r->alias[r->n_alias].station = otc__strdup(station);
     r->n_alias++;
     if (!r->alias[r->n_alias - 1].system || !r->alias[r->n_alias - 1].alias || !r->alias[r->n_alias - 1].station)
@@ -475,15 +477,15 @@ static otc_status names_once(builder *b, const cJSON *cons)
  * through the stream index (PK-R2-07). */
 static const char *line_problem(const otc_release *r, const cJSON *root, char *buf, size_t cap)
 {
-    const char *id = otc__jstr(root, "station_id"), *status = otc__jstr(root, "status"), *rec_id, *why;
-    const cJSON *aliases, *a, *sets, *s, *off;
+    const char *id = otc__jstr(root, "station_id"), *status = otc__jstr(root, "status"), *why;
+    const cJSON *aliases, *a, *sets, *s, *off, *rec_id;
     int rec_found = 0;
     if (!cJSON_IsObject(root) || !id || !status) return "not a station object with station_id and status";
     if (strcmp(status, "active") != 0) return NULL;   /* a tombstone, or another status (7.3) */
     aliases = otc__jget(root, "aliases");
     sets = otc__jget(root, "constant_sets");
     off = otc__jget(root, "subordinate_offsets");
-    rec_id = otc__jstr(root, "recommended_set_id");
+    rec_id = otc__jstr_item(root, "recommended_set_id");
     if (!otc__jstr(root, "name") || !cJSON_IsNumber(otc__jget(root, "lat")) || !cJSON_IsNumber(otc__jget(root, "lon"))
         || !otc__jstr(root, "type"))
         return "an active station lacks name, lat, lon or type";
@@ -499,9 +501,9 @@ static const char *line_problem(const otc_release *r, const cJSON *root, char *b
         return "subordinate_offsets.licence_id does not resolve";
     cJSON_ArrayForEach(s, sets) {
         const cJSON *t, *cons = otc__jget(s, "constituents"), *c;
-        const char *sid = otc__jstr(s, "set_id");
+        const cJSON *sid = otc__jstr_item(s, "set_id");
         for (t = sets->child; sid && t != s; t = t->next)   /* spec 6.1 (CR D5): a set_id once per station */
-            if (!otc__strcmp_null(otc__jstr(t, "set_id"), sid)) return "a set_id appears twice in the station";
+            if (otc__jstr_same(otc__jstr_item(t, "set_id"), sid)) return "a set_id appears twice in the station";   /* in full (CR2 DR33) */
         if (!cJSON_IsObject(s) || !sid || !otc__jstr(s, "source") || !otc__jstr(s, "qc_status"))
             return "a constant set lacks set_id, source or qc_status";
         if (!otc__find_convention(r, otc__jstr(s, "convention_id"))) return "a constant set's convention_id does not resolve";
@@ -520,7 +522,7 @@ static const char *line_problem(const otc_release *r, const cJSON *root, char *b
             }
         }
         cJSON_ArrayForEach(c, cons) if (!otc__jstr(c, "name")) return "a constituent has no name";
-        if (rec_id && !strcmp(rec_id, sid)) rec_found = 1;
+        if (otc__jstr_same(rec_id, sid)) rec_found = 1;   /* in full: a NUL inside never matches less (CR2 DR33) */
     }
     if (rec_id && !rec_found) return "recommended_set_id does not resolve";
     cJSON_ArrayForEach(a, aliases) {
@@ -535,16 +537,15 @@ static const char *line_problem(const otc_release *r, const cJSON *root, char *b
 }
 
 /* Adds what the index needs from one constant set (line_problem checked it). */
-static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const char *rec_id)
+static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const cJSON *rec_id)
 {
     otc_release *r = b->rel;
-    const char *set_id = otc__jstr(set, "set_id"), *source = otc__jstr(set, "source");
+    const char *source = otc__jstr(set, "source");
     const char *qc = otc__jstr(set, "qc_status");
-    const char *conv = otc__jstr(set, "convention_id"), *lic = otc__jstr(set, "licence_id");
+    const char *lic = otc__jstr(set, "licence_id");
     const cJSON *cons = otc__jget(set, "constituents"), *c;
     otc_qc_status qcs;
     otc_status st;
-    (void)conv;
     cJSON_ArrayForEach(c, cons) {
         if ((st = add_cname(b, otc__jstr(c, "name"))) != OTC_OK) return st;
     }
@@ -568,7 +569,7 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
             e->n_sources++;
         }
     }
-    if (rec_id && !strcmp(rec_id, set_id)) {
+    if (otc__jstr_same(rec_id, otc__jstr_item(set, "set_id"))) {   /* in full: a NUL inside never matches less */
         e->has_rec = 1;
         e->rec_quantity = otc__parse_quantity(otc__jstr(set, "quantity"));
         if (otc__jstr(set, "source_type") && !(e->rec_source_type = otc__strdup(otc__jstr(set, "source_type"))))
@@ -578,10 +579,8 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     return OTC_OK;
 }
 
-/* Indexes one parsed station line (root is not freed here). raw / raw_len: the
- * line's JSON text when it may hold a name with a NUL (else NULL). */
-static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64_t offset, const char *raw,
-                               size_t raw_len)
+/* Indexes one parsed station line (root is not freed here). */
+static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64_t offset)
 {
     otc_release *r = b->rel;
     const char *id, *status;
@@ -602,7 +601,7 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         otc__entry *e;
         const cJSON *aliases = otc__jget(root, "aliases"), *a, *sets = otc__jget(root, "constant_sets"), *s;
         const cJSON *off = otc__jget(root, "subordinate_offsets");
-        const char *name = otc__jstr(root, "name"), *rec_id = otc__jstr(root, "recommended_set_id");
+        const cJSON *name = otc__jstr_item(root, "name"), *rec_id = otc__jstr_item(root, "recommended_set_id");
         const cJSON *lat = otc__jget(root, "lat"), *lon = otc__jget(root, "lon");
         if (r->n_st == b->cap_st) {
             size_t nc = b->cap_st ? b->cap_st * 2 : 64;
@@ -620,14 +619,8 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         e->type_s = otc__strdup(otc__jstr(root, "type"));
         e->type = otc__parse_station_type(e->type_s);
         e->id = otc__strdup(id);
-        e->name_len = strlen(name);
-        if (raw && otc__json_has_nul(raw, raw_len)) {
-            /* cJSON ends the name at a NUL; the full name comes from the text */
-            int got = otc__json_member_string(raw, raw_len, "name", &e->name, &e->name_len);
-            if (got < 0) return OTC_E_NOMEM;
-            if (got == 0) e->name_len = strlen(name);
-        }
-        if (!e->name) e->name = otc__strdup(name);
+        e->name_len = otc__jstr_len(name);   /* a schema-valid name may hold a NUL (spec 4.4.1) */
+        e->name = otc__strndup(name->valuestring, e->name_len);
         e->folded = e->name ? otc__fold_n(e->name, e->name_len, &e->folded_len) : NULL;
         e->country = otc__strdup(otc__jstr(root, "country"));
         if (!e->id || !e->name || !e->folded || !e->type_s || (otc__jstr(root, "country") && !e->country))
@@ -645,11 +638,11 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         if (st == OTC_OK) {
             cJSON_ArrayForEach(a, aliases) {
                 if (cJSON_IsString(a)) {
-                    st = add_alias(b, a->string, a->valuestring, id);
+                    st = add_alias(b, a->string, a, id);
                 } else {
                     const cJSON *x;
                     cJSON_ArrayForEach(x, a) {
-                        if ((st = add_alias(b, a->string, x->valuestring, id)) != OTC_OK) break;
+                        if ((st = add_alias(b, a->string, x, id)) != OTC_OK) break;
                     }
                 }
                 if (st != OTC_OK) break;
@@ -670,7 +663,7 @@ static otc_status index_line(builder *b, const char *line, size_t len, uint64_t 
         cJSON_Delete(root);
         return bad_line(b, "not a station object with station_id and status");
     }
-    st = index_parsed(b, root, len, offset, line, len);
+    st = index_parsed(b, root, len, offset);
     cJSON_Delete(root);
     return st;
 }
@@ -796,7 +789,7 @@ static void put(cJSON *o, const char *key, cJSON *item, int *ok);
 static void dup_if_set(cJSON *to, const cJSON *from, const char *key, const char *as, int *ok)
 {
     const cJSON *v = otc__jget(from, key);
-    if (v && !cJSON_IsNull(v)) put(to, as, cJSON_Duplicate(v, 1), ok);
+    if (v && !cJSON_IsNull(v)) put(to, as, otc__json_dup(v), ok);
 }
 
 /* The station document the index pass needs, from an index entry; NULL when
@@ -818,7 +811,7 @@ static cJSON *line_from_entry(const cJSON *e)
         for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k], &ok);
         cJSON_ArrayForEach(n, otc__jget(cs, "constituents")) {
             cJSON *c = cJSON_CreateObject();
-            if (cJSON_IsString(n)) put(c, "name", cJSON_CreateString(n->valuestring), &ok);
+            if (cJSON_IsString(n)) put(c, "name", otc__json_dup(n), &ok);   /* the copy keeps a NUL's full length */
             put(cons, NULL, c, &ok);
         }
         put(s, "constituents", cons, &ok);
@@ -894,8 +887,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     memcpy(ds, jsonl_name + 4, nl - 10);
     ds[nl - 10] = '\0';
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
-    /* a name with a NUL does not survive cJSON: such an index is read from the .jsonl instead */
-    if (otc__json_has_nul(text, len)) goto done;
+    /* strings with a NUL keep their full length (CR2 DR33) */
     if (otc__json_parse_st(text, len, &doc) == OTC_E_NOMEM) { st = OTC_E_NOMEM; goto done; }
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
@@ -920,7 +912,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
         if (!line) { st = OTC_E_NOMEM; break; }
         b->line_no++;
         st = index_parsed(b, line, (size_t)otc__jget(e, "length")->valuedouble,
-                          (uint64_t)otc__jget(e, "offset")->valuedouble, NULL, 0);
+                          (uint64_t)otc__jget(e, "offset")->valuedouble);
         cJSON_Delete(line);
         if (st != OTC_OK) break;
         if (b->rel->n_st > n_st) b->rel->st[n_st].view = view_of(e, 0);
@@ -933,10 +925,11 @@ done:
     return st;
 }
 
+/* The string member k in full (a raw literal when it holds a NUL, CR2 DR33), or null. */
 static cJSON *jstr_or_null(const cJSON *o, const char *k)
 {
-    const char *s = otc__jstr(o, k);
-    return s ? cJSON_CreateString(s) : cJSON_CreateNull();
+    const cJSON *s = otc__jstr_item(o, k);
+    return s ? otc__json_str_out(s) : cJSON_CreateNull();
 }
 
 typedef struct ix_ctx {
@@ -963,7 +956,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     ix_ctx *x = (ix_ctx *)ctx;
     cJSON *d, *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
-    const char *rec, *name, *kind = NULL;
+    const cJSON *rec, *name;
+    const char *kind = NULL;
     int ok = 1;
     otc_status pst = otc__json_parse_st(text, len, &d);
     if (pst != OTC_OK) return pst;
@@ -973,35 +967,21 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     if (!o || !sets || !al) ok = 0;
     offs = otc__jget(d, "subordinate_offsets");
     if (!cJSON_IsObject(offs)) offs = NULL;
-    rec = otc__jstr(d, "recommended_set_id");
-    name = otc__jstr(d, "name");
+    rec = otc__jstr_item(d, "recommended_set_id");
+    name = otc__jstr_item(d, "name");
     put(o, "offset", cJSON_CreateNumber((double)offset), &ok);
     put(o, "length", cJSON_CreateNumber((double)len), &ok);
     put(o, "station_id", jstr_or_null(d, "station_id"), &ok);
     put(o, "status", jstr_or_null(d, "status"), &ok);
-    if (name && otc__json_has_nul(text, len)) {
-        /* a name with a NUL (schema-valid): written from the text, in full, as raw JSON */
-        char *full = NULL, *fold = NULL, *jn = NULL, *jf = NULL;
-        size_t fl = 0, ffl = 0;
-        int r = otc__json_member_string(text, len, "name", &full, &fl);
-        if (r > 0) fold = otc__fold_n(full, fl, &ffl);
-        if (r > 0 && fold) {
-            jn = otc__json_escape_n(full, fl);
-            jf = otc__json_escape_n(fold, ffl);
-        }
-        if (r < 0 || (r > 0 && (!fold || !jn || !jf))) ok = 0;
-        put(o, "name", jn ? cJSON_CreateRaw(jn) : jstr_or_null(d, "name"), &ok);
-        put(o, "name_folded", jf ? cJSON_CreateRaw(jf) : cJSON_CreateNull(), &ok);
-        free(full);
-        free(fold);
-        free(jn);
-        free(jf);
-    } else {
-        char *folded = name ? otc__fold(name) : NULL;
+    put(o, "name", name ? otc__json_str_out(name) : cJSON_CreateNull(), &ok);   /* in full: it may hold a NUL */
+    {   /* folded in full: a name may hold a NUL (spec 4.4.1); a raw literal then, as for the name */
+        size_t fl = 0;
+        char *folded = name ? otc__fold_n(name->valuestring, otc__jstr_len(name), &fl) : NULL, *jf = NULL;
         if (name && !folded) ok = 0;
-        put(o, "name", jstr_or_null(d, "name"), &ok);
-        put(o, "name_folded", folded ? cJSON_CreateString(folded) : cJSON_CreateNull(), &ok);
+        if (folded && fl != strlen(folded) && !(jf = otc__json_escape_n(folded, fl))) ok = 0;
+        put(o, "name_folded", jf ? cJSON_CreateRaw(jf) : folded ? cJSON_CreateString(folded) : cJSON_CreateNull(), &ok);
         free(folded);
+        free(jf);
     }
     put(o, "country", jstr_or_null(d, "country"), &ok);
     put(o, "type", jstr_or_null(d, "type"), &ok);
@@ -1015,10 +995,10 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         size_t k;
         for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]), &ok);
         cJSON_ArrayForEach(c, otc__jget(cs, "constituents"))
-            if (otc__jstr(c, "name")) put(cons, NULL, cJSON_CreateString(otc__jstr(c, "name")), &ok);
+            if (otc__jstr_item(c, "name")) put(cons, NULL, otc__json_str_out(otc__jstr_item(c, "name")), &ok);
         put(s, "constituents", cons, &ok);
         put(sets, NULL, s, &ok);
-        if (rec && !otc__strcmp_null(otc__jstr(cs, "set_id"), rec)) {
+        if (otc__jstr_same(otc__jstr_item(cs, "set_id"), rec)) {
             const char *q = otc__jstr(cs, "quantity");
             kind = !q ? NULL : !strcmp(q, "water_level") ? "tide" : !strcmp(q, "current") ? "current" : "other";
         }
@@ -1031,8 +1011,8 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     cJSON_ArrayForEach(a, otc__jget(d, "aliases")) {
         cJSON *list = cJSON_CreateArray();
         const cJSON *id;
-        if (cJSON_IsString(a)) put(list, NULL, cJSON_CreateString(a->valuestring), &ok);
-        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) put(list, NULL, cJSON_CreateString(id->valuestring), &ok);
+        if (cJSON_IsString(a)) put(list, NULL, otc__json_str_out(a), &ok);
+        else cJSON_ArrayForEach(id, a) if (cJSON_IsString(id)) put(list, NULL, otc__json_str_out(id), &ok);
         put(al, a->string, list, &ok);
     }
     put(o, "aliases", al, &ok);
@@ -1497,10 +1477,15 @@ REL_STR(otc_release_datestamp, otc__jstr(rel->release_obj, "datestamp"))
  * is not an RFC 3339 time fails the open (CR2 DR6), so the raw text is never returned. */
 REL_STR(otc_release_created, rel->created[0] ? rel->created : NULL)
 REL_STR(otc_release_format_version, otc__jstr(rel->meta, "format_version"))
-REL_STR(otc_release_concept_doi, otc__jstr(rel->release_obj, "concept_doi"))
+#define REL_MEMBER(NAME, KEY)                                                                  \
+    otc_status NAME(const otc_release *rel, char *buf, size_t len, size_t *needed)             \
+    {                                                                                          \
+        return rel ? otc__copy_member(rel->release_obj, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+REL_MEMBER(otc_release_concept_doi, "concept_doi")
 REL_STR(otc_release_zenodo_version_doi, rel->zenodo_version_doi)
-REL_STR(otc_release_build_commit, otc__jstr(rel->release_obj, "build_commit"))
-REL_STR(otc_release_changelog_url, otc__jstr(rel->release_obj, "changelog_url"))
+REL_MEMBER(otc_release_build_commit, "build_commit")
+REL_MEMBER(otc_release_changelog_url, "changelog_url")
 
 size_t otc_release_source_version_count(const otc_release *rel)
 {
@@ -1517,7 +1502,7 @@ otc_status otc_release_source_version_at(const otc_release *rel, size_t i, char 
     if (!rel || i >= otc_release_source_version_count(rel)) return OTC_E_INVALID_ARGUMENT;
     item = cJSON_GetArrayItem(otc__jget(rel->release_obj, "source_versions"), (int)i);
     a = otc__copy_str(item->string, source, source_len, source_needed);
-    b = otc__copy_str(item->valuestring, version, version_len, version_needed);   /* a string: checked at open */
+    b = otc__copy_jstr(item, version, version_len, version_needed);   /* a string: checked at open */
     return a != OTC_OK ? a : b;
 }
 
@@ -1791,7 +1776,7 @@ otc_status otc_release_convention(const otc_release *rel, const char *id, const 
 #define CONV_STR(NAME, KEY)                                                                    \
     otc_status NAME(const otc_convention *c, char *buf, size_t len, size_t *needed)            \
     {                                                                                          \
-        return c ? otc__copy_str(otc__jstr(c->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return c ? otc__copy_member(c->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 #define CONV_JSON(NAME, KEY)                                                                   \
     otc_status NAME(const otc_convention *c, char *buf, size_t len, size_t *needed)            \
@@ -1846,7 +1831,7 @@ otc_status otc_release_licence(const otc_release *rel, const char *id, const otc
 #define LIC_STR(NAME, KEY)                                                                     \
     otc_status NAME(const otc_licence *l, char *buf, size_t len, size_t *needed)               \
     {                                                                                          \
-        return l ? otc__copy_str(otc__jstr(l->json, KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+        return l ? otc__copy_member(l->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
     }
 LIC_STR(otc_licence_licence_id, "licence_id")
 LIC_STR(otc_licence_spdx, "spdx")
