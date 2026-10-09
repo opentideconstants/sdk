@@ -45,11 +45,11 @@ jobs:
           - os: ubuntu-latest
             ruby: "3.0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: ${{ matrix.ruby }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: The gem's fold table is the suite's
         shell: bash
         run: cmp conformance/name_fold.json ruby/lib/opentideconstants/name_fold.json
@@ -93,7 +93,7 @@ jobs:
         run: uv run conformance/driver.py --runner "ruby conformance/runners/ruby/runner.rb" --all-steps --report ruby-report.json
       - name: Upload the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ruby-conformance-${{ matrix.os }}-${{ matrix.ruby }}
           path: ruby-report.json
