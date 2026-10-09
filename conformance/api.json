@@ -422,6 +422,7 @@
       "checksum_mismatch",
       "unsupported_format",
       "reader_too_old",
+      "invalid_release",
       "file_exists",
       "cache",
       "io",
