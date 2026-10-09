@@ -901,7 +901,7 @@ def group_load():
                          step("open", {"loaded_from": "file_unverified", "datestamp": d}, file=f"${{tmp}}/rel/OTC_{d}{ext}"),
                          step("release_files", {"files": rows})], requires=["fs"] + req))
     out.append(case("load/file-missing", "opening a missing file is an io error with the path", "4.8",
-                    [step("open", err("io", path={"$contains": "OTC_20991231.9.json"}), file="${tmp}/OTC_20991231.9.json")], requires=["fs"]))
+                    [step("open", err("io", path={"$contains": "OTC_20991231.9.jsonl"}), file="${tmp}/OTC_20991231.9.jsonl")], requires=["fs"]))
     out.append(case("load/file-not-json", "a .json file that is not JSON is invalid_release", "4.8",
                     [drv("write", path=f"${{tmp}}/OTC_{d}.json", text="this is not json\n"),
                      step("open", err("invalid_release"), file=f"${{tmp}}/OTC_{d}.json")], requires=["fs", "json"]))
@@ -971,13 +971,13 @@ def group_network():
                          present=[".verified", "OTC_20991231.2.jsonl", "OTC_20991231.2.meta.json", "index-v1.json"], no_tmp=True),
                      drv("assert_sha256", path="${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl", equals=f"{FIX}/good/OTC_20991231.2.jsonl"),
                      step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0006")],
-                    requires=["fs"]))
+                    requires=["fs", "stream"]))
     out.append(case("net/eager-stores-json", "eager mode stores the release decompressed as .json in the cache", "5.4",
                     [open_latest(mode="eager"),
                      drv("assert_sha256", path="${cache}/v1/releases/20991231.2/OTC_20991231.2.json", equals=f"{FIX}/good/OTC_20991231.2.json"),
                      drv("assert_json", path="${cache}/v1/releases/20991231.2/.verified",
                          match={"files": {"$type": "object"}, "verified_at": {"$type": "string"}, "by": {"$regex": "^opentideconstants-[a-z0-9]+/"}})],
-                    requires=["fs"]))
+                    requires=["fs", "eager"]))
     out.append(case("net/second-open-uses-cache", "a second client: conditional GET of the pointer (304), no data request, loaded_from cache", "5.2, 5.3, 4.3.1",
                     [open_latest(), drv("restart_runner"), drv("clear_log"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
@@ -1094,7 +1094,7 @@ def group_network():
             continue  # a pinned download reads no pointer (spec 5.2), so this root has no pinned case
         out.append(case(f"net/bad-{root}-pinned", f"pinned 20991231 from bad/{root}: {code}", "4.8, 5.2, 7.4",
                         [net(step("open", err(code), release=exp_d, base_url=f"{SRV}/bad/{root}/", cache_dir="${cache}", on_network_error="raise", mode="stream"))] + extra,
-                        requires=["fs"]))
+                        requires=["fs", "stream"]))
     out.append(case("net/checksum-error-fields", "checksum_mismatch has file, expected and actual", "4.8",
                     [net(step("open", err("checksum_mismatch", file={"$regex": r"OTC_20991231\.(json|json\.gz|jsonl)$"},
                                           expected={"$regex": "^[0-9a-f]{64}$"}, actual={"$regex": "^[0-9a-f]{64}$"}),
@@ -1232,7 +1232,7 @@ def group_cache():
     out.append(case("cache/verify", "verify on a cached release passes, and fails after a cached file changes", "4.3, 5.3",
                     [open_latest_step(G, mode="stream"), step("verify", {"verified": True}),
                      drv("corrupt", path="${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl", offset=50),
-                     step("verify", err("checksum_mismatch"))], requires=["fs"]))
+                     step("verify", err("checksum_mismatch"))], requires=["fs", "stream"]))
     out.append(case("cache/not-writable", "a cache directory that cannot be created: cache error", "4.8",
                     [drv("write", path="${tmp}/not-a-dir", text="x"),
                      net(step("open", err("cache"), base_url=G, cache_dir="${tmp}/not-a-dir/cache"))], requires=["fs"]))
@@ -1280,7 +1280,7 @@ def group_download():
                      drv("assert_files", dir=B, exactly=[f"OTC_{d2}.jsonl", f"OTC_{d2}.sha256"])], requires=[]))
     out.append(case("download/from-cache", "download-from-cache: the cache holds the release, the server is stopped, no request", "4.3.2, 7.1",
                     [open_latest_step(G, mode="stream"), drv("server_stop"), drv("clear_log"),
-                     dl({"paths": default_files}, release=d2, to=B), drv("assert_requests", source="any", count=0)] + same(default_files), requires=[]))
+                     dl({"paths": default_files}, release=d2, to=B), drv("assert_requests", source="any", count=0)] + same(default_files), requires=["stream"]))
     out.append(case("download/bad-checksum", "download-bad-checksum: the server sends a file with a wrong SHA-256; checksum_mismatch and the file is not in the folder", "4.3.2, 7.1",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=f"{SRV}/bad/wrong-sha256/", cache_dir="${cache}"),
                      dl(err("checksum_mismatch"), release=d1, to=B),

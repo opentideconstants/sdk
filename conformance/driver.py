@@ -423,6 +423,53 @@ def api_error_problems(cases, errors_by_op):
     return problems
 
 
+FETCH_OPS = {"releases", "latest", "check_for_update", "newer_format_major", "update", "download", "cached_releases", "prune"}
+
+
+def step_needs(st):
+    """The runner features a runner step uses (README "Hello" feature table)."""
+    op, a = st.get("op"), st.get("args") or {}
+    need = set()
+    if op == "open":
+        if a.get("mode") in ("eager", "stream"):
+            need.add(a["mode"])
+        f = a.get("file")
+        if isinstance(f, str):
+            need.add("fs")
+            if f.endswith((".json", ".json.gz")):
+                need.add("json")
+        elif "base_url" in a or "release" in a or "cache_dir" in a or not a:
+            need.add("fetch")   # no file: the release comes from the network module
+    if op in FETCH_OPS:
+        need.add("fetch")
+    if op == "download":
+        need.add("fs")
+    return need
+
+
+def requires_problems(c):
+    """K55/K56: every feature a runner step uses must be in the case's requires (for its role), or be covered by an
+    expect_if_missing of that step or an earlier one (a runner without the feature stops there)."""
+    out = []
+    base = set(c.get("requires", []))
+    roles = c.get("roles") or {"main": []}
+    covered = {r: base | set(f) for r, f in roles.items()}
+    for i, st in enumerate(c.get("steps", [])):
+        if "op" not in st:
+            continue
+        who = st.get("as", "main") if c.get("roles") else "main"
+        eim = set(st.get("expect_if_missing") or {})
+        for role in ([who] if isinstance(who, str) else who):
+            if role not in covered:
+                continue
+            lacking = sorted(step_needs(st) - covered[role] - eim)
+            if lacking:
+                out.append(f"{c.get('id')} step {i}: op {st['op']} uses {', '.join(repr(f) for f in lacking)}, "
+                           f"which the case does not require" + (f" for role {role}" if role != "main" else ""))
+            covered[role] |= eim
+    return out
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -433,6 +480,7 @@ def check_cases(cases):
             problems.append(f"{c.get('_file')}: missing or duplicate id {cid!r}")
         ids.add(cid)
         compared = 0
+        problems += requires_problems(c)
         try:
             case_timeout(c)
         except CaseError as e:

@@ -417,7 +417,9 @@
    "id": "download/from-cache",
    "title": "download-from-cache: the cache holds the release, the server is stopped, no request",
    "spec": "4.3.2, 7.1",
-   "requires": [],
+   "requires": [
+    "stream"
+   ],
    "steps": [
     {
      "op": "open",

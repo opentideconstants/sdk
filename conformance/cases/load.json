@@ -213,13 +213,13 @@
     {
      "op": "open",
      "args": {
-      "file": "${tmp}/OTC_20991231.9.json"
+      "file": "${tmp}/OTC_20991231.9.jsonl"
      },
      "expect": {
       "error": "io",
       "error_fields": {
        "path": {
-        "$contains": "OTC_20991231.9.json"
+        "$contains": "OTC_20991231.9.jsonl"
        }
       }
      }

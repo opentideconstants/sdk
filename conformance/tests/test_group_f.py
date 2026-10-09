@@ -220,7 +220,7 @@ def _api_with(tmp_path, op, errors):
 
 
 def test_check_cases_flags_error_not_in_api(tmp_path):
-    cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "check_for_update", "expect": {"error": "reader_too_old"}}]}])
+    cases = write_cases(tmp_path, [{"id": "a", "requires": ["fetch"], "steps": [{"op": "check_for_update", "expect": {"error": "reader_too_old"}}]}])
     api = _api_with(tmp_path, "check_for_update", ["network", "offline_unavailable"])
     r = run_driver("--check-cases", "--cases", str(cases), "--api", str(api))
     assert r.returncode == 2 and "reader_too_old" in r.stdout and "check_for_update" in r.stdout, (r.returncode, r.stdout[-400:], r.stderr[-300:])
@@ -234,3 +234,27 @@ def test_check_cases_flags_error_in_expect_if_missing(tmp_path):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [st]}])
     r = run_driver("--check-cases", "--cases", str(cases))
     assert r.returncode == 2 and "file_exists" in r.stdout, r.stdout[-400:]
+
+
+# --- K55, K56: --check-cases finds a step that needs a feature the case does not require (eager, json, fs)
+
+@pytest.mark.parametrize("st,feature", [
+    ({"op": "open", "args": {"base_url": "x", "cache_dir": "${cache}", "mode": "eager"}, "expect": {"datestamp": "d"},
+      "expect_if_missing": {"fetch": {"error": "not_built"}}}, "eager"),
+    ({"op": "open", "args": {"file": "${tmp}/OTC_20991231.json"}, "expect": {"error": "io"}}, "json"),
+    ({"op": "open", "args": {"base_url": "x", "cache_dir": "${cache}"}, "expect": {"datestamp": "d"},
+      "expect_if_missing": {"fetch": {"error": "not_built"}}}, "fs"),
+])
+def test_check_cases_finds_missing_requires(tmp_path, st, feature):
+    cases = write_cases(tmp_path, [{"id": "a", "requires": [], "steps": [st]}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and f"'{feature}'" in r.stdout, (r.returncode, r.stdout[-400:])
+
+
+def test_expect_if_missing_covers_later_steps(tmp_path):
+    steps = [{"op": "download", "args": {"to": "x"}, "expect": {"paths": ["a"]},
+              "expect_if_missing": {"fetch": {"error": "not_built"}, "fs": {"error": "unsupported"}}},
+             {"op": "open", "args": {"file": "${tmp}/OTC_20991231.jsonl"}, "expect": {"datestamp": "d"}}]
+    cases = write_cases(tmp_path, [{"id": "a", "requires": [], "steps": steps}])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 0, r.stdout[-400:]
