@@ -43,11 +43,7 @@ int main(void)
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
     /* too small for them: 0.1 ms would be CONNECTTIMEOUT_MS 0 (libcurl's 300 s) and no read timeout */
     fo.timeout_s = 0.0001;
-    {
-        otc_status st = otc_fetch_latest(&fo, path, sizeof path, &need);
-        if (st != OTC_E_INVALID_ARGUMENT) fprintf(stderr, "timeout_s 0.0001: %s, want invalid_argument\n", otc_status_code(st));
-        PENDING("PK-R2-13", st == OTC_E_INVALID_ARGUMENT);
-    }
+    CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);   /* CR2 DR19 (PK-R2-13) */
     /* CR 4c */
     fo.timeout_s = 0;
     CHECK_STATUS(otc_fetch_latest(&fo, path, sizeof path, &need), OTC_E_INVALID_ARGUMENT);
