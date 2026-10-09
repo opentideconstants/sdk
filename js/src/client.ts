@@ -37,9 +37,10 @@ function optBool(v: unknown, name: string): boolean | null {
     return v;
 }
 
-function optNum(v: unknown, name: string): number | null {
+/** A positive, finite number of seconds, or null when absent (spec 4.2: 0 would mean "no time at all"). */
+function optSeconds(v: unknown, name: string): number | null {
     if (v === undefined || v === null) return null;
-    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) throw new InvalidArgumentError(`${name} must be a non-negative number`);
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) throw new InvalidArgumentError(`${name} must be a number of seconds greater than 0; got ${JSON.stringify(v)}`);
     return v;
 }
 
@@ -119,9 +120,9 @@ export class OpenTideConstants {
         if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
         const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
         if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
-        const timeout = optNum(options.timeout, "timeout");
+        const timeout = optSeconds(options.timeout, "timeout");
         const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
-        const interval = optNum(options.updateInterval, "updateInterval") ?? 86_400;
+        const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
         const file = optStr(options.file, "file");
         const suffix = optStr(options.userAgent, "userAgent");
@@ -414,8 +415,8 @@ export class OpenTideConstants {
         const release = options.release ?? "latest";
         if (release !== "latest") checkDatestamp(release);
         const formats = options.formats ?? ["jsonl"];
-        if (!Array.isArray(formats) || formats.some((f) => !FORMATS.includes(f))) {
-            throw new InvalidArgumentError(`formats must be a list of ${FORMATS.join(", ")}`);
+        if (!Array.isArray(formats) || formats.length === 0 || formats.some((f) => !FORMATS.includes(f))) {
+            throw new InvalidArgumentError(`formats must be a non-empty list of ${FORMATS.join(", ")}`);
         }
         const overwrite = optBool(options.overwrite, "overwrite") ?? false;
         const ctx = this.#ctx;

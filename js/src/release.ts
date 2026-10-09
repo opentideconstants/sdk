@@ -103,6 +103,9 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     const conventions = doc["conventions"];
     const licences = doc["licences"];
     if (!Array.isArray(conventions) || !Array.isArray(licences)) throw new InvalidReleaseError("conventions or licences is missing");
+    const created = release["created"];
+    if (created !== undefined && created !== null && typeof created !== "string") throw new InvalidReleaseError("release.created is not a string");
+    if (!shapeOk(release["source_versions"], "object")) throw new InvalidReleaseError("release.source_versions is not an object");
     if (!conventions.every(isObject) || !licences.every(isObject)) throw new InvalidReleaseError("a convention or licence is not a JSON object");
     const cs = conventions.filter(isObject);
     const ls = licences.filter(isObject);
@@ -118,6 +121,47 @@ export function parseHeader(doc: unknown): ReleaseHeader {
         }
     }
     return deepFreeze({ format_version: fv, release, conventions: cs, licences: ls });
+}
+
+type Shape = "object" | "array";
+/** The structured fields of a station and of a set: present and not null means this JSON type (spec 7.3, PK07). */
+const STATION_SHAPE: Record<string, Shape> = {
+    aliases: "object", constant_sets: "array", validation: "array", subordinate_offsets: "object", current_offsets: "array",
+};
+const SET_SHAPE: Record<string, Shape> = {
+    constituents: "array", dropped_constituents: "array", qc_flags: "array", record_span: "object", datum: "object",
+    time_base: "object", provenance: "object", current_bins: "array",
+};
+
+function shapeOk(v: Json | undefined, want: Shape): boolean {
+    return v === undefined || v === null || (want === "array" ? Array.isArray(v) : isObject(v));
+}
+
+/**
+ * Tolerant is not lax (spec 7.3): a known field with the wrong JSON type is invalid_release at load, in every path,
+ * instead of a field that is silently dropped or a raw TypeError at query time.
+ */
+function checkShape(doc: JsonObject, id: string): void {
+    const bad = (what: string) => new InvalidReleaseError(`station ${id}: ${what} has the wrong type`);
+    for (const [k, want] of Object.entries(STATION_SHAPE)) if (!shapeOk(doc[k], want)) throw bad(k);
+    const a = doc["aliases"];
+    if (isObject(a)) {
+        for (const [system, ids] of Object.entries(a)) {
+            if (!(typeof ids === "string" || (Array.isArray(ids) && ids.every((x) => typeof x === "string")))) throw bad(`aliases.${system}`);
+        }
+    }
+    for (const k of ["constant_sets", "validation"]) {
+        const list = doc[k];
+        if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k}`);
+    }
+    for (const cs of arr(doc, "constant_sets").filter(isObject)) {
+        const sid = typeof cs["set_id"] === "string" ? cs["set_id"] : "?";
+        for (const [k, want] of Object.entries(SET_SHAPE)) if (!shapeOk(cs[k], want)) throw bad(`${k} of set ${sid}`);
+        for (const k of ["constituents", "dropped_constituents", "qc_flags"]) {
+            const list = cs[k];
+            if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k} of set ${sid}`);
+        }
+    }
 }
 
 function aliasMap(doc: JsonObject): Record<string, string[]> {
@@ -142,6 +186,7 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     const status = doc["status"];
     if (typeof id !== "string" || typeof status !== "string") throw new InvalidReleaseError("a station has no station_id or status");
     void header;
+    checkShape(doc, id);
     const sets = arr(doc, "constant_sets").filter(isObject);
     const recId = str(doc, "recommended_set_id");
     let rec: JsonObject | null = null;
@@ -608,9 +653,10 @@ function checkNumber(v: unknown, what: string, lo: number, hi: number): number {
     return v;
 }
 
+/** `limit` is an integer of 1 or more, or absent / null for no limit (spec 4.4, CR D36). */
 function checkLimit(v: unknown): number | null {
     if (v === undefined || v === null) return null;
-    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw new InvalidArgumentError(`limit must be a non-negative integer; got ${JSON.stringify(v)}`);
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) throw new InvalidArgumentError(`limit must be an integer of 1 or more, or null; got ${JSON.stringify(v)}`);
     return v;
 }
 
@@ -867,10 +913,14 @@ export class Release {
         return Object.freeze([...this.iterStations(filters)]);
     }
 
-    /** Iterate active stations ordered by station_id. */
-    *iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
+    /** Iterate active stations ordered by station_id. Bad filters fail here, not at the first next(). */
+    iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
         const f = checkFilters(filters);
-        for (const e of this.#active) if (matches(e, f)) yield this.#station(e);
+        const active = this.#active;
+        const station = (e: IndexEntry) => this.#station(e);
+        return (function* () {
+            for (const e of active) if (matches(e, f)) yield station(e);
+        })();
     }
 
     /** Name search, accent-insensitive and ranked (spec 4.4.1). */

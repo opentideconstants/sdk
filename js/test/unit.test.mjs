@@ -216,3 +216,26 @@ test("T46: a convention or licence that is not an object, and a repeated licence
     assert.throws(() => parseHeader(h({ conventions: [{ convention_id: "c" }, 5] })), isCode("invalid_release"));
     assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l" }, { licence_id: "l" }] })), isCode("invalid_release"));
 });
+
+const GOOD = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+
+test("T21: iterStations checks its filters when called, not at the first next()", async () => {
+    const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir() });
+    try {
+        assert.throws(() => c.iterStations({ country: 5 }), isCode("invalid_argument"));
+    } finally {
+        c.close();
+    }
+});
+
+test("T20: time() reads RFC 3339 only, never a local time", async () => {
+    const { time } = await import("../dist/json.js");
+    assert.equal(time("2099-12-31T12:00:00+02:00").toISOString(), "2099-12-31T10:00:00.000Z");
+    assert.equal(time("2099-12-31t12:00:00z").toISOString(), "2099-12-31T12:00:00.000Z");
+    for (const v of ["2099-12-31T12:00:00", "2099-12-31", "Dec 31 2099", "2099-12-31T12:00Z"]) assert.equal(time(v), null, v);
+});
+
+test("T12: updateInterval 0 is invalid_argument", async () => {
+    await assert.rejects(otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir(), updateInterval: 0 }),
+        isCode("invalid_argument"));
+});

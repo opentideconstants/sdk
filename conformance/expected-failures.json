@@ -582,8 +582,7 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -591,8 +590,7 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json-gz",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -600,8 +598,7 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -609,8 +606,7 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl-stream",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -634,8 +630,7 @@
   {
    "case": "rules/pk07/bad-created-not-string-json",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of Integer into String /usr/local/rbenv/versions/3.2.2/lib/ruby/3.2.0/time.rb:624:in `xmlschema' | /Users/jpr5/.local/state/worktrees/open"
@@ -643,8 +638,7 @@
   {
    "case": "rules/pk07/bad-created-not-string-json-gz",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of Integer into String /usr/local/rbenv/versions/3.2.2/lib/ruby/3.2.0/time.rb:624:in `xmlschema' | /Users/jpr5/.local/state/worktrees/open"
@@ -652,8 +646,7 @@
   {
    "case": "rules/pk07/bad-created-not-string-jsonl",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of Integer into String /usr/local/rbenv/versions/3.2.2/lib/ruby/3.2.0/time.rb:624:in `xmlschema' | /Users/jpr5/.local/state/worktrees/open"
@@ -663,8 +656,7 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -740,8 +732,7 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-json",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of String into Integer /Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/ruby/lib/opentideconstants/models.rb:199:in `[]' "
@@ -749,8 +740,7 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-json-gz",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of String into Integer /Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/ruby/lib/opentideconstants/models.rb:199:in `[]' "
@@ -758,8 +748,7 @@
   {
    "case": "rules/pk07/bad-qc-flags-not-array-jsonl",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got error 'uncaught:TypeError' (no implicit conversion of String into Integer /Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/ruby/lib/opentideconstants/models.rb:199:in `[]' "
@@ -769,8 +758,7 @@
    "runners": [
     "c",
     "c-fetch",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -779,8 +767,7 @@
    "case": "rules/pk07/bad-source-versions-not-object-json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -789,8 +776,7 @@
    "case": "rules/pk07/bad-source-versions-not-object-json-gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -799,8 +785,7 @@
    "case": "rules/pk07/bad-source-versions-not-object-jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -811,8 +796,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
@@ -852,8 +836,7 @@
   {
    "case": "rules/pk07/formats-empty",
    "runners": [
-    "c-fetch",
-    "typescript"
+    "c-fetch"
    ],
    "package": "PK07",
    "reason": "step 1 download: expected error 'invalid_argument', got a result {\"paths\": [\"OTC_20991231.2.jsonl\", \"OTC_20991231.2.meta.json\", \"OTC_20991231.2.sha256\"]}"
@@ -862,8 +845,7 @@
    "case": "rules/pk07/limit-zero@json",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 1 search: expected error 'invalid_argument', got a result {\"station_ids\": []}"
@@ -872,8 +854,7 @@
    "case": "rules/pk07/limit-zero@json.gz",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 1 search: expected error 'invalid_argument', got a result {\"station_ids\": []}"
@@ -882,8 +863,7 @@
    "case": "rules/pk07/limit-zero@jsonl",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 1 search: expected error 'invalid_argument', got a result {\"station_ids\": []}"
@@ -894,8 +874,7 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 1 search: expected error 'invalid_argument', got error 'uncaught:LimitZero' (limit 0: this C API has no separate no-limit value, so the runner cannot pass 0 (D36))"
@@ -904,8 +883,7 @@
    "case": "rules/pk07/limit-zero@server",
    "runners": [
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK07",
    "reason": "step 1 search: expected error 'invalid_argument', got a result {\"station_ids\": []}"
@@ -914,8 +892,7 @@
    "case": "rules/pk07/timeout-zero",
    "runners": [
     "c-fetch",
-    "python",
-    "typescript"
+    "python"
    ],
    "package": "PK07",
    "reason": "step 0 open: expected error 'invalid_argument', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
