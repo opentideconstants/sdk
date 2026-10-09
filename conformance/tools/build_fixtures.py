@@ -605,6 +605,102 @@ def unresolved_doc():
     return doc
 
 
+def rehash(files, sums, entry, new_sums=None):
+    """The .sha256 list and the pointer entry made honest again for changed files (so a defect is the only one)."""
+    sums = new_sums if new_sums is not None else sha256_list(files)
+    entry = copy.deepcopy(entry)
+    for f in entry["files"]:
+        data = sums if f["name"].endswith(".sha256") else files.get(f["name"])
+        if data is not None:
+            f["size"], f["sha256"] = len(data), sha(data)
+    return files, sums, entry
+
+
+def honest(change):
+    """A tamper that changes the files with change(files) and keeps every digest honest."""
+    def t(files, sums, entry, reuse):
+        files = dict(files)
+        change(files)
+        return rehash(files, sums, entry)
+    return t
+
+
+def _gz_differs(files):
+    name = next(n for n in files if n.endswith(".json.gz"))
+    files[name] = gzip.compress(files[name[:-3]].replace(b"San Francisco", b"San Franciscx", 1), compresslevel=9, mtime=0)
+
+
+def _jsonl_differs(files):
+    name = next(n for n in files if n.endswith(".jsonl"))
+    files[name] = files[name].replace(b"San Francisco", b"San Franciscx", 1)
+
+
+def _meta_differs(files):
+    name = next(n for n in files if n.endswith(".meta.json"))
+    files[name] = files[name].replace(b"Example Mapping Authority.", b"Example Mapping Authority!", 1)
+
+
+def size_mismatch(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    next(f for f in entry["files"] if f["name"].endswith(".jsonl"))["size"] += 1
+    return files, sums, entry
+
+
+def sums_extra_file(files, sums, entry, reuse):
+    return rehash(files, sums, entry, sums + f"{sha(b'extra')}  OTC_{BASE}.csv\n".encode())
+
+
+def sha256_file_differs(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    next(f for f in entry["files"] if f["name"].endswith(".sha256"))["sha256"] = sha(b"not the .sha256 file")
+    return files, sums, entry
+
+
+def sums_disagree(files, sums, entry, reuse):
+    name = next(n for n in files if n.endswith(".jsonl")).encode()
+    lines = [(sha(b"wrong digest").encode() + b"  " + name) if l.endswith(b"  " + name) else l for l in sums.splitlines()]
+    return rehash(files, sums, entry, b"\n".join(lines) + b"\n")
+
+
+def index_content_digest_bad(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    entry["content_sha256"] = "not a digest"
+    return files, sums, entry
+
+
+def changed_doc(change):
+    def make():
+        doc = release_doc(BASE)
+        change(doc)
+        doc["stations"].sort(key=lambda s: s["station_id"])
+        return [doc]
+    return make
+
+
+def _station(doc, sid):
+    return next(s for s in doc["stations"] if s["station_id"] == sid)
+
+
+def _duplicate_station(doc):
+    st = copy.deepcopy(_station(doc, "OTC-T-0020"))
+    st["constant_sets"][0]["set_id"] = "OTC-T-0020/noaa-copy"
+    st["recommended_set_id"] = "OTC-T-0020/noaa-copy"
+    doc["stations"].append(st)
+
+
+def _jsonl_one_byte(files, sums, entry, reuse):
+    files = dict(files)
+    name = next(n for n in files if n.endswith(".jsonl"))
+    files[name] = files[name].replace(b"San Francisco", b"San Franciscx", 1)
+    return files, sums, entry
+
+
+def _too_new_broken():
+    doc = small_doc(BASE)
+    doc["stations"][0]["constant_sets"][0]["licence_id"] = "no-such-licence"
+    return [versioned(doc, TOO_NEW)]
+
+
 BAD = [
     ("wrong-sha256", "checksum_mismatch", "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
      lambda: [release_doc(BASE)], corrupt_same_size),
@@ -622,6 +718,39 @@ BAD = [
      lambda: [versioned(small_doc(BASE), TOO_NEW)], None),
     ("no-build", "load", "OTC-T-0004's set has no provenance.build (malformed: format 1.0 requires it); it must load, with build null",
      lambda: [no_build_doc()], None),
+    # Reference-reader coverage (review round 1, B2-T1): each rule of the reader decides one of these outcomes, so
+    # turning a rule off fails --check. The first three are reader-only (D37: SDKs do not cross-check the files of a
+    # release; each file is checked against OTC_{D}.sha256).
+    ("gz-differs", "checksum_mismatch", "honest digests, but the .json.gz decompresses to other data than the .json (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_gz_differs)),
+    ("jsonl-differs", "invalid_release", "honest digests, but a .jsonl line differs from the .json station (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_jsonl_differs)),
+    ("meta-differs", "invalid_release", "honest digests, but the .meta.json differs from the .json without stations (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_meta_differs)),
+    ("size-mismatch", "checksum_mismatch", "the pointer and index give the .jsonl one byte more than its size; every SHA-256 is right",
+     lambda: [release_doc(BASE)], size_mismatch),
+    ("sums-extra-file", "checksum_mismatch", "OTC_20991231.sha256 lists a file the pointer does not list (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sums_extra_file),
+    ("sha256-file-differs", "checksum_mismatch", "the pointer's SHA-256 of OTC_20991231.sha256 is not the file's (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sha256_file_differs),
+    ("sums-disagree", "checksum_mismatch", "OTC_20991231.sha256 gives another SHA-256 for the .jsonl than the pointer; the file matches the pointer (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sums_disagree),
+    ("unresolved-licence", "invalid_release", "OTC-T-0010's set has licence_id no-such-licence",
+     changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0].update(licence_id="no-such-licence")), None),
+    ("unresolved-recommended", "invalid_release", "OTC-T-0010's recommended_set_id names no set of the station",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(recommended_set_id="OTC-T-0010/no-such-set")), None),
+    ("duplicate-alias", "invalid_release", "OTC-T-0002 has the noaa alias 9900001 of OTC-T-0001 (spec 4.4: alias ids are unique in a system)",
+     changed_doc(lambda d: _station(d, "OTC-T-0002")["aliases"].update(noaa="9900001")), None),
+    ("duplicate-station-id", "invalid_release", "OTC-T-0020 appears twice (the second line's set has another set_id, so the station id is the only duplicate)",
+     changed_doc(_duplicate_station), None),
+    ("lat-nan", "invalid_release", "OTC-T-0010's lat is NaN, which is not JSON (RFC 8259) though Python's json module writes and reads it",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat=float("nan"))), None),
+    ("jsonl-wrong-sha256", "checksum_mismatch", "only the .jsonl has one byte changed (same size); the .json and .json.gz are honest, so only the hash check catches it",
+     lambda: [release_doc(BASE)], _jsonl_one_byte),
+    ("index-invalid", "load", "the release is good, but its OTC_index.json entry has a content_sha256 that is not a digest (the index fails otc-index-1.0)",
+     lambda: [release_doc(BASE)], index_content_digest_bad, {"index_invalid": True}),
+    ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
+     _too_new_broken, None, {"valid_as_1_0": False}),
 ]
 
 
@@ -772,11 +901,11 @@ def build(out, reuse):
     for name, docs, vdois, material, entry in ROOTS:
         write_root(out / name, docs(), reuse_root=(reuse / name) if reuse else None, version_dois=vdois, material=material)
         manifest["fixtures"].append({"root": name, **entry})
-    for name, expect, defect, docs, tamper in BAD:
+    for name, expect, defect, docs, tamper, *extra in BAD:
         write_root(out / "bad" / name, docs(), reuse_root=(reuse / "bad" / name) if reuse else None, tamper=tamper)
         manifest["fixtures"].append({"root": f"bad/{name}", "releases": [BASE], "latest": BASE,
                                      "expect": expect if expect == "load" else {"error": expect},
-                                     "defect": defect})
+                                     "defect": defect, **(extra[0] if extra else {})})
     (out / "fixtures.json").write_bytes(dumps_pretty(manifest))
 
 
@@ -810,6 +939,15 @@ def load_schemas(schema_dir=None):
 def version_key(v):
     major, minor = (int(x) for x in str(v).split("."))
     return major, minor
+
+
+def _not_json(token):
+    raise ValueError(f"{token} is not JSON")
+
+
+def strict_json(text):
+    """json.loads that refuses NaN and Infinity (they are not JSON, RFC 8259; Python accepts them)."""
+    return json.loads(text, parse_constant=_not_json)
 
 
 def checked_version(v, what):
@@ -998,9 +1136,9 @@ def open_release(root, datestamp, schemas):
     if unzipped != body:
         raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
     try:
-        doc = json.loads(body)
-        meta = json.loads(read_file(root, f"OTC_{datestamp}.meta.json"))
-        lines = [json.loads(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
+        doc = strict_json(body)
+        meta = strict_json(read_file(root, f"OTC_{datestamp}.meta.json"))
+        lines = [strict_json(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
     if not isinstance(doc, dict):
@@ -1178,7 +1316,13 @@ def check(schema_dir=None):
     for fx in manifest["fixtures"]:
         root = FIXTURES / fx["root"]
         errs = check_pointers(root, fx)
-        errs += index_errors(root, schemas)
+        ierrs = index_errors(root, schemas)
+        if fx.get("index_invalid"):   # this fixture's index must fail otc-index-1.0
+            if not ierrs:
+                errs.append("the index should fail otc-index-1.0, and it passes")
+            print(f"{'PASS' if ierrs else 'FAIL'}  {fx['root']:30} index fails otc-index-1.0 as it should  [{'; '.join(ierrs)[:120]}]")
+        else:
+            errs += ierrs
         for d in fx["releases"]:
             expect = (fx.get("expect_by_release") or {}).get(d, fx["expect"])
             try:
@@ -1194,9 +1338,15 @@ def check(schema_dir=None):
             if outcome in ({"error": "reader_too_old"}, {"error": "unsupported_format"}):
                 try:
                     as_readable(root, d, schemas)
+                    readable = None
                 except Fail as e:
+                    readable = e
+                if fx.get("valid_as_1_0", True) and readable is not None:
                     ok = False
-                    errs.append(f"{d}: not a valid {FORMAT} release apart from its versions: {e}")
+                    errs.append(f"{d}: not a valid {FORMAT} release apart from its versions: {readable}")
+                elif not fx.get("valid_as_1_0", True) and readable is None:
+                    ok = False
+                    errs.append(f"{d}: should not be a valid {FORMAT} release apart from its versions, and it is")
             print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} {d:11} expect {json.dumps(expect):32} got {json.dumps(outcome)}  [{detail}]")
         if "latest_readable" in fx:
             got = readable_latest(root)
