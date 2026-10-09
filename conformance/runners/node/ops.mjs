@@ -284,11 +284,11 @@ export function makeRunner(sdk) {
         },
         subordinates_of(a, msg) {
             const st = lookStation(msg, a);
-            return { station_ids: st ? target(msg).subordinatesOf(st).map((s) => s.station_id) : [] };
+            return { station_ids: st ? target(msg).subordinatesOf(st).map((s) => s.station_id) : null };
         },
         station_validation(a, msg) {
             const st = lookStation(msg, a);
-            return { validation: st ? st.validation.map(encValidation) : [] };
+            return { validation: st ? need(st, "validation").map(encValidation) : null };
         },
         subordinate_offsets(a, msg) {
             const st = lookStation(msg, a);
@@ -302,12 +302,12 @@ export function makeRunner(sdk) {
         },
         constant_sets(a, msg) {
             const st = lookStation(msg, a);
-            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : [] };
+            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : null };
         },
         constant_set: (a, msg) => ({ set: encSet(lookSet(msg, a)) }),
         constituents(a, msg) {
             const cs = lookSet(msg, a);
-            return { constituents: cs ? cs.constituents.map((c) => pick(c, CONSTITUENT)) : [] };
+            return { constituents: cs ? need(cs, "constituents").map((c) => pick(c, CONSTITUENT)) : null };
         },
         constituent(a, msg) {
             const cs = lookSet(msg, a);
@@ -322,7 +322,7 @@ export function makeRunner(sdk) {
         },
         set_validation(a, msg) {
             const cs = lookSet(msg, a);
-            return { validation: cs ? cs.validation.map(encValidation) : [] };
+            return { validation: cs ? need(cs, "validation").map(encValidation) : null };
         },
         raw(a, msg) {
             let obj = null;

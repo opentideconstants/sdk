@@ -1202,10 +1202,10 @@ static void op_query(request *q, reply *r)
                     return;
                 }
             }
-            cJSON_AddItemToObject(o, "station_ids", ids_array(ids, count));
+            cJSON_AddItemToObject(o, "station_ids", st ? ids_array(ids, count) : cJSON_CreateNull());
             free((void *)ids);
         } else if (!strcmp(op, "station_validation")) {
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = st ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = st ? otc_station_validation_count(st) : 0;
             for (i = 0; i < n; i++) {
                 const otc_validation_t *v = NULL;
@@ -1243,7 +1243,7 @@ static void op_query(request *q, reply *r)
             }
         } else if (!strcmp(op, "constant_sets")) {
             bool inc = arg_bool(&q->a, "include_no_constants", false);
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = st ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = st ? otc_station_set_count(st, inc) : 0;
             if (q->a.bad) { cJSON_Delete(arr); otc_station_free(st); set_error(r, "invalid_argument", "include_no_constants"); return; }
             for (i = 0; i < n; i++) {
@@ -1258,7 +1258,7 @@ static void op_query(request *q, reply *r)
             else cJSON_AddNullToObject(o, "set");
         } else if (!strcmp(op, "constituents")) {
             const otc_set *set = find_set(q, st, &bad);
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = set ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = set ? otc_set_constituent_count(set) : 0;
             for (i = 0; i < n; i++) {
                 const otc_constituent_t *c = NULL;
@@ -1303,7 +1303,7 @@ static void op_query(request *q, reply *r)
             }
         } else if (!strcmp(op, "set_validation")) {
             const otc_set *set = find_set(q, st, &bad);
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = set ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = set ? otc_set_validation_count(set) : 0;
             for (i = 0; i < n; i++) {
                 const otc_validation_t *v = NULL;

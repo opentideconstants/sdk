@@ -90,7 +90,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 - Arguments are the API's snake_case names. A runner turns them into its language's form by the rules of §4.1 (keyword arguments, an options object, a C struct).
 - An argument that is absent from `args` is not passed (the SDK's default applies). An argument given as JSON `null` is passed as nil / None / null.
 - Values are passed through with their JSON type, so a case can pass a wrong type (for example `country: 5`) to test `invalid_argument`. C, where the type cannot be wrong, reports `invalid_argument` for such a step without calling the SDK.
-- Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with the result for "nothing" (`null` or `[]`) as the op's encoding gives it.
+- Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with `null` as the op's value, also for an op whose value is a list (`subordinates_of`, `station_validation`, `constant_sets`, `constituents`, `set_validation`): an empty list would hide a lookup that fails.
 - Times in arguments do not occur in suite 1.0.
 
 ## Operations

@@ -290,10 +290,10 @@ class Runner:
             return {"station_id": None if ref is None else ref.station_id}
         if op == "subordinates_of":
             st = self.station(req, a)
-            return {"station_ids": [] if st is None else [s.station_id for s in self.target(req).subordinates_of(st)]}
+            return {"station_ids": None if st is None else [s.station_id for s in self.target(req).subordinates_of(st)]}
         if op == "station_validation":
             st = self.station(req, a)
-            return {"validation": [] if st is None else enc_validation(st.validation)}
+            return {"validation": None if st is None else enc_validation(st.validation)}
         if op == "subordinate_offsets":
             st = self.station(req, a)
             off = None if st is None else st.subordinate_offsets
@@ -305,12 +305,12 @@ class Runner:
         if op == "constant_sets":
             st = self.station(req, a)
             kw = {"include_no_constants": a["include_no_constants"]} if "include_no_constants" in a else {}
-            return {"set_ids": [] if st is None else [cs.set_id for cs in st.constant_sets(**kw)]}
+            return {"set_ids": None if st is None else [cs.set_id for cs in st.constant_sets(**kw)]}
         if op == "constant_set":
             return {"set": enc_set(self.set(req, a))}
         if op == "constituents":
             cs = self.set(req, a)
-            return {"constituents": [] if cs is None else [pick(x, CONSTITUENT) for x in cs.constituents]}
+            return {"constituents": None if cs is None else [pick(x, CONSTITUENT) for x in cs.constituents]}
         if op == "constituent":
             cs = self.set(req, a)
             x = None if cs is None else cs.constituent(a["name"])
@@ -322,7 +322,7 @@ class Runner:
             return {"provenance": enc_provenance(cs.provenance), "raw": plain(cs.provenance.raw)}
         if op == "set_validation":
             cs = self.set(req, a)
-            return {"validation": [] if cs is None else enc_validation(cs.validation)}
+            return {"validation": None if cs is None else enc_validation(cs.validation)}
         if op == "raw":
             obj = a["object"]
             r = self.release(req)

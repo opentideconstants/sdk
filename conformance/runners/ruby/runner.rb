@@ -194,10 +194,10 @@ class Runner
             { "station_id" => ref && ref.station_id }
         when "subordinates_of"
             st = find_station(args, target)
-            { "station_ids" => st ? q(target).subordinates_of(st).map(&:station_id) : [] }
+            { "station_ids" => st ? q(target).subordinates_of(st).map(&:station_id) : nil }
         when "station_validation"
             st = find_station(args, target)
-            { "validation" => st ? st.validation.map { |v| validation(v) } : [] }
+            { "validation" => st ? st.validation.map { |v| validation(v) } : nil }
         when "subordinate_offsets"
             st = find_station(args, target)
             off = st && st.subordinate_offsets
@@ -208,13 +208,13 @@ class Runner
             { "set_id" => set && set.set_id }
         when "constant_sets"
             st = find_station(args, target)
-            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : [] }
+            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : nil }
         when "constant_set"
             set = find_set(args, target)
             { "set" => set && constant_set(set) }
         when "constituents"
             set = find_set(args, target)
-            { "constituents" => set ? set.constituents.map { |c| constituent(c) } : [] }
+            { "constituents" => set ? set.constituents.map { |c| constituent(c) } : nil }
         when "constituent"
             set = find_set(args, target)
             c = set && set.constituent(args["name"])
@@ -225,7 +225,7 @@ class Runner
             { "provenance" => p && provenance(p), "raw" => p && p.raw }
         when "set_validation"
             set = find_set(args, target)
-            { "validation" => set ? set.validation.map { |v| validation(v) } : [] }
+            { "validation" => set ? set.validation.map { |v| validation(v) } : nil }
         when "raw" then { "raw" => raw(args, target) }
         else
             raise ArgumentError, "unknown op #{op}"

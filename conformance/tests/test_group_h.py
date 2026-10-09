@@ -352,3 +352,41 @@ def test_node_full_station_encodes():
     rc, hello, out, err = talk("node", [OPEN, {"op": "station", "args": {"station_id": "OTC-T-0001"}}], mode="station-without-nothing")
     reply = strict(out[1])
     assert reply["ok"] is True and reply["result"]["station"]["recommended_set_id"] is None, reply
+
+
+# --- T56: a list op whose station or set is not found answers null, not [] (a broken lookup must not match [])
+
+LIST_OPS = [("subordinates_of", {"station_id": "OTC-T-9999"}, "station_ids"),
+            ("station_validation", {"station_id": "OTC-T-9999"}, "validation"),
+            ("constant_sets", {"station_id": "OTC-T-9999"}, "set_ids"),
+            ("constituents", {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/none"}, "constituents"),
+            ("set_validation", {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/none"}, "validation")]
+
+
+def _real_runner(lang):
+    if lang == "python":
+        return [sys.executable, str(RUNNERS / "python" / "runner.py")], {}
+    if lang == "ruby":
+        if not shutil.which("ruby"):
+            pytest.skip("no ruby")
+        return ["ruby", str(RUNNERS / "ruby" / "runner.rb")], {}
+    if lang == "node":
+        if not (CONF.parent / "js" / "dist" / "index.js").exists():
+            pytest.skip("js/dist is not built")
+        return ["node", str(RUNNERS / "node" / "runner.mjs")], {}
+    return runner_cmd(lang)
+
+
+@pytest.mark.parametrize("lang", ["python", "ruby", "node", "c"])
+def test_missing_parent_gives_null_not_empty_list(tmp_path, lang):
+    if lang == "python" and sys.version_info < (3, 10):
+        pytest.skip("the Python SDK needs 3.10")
+    path = _copy_release(tmp_path)
+    cmd, env = _real_runner(lang)
+    lines = [{"op": "open", "args": {"file": str(path), "mode": "stream"}}] + [{"op": op, "args": a} for op, a, _ in LIST_OPS]
+    data = "".join(json.dumps(x) + "\n" for x in lines)
+    p = subprocess.run(cmd, input=data, capture_output=True, text=True, env=dict(os.environ, **env), timeout=60, cwd=str(CONF.parent))
+    out = [strict(x) for x in p.stdout.splitlines()[1:]]
+    assert len(out) == len(lines) and out[0]["ok"], (p.stdout[-500:], p.stderr[-500:])
+    for (op, a, key), reply in zip(LIST_OPS, out[1:]):
+        assert reply == {"ok": True, "result": {key: None}}, (op, reply)
