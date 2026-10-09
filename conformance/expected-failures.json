@@ -948,14 +948,6 @@
    "reason": "step 0 open: expected error 'invalid_argument', got a result {\"loaded_from\": \"download\", \"datestamp\": \"20991231.2\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk08/base-url-no-slash",
-   "runners": [
-    "c-fetch"
-   ],
-   "package": "PK08",
-   "reason": "step 0 open: expected a result, got error 'release_not_found' (no latest pointer under http://127.0.0.1:51308/good)"
-  },
-  {
    "case": "rules/pk08/fold-d12@json",
    "runners": [
     "python",

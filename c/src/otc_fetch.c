@@ -504,7 +504,10 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     c->base = path2(root, LAYOUT);
     free(root);
     v = (o && o->base_url) ? o->base_url : env_get("OPENTIDECONSTANTS_BASE_URL");
-    c->base_url = otc__strdup(v ? v : DEFAULT_BASE_URL);
+    if (!v) v = DEFAULT_BASE_URL;
+    /* a base_url is a folder: without its trailing slash the last segment would be
+     * dropped when a file name is resolved against it (spec 4.2, 5.2) */
+    c->base_url = (v[0] && v[strlen(v) - 1] != '/') ? otc__join(v, "/") : otc__strdup(v);
     if (!c->base || !c->base_url) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     v = env_get("OPENTIDECONSTANTS_OFFLINE");
     c->offline = (o && o->offline) || (v && !strcmp(v, "1"));
