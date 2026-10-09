@@ -1753,7 +1753,19 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         pend[n_pend++].dest = dest;
     }
 
-    /* 3. renames: the .sha256 first, then the data files */
+    /* 3. renames: the .sha256 first, then the data files. An old .verified goes first, so that
+     * it never vouches for a directory whose files are being replaced (spec 5.4: .verified
+     * is written last, and a reader trusts a directory only when it exists). */
+    if (old) {
+        char *vpath = path2(dir, ".verified");
+        int gone = vpath && (fs_unlink(vpath) == 0 || fs_kind(vpath) == 0);
+        if (!gone) {
+            st = fail(c, OTC_E_CACHE, vpath, "cannot remove %s", vpath ? vpath : dir);
+            free(vpath);
+            goto out;
+        }
+        free(vpath);
+    }
     {
         char *sha_dest = path2(dir, sha_name);
         if (!sha_dest || fs_rename(sha_tmp, sha_dest) != 0) {
