@@ -11,7 +11,9 @@ int otc__filter_match(const otc_filter *f, const otc__entry *e)
     if (f->country && otc__strcmp_null(e->country, f->country) != 0) return 0;
     if (f->type && strcmp(e->type_s, f->type) != 0) return 0;
     if (f->kind) {
-        const char *k = otc_kind_name(e->kind);
+        /* only the schema values match; "other" (the name of an unknown kind) is an
+         * unknown filter value, which gives an empty result (spec 4.4) */
+        const char *k = (e->kind == OTC_KIND_TIDE || e->kind == OTC_KIND_CURRENT) ? otc_kind_name(e->kind) : NULL;
         if (!k || strcmp(k, f->kind) != 0) return 0;
     }
     if (f->source) {

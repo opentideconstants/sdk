@@ -2,7 +2,9 @@
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
  *      not cut to an integer: it reads as missing (-1).
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
- *      text after a line's object is invalid_release, not ignored. */
+ *      text after a line's object is invalid_release, not ignored.
+ * C34: the kind filter "other" is not a kind value: it matches no station,
+ *      also not one whose kind is unknown (spec 4.4). */
 #include "otc_test.h"
 
 static otc_release *open_lines(const char *lines, char **dir_out)
@@ -60,5 +62,26 @@ int main(void)
         free(path);
         free(d2);
     }
+    /* C34 */
+    rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
+                     "\"recommended_set_id\":\"s\",\"constant_sets\":[{\"set_id\":\"s\",\"source\":\"a\",\"quantity\":\"salinity\","
+                     "\"qc_status\":\"ok\",\"convention_id\":\"c1\",\"licence_id\":\"l1\"}]}\n", &dir);
+    if (rel) {
+        otc_filter f;
+        const char *ids[4];
+        size_t n = 9;
+        otc_filter_init(&f);
+        f.kind = "other";
+        CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
+        CHECK(n == 0);
+        f.kind = "tide";
+        CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
+        CHECK(n == 0);
+        f.kind = NULL;
+        CHECK_STATUS(otc_stations(rel, &f, ids, 4, &n), OTC_OK);
+        CHECK(n == 1);
+    }
+    otc_close(rel);
+    free(dir);
     return test_done("test_values");
 }
