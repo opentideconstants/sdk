@@ -427,3 +427,14 @@ test("DR20: a userAgent with a control or non-latin-1 character is invalid_argum
         s.srv.close();
     }
 });
+
+test("R2-097: a read error in stream mode (EISDIR, EIO, EBADF) is io, not a raw Node error", async () => {
+    const { openLineReader } = await import("../dist/node.js");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-read-"));
+    const r = openLineReader(dir); // a directory opens for reading; every read fails with EISDIR
+    try {
+        assert.throws(() => r.read(0, 10), (e) => isCode("io")(e) && e.cause?.code === "EISDIR");
+    } finally {
+        r.close();
+    }
+});

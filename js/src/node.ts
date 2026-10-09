@@ -113,7 +113,13 @@ export function openLineReader(file: string): { read: (offset: number, length: n
             const buf = Buffer.alloc(length);
             let got = 0;
             while (got < length) {
-                const n = fs.readSync(fd, buf, got, length - got, offset + got);
+                let n: number;
+                try {
+                    n = fs.readSync(fd, buf, got, length - got, offset + got);
+                } catch (e) {
+                    // EIO, EBADF, ESTALE...: a local read failure is io, never a raw Node error (R2-097)
+                    throw new FileError(`cannot read ${file}`, { path: file, cause: e });
+                }
                 if (n === 0) break;
                 got += n;
             }
