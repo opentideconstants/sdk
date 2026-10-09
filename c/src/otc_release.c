@@ -223,7 +223,8 @@ typedef struct builder {
     otc_error   *err;
     size_t       cap_st, cap_tomb, cap_alias, cap_cn;
     size_t       line_no;
-    /* the reference ids, to resolve kind after the pass */
+    size_t      *cn_slots;   /* open addressing over rel->cnames: index + 1, 0 = empty */
+    size_t       cn_slots_cap;
 } builder;
 
 #define GROW(ptr, n, cap)                                                        \
@@ -244,16 +245,38 @@ static otc_status bad_line(builder *b, const char *what)
     return OTC_E_INVALID_RELEASE;
 }
 
+static size_t name_hash(const char *s)
+{
+    size_t h = (size_t)2166136261u;
+    while (*s) h = (h ^ (unsigned char)*s++) * (size_t)16777619u;
+    return h;
+}
+
+/* Adds a constituent name once. A hash set over rel->cnames keeps this
+ * linear in the number of constituents (spec 6.5), not quadratic. */
 static otc_status add_cname(builder *b, const char *name)
 {
     otc_release *r = b->rel;
-    size_t i;
-    for (i = 0; i < r->n_cnames; i++)
-        if (!strcmp(r->cnames[i], name)) return OTC_OK;
+    size_t i, mask;
+    if (r->n_cnames * 2 >= b->cn_slots_cap) {   /* grow (and fill) the table at half full */
+        size_t cap = b->cn_slots_cap ? b->cn_slots_cap * 2 : 64, k;
+        size_t *t = (size_t *)calloc(cap, sizeof *t);
+        if (!t) return OTC_E_NOMEM;
+        for (k = 0; k < r->n_cnames; k++) {
+            for (i = name_hash(r->cnames[k]) & (cap - 1); t[i]; i = (i + 1) & (cap - 1)) {}
+            t[i] = k + 1;
+        }
+        free(b->cn_slots);
+        b->cn_slots = t;
+        b->cn_slots_cap = cap;
+    }
+    mask = b->cn_slots_cap - 1;
+    for (i = name_hash(name) & mask; b->cn_slots[i]; i = (i + 1) & mask)
+        if (!strcmp(r->cnames[b->cn_slots[i] - 1], name)) return OTC_OK;
     GROW(r->cnames, r->n_cnames, b->cap_cn);
     r->cnames[r->n_cnames] = otc__strdup(name);
     if (!r->cnames[r->n_cnames]) return OTC_E_NOMEM;
-    r->n_cnames++;
+    b->cn_slots[i] = ++r->n_cnames;
     return OTC_OK;
 }
 
@@ -972,6 +995,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     otc_status st;
     builder b;
 
+    memset(&b, 0, sizeof b);
     if (otc__path_size(path) < 0) {
         otc__err_set(err, OTC_E_IO, path, "cannot open %s", path);
         return OTC_E_IO;
@@ -1021,7 +1045,6 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         r->loaded_from = OTC_LOADED_FROM_FILE_UNVERIFIED;
     }
     if ((st = load_meta(r, meta_path, meta_text, meta_len, err)) != OTC_OK) goto done;
-    memset(&b, 0, sizeof b);
     b.rel = r;
     b.err = err;
     st = OTC_E_NOT_FOUND;
@@ -1084,6 +1107,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     otc__kv_sort(&r->qc_counts);
     st = build_files(r, dir, names, digests, n_rows, jsonl_name, path_base(meta_path));
 done:
+    free(b.cn_slots);
     otc__free_rows(names, digests, n_rows);
     free(meta_text);
     free(base);
