@@ -461,9 +461,10 @@ class OpenTideConstants
     end
 
     # Keeps the version DOI of an entry in the .verified of its cached release.
+    # An entry whose DOI is null never erases a known one (CR2 DR11).
     def note_version_doi(entry)
         d = entry["datestamp"]
-        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && entry.key?("zenodo_version_doi")
+        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && !entry["zenodo_version_doi"].nil?
         cache.note_version_doi(d, entry["zenodo_version_doi"])
     end
 
@@ -736,8 +737,9 @@ class OpenTideConstants
                                    "url" => url_of.call(sha_name) }
         end
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
-        # Only the keys the entry has: a missing zenodo_version_doi keeps the stored one.
+        # Only the keys the entry has: a missing or null zenodo_version_doi keeps the stored one (CR2 DR11).
         info = entry ? entry.slice(*Cache::VERIFIED_INFO) : {}
+        info.delete("zenodo_version_doi") if info["zenodo_version_doi"].nil?
         if @mode == :stream
             %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
                 size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],

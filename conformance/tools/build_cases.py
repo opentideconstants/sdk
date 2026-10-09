@@ -1420,7 +1420,32 @@ def group_cross(R2):
                      drv("assert_index", path=idx, jsonl=jl, datestamp=d)],
                     roles=roles, timeout_s=90))
     out += cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir)
+    out += cross_r2_pk09(R2, roles, rdir)
     return out
+
+
+def cross_r2_pk09(R2, roles, rdir):
+    """Cross-SDK case of review round 2, package PK-R2-09: a null version DOI never erases a known one (spec 4.3,
+    5.4; CR2 DR11)."""
+    d = R2.datestamp
+    G = f"{SRV}/good/"
+    vdoi = pointer_entry("good", d)["zenodo_version_doi"]
+    null_doi = drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_latest-f1.json",
+                                          "pointer": "", "set": {"/zenodo_version_doi": None}}])
+    return [case("cross/verified-doi-null-pointer", "the writer caches latest with its version DOI; then the pointer names the same release with zenodo_version_doi null: the reader keeps the known DOI in the session (open, check_for_update) and in .verified (CR2 DR11)", "4.3, 5.4",
+                 [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                  as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("writer", step("close")),
+                  null_doi,
+                  as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
+                  as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("reader", step("check_for_update", {"release": None})),
+                  as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
+                  as_("reader", step("close")),
+                  drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi}),
+                  as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
+                  as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi}))],
+                 roles=roles)]
 
 
 def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
