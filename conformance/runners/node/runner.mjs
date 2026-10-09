@@ -15,7 +15,16 @@ const argv = process.argv.slice(2);
 const sdkArg = argv.indexOf("--sdk") >= 0 ? argv[argv.indexOf("--sdk") + 1] : path.join(here, "..", "..", "..", "js", "dist", "index.js");
 const sdkSpec = sdkArg.startsWith(".") || path.isAbsolute(sdkArg) ? pathToFileURL(path.resolve(sdkArg)).href : sdkArg;
 
-const out = (obj) => process.stdout.write(JSON.stringify(obj) + "\n");
+// One line per reply: a reply the runner cannot encode becomes an uncaught: reply.
+const out = (obj) => {
+    let line;
+    try {
+        line = JSON.stringify(obj);
+    } catch (e) {
+        line = JSON.stringify({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `cannot encode the reply: ${e.message}` } });
+    }
+    process.stdout.write(line + "\n");
+};
 
 let sdk;
 try {
@@ -25,14 +34,27 @@ try {
     process.exit(3);
 }
 
+// The SDK's error base class and version must be there: a runner without them fails the handshake (exit 3).
+if (typeof sdk.OpenTideConstantsError !== "function" || typeof sdk.VERSION !== "string") {
+    process.stderr.write(`cannot load the SDK from ${sdkSpec}: it has no OpenTideConstantsError class or no VERSION string\n`);
+    process.exit(3);
+}
+
 out({ hello: { runner: "typescript", version: sdk.VERSION, features: ["fs", "fetch", "json", "eager", "stream"] } });
 
 const runner = makeRunner(sdk);
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
     if (!line.trim()) continue;
-    const msg = JSON.parse(line); // a malformed request is a driver bug; let it raise
+    let msg;
+    try {
+        msg = JSON.parse(line);
+        if (msg === null || typeof msg !== "object" || Array.isArray(msg)) throw new TypeError("a request must be a JSON object");
+    } catch (e) { // a request the runner cannot read: an error reply, and the runner goes on
+        process.stderr.write(`bad request line: ${e}\n`);
+        out({ ok: false, error: { code: `uncaught:${e.constructor.name}`, message: `bad request line: ${e.message}` } });
+        continue;
+    }
     out(await runner.handle(msg));
 }
-await runner.shutdown();
-process.exit(0);
+process.exit((await runner.shutdown()) ? 0 : 1);

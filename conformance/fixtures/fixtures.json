@@ -52,6 +52,46 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "created with an offset and a fraction, a non-number in validation.previous_release, station names with a NUL",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "values"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
+   "note": "a kept_reason of 48 bytes",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "values-kept-reason"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
+   "note": "a source_name of 31 characters, 62 bytes",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "values-source-name"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
+   "note": "station names for the D12 fold rules",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "fold"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"
@@ -66,6 +106,16 @@
     "20991231"
    ],
    "root": "major"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
+   "note": "the release publishes no .json.gz",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "nogz"
   },
   {
    "defect": "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
@@ -150,6 +200,325 @@
     "20991231"
    ],
    "root": "bad/no-build"
+  },
+  {
+   "defect": "release.min_reader_version is \"2\" (not MAJOR.MINOR; D9)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/min-reader-malformed"
+  },
+  {
+   "defect": "format_version is \"1.x\" (not MAJOR.MINOR; D9)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/format-version-malformed"
+  },
+  {
+   "defect": "OTC-T-0020 is both an active station and a tombstone (D5)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/active-and-removed-same-id"
+  },
+  {
+   "defect": "OTC-T-0001 has two sets with the set_id OTC-T-0001/noaa (D5)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/duplicate-set-id"
+  },
+  {
+   "defect": "OTC-T-0003's subordinate_offsets.reference_station_id is OTC-T-9999",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unresolved-reference-station"
+  },
+  {
+   "defect": "OTC-T-0003's subordinate_offsets.licence_id is no-such-licence",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unresolved-offsets-licence"
+  },
+  {
+   "defect": "two conventions with the convention_id noaa-greenwich-v1 (D5)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/duplicate-convention-id"
+  },
+  {
+   "defect": "OTC-T-0020's station_id is the number 20 (malformed: schema-invalid)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/station-id-not-string"
+  },
+  {
+   "defect": "OTC-T-0010's lat is the string \"0.0\" (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lat-string"
+  },
+  {
+   "defect": "OTC-T-0006's aliases is a list (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/aliases-not-object"
+  },
+  {
+   "defect": "OTC-T-0002's first set has qc_flags as an object (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/qc-flags-not-array"
+  },
+  {
+   "defect": "the first convention has no convention_id (malformed; the .meta.json path reads it too)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/convention-without-id"
+  },
+  {
+   "defect": "release.created is the number 2099 (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/created-not-string"
+  },
+  {
+   "defect": "release.source_versions is a list (malformed)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/source-versions-not-object"
+  },
+  {
+   "defect": "honest digests, but the .json.gz decompresses to other data than the .json (reader only, D37)",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/gz-differs"
+  },
+  {
+   "defect": "honest digests, but a .jsonl line differs from the .json station (reader only, D37)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/jsonl-differs"
+  },
+  {
+   "defect": "honest digests, but the .meta.json differs from the .json without stations (reader only, D37)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/meta-differs"
+  },
+  {
+   "defect": "the pointer and index give the .jsonl one byte more than its size; every SHA-256 is right",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/size-mismatch"
+  },
+  {
+   "defect": "OTC_20991231.sha256 lists a file the pointer does not list (spec 5.2 step 4.1)",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sums-extra-file"
+  },
+  {
+   "defect": "the pointer's SHA-256 of OTC_20991231.sha256 is not the file's (spec 5.2 step 4.1)",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sha256-file-differs"
+  },
+  {
+   "defect": "OTC_20991231.sha256 gives another SHA-256 for the .jsonl than the pointer; the file matches the pointer (spec 5.2 step 4.1)",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/sums-disagree"
+  },
+  {
+   "defect": "OTC-T-0010's set has licence_id no-such-licence",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unresolved-licence"
+  },
+  {
+   "defect": "OTC-T-0010's recommended_set_id names no set of the station",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/unresolved-recommended"
+  },
+  {
+   "defect": "OTC-T-0002 has the noaa alias 9900001 of OTC-T-0001 (spec 4.4: alias ids are unique in a system)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/duplicate-alias"
+  },
+  {
+   "defect": "OTC-T-0020 appears twice (the second line's set has another set_id, so the station id is the only duplicate)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/duplicate-station-id"
+  },
+  {
+   "defect": "OTC-T-0010's lat is NaN, which is not JSON (RFC 8259) though Python's json module writes and reads it",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/lat-nan"
+  },
+  {
+   "defect": "only the .jsonl has one byte changed (same size); the .json and .json.gz are honest, so only the hash check catches it",
+   "expect": {
+    "error": "checksum_mismatch"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/jsonl-wrong-sha256"
+  },
+  {
+   "defect": "the release is good, but its OTC_index.json entry has a content_sha256 that is not a digest (the index fails otc-index-1.0)",
+   "expect": "load",
+   "index_invalid": true,
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/index-invalid"
+  },
+  {
+   "defect": "min_reader_version 1.99, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
+   "expect": {
+    "error": "reader_too_old"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/too-new-broken",
+   "valid_as_1_0": false
   }
  ],
  "reader_format_version": "1.0",

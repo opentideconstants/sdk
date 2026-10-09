@@ -27,13 +27,19 @@ What it does:
     {"match": RE, "action": "slow", "delay_s": 5}         headers at once, the body after delay_s seconds
     {"match": RE, "action": "file", "file": "good/OTC_20991231.jsonl"}       serve another fixture file
     {"match": RE, "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}   serve one JSON value of a fixture (RFC 6901 pointer)
+      with "set": {"/datestamp": "x", ...}, the served value is changed at those pointers first
+    A file rule takes "headers" too (sent with the file, for example Content-Encoding).
   Rules are tried in order; the first active match applies. "times" null = always.
+  A rule that cannot be applied when a request comes (for example a JSON pointer that does not resolve) gets a
+  500, a log entry with an "error", and a line in errors; the driver fails the case with a harness error.
 - Records every request (method, path, query, headers, status, time) in a log.
 - stop() closes the HTTP listener and every open (keep-alive) connection, and
   puts a tripwire on the same port: it accepts any connection, records it, and
   closes it at once. A request that still reaches a handler while stopped is
   also recorded as a tripwire entry and gets no response. So "the server is
   stopped" and "no socket was opened" can both be checked. resume() serves again.
+  An accept() error of the tripwire goes to trip_errors; the driver fails the case with a harness error, because
+  a tripwire that cannot accept records nothing.
 - RecordingProxy is a forward HTTP proxy (absolute-URI requests and CONNECT)
   that records every request it relays. Its aliases map a host name (one that
   does not resolve) to the address it connects to instead.
@@ -73,7 +79,13 @@ PREFLIGHT_HEADERS = {
 ACTIONS = {"status", "short_body", "truncate", "slow", "file", "json"}
 # action -> required fields and their types; then the optional fields of any rule
 _REQUIRED = {"status": {"status": int}, "file": {"file": str}, "json": {"file": str}, "truncate": {"bytes": int}}
-_OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str}
+_OPTIONAL = {"delta": int, "delay_s": (int, float), "headers": dict, "body": str, "pointer": str, "name": str, "set": dict}
+# the optional fields each action reads (any other key is a typo, and would be ignored without this check)
+_ACTION_OPTIONAL = {"status": {"headers", "body"}, "short_body": {"delta"}, "truncate": set(), "slow": {"delay_s"},
+                    "file": {"headers"}, "json": {"pointer", "set"}}
+_COMMON = {"match", "action", "times", "name"}
+# the smallest value of each number field
+_MINIMUM = {"status": 100, "delta": 1, "delay_s": 0, "bytes": 0}
 
 
 def validate_rule(i, r):
@@ -94,17 +106,56 @@ def validate_rule(i, r):
     for k, t in {**_OPTIONAL, **_REQUIRED.get(r["action"], {})}.items():
         if k in r and (isinstance(r[k], bool) or not isinstance(r[k], t)):
             raise ValueError(f"rule {i}: {k} has the wrong type: {r[k]!r}")
+    allowed = _COMMON | set(_REQUIRED.get(r["action"], {})) | _ACTION_OPTIONAL[r["action"]]
+    unknown = sorted(set(r) - allowed)
+    if unknown:
+        raise ValueError(f"rule {i}: action {r['action']!r} has no field(s) {unknown}")
+    for k, low in _MINIMUM.items():
+        if k in r and r[k] < low:
+            raise ValueError(f"rule {i}: {k} must be at least {low}, got {r[k]!r}")
+    if "status" in r and r["status"] > 599:
+        raise ValueError(f"rule {i}: status must be an HTTP status (100-599), got {r['status']!r}")
+    if isinstance(r.get("pointer"), str):
+        pointer_parts(r["pointer"])  # ValueError for a pointer that is not RFC 6901
+    for ptr in r.get("set") or {}:
+        if not pointer_parts(ptr):    # each key of set is a pointer below the served value
+            raise ValueError(f"rule {i}: set needs pointers below the value, got {ptr!r}")
     times = r.get("times")
-    if times is not None and (isinstance(times, bool) or not isinstance(times, int)):
-        raise ValueError(f"rule {i}: times must be an integer or null, got {times!r}")
+    if times is not None and (isinstance(times, bool) or not isinstance(times, int) or times < 1):
+        raise ValueError(f"rule {i}: times must be an integer of 1 or more, or null, got {times!r}")
+
+
+def pointer_parts(pointer):
+    """The reference tokens of an RFC 6901 JSON pointer: "" is the whole document, and every other pointer starts
+    with "/" ("/" is the member named ""). ValueError for a pointer without the leading "/"."""
+    if not isinstance(pointer, str):
+        raise ValueError(f"a JSON pointer must be a string, got {pointer!r}")
+    if pointer == "":
+        return []
+    if not pointer.startswith("/"):
+        raise ValueError(f"JSON pointer {pointer!r} does not start with /")
+    return [p.replace("~1", "/").replace("~0", "~") for p in pointer[1:].split("/")]
+
+
+def array_index(token, length):
+    """An RFC 6901 array index: digits with no leading zero, inside the array."""
+    if not (token == "0" or (token.isdigit() and token.isascii() and not token.startswith("0"))):
+        raise ValueError(f"{token!r} is not an array index")
+    i = int(token)
+    if i >= length:
+        raise IndexError(f"index {i} is past the end of an array of {length}")
+    return i
 
 
 def json_pointer(doc, pointer):
-    if pointer in ("", "/"):
-        return doc
-    for part in pointer.lstrip("/").split("/"):
-        part = part.replace("~1", "/").replace("~0", "~")
-        doc = doc[int(part)] if isinstance(doc, list) else doc[part]
+    """The value at an RFC 6901 pointer (KeyError, IndexError or ValueError when it does not resolve)."""
+    for part in pointer_parts(pointer):
+        if isinstance(doc, list):
+            doc = doc[array_index(part, len(doc))]
+        elif isinstance(doc, dict):
+            doc = doc[part]
+        else:
+            raise KeyError(f"{part!r}: not an object or array")
     return doc
 
 
@@ -181,6 +232,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
         if "content-length" not in {k.lower() for k in (headers or {})}:
             self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self._started = True
         if not head and body:
             self.wfile.write(body)
 
@@ -202,13 +254,20 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
         rule = self.fx.take_rule(path)
+        self._started = False
         try:
             self._serve(path, rule, head)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:  # a rule that cannot be applied: log it and answer 500, do not drop the connection
             msg = f"{type(e).__name__}: {e}"
+            if self._started:  # a response is already under way: no second status line or log entry; end it here
+                print(f"fixture server: error while sending {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
+                self.fx.errors.append(f"error while sending {path} with rule {rule!r}: {msg}")
+                self.close_connection = True
+                return
             print(f"fixture server: cannot serve {path} with rule {rule!r}: {msg}", file=sys.stderr, flush=True)
+            self.fx.errors.append(f"cannot serve {path} with rule {rule!r}: {msg}")
             self._record(500, rule.get("name") if rule else None, error=msg)
             try:
                 self.close_connection = True
@@ -238,8 +297,18 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             served = rule["file"]
         elif action == "json":
             raw = self._load(rule["file"])
-            data = None if raw is None else (
-                json.dumps(json_pointer(json.loads(raw), rule.get("pointer", "")), indent=1, sort_keys=True) + "\n").encode()
+            if raw is None:
+                data = None
+            else:
+                value = json_pointer(json.loads(raw), rule.get("pointer", ""))
+                for ptr, v in (rule.get("set") or {}).items():
+                    parts = pointer_parts(ptr)
+                    parent = json_pointer(value, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
+                    if isinstance(parent, list):
+                        parent[array_index(parts[-1], len(parent))] = v
+                    else:
+                        parent[parts[-1]] = v
+                data = (json.dumps(value, indent=1, sort_keys=True) + "\n").encode()
             served = "x.json"
         else:
             data = self._load(path)
@@ -257,13 +326,14 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("ETag", tag)
             self.send_header("Content-Length", "0")
             self.end_headers()
+            self._started = True
             return
         ctype = "application/json" if served.endswith((".json", ".jsonl")) else (
             "application/gzip" if served.endswith(".gz") else "text/plain")
-        headers = {"ETag": tag, "Content-Type": ctype}
+        headers = {"ETag": tag, "Content-Type": ctype, **(rule.get("headers") or {} if action == "file" else {})}
         body = data
         accept = self.headers.get("Accept-Encoding", "")
-        if "gzip" in accept.lower() and not path.endswith(".gz") and action not in ("short_body", "truncate"):
+        if "gzip" in accept.lower() and not served.endswith(".gz") and action not in ("short_body", "truncate"):
             body = gzip.compress(data, mtime=0)
             headers["Content-Encoding"] = "gzip"
         if action == "short_body":
@@ -282,6 +352,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             for k, v in {**CORS_HEADERS, **headers, "Content-Length": str(len(body))}.items():
                 self.send_header(k, v)
             self.end_headers()
+            self._started = True
             self.wfile.flush()
             time.sleep(float(rule.get("delay_s", 5)))
             if not head:
@@ -307,6 +378,9 @@ class FixtureServer:
         self._conns = set()
         self._conns_lock = threading.Lock()
         self.trip_errors = []
+        # Harness errors: a rule that could not be applied to a request (the request got a 500). The driver fails
+        # the case when this list is not empty, so a broken rule never looks like correct SDK error handling.
+        self.errors = []
         self.running = False
 
     @property
@@ -340,8 +414,8 @@ class FixtureServer:
         self._httpd.fixture = self  # type: ignore[attr-defined]
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        self.running = True  # before the thread: a request right after start() or resume() is served, not a tripwire hit
         self._thread.start()
-        self.running = True
         return self
 
     def _track(self, conn, add):
@@ -495,28 +569,61 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ("proxy-connection", "connection", "keep-alive")}
         try:
-            host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
-            conn = http.client.HTTPConnection(host, parts.port or 80, timeout=120)
-            conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
-            resp = conn.getresponse()
-            data = resp.read()
-        except (OSError, http.client.HTTPException) as e:
-            self._record(502, target, error=f"{type(e).__name__}: {e}")
-            try:
-                self.send_error(502)
-            except OSError:
-                pass
+            port = parts.port or 80
+        except ValueError as e:
+            self._record(400, target, error=f"bad port: {e}")
+            self.send_error(400, "bad port")
             return
-        self._record(resp.status, target)
+        conn = None
+        try:
+            try:
+                host = self.server.proxy.aliases.get(parts.hostname, parts.hostname)  # type: ignore[attr-defined]
+                conn = http.client.HTTPConnection(host, port, timeout=120)
+                conn.request(self.command, urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")), body, headers)
+                resp = conn.getresponse()
+            except (OSError, ValueError, http.client.HTTPException) as e:
+                self._record(502, target, error=f"{type(e).__name__}: {e}")
+                try:
+                    self.send_error(502)
+                except OSError:
+                    pass
+                return
+            self._record(resp.status, target)
+            self._stream(resp)
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def _stream(self, resp):
+        """Relay the upstream response as it comes: its status, its headers (its own Content-Length, also for HEAD),
+        then the body in chunks. A body that ends early (short_body) ends early here too: the proxy closes the
+        connection after the bytes it got, so the client sees the same short body as without the proxy."""
         self.send_response(resp.status)
+        length = None
         for k, v in resp.getheaders():
-            if k.lower() in ("transfer-encoding", "connection", "content-length"):
+            if k.lower() in ("transfer-encoding", "connection", "keep-alive"):
                 continue
+            if k.lower() == "content-length":
+                length = v
             self.send_header(k, v)
-        self.send_header("Content-Length", str(len(data)))
+        if length is None:
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(data)
+        self.wfile.flush()
+        if self.command == "HEAD" or resp.status in (204, 304):
+            return
+        try:
+            while True:
+                chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (OSError, http.client.HTTPException):
+            pass
+        if resp.length:  # upstream closed before Content-Length bytes: end the client connection the same way
+            self.close_connection = True
 
     do_GET = _relay
     do_HEAD = _relay

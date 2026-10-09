@@ -10,5 +10,6 @@
 conformance/fixtures/** -text
 conformance/cases/*.json -text
 conformance/api.json  -text
+conformance/schemas/** -text
 name_fold.json        -text
 js/src/fold-table.ts  -text

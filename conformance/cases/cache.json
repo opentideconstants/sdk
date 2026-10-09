@@ -399,7 +399,8 @@
    "title": "verify on a cached release passes, and fails after a cached file changes",
    "spec": "4.3, 5.3",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {

@@ -47,7 +47,8 @@ def entry(d: dict, offset: int, length: int) -> dict:
     off = d.get("subordinate_offsets") if isinstance(d.get("subordinate_offsets"), dict) else {}
     aliases = {}
     for system, ids in (d.get("aliases") or {}).items():
-        aliases[system] = [ids] if isinstance(ids, str) else [x for x in ids if isinstance(x, str)]
+        # a string or a list of strings; any other value (null, a number, an object) gives no id
+        aliases[system] = [ids] if isinstance(ids, str) else [x for x in ids if isinstance(x, str)] if isinstance(ids, list) else []
     sets = []
     rec_id = _s(d, "recommended_set_id")
     kind = None
@@ -82,8 +83,10 @@ def resolve_kinds(entries: list) -> None:
             return kind_of(e["reference_station_id"], depth + 1)
         return None
 
-    for sid, e in by_id.items():
-        e["kind"] = kind_of(sid, 0)
+    resolved = {sid: kind_of(sid, 0) for sid in by_id}
+    for e in entries:   # every active entry, also an earlier duplicate of an id (by_id keeps the last one)
+        if e["status"] == "active" and e["kind"] is None:
+            e["kind"] = resolved[e["station_id"]]
 
 
 def build(jsonl: Path, datestamp: str) -> dict:
@@ -116,7 +119,7 @@ def compare(actual, expected: dict) -> list:
     out = []
     if sorted(actual) != sorted(TOP_KEYS):
         out.append(f"top-level keys {sorted(actual)}, expected {sorted(TOP_KEYS)}")
-    if not (isinstance(actual.get("by"), str) and re.match(r"^opentideconstants-[a-z]+/\S+$", actual["by"])):
+    if not (isinstance(actual.get("by"), str) and re.fullmatch(r"opentideconstants-[a-z]+/\S+", actual["by"])):
         out.append(f"by is {actual.get('by')!r}, expected opentideconstants-<lang>/<version>")
     for k in TOP_KEYS:
         if k not in ("by", "stations") and not _same(actual.get(k), expected[k]):

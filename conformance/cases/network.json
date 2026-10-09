@@ -171,7 +171,8 @@
    "title": "stream mode downloads .jsonl and .meta.json with Accept-Encoding gzip and builds index-v1.json",
    "spec": "5.2, 5.7, 6.2",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {
@@ -242,7 +243,8 @@
    "title": "eager mode stores the release decompressed as .json in the cache",
    "spec": "5.4",
    "requires": [
-    "fs"
+    "fs",
+    "eager"
    ],
    "steps": [
     {
@@ -1505,7 +1507,8 @@
    "title": "pinned 20991231 from bad/wrong-sha256: checksum_mismatch",
    "spec": "4.8, 5.2, 7.4",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {
@@ -1581,7 +1584,8 @@
    "title": "pinned 20991231 from bad/truncated: checksum_mismatch",
    "spec": "4.8, 5.2, 7.4",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {
@@ -1683,7 +1687,8 @@
    "title": "pinned 20991231 from bad/format-major: unsupported_format",
    "spec": "4.8, 5.2, 7.4",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {
@@ -1737,7 +1742,8 @@
    "title": "pinned 20991231 from bad/unresolved-convention: invalid_release",
    "spec": "4.8, 5.2, 7.4",
    "requires": [
-    "fs"
+    "fs",
+    "stream"
    ],
    "steps": [
     {

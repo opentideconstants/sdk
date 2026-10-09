@@ -912,6 +912,626 @@
      "datestamp": "20991231.2"
     }
    ]
+  },
+  {
+   "id": "cross/index-station-id-swapped",
+   "title": "two index entries trade station ids (the index is still fresh and in bounds): a query for one reads the other's line, which must be invalid_release, never the wrong station (D4)",
+   "spec": "6.2",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/0/station_id",
+     "value": "OTC-T-0002"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/1/station_id",
+     "value": "OTC-T-0001"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0001"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-offset-past-eof",
+   "title": "an index entry whose offset is past the end of the .jsonl: the index is stale, so it is rebuilt, and the query is right (D4)",
+   "spec": "6.2",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/21/offset",
+     "value": 25837
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0022"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0022",
+       "name": "New Pier",
+       "country": "GBR",
+       "lat": 52.1,
+       "lon": 1.75,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/London",
+       "aliases": {},
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0022/gesla-fit"
+      }
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-datestamp-mismatch",
+   "title": "an index whose datestamp is not the release's is stale: it is ignored and rebuilt",
+   "spec": "6.2",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/10/country",
+     "value": "ZZ"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/datestamp",
+     "value": "20991230"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "stations",
+     "args": {
+      "country": "ZZ"
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-nul-name",
+   "title": "a station name with a NUL inside: the writer's stream index keeps it, and the reader's search finds the station by its full name",
+   "spec": "6.2, 4.4.1",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/values/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "search",
+     "args": {
+      "name": "Me\u0000da"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0151"
+      ]
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "search",
+     "args": {
+      "name": "Me\u0000da"
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0151"
+      ]
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/verified-doi-handoff",
+   "title": "the writer downloads latest (the pointer has a version DOI); the reader opens the cache offline and has the same version DOI (B1-5, D26)",
+   "spec": "4.3, 5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/verified-doi-preserved",
+   "title": "the reader adds the eager .json to the writer's cached release (a pinned open, no pointer): .verified keeps the version DOI (P12, R73, D26)",
+   "spec": "4.3, 5.4",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "eager"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "release_metadata",
+     "expect": {
+      "zenodo_version_doi": "10.5072/zenodo.2"
+     }
+    }
+   ]
   }
  ]
 }

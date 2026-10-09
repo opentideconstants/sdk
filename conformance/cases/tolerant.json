@@ -732,6 +732,15 @@
        }
       }
      }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "legacy-fit"
+     },
+     "expect": {
+      "station_ids": []
+     }
     }
    ]
   },

@@ -46,7 +46,7 @@ def test_case_runner_is_closed_when_hello_fails(tmp_path):
     srv, proxy = FixtureServer().start(), RecordingProxy().start()
     try:
         stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
-        failures, _ = driver.run_case({"id": "x", "steps": [OK_STEP]}, [sys.executable, str(script)], set(),
+        failures, _ = driver.run_case({"id": "x", "steps": [OK_STEP]}, {"main": ([sys.executable, str(script)], set())},
                                       srv, proxy, False, False, stats)
     finally:
         srv.shutdown()
@@ -73,7 +73,8 @@ def test_server_variant_requires_fs():
 def test_runner_home_is_isolated(tmp_path):
     probe = tmp_path / "homes"
     cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
-    run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_HOME_PROBE": str(probe)})
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_HOME_PROBE": str(probe)})
+    assert r.returncode == 1 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])  # the fake reply fails the step
     homes = [h for h in probe.read_text().splitlines()]
     assert len(homes) >= 2, homes  # the probe and the case runner
     assert all(h and h != os.environ.get("HOME") for h in homes), homes

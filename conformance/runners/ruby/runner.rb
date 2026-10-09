@@ -15,8 +15,14 @@ require "opentideconstants"
 
 $stdout.sync = true
 
-# The SDK base error class (a stand-in only while the gem has none, so the RED run is clean).
-SDK_ERROR = OpenTideConstants.const_defined?(:Error) ? OpenTideConstants::Error : Class.new(StandardError)
+# The SDK base error class and version. A gem without either fails the handshake (stderr and exit status 3): a
+# stand-in would hide a missing class or version.
+%i[Error VERSION].each do |name|
+    next if OpenTideConstants.const_defined?(name, false)
+    $stderr.puts("cannot load the SDK: OpenTideConstants::#{name} is not defined")
+    exit(3)
+end
+SDK_ERROR = OpenTideConstants::Error
 
 class Runner
     FILTERS = %w[country type kind source source_type].freeze
@@ -27,8 +33,7 @@ class Runner
     end
 
     def hello
-        version = defined?(OpenTideConstants::VERSION) ? OpenTideConstants::VERSION : "0.0.0"
-        { "hello" => { "runner" => "ruby", "version" => version,
+        { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
                        "features" => %w[fs fetch json eager stream] } }
     end
 
@@ -36,20 +41,40 @@ class Runner
         op = req["op"]
         args = req["args"] || {}
         target = req["on"] ? @held.fetch(req["on"]) : nil
-        { "ok" => true, "result" => dispatch(op, args, target) }
+        { "ok" => true, "result" => finite(dispatch(op, args, target)) }
     rescue SDK_ERROR => e
-        { "ok" => false, "error" => encode_error(e) }
+        begin
+            { "ok" => false, "error" => encode_error(e) }
+        rescue StandardError, ScriptError => x # an error while encoding the SDK error is still one reply
+            { "ok" => false, "error" => { "code" => "uncaught:#{x.class}", "message" => "cannot encode the SDK error: #{x.message}" } }
+        end
     rescue StandardError, ScriptError => e
         { "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "#{e.message} #{e.backtrace&.first(3)&.join(' | ')}" } }
     end
 
+    # Closes the client at shutdown; a close that fails is reported (stderr, and false for a non-zero exit).
     def close
         @client&.close
-    rescue StandardError
-        nil
+        true
+    rescue StandardError => e
+        $stderr.puts("close failed at shutdown: #{e.class}: #{e.message}")
+        false
     end
 
     private
+
+    # The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded.
+    def finite(v)
+        case v
+        when Float
+            raise FloatDomainError, "the SDK returned #{v}, which JSON cannot carry" if v.infinite?
+            v.nan? ? nil : v
+        when Hash then v.to_h { |k, x| [k, finite(x)] }
+        when Array then v.map { |x| finite(x) }
+        when String, Integer, true, false, nil then v
+        else raise TypeError, "the runner cannot encode a #{v.class} as JSON"
+        end
+    end
 
     def sym_kw(args, names)
         out = {}
@@ -140,7 +165,8 @@ class Runner
         when "attribution"
             if args.key?("station_ids")
                 ids = args["station_ids"]
-                sts = ids.nil? ? nil : ids.map { |id| rel(target).station(id) }.compact
+                # an unknown or removed id gives nil, which goes to the SDK as it is (D2 a: invalid_argument)
+                sts = ids.nil? ? nil : ids.map { |id| rel(target).station(id) }
                 { "attribution" => q(target).attribution(sts) }
             else
                 { "attribution" => q(target).attribution }
@@ -174,10 +200,10 @@ class Runner
             { "station_id" => ref && ref.station_id }
         when "subordinates_of"
             st = find_station(args, target)
-            { "station_ids" => st ? q(target).subordinates_of(st).map(&:station_id) : [] }
+            { "station_ids" => st ? q(target).subordinates_of(st).map(&:station_id) : nil }
         when "station_validation"
             st = find_station(args, target)
-            { "validation" => st ? st.validation.map { |v| validation(v) } : [] }
+            { "validation" => st ? st.validation.map { |v| validation(v) } : nil }
         when "subordinate_offsets"
             st = find_station(args, target)
             off = st && st.subordinate_offsets
@@ -188,13 +214,13 @@ class Runner
             { "set_id" => set && set.set_id }
         when "constant_sets"
             st = find_station(args, target)
-            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : [] }
+            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : nil }
         when "constant_set"
             set = find_set(args, target)
             { "set" => set && constant_set(set) }
         when "constituents"
             set = find_set(args, target)
-            { "constituents" => set ? set.constituents.map { |c| constituent(c) } : [] }
+            { "constituents" => set ? set.constituents.map { |c| constituent(c) } : nil }
         when "constituent"
             set = find_set(args, target)
             c = set && set.constituent(args["name"])
@@ -205,7 +231,7 @@ class Runner
             { "provenance" => p && provenance(p), "raw" => p && p.raw }
         when "set_validation"
             set = find_set(args, target)
-            { "validation" => set ? set.validation.map { |v| validation(v) } : [] }
+            { "validation" => set ? set.validation.map { |v| validation(v) } : nil }
         when "raw" then { "raw" => raw(args, target) }
         else
             raise ArgumentError, "unknown op #{op}"
@@ -241,15 +267,16 @@ class Runner
         %i[url status file expected actual path].each do |f|
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
+        code = e.code.to_s
         if e.respond_to?(:tombstone) && e.tombstone
-            # a tombstone the runner cannot encode fails the step instead of crashing the runner
+            # a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails)
             fields["tombstone"] = begin
                 tombstone(e.tombstone)
             rescue StandardError, ScriptError => te
-                "uncaught:#{te.class}"
+                code = "uncaught:#{te.class}"
             end
         end
-        { "code" => e.code.to_s, "message" => e.message.to_s, "fields" => fields }
+        { "code" => code, "message" => e.message.to_s, "fields" => finite(fields) }
     end
 
     def file_info(f)
@@ -286,7 +313,9 @@ class Runner
 
     def stats(st)
         %i[type kind country source qc_status].to_h do |k|
-            [k.to_s, (st.public_send(k) || {}).to_h { |v, n| [v.to_s, n] }]
+            counts = st.public_send(k)
+            raise TypeError, "stats.#{k} is #{counts.inspect}, not a Hash" unless counts.is_a?(Hash) # never {} for nil
+            [k.to_s, counts.to_h { |v, n| [v.to_s, n] }]
         end
     end
 
@@ -369,7 +398,25 @@ runner = Runner.new
 $stdout.write(JSON.generate(runner.hello) + "\n")
 $stdin.each_line do |line|
     next if line.strip.empty?
-    reply = runner.handle(JSON.parse(line))
-    $stdout.write(JSON.generate(reply) + "\n")
+    req = begin
+        JSON.parse(line)
+    rescue JSON::ParserError => e
+        e
+    end
+    reply = if req.is_a?(Hash)
+        runner.handle(req)
+    else
+        # a request the runner cannot read: an error reply, and the runner goes on
+        msg = req.is_a?(Exception) ? req.message : "a request must be a JSON object"
+        $stderr.puts("bad request line: #{msg}")
+        { "ok" => false, "error" => { "code" => "uncaught:#{req.is_a?(Exception) ? req.class : 'BadRequest'}",
+                                      "message" => "bad request line: #{msg}" } }
+    end
+    line_out = begin
+        JSON.generate(reply)
+    rescue StandardError => e # a reply the runner cannot encode is still one line
+        JSON.generate({ "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "cannot encode the reply: #{e.message}" } })
+    end
+    $stdout.write(line_out + "\n")
 end
-runner.close
+exit(runner.close ? 0 : 1)

@@ -57,7 +57,7 @@ function iso(t) {
 
 function encStation(s) {
     if (s == null) return null;
-    const rec = s.recommendedSet;
+    const rec = need(s, "recommendedSet");
     return {
         station_id: s.station_id, name: s.name, country: s.country, lat: s.lat, lon: s.lon, type: s.type,
         kind: s.kind, timezone: s.timezone, aliases: s.aliases, status: s.status,
@@ -68,40 +68,41 @@ function encStation(s) {
 
 function encSet(cs) {
     if (cs == null) return null;
-    const span = cs.record_span;
-    const datum = cs.datum;
+    const span = need(cs, "record_span");
+    const datum = need(cs, "datum");
     return {
         set_id: cs.set_id, source: cs.source, source_type: cs.source_type, quantity: cs.quantity,
         source_record_id: cs.source_record_id, source_version: cs.source_version,
-        record_span: span == null ? null : { start: iso(span.start), end: iso(span.end), good_samples: span.good_samples },
-        datum: datum == null ? null : { msl_offset_m: datum.msl_offset_m, named: datum.named },
+        record_span: span === null ? null : { start: iso(need(span, "start")), end: iso(need(span, "end")), good_samples: need(span, "good_samples") },
+        datum: datum === null ? null : { msl_offset_m: need(datum, "msl_offset_m"), named: need(datum, "named") },
         qc_status: cs.qc_status,
         qc_flags: cs.qc_flags.map((f) => pick(f, ["flag", "reason", "values"])),
-        dropped_constituents: cs.dropped_constituents.map((d) => ({ name: d.name, dropped_reason: d.dropped_reason, detail: d.detail })),
+        dropped_constituents: cs.dropped_constituents.map((d) => pick(d, ["name", "dropped_reason", "detail"])),
         time_base: encTimeBase(need(cs, "time_base")),
         is_recommended: cs.isRecommended,
-        convention_id: cs.convention.convention_id, licence_id: cs.licence.licence_id,
+        convention_id: need(need(cs, "convention"), "convention_id"), licence_id: need(need(cs, "licence"), "licence_id"),
         constituent_count: cs.constituents.length,
     };
 }
 
 function encValidation(v) {
     const out = pick(v, VALIDATION);
-    out.previous_release = v.previous_release == null ? null : pick(v.previous_release, PREVIOUS);
+    const prev = need(v, "previous_release");
+    out.previous_release = prev === null ? null : pick(prev, PREVIOUS);
     return out;
 }
 
 function encFiles(files) {
-    return [...files].map((f) => ({ name: f.name, url: f.url, size: f.size, sha256: f.sha256 }))
+    return [...files].map((f) => pick(f, ["name", "url", "size", "sha256"]))
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 function encInfo(i) {
     if (i == null) return null;
     return {
-        datestamp: i.datestamp, format_version: i.format_version, concept_doi: need(i, "concept_doi"),
+        datestamp: need(i, "datestamp"), format_version: need(i, "format_version"), concept_doi: need(i, "concept_doi"),
         zenodo_version_doi: need(i, "zenodo_version_doi"), content_sha256: need(i, "content_sha256"),
-        files: encFiles(i.files),
+        files: encFiles(need(i, "files")),
     };
 }
 
@@ -142,7 +143,31 @@ function encTimeBase(t) {
 }
 
 function encStats(s) {
-    return { type: s.type, kind: s.kind, country: s.country, source: s.source, qc_status: s.qc_status };
+    return pick(s, ["type", "kind", "country", "source", "qc_status"]);
+}
+
+// The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded
+// (JSON.stringify would print null and hide it).
+function finite(v) {
+    if (typeof v === "number") {
+        if (Number.isNaN(v)) return null;
+        if (!Number.isFinite(v)) throw new RangeError(`the SDK returned ${v}, which JSON cannot carry`);
+        return v;
+    }
+    if (typeof v === "bigint" || typeof v === "symbol" || typeof v === "function") {
+        throw new TypeError(`the runner cannot encode a ${typeof v} as JSON`);
+    }
+    if (Array.isArray(v)) return v.map(finite);
+    if (v !== null && typeof v === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(v))) {
+        const out = {};
+        for (const [k, x] of Object.entries(v)) {
+            // a field the SDK left out: JSON.stringify would drop the key; fail the step instead
+            if (x === undefined) throw new TypeError(`the SDK gave no value for ${k}`);
+            out[k] = finite(x);
+        }
+        return out;
+    }
+    return v;
 }
 
 const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path"];
@@ -189,9 +214,9 @@ export function makeRunner(sdk) {
         release_metadata(a, msg) {
             const r = release(msg);
             return {
-                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version,
-                concept_doi: r.concept_doi, source_versions: r.source_versions, build_commit: r.build_commit,
-                changelog_url: r.changelog_url, zenodo_version_doi: need(r, "zenodo_version_doi"),
+                datestamp: need(r, "datestamp"), created: iso(need(r, "created")), format_version: need(r, "format_version"),
+                concept_doi: need(r, "concept_doi"), source_versions: need(r, "source_versions"), build_commit: need(r, "build_commit"),
+                changelog_url: need(r, "changelog_url"), zenodo_version_doi: need(r, "zenodo_version_doi"),
             };
         },
         release_files: (a, msg) => ({ files: encFiles(release(msg).files) }),
@@ -201,7 +226,7 @@ export function makeRunner(sdk) {
         newer_format_major: () => ({ newer_format_major: need(client(), "newerFormatMajor") }),
         async update() {
             const u = await client().update();
-            return { updated: u.updated, from: u.from, to: u.to };
+            return pick(u, ["updated", "from", "to"]);
         },
         async download(a) {
             const paths = await client().download(opts(a, ["release", "to", "formats", "overwrite"]));
@@ -259,11 +284,11 @@ export function makeRunner(sdk) {
         },
         subordinates_of(a, msg) {
             const st = lookStation(msg, a);
-            return { station_ids: st ? target(msg).subordinatesOf(st).map((s) => s.station_id) : [] };
+            return { station_ids: st ? target(msg).subordinatesOf(st).map((s) => s.station_id) : null };
         },
         station_validation(a, msg) {
             const st = lookStation(msg, a);
-            return { validation: st ? st.validation.map(encValidation) : [] };
+            return { validation: st ? need(st, "validation").map(encValidation) : null };
         },
         subordinate_offsets(a, msg) {
             const st = lookStation(msg, a);
@@ -277,12 +302,12 @@ export function makeRunner(sdk) {
         },
         constant_sets(a, msg) {
             const st = lookStation(msg, a);
-            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : [] };
+            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : null };
         },
         constant_set: (a, msg) => ({ set: encSet(lookSet(msg, a)) }),
         constituents(a, msg) {
             const cs = lookSet(msg, a);
-            return { constituents: cs ? cs.constituents.map((c) => pick(c, CONSTITUENT)) : [] };
+            return { constituents: cs ? need(cs, "constituents").map((c) => pick(c, CONSTITUENT)) : null };
         },
         constituent(a, msg) {
             const cs = lookSet(msg, a);
@@ -297,7 +322,7 @@ export function makeRunner(sdk) {
         },
         set_validation(a, msg) {
             const cs = lookSet(msg, a);
-            return { validation: cs ? cs.validation.map(encValidation) : [] };
+            return { validation: cs ? need(cs, "validation").map(encValidation) : null };
         },
         raw(a, msg) {
             let obj = null;
@@ -318,28 +343,46 @@ export function makeRunner(sdk) {
         const fn = ops[msg.op];
         try {
             if (!fn) throw new Error(`unknown op ${msg.op}`);
-            const result = await fn(msg.args || {}, msg);
+            const result = finite(await fn(msg.args || {}, msg));
             return { ok: true, result };
         } catch (e) {
-            if (typeof sdk.OpenTideConstantsError === "function" && e instanceof sdk.OpenTideConstantsError) {
-                const fields = {};
-                for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
-                if (e.tombstone != null) {
-                    // a tombstone the runner cannot encode fails the step instead of crashing the runner
-                    try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
-                        fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
-                    }
+            if (e instanceof sdk.OpenTideConstantsError) {
+                try {
+                    return encodeSdkError(e);
+                } catch (x) { // an error while encoding the SDK error is still one reply
+                    return { ok: false, error: { code: `uncaught:${x && x.constructor ? x.constructor.name : typeof x}`, message: `cannot encode the SDK error: ${x}` } };
                 }
-                return { ok: false, error: { code: e.code, message: String(e.message), fields } };
             }
             const name = e && e.constructor ? e.constructor.name : typeof e;
             return { ok: false, error: { code: `uncaught:${name}`, message: String(e && e.stack ? e.stack : e) } };
         }
     }
 
+    function encodeSdkError(e) {
+        const fields = {};
+        for (const f of ERROR_FIELDS) if (e[f] !== undefined && e[f] !== null) fields[f] = e[f];
+        let code = e.code;
+        if (e.tombstone != null) {
+            // a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails)
+            try { fields.tombstone = pick(e.tombstone, TOMBSTONE); } catch (te) {
+                code = fields.tombstone = `uncaught:${te && te.constructor ? te.constructor.name : typeof te}`;
+            }
+        }
+        return { ok: false, error: { code, message: String(e.message), fields: finite(fields) } };
+    }
+
+    // Closes the client at shutdown. Returns false (and the runner exits non-zero) when close() fails.
     async function shutdown() {
-        if (state.client) {
-            try { await state.client.close(); } catch { /* the runner is exiting */ }
+        if (!state.client) return true;
+        try {
+            await state.client.close();
+            return true;
+        } catch (e) {
+            const text = `close failed at shutdown: ${e && e.stack ? e.stack : e}`;
+            if (globalThis.process && globalThis.process.stderr) globalThis.process.stderr.write(text + "\n");
+            else console.error(text);
+            return false;
+        } finally {
             state.client = null;
         }
     }

@@ -16,13 +16,13 @@ OK_STEP = {"op": "station_count", "expect": {"count": 1}}
 
 def test_nothing_ran_is_not_success():
     r = run_driver("--runner", f"{sys.executable} {NULL_RUNNER}", "--only", "no-such-case-id$")
-    assert r.returncode != 0, r.stdout[-500:]
+    assert r.returncode == 1 and "Traceback" not in r.stderr and "no case ran" in r.stdout, (r.returncode, r.stdout[-500:], r.stderr[-500:])
 
 
 def test_all_skipped_is_not_success(tmp_path):
     cases = write_cases(tmp_path, [{"id": "needs-fs", "requires": ["fs"], "steps": [OK_STEP]}])
     r = run_driver("--runner", f"{sys.executable} {NULL_RUNNER} --features none", "--cases", str(cases))
-    assert r.returncode != 0, r.stdout[-500:]
+    assert r.returncode == 1 and "Traceback" not in r.stderr and "no case ran" in r.stdout, (r.returncode, r.stdout[-500:], r.stderr[-500:])
 
 
 def test_hello_without_features_list_exits_2(tmp_path):
@@ -111,3 +111,4 @@ def test_step_without_expect_fails_on_bad_reply(tmp_path, reply):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [{"op": "close"}, {"op": "station_count", "expect": {"error": "io_error"}}]}])
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": reply})
     assert "FAIL  a  [step 0 close]" in r.stdout, r.stdout[-500:]
+    assert r.returncode == 1 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])

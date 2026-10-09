@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fnmatch
 import gzip
 import hashlib
 import http.client
@@ -42,7 +43,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from server import FixtureServer, RecordingProxy, validate_rule  # noqa: E402
+from server import FixtureServer, RecordingProxy, array_index, json_pointer, pointer_parts, validate_rule  # noqa: E402
 import stream_index  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
@@ -84,7 +85,7 @@ OPS = {
 }
 DRIVER_ACTIONS = {"server_rules", "server_stop", "server_start", "clear_log", "assert_requests", "copy", "write", "delete",
                   "corrupt", "assert_files", "assert_sha256", "assert_json", "sleep", "restart_runner", "mkdir",
-                  "assert_index", "json_set"}
+                  "assert_index", "json_set", "chmod", "assert_tree"}
 PLACEHOLDERS = {"fixtures", "server", "server_alias", "proxy", "tmp", "cache"}
 # A host name that never resolves (RFC 2606). Only the recording proxy knows it: it relays it to the
 # fixture server. So a request to ${server_alias} succeeds only through the proxy, and no proxy-bypass
@@ -102,6 +103,63 @@ PROFILES = {
 
 class CaseError(Exception):
     pass
+
+
+# --------------------------------------------------------------------------- expected failures
+
+EXPECTED_FAILURES = HERE / "expected-failures.json"
+# The runner names an entry may list: the profiles (a hello's "runner"), and "cross" for a --cross run.
+XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "c", "c-fetch", "cross"}
+# The --cross names the CI and the gates use; a cross entry's case pattern must match one of these expansions.
+CROSS_NAMES = ["python", "ruby", "typescript", "c"]
+
+
+def load_expected_failures(path):
+    """The entries of an expected-failures file (README "Expected failures"). ValueError for a malformed file."""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = doc.get("entries") if isinstance(doc, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError(f"{path}: needs an object with an entries list")
+    for i, e in enumerate(entries):
+        if not (isinstance(e, dict) and isinstance(e.get("case"), str) and e["case"]
+                and isinstance(e.get("runners"), list) and e["runners"] and all(isinstance(r, str) for r in e["runners"])):
+            raise ValueError(f"{path}: entry {i} needs a case pattern and a non-empty runners list: {json.dumps(e)[:200]}")
+    return entries
+
+
+def expected_failure(entries, case_id, runner):
+    """The entry that expects case_id to fail for this runner, or None. case is an exact id or an fnmatch pattern."""
+    for e in entries:
+        if runner in e["runners"] and case_names(e["case"], case_id):
+            return e
+    return None
+
+
+def case_names(pattern, case_id):
+    """An exact case id, or an fnmatch pattern (a cross id's [writer>reader] is matched exactly, not as a class)."""
+    return case_id == pattern or fnmatch.fnmatchcase(case_id, pattern)
+
+
+def expected_failure_problems(path, plain_ids, cross_ids):
+    """Lint an expected-failures file: known runner names, a package and a reason, and a case pattern that names at
+    least one case id (plain ids for the plain runners; cross ids expanded with CROSS_NAMES for "cross")."""
+    try:
+        entries = load_expected_failures(path)
+    except (OSError, ValueError) as e:
+        return [f"expected-failures: {e}"]
+    out = []
+    for i, e in enumerate(entries):
+        where = f"expected-failures entry {i} ({e['case']})"
+        for r in e["runners"]:
+            if r not in XF_RUNNERS:
+                out.append(f"{where}: unknown runner {r!r} (one of {sorted(XF_RUNNERS)})")
+        for k in ("package", "reason"):
+            if not isinstance(e.get(k), str) or not e[k]:
+                out.append(f"{where}: needs a {k}")
+        ids = (cross_ids if "cross" in e["runners"] else []) + (plain_ids if set(e["runners"]) - {"cross"} else [])
+        if not any(case_names(e["case"], c) for c in ids):
+            out.append(f"{where}: the pattern names no case")
+    return out
 
 
 class RunnerError(Exception):
@@ -186,6 +244,47 @@ def match(exp, act, tol, path="result"):
     raise CaseError(f"cannot match {exp!r}")
 
 
+MATCHERS = {"$contains", "$regex", "$type", "$len_min", "$all", "$any_of"}
+TYPE_NAMES = {"object", "array", "string", "number", "boolean", "null"}
+
+
+def matcher_problems(v, path):
+    """Lint an expected value: every matcher must be a known one with an argument of the right type, and a
+    non-matcher object must not have a key that starts with "$" (a typo of a matcher would compare as data)."""
+    out = []
+    if isinstance(v, list):
+        for i, x in enumerate(v):
+            out += matcher_problems(x, f"{path}[{i}]")
+    elif isinstance(v, dict):
+        dollar = [k for k in v if isinstance(k, str) and k.startswith("$")]
+        if dollar and len(v) != 1:
+            return [f"{path}: an object with a $ key must be one matcher, got keys {sorted(v)}"]
+        if not dollar:
+            for k, x in v.items():
+                out += matcher_problems(x, f"{path}.{k}")
+            return out
+        (op, arg), = v.items()
+        if op not in MATCHERS:
+            return [f"{path}: unknown matcher {op}"]
+        if op in ("$contains", "$regex") and not isinstance(arg, str):
+            out.append(f"{path}: {op} needs a string")
+        elif op == "$regex":
+            try:
+                re.compile(arg)
+            except re.error as e:
+                out.append(f"{path}: $regex {arg!r} is not a regular expression: {e}")
+        elif op == "$type" and arg not in TYPE_NAMES:
+            out.append(f"{path}: $type must be one of {sorted(TYPE_NAMES)}, got {arg!r}")
+        elif op == "$len_min" and (isinstance(arg, bool) or not isinstance(arg, int) or arg < 0):
+            out.append(f"{path}: $len_min needs a non-negative integer, got {arg!r}")
+        elif op in ("$all", "$any_of"):
+            if not isinstance(arg, list) or not arg:
+                out.append(f"{path}: {op} needs a non-empty list")
+            else:
+                out += matcher_problems(arg, f"{path}.{op}")
+    return out
+
+
 def reply_problems(reply):
     """Check the shape of a runner reply (README "The runner protocol"); return problems."""
     if not isinstance(reply, dict) or "ok" not in reply:
@@ -201,8 +300,22 @@ def reply_problems(reply):
     return []
 
 
+def expect_shape_problems(expect):
+    """An error expectation has only the reserved keys; a result expectation has no error_* keys."""
+    if not isinstance(expect, dict):
+        return [f"an expectation must be an object, got {_type_name(expect)}"]
+    if "error" in expect:
+        extra = sorted(set(expect) - RESERVED_EXPECT)
+        return [f"an error expectation compares only {sorted(RESERVED_EXPECT)}; it also has {extra}"] if extra else []
+    stray = sorted({"error_fields", "error_message"} & set(expect))
+    return [f"{stray} need an \"error\" in the same expectation"] if stray else []
+
+
 def evaluate(expect, reply):
     """Compare a runner reply with a step expectation; return mismatch messages."""
+    bad = expect_shape_problems(expect)
+    if bad:
+        raise CaseError(bad[0])
     tol = expect.get("tolerance", DEFAULT_TOL)
     bad = reply_problems(reply)
     if bad:
@@ -212,7 +325,10 @@ def evaluate(expect, reply):
             return [f"expected error {expect['error']!r}, got a result {json.dumps(reply.get('result'))[:200]}"]
         e = reply["error"]
         out = []
-        if e.get("code") != expect["error"]:
+        if is_matcher(expect["error"]):   # several codes allowed (for example {"$any_of": ["io", "checksum_mismatch"]})
+            if match(expect["error"], e.get("code", _MISSING), tol, "error.code"):
+                out.append(f"expected error {json.dumps(expect['error'])}, got error {e.get('code')!r} ({str(e.get('message'))[:200]})")
+        elif e.get("code") != expect["error"]:
             out.append(f"expected error {expect['error']!r}, got error {e.get('code')!r} ({str(e.get('message'))[:200]})")
         fields = e.get("fields") or {}
         for k, v in (expect.get("error_fields") or {}).items():
@@ -287,6 +403,138 @@ def subst(value, ctx):
     return value
 
 
+def case_timeout(case):
+    """The case's timeout_s: a positive number of seconds (default 60)."""
+    t = case.get("timeout_s", 60)
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not t > 0:
+        raise CaseError(f"timeout_s must be a positive number, got {t!r}")
+    return float(t)
+
+
+def structure_problems(c):
+    """The shape of one case, checked before anything else reads it: a malformed case is a case-file error (exit 2)."""
+    if not isinstance(c, dict):
+        return [f"a case must be an object, got {_type_name(c)}"]
+    cid = c.get("id")
+    if not isinstance(cid, str) or not cid:
+        return [f"{c.get('_file')}: a case needs a non-empty string id, got {cid!r}"]
+    steps = c.get("steps")
+    if not isinstance(steps, list):
+        return [f"{cid}: steps must be a list"]
+    out = []
+    for i, st in enumerate(steps):
+        where = f"{cid} step {i}"
+        if not isinstance(st, dict):
+            out.append(f"{where}: a step must be an object")
+            continue
+        if not isinstance(st.get("driver", st.get("op")), str):
+            out.append(f"{where}: a step needs a string op or driver")
+        if "args" in st and not isinstance(st["args"], dict):
+            out.append(f"{where}: args must be an object")
+        if st.get("expect") is not None and not isinstance(st["expect"], dict):
+            out.append(f"{where}: expect must be an object")
+        eim = st.get("expect_if_missing")
+        if eim is not None and not (isinstance(eim, dict) and all(isinstance(v, dict) for v in eim.values())):
+            out.append(f"{where}: expect_if_missing must be an object of expectations")
+        who = st.get("as")
+        if who is not None and not (isinstance(who, str) or (isinstance(who, list) and who and all(isinstance(r, str) for r in who))):
+            out.append(f"{where}: 'as' must be a role name or a list of role names")
+        if "on" in st and not isinstance(st["on"], str):
+            out.append(f"{where}: 'on' must be a string")
+    for k in ("requires",):
+        if k in c and not (isinstance(c[k], list) and all(isinstance(f, str) for f in c[k])):
+            out.append(f"{cid}: {k} must be a list of strings")
+    if "roles" in c and not (isinstance(c["roles"], dict) and all(isinstance(v, list) for v in c["roles"].values())):
+        out.append(f"{cid}: roles must be an object of feature lists")
+    return out
+
+
+API = HERE / "api.json"
+# Error codes any fetch operation may give without being listed: a C build without otc_fetch answers not_built
+# (conformance/README.md "expect_if_missing").
+API_ANY_OP_ERRORS = {"not_built"}
+
+
+def api_errors(api_path):
+    """op name -> the error codes api.json lists for it, from the members of the objects a runner op calls."""
+    api = json.loads(Path(api_path).read_text(encoding="utf-8"))
+    out = {}
+    for obj in ("Client", "Release", "Station", "ConstantSet"):
+        for m in api["objects"][obj]["members"]:
+            if "errors" in m:
+                out.setdefault(m["name"], set()).update(m["errors"])
+    return out
+
+
+def api_error_problems(cases, errors_by_op):
+    """K77: every error a case expects from an op must be in that operation's api.json errors list."""
+    problems = []
+    for c in cases:
+        for i, st in enumerate(c.get("steps", [])):
+            op = st.get("op")
+            if op not in errors_by_op:
+                continue
+            exps = [st.get("expect")] + list((st.get("expect_if_missing") or {}).values())
+            for exp in exps:
+                if isinstance(exp, dict) and "error" in exp:
+                    e = exp["error"]
+                    codes = e["$any_of"] if isinstance(e, dict) and isinstance(e.get("$any_of"), list) else [e]
+                    for code in codes:
+                        if code not in errors_by_op[op] and code not in API_ANY_OP_ERRORS:
+                            problems.append(f"{c.get('id')} step {i}: op {op} expects error {code!r}, "
+                                            f"which api.json does not list for {op} ({sorted(errors_by_op[op])})")
+    return problems
+
+
+FETCH_OPS = {"releases", "latest", "check_for_update", "newer_format_major", "update", "download", "cached_releases", "prune"}
+
+
+def step_needs(st):
+    """The runner features a runner step uses (README "Hello" feature table)."""
+    op, a = st.get("op"), st.get("args") or {}
+    need = set()
+    if op == "open":
+        if a.get("mode") in ("eager", "stream"):
+            need.add(a["mode"])
+        f = a.get("file")
+        if isinstance(f, str):
+            need.add("fs")
+            if f.endswith((".json", ".json.gz")) and not f.endswith(".meta.json"):
+                need.add("json")
+        elif "base_url" in a or "release" in a or "cache_dir" in a or not a:
+            need.add("fetch")   # no file: the release comes from the network module
+        if "cache_dir" in a:
+            need.add("fs")      # README "Hello": cache_dir is a file-system option
+    if op in FETCH_OPS:
+        need.add("fetch")
+    if op == "download":
+        need.add("fs")
+    return need
+
+
+def requires_problems(c):
+    """K55/K56: every feature a runner step uses must be in the case's requires (for its role), or be covered by an
+    expect_if_missing of that step or an earlier one (a runner without the feature stops there)."""
+    out = []
+    base = set(c.get("requires", []))
+    roles = c.get("roles") or {"main": []}
+    covered = {r: base | set(f) for r, f in roles.items()}
+    for i, st in enumerate(c.get("steps", [])):
+        if "op" not in st:
+            continue
+        who = st.get("as", "main") if c.get("roles") else "main"
+        eim = set(st.get("expect_if_missing") or {})
+        for role in ([who] if isinstance(who, str) else who):
+            if role not in covered:
+                continue
+            lacking = sorted(step_needs(st) - covered[role] - eim)
+            if lacking:
+                out.append(f"{c.get('id')} step {i}: op {st['op']} uses {', '.join(repr(f) for f in lacking)}, "
+                           f"which the case does not require" + (f" for role {role}" if role != "main" else ""))
+            covered[role] |= eim
+    return out
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -297,6 +545,17 @@ def check_cases(cases):
             problems.append(f"{c.get('_file')}: missing or duplicate id {cid!r}")
         ids.add(cid)
         compared = 0
+        problems += requires_problems(c)
+        try:
+            case_timeout(c)
+        except CaseError as e:
+            problems.append(f"{cid}: {e}")
+        env = c.get("env", {})
+        if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+            problems.append(f"{cid}: env must be an object of strings")
+        for s in re.findall(r"\$\{([a-z_]+)\}", json.dumps(env)):
+            if s not in PLACEHOLDERS:
+                problems.append(f"{cid}: env: unknown placeholder ${{{s}}}")
         roles = c.get("roles")
         if roles is not None and (not isinstance(roles, dict) or len(roles) < 2
                                   or any(f not in FEATURES for fs in roles.values() for f in fs)):
@@ -320,6 +579,19 @@ def check_cases(cases):
             if "driver" in st:
                 if st["driver"] not in DRIVER_ACTIONS:
                     problems.append(f"{where}: unknown driver action {st['driver']!r}")
+                if st["driver"] == "assert_requests":
+                    for name, rx in [("match", st.get("match"))] + list((st.get("header") or {}).items()):
+                        try:
+                            if rx is not None:
+                                re.compile(rx)
+                        except (re.error, TypeError) as e:
+                            problems.append(f"{where}: assert_requests {name} {rx!r} is not a regular expression: {e}")
+                if st["driver"] == "json_set":
+                    try:
+                        if not pointer_parts(st.get("pointer")):
+                            raise ValueError("json_set cannot replace the whole document")
+                    except ValueError as e:
+                        problems.append(f"{where}: {e}")
                 if st["driver"] == "server_rules":
                     for j, rule in enumerate(st.get("rules", [])):
                         try:
@@ -337,7 +609,9 @@ def check_cases(cases):
             for exp in [st.get("expect")] + list((st.get("expect_if_missing") or {}).values()):
                 if exp is None:
                     continue
-                if "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
+                shape = expect_shape_problems(exp)
+                problems += [f"{where}: {p}" for p in shape + matcher_problems(exp, "expect")]
+                if not shape and "error" not in exp and not evaluate(exp, {"ok": True, "result": {}}):
                     problems.append(f"{where}: an empty result satisfies this expectation")
             if st.get("expect") is not None:
                 compared += 1
@@ -353,6 +627,10 @@ def check_cases(cases):
 
 
 # --------------------------------------------------------------------------- runner process
+
+def _not_json(token):
+    raise ValueError(f"{token} is not JSON")
+
 
 class Runner:
     def __init__(self, cmd, env, stderr_path, cwd):
@@ -380,8 +658,8 @@ class Runner:
                 status = None
             raise EOFError(f"runner closed its stdout (exit status {status})")
         try:
-            return json.loads(line)
-        except json.JSONDecodeError:
+            return json.loads(line, parse_constant=_not_json)
+        except ValueError:  # JSONDecodeError, or NaN / Infinity, which are not JSON
             raise RunnerError(f"runner printed a line that is not JSON: {line[:200]!r}")
 
     def send(self, msg):
@@ -389,16 +667,19 @@ class Runner:
         self.proc.stdin.flush()
 
     def close(self):
+        """Close stdin and wait for the runner. Returns its exit status (None if it had to be killed)."""
         try:
             self.proc.stdin.close()
         except OSError:
             pass
         try:
-            self.proc.wait(timeout=10)
+            status = self.proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self.proc.kill()
             self.proc.wait()
+            status = None
         self.stderr_f.close()
+        return status
 
 
 def parse_hello(line):
@@ -406,6 +687,8 @@ def parse_hello(line):
     if not isinstance(line, dict) or not isinstance(line.get("hello"), dict):
         raise RunnerError(f"first line is not a hello object: {json.dumps(line)[:200]}")
     hello = line["hello"]
+    if "runner" in hello and not isinstance(hello["runner"], str):
+        raise RunnerError(f"hello.runner is not a string: {json.dumps(hello)[:200]}")
     feats = hello.get("features")
     if not isinstance(feats, list) or not all(isinstance(f, str) for f in feats):
         raise RunnerError(f"hello.features is not a list of strings: {json.dumps(hello)[:200]}")
@@ -471,11 +754,15 @@ def act_assert_requests(a, srv, proxy):
         entries = [e for e in entries if e["query"] or (e["path"] and "?" in e["path"])]
     problems = []
     hdr = a.get("header") or {}
+    # compile first: a bad pattern is a case error even when the log is empty
+    hdr_rx = {name: re.compile(rx) for name, rx in hdr.items()}
     if hdr:
         def ok(e):
-            return all(re.search(rx, e["headers"].get(name.lower(), "")) for name, rx in hdr.items())
+            return all(rx.search(e["headers"].get(name.lower(), "")) for name, rx in hdr_rx.items())
         if a.get("all"):
             bad = [e for e in entries if not ok(e)]
+            if not entries:
+                problems.append(f"no request to check the header {hdr} on (all: true needs at least one)")
             if bad:
                 problems.append(f"{len(bad)} request(s) fail the header check {hdr}: e.g. {bad[0]['path']} {bad[0]['headers']}")
         else:
@@ -518,6 +805,26 @@ def act_assert_files(a):
     return out
 
 
+def act_assert_tree(a):
+    """Every file and directory under dir (relative, with /) must match one of the allow globs (fnmatch)."""
+    d = Path(a["dir"])
+    if not d.is_dir():
+        return [] if a.get("may_be_missing") else [f"{d}: not a directory"]
+    bad = sorted(p.relative_to(d).as_posix() for p in d.rglob("*")
+                 if not any(fnmatch.fnmatchcase(p.relative_to(d).as_posix(), g) for g in a["allow"]))
+    return [f"{d}: paths outside {a['allow']}: {bad[:10]}"] if bad else []
+
+
+def restore_writable(root):
+    """Give the owner write and search permission again under root (after chmod steps), so it can be removed."""
+    for p in [Path(root), *Path(root).rglob("*")]:
+        try:
+            if not p.is_symlink():
+                p.chmod(p.stat().st_mode | (0o700 if p.is_dir() else 0o600))
+        except OSError:
+            pass
+
+
 def run_action(st, ctx, srv, proxy):
     """Run a driver action. Returns (problems, restart_env or None)."""
     a = subst(st, ctx)
@@ -558,6 +865,10 @@ def run_action(st, ctx, srv, proxy):
         p.write_bytes(bytes(data))
     elif kind == "assert_files":
         return act_assert_files(a), None
+    elif kind == "assert_tree":
+        return act_assert_tree(a), None
+    elif kind == "chmod":   # POSIX permissions: mode is an octal string such as "555"
+        Path(a["path"]).chmod(int(str(a["mode"]), 8))
     elif kind == "assert_sha256":
         p = Path(a["path"])
         if not p.is_file():
@@ -590,13 +901,13 @@ def run_action(st, ctx, srv, proxy):
             doc = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             return [f"json_set: {p}: cannot read it as JSON ({e})"], None
-        parts = [x.replace("~1", "/").replace("~0", "~") for x in a["pointer"].split("/")[1:]]
-        node = doc
         try:
-            for k in parts[:-1]:
-                node = node[int(k)] if isinstance(node, list) else node[k]
+            parts = pointer_parts(a["pointer"])
+            if not parts:
+                raise ValueError("json_set cannot replace the whole document")
+            node = json_pointer(doc, "".join("/" + x.replace("~", "~0").replace("/", "~1") for x in parts[:-1]))
             if isinstance(node, list):
-                node[int(parts[-1])] = a["value"]
+                node[array_index(parts[-1], len(node))] = a["value"]
             elif isinstance(node, dict):
                 node[parts[-1]] = a["value"]
             else:
@@ -626,13 +937,14 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
     env_extra = isolated_env(tmp)
-    env_extra.update(subst(case.get("env", {}), ctx))
     srv.set_rules([])
     srv.log.clear()
+    srv.errors.clear()
+    srv.trip_errors.clear()
     proxy.log.clear()
     failures = []
     live = {}
-    step_timeout = float(case.get("timeout_s", 60))
+    step_timeout = 60.0
 
     def stderr_path(role):
         return tmp / ("runner.stderr" if role == "main" else f"runner-{role}.stderr")
@@ -665,14 +977,23 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
 
     cur = {"step": None}
     try:
+        # case fields: a bad env or timeout_s is a harness error of this case (inside the try, so tmp is removed)
+        env_extra.update(subst(case.get("env", {}), ctx))
+        step_timeout = case_timeout(case)
         for role in runners:
             live[role] = start(role)
         for i, st in enumerate(case["steps"]):
             cur = {"step": i, "driver": st["driver"]} if "driver" in st else {"step": i, "op": st.get("op")}
             if "driver" in st:
-                problems, restart_env = run_action(st, ctx, srv, proxy)
+                try:
+                    problems, restart_env = run_action(st, ctx, srv, proxy)
+                except OSError as e:  # a file the case names is missing, or the server cannot stop: not the SDK
+                    raise CaseError(f"driver action {st['driver']}: {type(e).__name__}: {e}") from e
                 if restart_env is not None:
-                    live["main"].close()
+                    status = live.pop("main").close()
+                    if status != 0:
+                        failures.append({"step": i, "driver": "restart_runner",
+                                         "problems": [f"the runner exited with status {status} when it was stopped"]})
                     env_extra.update(restart_env)
                     live["main"] = start("main")
                 if problems:
@@ -710,11 +1031,28 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
         stats["harness_errors"] += 1
         failures.append({**cur, "harness_error": True, "problems": [f"harness error: {type(e).__name__}: {e}"]})
     finally:
-        for r in live.values():
-            r.close()
-        if not srv.running:
-            srv.resume()
-        srv.set_rules([])
+        for role, r in live.items():
+            status = r.close()
+            if status != 0 and not failures:  # a runner that fails at shutdown (a close() error) fails the case
+                failures.append({"step": None, **({"as": role} if role != "main" else {}),
+                                 "problems": [f"the runner exited with status {status} at the end of the case"]})
+        if srv.errors:  # a server rule that could not be applied: the harness is wrong, not the SDK
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "server", "harness_error": True,
+                             "problems": [f"harness error: fixture server: {e}" for e in srv.errors[:5]]})
+        if srv.trip_errors:  # the tripwire could not accept: "no connection was made" checks would pass vacuously
+            stats["harness_errors"] += 1
+            failures.append({"step": None, "driver": "tripwire", "harness_error": True,
+                             "problems": [f"harness error: the tripwire could not accept connections: {srv.trip_errors[0]}"]})
+        try:
+            if not srv.running:
+                srv.resume()
+            srv.set_rules([])
+        except OSError as e:  # the server cannot serve again: no later case can run; stop the run (exit 2)
+            stats["harness_errors"] += 1
+            stats["abort"] = f"the fixture server cannot restart: {type(e).__name__}: {e}"
+            failures.append({"step": None, "driver": "server_start", "harness_error": True,
+                             "problems": [f"harness error: {stats['abort']}"]})
         tails = []
         for role in runners:
             sp = stderr_path(role)
@@ -723,6 +1061,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 tails.append(t if role == "main" else f"[{role}]\n{t}")
         stderr_tail = "\n".join(tails)
         if not keep_tmp:
+            restore_writable(tmp)   # a chmod step may have left a directory read-only
             shutil.rmtree(tmp, ignore_errors=True)
     return failures, stderr_tail
 
@@ -735,8 +1074,9 @@ def expand_cross(cases, hellos):
         roles = list(c.get("roles") or {})
         if not roles:
             raise ValueError(f"{c.get('id')}: a cross case needs roles")
+        need = set(c.get("requires", []))  # the case's own requires applies to every role
         for names in itertools.permutations(hellos, len(roles)):
-            if any(set(c["roles"][r]) - hellos[n][1] for r, n in zip(roles, names)):
+            if any((set(c["roles"][r]) | need) - hellos[n][1] for r, n in zip(roles, names)):
                 continue
             v = copy.deepcopy(c)
             v["id"] = f"{c['id']}[{'>'.join(names)}]"
@@ -873,20 +1213,36 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--check-cases", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--expected-failures", default=str(EXPECTED_FAILURES),
+                    help="the expected-failures file (default conformance/expected-failures.json)")
+    ap.add_argument("--no-expected-failures", action="store_true",
+                    help="ignore the expected-failures file: report every failure as FAIL (to see a lane's RED cases)")
+    ap.add_argument("--api", default=str(API), help="the API manifest that --check-cases checks error codes against "
+                                                     "(default conformance/api.json)")
     a = ap.parse_args()
 
     if a.selftest:
         return selftest()
     if a.cross and a.runner:
         ap.error("--runner and --cross do not go together")
-    cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross else CASES_DIR)
+    # --check-cases with no --cases lints cases/ and cross/ (each once), whatever --cross says
+    cases_dir = Path(a.cases) if a.cases else (CROSS_DIR if a.cross and not a.check_cases else CASES_DIR)
     try:
         raw = load_cases(cases_dir)
-        cases = raw if a.cross else expand(raw)
-        if a.check_cases and not a.cases:
-            raw_cross = load_cases(CROSS_DIR)
+        raw_cross = load_cases(CROSS_DIR) if a.check_cases and not a.cases else []
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         print(f"case files in {cases_dir}: cannot load: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+    malformed = [p for c in raw + (raw_cross if a.check_cases and not a.cases else []) for p in structure_problems(c)]
+    if malformed:
+        for p in malformed:
+            print(("PROBLEM " if a.check_cases else "case file error: ") + p, file=sys.stdout if a.check_cases else sys.stderr)
+        print(f"case files in {cases_dir}: {len(malformed)} malformed case(s) (exit 2)", file=sys.stderr)
+        return 2
+    try:
+        cases = raw if a.cross else expand(raw)
+    except (KeyError, TypeError, AttributeError) as e:
+        print(f"case files in {cases_dir}: cannot expand a matrix case: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
     if a.only:
         try:
@@ -899,6 +1255,17 @@ def main():
     if a.check_cases:
         # non-matrix cases are the same before and after expansion: lint them once
         problems = check_cases(raw) + check_cases([c for c in expand(raw) if "@" in c["id"]])
+        try:
+            by_op = api_errors(a.api)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"--api {a.api}: cannot read the API manifest: {type(e).__name__}: {e}", file=sys.stderr)
+            return 2
+        problems += api_error_problems(raw + raw_cross, by_op)
+        if not a.cases or a.expected_failures != str(EXPECTED_FAILURES):
+            import itertools
+            cross_ids = [f"{c['id']}[{'>'.join(p)}]" for c in raw_cross
+                         for p in itertools.permutations(CROSS_NAMES, len(c.get("roles") or {}))]
+            problems += expected_failure_problems(a.expected_failures, [c["id"] for c in expand(raw)], cross_ids)
         n_cross = 0
         if not a.cases:
             problems += check_cases(raw_cross)
@@ -927,7 +1294,10 @@ def main():
         ap.error("--cross needs two or more runners")
     hellos = {}
     for name, command in (named.items() if a.cross else [("main", a.runner)]):
-        cmd = shlex.split(command)
+        try:
+            cmd = shlex.split(command)
+        except ValueError as e:
+            ap.error(f"runner command {command!r}: {e}")
         hello, err = probe_runner(cmd)
         if err:
             print(f"runner {name if a.cross else ''} failed the handshake: {err}".replace("runner  ", "runner "), file=sys.stderr)
@@ -952,6 +1322,14 @@ def main():
         features = set()
     else:
         cmd, features, hello, profile = hellos["main"]
+    xf_entries = []
+    if not a.no_expected_failures and Path(a.expected_failures).exists():
+        try:
+            xf_entries = load_expected_failures(a.expected_failures)
+        except (OSError, ValueError) as e:
+            print(f"--expected-failures: {e}", file=sys.stderr)
+            return 2
+    xf_runner = "cross" if a.cross else hello.get("runner")
     srv = FixtureServer().start()
     try:
         proxy = RecordingProxy().start()
@@ -967,7 +1345,7 @@ def main():
     print(f"fixture server {srv.url}  proxy {proxy.url}")
     stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
     report = []
-    counts = {"PASS": 0, "FAIL": 0, "SKIP": 0}
+    counts = {"PASS": 0, "FAIL": 0, "SKIP": 0, "XFAIL": 0, "XPASS": 0}
     t0 = time.monotonic()
     try:
         for c in cases:
@@ -981,10 +1359,18 @@ def main():
             runners = c.pop("_runners") if a.cross else {"main": (cmd, features)}
             failures, stderr_tail = run_case(c, runners, srv, proxy, a.keep_tmp, a.all_steps, stats)
             status = "FAIL" if failures else "PASS"
+            xf = expected_failure(xf_entries, c["id"], xf_runner)
+            if xf and not any(f.get("harness_error") for f in failures):   # a harness error is never expected
+                status = "XFAIL" if failures else "XPASS"
             counts[status] += 1
-            report.append({"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""})
+            entry = {"id": c["id"], "status": status, "failures": failures, "stderr": stderr_tail if failures else ""}
+            if xf:
+                entry["expected_failure"] = {"package": xf.get("package"), "reason": xf.get("reason")}
+            report.append(entry)
             line = f"{status}  {c['id']}"
-            if failures:
+            if status == "XPASS":
+                line += f"  (listed in the expected failures for {xf.get('package')}: it passes now; remove the entry)"
+            elif failures:
                 first = failures[0]
                 where = f"step {first['step']} {first.get('op') or first.get('driver') or ''}".strip()
                 if first.get("as"):
@@ -993,11 +1379,15 @@ def main():
                 if len(failures) > 1:
                     line += f"  (+{len(failures) - 1} more failed step(s))"
             print(line[:400], flush=True)
+            if stats.get("abort"):
+                print(f"run stopped: {stats['abort']}", flush=True)
+                break
     finally:
         srv.shutdown()
         proxy.shutdown()
-    ran = counts["PASS"] + counts["FAIL"]
-    print(f"\n{len(cases)} cases: {counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped "
+    ran = counts["PASS"] + counts["FAIL"] + counts["XFAIL"] + counts["XPASS"]
+    xf_text = f", {counts['XFAIL']} expected failures, {counts['XPASS']} unexpected passes" if xf_entries else ""
+    print(f"\n{len(cases)} cases: {counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped{xf_text} "
           f"({ran} ran; {stats['steps_compared']} runner steps compared, {stats['steps_failed']} failed) in {time.monotonic() - t0:.1f} s")
     if a.report:
         Path(a.report).write_text(json.dumps({"runner": hello, "counts": counts, "steps": stats, "cases": report}, indent=1) + "\n")
@@ -1007,7 +1397,7 @@ def main():
     if ran == 0:
         print("no case ran: check --only and the features the runner reports (exit 1)")
         return 1
-    return 0 if counts["FAIL"] == 0 else 1
+    return 0 if counts["FAIL"] == 0 and counts["XPASS"] == 0 else 1
 
 
 if __name__ == "__main__":

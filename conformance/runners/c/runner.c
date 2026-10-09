@@ -37,6 +37,27 @@
 #define OTC_RUNNER_FETCH 0
 #endif
 
+/* ------------------------------------------------------------ test faults */
+
+/*
+ * OTC_RUNNER_FAULT (self-tests only, conformance/tests/test_group_h.py): a comma-separated list of faults the
+ * runner plants in its own code, to show that a library failure it cannot otherwise provoke still fails the step.
+ * Unset in every conformance run.
+ */
+static const char *g_fault;
+
+static int fault(const char *name)
+{
+    const char *p = g_fault;
+    size_t n = strlen(name);
+    while (p && *p) {
+        if (!strncmp(p, name, n) && (p[n] == ',' || p[n] == '\0')) return 1;
+        p = strchr(p, ',');
+        if (p) p++;
+    }
+    return 0;
+}
+
 /* ------------------------------------------------------------------ state */
 
 #define MAX_HELD 16
@@ -193,14 +214,16 @@ static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
 #define PARSE_UNLOCK() pthread_mutex_unlock(&g_parse_lock)
 #endif
 
-static cJSON *j_parse_or_null(char *text)
+static cJSON *j_parse_or_null(char *text, int *bad)
 {
     cJSON *v = NULL;
+    if (text && fault("json") && text[0]) text[0] = 'x';   /* the library returned text that is not JSON */
     if (text) {
         PARSE_LOCK();
         v = cJSON_Parse(text);
         PARSE_UNLOCK();
         free(text);
+        if (!v) *bad = 1;   /* the library gave text that is not JSON: a failure, never a null value */
     }
     return v ? v : cJSON_CreateNull();
 }
@@ -509,7 +532,7 @@ static cJSON *enc_set(const otc_set *set, int *bad)
         if (otc_set_qc_flag_at(set, i, &f) != OTC_OK) { *bad = 1; cJSON_Delete(fo); break; }
         cJSON_AddItemToObject(fo, "flag", j_enum(otc_qc_flag_kind_name(otc_qc_flag_flag(f))));
         cJSON_AddItemToObject(fo, "reason", j_take(s_flag_reason(f, bad)));
-        cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad)));
+        cJSON_AddItemToObject(fo, "values", j_parse_or_null(s_flag_values(f, bad), bad));
         cJSON_AddItemToArray(flags, fo);
     }
     cJSON_AddItemToObject(o, "qc_flags", flags);
@@ -558,10 +581,10 @@ static cJSON *enc_convention(const otc_convention *c, int *bad)
     cJSON_AddItemToObject(o, "utc_offset_hours", j_num(otc_convention_utc_offset_hours(c)));
     cJSON_AddItemToObject(o, "v0_model", j_take(s_conv_v0(c, bad)));
     cJSON_AddItemToObject(o, "nodal_handling", j_enum(otc_nodal_handling_name(otc_convention_nodal_handling(c))));
-    cJSON_AddItemToObject(o, "nodal_formula_ids", j_parse_or_null(s_conv_nodal_ids(c, bad)));
+    cJSON_AddItemToObject(o, "nodal_formula_ids", j_parse_or_null(s_conv_nodal_ids(c, bad), bad));
     cJSON_AddItemToObject(o, "constituent_table_version", j_take(s_conv_table_version(c, bad)));
     cJSON_AddItemToObject(o, "tables_sha256", j_take(s_conv_tables_sha(c, bad)));
-    cJSON_AddItemToObject(o, "canary", j_parse_or_null(s_conv_canary(c, bad)));
+    cJSON_AddItemToObject(o, "canary", j_parse_or_null(s_conv_canary(c, bad), bad));
     return o;
 }
 
@@ -616,12 +639,32 @@ static double arg_num(args *a, const char *name, double dflt)
     return v->valuedouble;
 }
 
-static size_t arg_limit(args *a, const char *name)
+/*
+ * A limit argument. Absent or null is "no limit". An explicit 0 is a value the SDK must judge (spec 4.4, D36: limit
+ * must be 1 or more), so it is passed on as 0 only when the API has a separate no-limit value (OTC_NO_LIMIT);
+ * without one, 0 means "no limit" to the library, and the runner must not hide the difference: *zero is set and
+ * the op answers uncaught:LimitZero.
+ */
+static size_t arg_limit(args *a, const char *name, int *zero)
 {
-    double v = arg_num(a, name, 0.0);
-    if (v < 0 || v != floor(v)) { a->bad = 1; return 0; }
-    return (size_t)v;
+    const cJSON *v = a->obj ? cJSON_GetObjectItemCaseSensitive(a->obj, name) : NULL;
+    double d;
+#ifdef OTC_NO_LIMIT
+    const size_t none = OTC_NO_LIMIT;
+#else
+    const size_t none = 0;
+#endif
+    *zero = 0;
+    if (!v || cJSON_IsNull(v)) return none;
+    d = arg_num(a, name, 0.0);
+    if (a->bad || d < 0 || d != floor(d)) { a->bad = 1; return none; }
+#ifndef OTC_NO_LIMIT
+    if (d == 0) { *zero = 1; return none; }
+#endif
+    return (size_t)d;
 }
+
+#define LIMIT_ZERO_MESSAGE "limit 0: this C API has no separate no-limit value, so the runner cannot pass 0 (D36)"
 
 static bool arg_bool(args *a, const char *name, bool dflt)
 {
@@ -667,7 +710,7 @@ static cJSON *ids_array(const char **ids, size_t n)
         RC = CALL_NULL;                                                           \
         if (RC == OTC_OK || RC == OTC_E_BUFFER_TOO_SMALL) {                       \
             cap_ = COUNT;                                                         \
-            ITEMS = (TYPE *)calloc(cap_ ? cap_ : 1, sizeof(TYPE));                \
+            ITEMS = fault("list-nomem") ? NULL : (TYPE *)calloc(cap_ ? cap_ : 1, sizeof(TYPE)); \
             RC = ITEMS ? CALL_BUF : OTC_E_NOMEM;                                  \
         }                                                                         \
     } while (0)
@@ -683,12 +726,16 @@ static void with_station(request *q, reply *r, otc_station_t **st, const char **
     if (rc != OTC_OK && rc != OTC_E_NOT_FOUND) set_status(r, rc, "otc_station");
 }
 
-static const otc_set *find_set(request *q, const otc_station_t *st)
+/* The set named by set_id, or NULL when there is none (NOT_FOUND); any other status sets *bad. */
+static const otc_set *find_set(request *q, const otc_station_t *st, int *bad)
 {
     const char *set_id = arg_str(&q->a, "set_id");
     const otc_set *set = NULL;
+    otc_status rc;
     if (!st || !set_id) return NULL;
-    if (otc_station_set(st, set_id, &set) != OTC_OK) return NULL;
+    rc = fault("lookup") ? OTC_E_IO : otc_station_set(st, set_id, &set);
+    if (rc == OTC_E_NOT_FOUND) return NULL;
+    if (rc != OTC_OK) { *bad = 1; return NULL; }
     return set;
 }
 
@@ -732,6 +779,15 @@ static void op_open(request *q, reply *r)
     otc_error err;
     otc_status rc;
     if (q->a.bad) { set_error(r, "invalid_argument", "file and release must be strings"); return; }
+    /* an enum the C API cannot hold (README "Argument rules"): invalid_argument, never a silent default */
+    if (mode && strcmp(mode, "eager") && strcmp(mode, "stream")) {
+        set_error(r, "invalid_argument", "mode must be eager or stream");
+        return;
+    }
+    if (one && strcmp(one, "raise") && strcmp(one, "use_cache")) {
+        set_error(r, "invalid_argument", "on_network_error must be raise or use_cache");
+        return;
+    }
     close_current();
     client_free();
     g_client.cache_dir = dup_or_null(arg_str(&q->a, "cache_dir"));
@@ -785,10 +841,18 @@ static void op_verify(request *q, reply *r)
 {
     size_t i, n = otc_release_file_count(q->rel);
     char dir[4096];
-    const char *slash1 = strrchr(q->path, '/'), *slash2 = strrchr(q->path, '\\');
-    const char *slash = slash1 > slash2 ? slash1 : slash2;
-    size_t dlen = slash ? (size_t)(slash - q->path + 1) : 0;
-    if (dlen >= sizeof dir) { set_error(r, "io", "path too long"); return; }
+    const char *slash1, *slash2, *slash;
+    size_t dlen;
+    int opened_hashed = 0;   /* the file the release was opened from must be one of the files hashed */
+    otc_error oerr;
+    otc_status orc;
+    /* no path: the runner does not know where the release is; it must not answer verified with nothing hashed */
+    if (!q->path || !q->path[0]) { set_error(r, "uncaught:NoPath", "verify: the runner has no path for this release"); return; }
+    slash1 = strrchr(q->path, '/');
+    slash2 = strrchr(q->path, '\\');
+    slash = slash1 > slash2 ? slash1 : slash2;
+    dlen = slash ? (size_t)(slash - q->path + 1) : 0;
+    if (dlen >= sizeof dir) { set_error(r, "uncaught:PathTooLong", "path too long"); return; }
     memcpy(dir, q->path, dlen);
     dir[dlen] = '\0';
     for (i = 0; i < n; i++) {
@@ -814,6 +878,15 @@ static void op_verify(request *q, reply *r)
         otc_error_init(&err);
         rc = otc_verify_file(full, NULL, &err);
         if (rc != OTC_OK) { set_error_struct(r, rc, &err); return; }
+        if (!strcmp(full, q->path)) opened_hashed = 1;
+    }
+    if (!opened_hashed) {
+        /* the opened file was not hashed: it is gone (the library reports that), or no checksum lists it */
+        otc_error_init(&oerr);
+        orc = otc_verify_file(q->path, NULL, &oerr);
+        if (orc != OTC_OK) { set_error_struct(r, orc, &oerr); return; }
+        set_error(r, "uncaught:NothingVerified", "verify: no checksum covers the file the release was opened from");
+        return;
     }
     r->result = cJSON_CreateObject();
     cJSON_AddTrueToObject(r->result, "verified");
@@ -913,10 +986,10 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "convention")) {
         const char *id = arg_str(&q->a, "convention_id");
         const otc_convention *c = NULL;
-        if (!q->a.bad && id && otc_release_convention(R, id, &c) == OTC_OK)
-            cJSON_AddItemToObject(o, "convention", enc_convention(c, &bad));
-        else
-            cJSON_AddNullToObject(o, "convention");
+        rc = q->a.bad || !id ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_release_convention(R, id, &c);
+        if (rc == OTC_OK) cJSON_AddItemToObject(o, "convention", enc_convention(c, &bad));
+        else if (rc == OTC_E_NOT_FOUND) cJSON_AddNullToObject(o, "convention");
+        else bad = 1;
     } else if (!strcmp(op, "licences")) {
         cJSON *arr = cJSON_CreateArray();
         size_t i, n = otc_release_licence_count(R);
@@ -929,10 +1002,10 @@ static void op_query(request *q, reply *r)
     } else if (!strcmp(op, "licence")) {
         const char *id = arg_str(&q->a, "licence_id");
         const otc_licence *l = NULL;
-        if (!q->a.bad && id && otc_release_licence(R, id, &l) == OTC_OK)
-            cJSON_AddItemToObject(o, "licence", enc_licence(l, &bad));
-        else
-            cJSON_AddNullToObject(o, "licence");
+        rc = q->a.bad || !id ? OTC_E_NOT_FOUND : otc_release_licence(R, id, &l);
+        if (rc == OTC_OK) cJSON_AddItemToObject(o, "licence", enc_licence(l, &bad));
+        else if (rc == OTC_E_NOT_FOUND) cJSON_AddNullToObject(o, "licence");
+        else bad = 1;
     } else if (!strcmp(op, "citation")) {
         cJSON_AddItemToObject(o, "citation", j_take(s_rel_citation(R, &bad)));
     } else if (!strcmp(op, "attribution")) {
@@ -977,6 +1050,8 @@ static void op_query(request *q, reply *r)
                 r->fields = cJSON_CreateObject();
                 cJSON_AddItemToObject(r->fields, "tombstone", enc_tombstone(t, &bad));
                 otc_tombstone_free(t);
+                /* a tombstone the runner could not encode: the code changes too, so a code-only check fails */
+                if (bad) set_error(r, "uncaught:BufferProtocol", "the tombstone of station_removed could not be encoded");
             }
             return;
         }
@@ -1040,10 +1115,12 @@ static void op_query(request *q, reply *r)
         otc_filter f;
         otc_hit *hits = NULL;
         size_t count = 0, i, limit;
+        int zero = 0;
         const char *name = arg_str(&q->a, "name"), *match = arg_str(&q->a, "match");
         cJSON *arr;
         arg_filter(&q->a, &f);
-        limit = arg_limit(&q->a, "limit");
+        limit = arg_limit(&q->a, "limit", &zero);
+        if (zero) { set_error(r, "uncaught:LimitZero", LIMIT_ZERO_MESSAGE); return; }
         if (match) {
             if (!strcmp(match, "exact")) f.match_exact = true;
             else q->a.bad = 1;
@@ -1063,8 +1140,10 @@ static void op_query(request *q, reply *r)
         double lat = arg_num(&q->a, "lat", NAN), lon = arg_num(&q->a, "lon", NAN);
         double radius = arg_num(&q->a, "radius_km", NAN);
         cJSON *ids, *dist;
+        int zero = 0;
         arg_filter(&q->a, &f);
-        limit = arg_limit(&q->a, "limit");
+        limit = arg_limit(&q->a, "limit", &zero);
+        if (zero) { set_error(r, "uncaught:LimitZero", LIMIT_ZERO_MESSAGE); return; }
         if (q->a.bad) { set_error(r, "invalid_argument", "near arguments"); return; }
         LIST_CALL(rc, otc_nearby, hits, count, otc_near(R, lat, lon, radius, &f, limit, NULL, 0, &count),
                   otc_near(R, lat, lon, radius, &f, limit, hits, cap_, &count));
@@ -1104,10 +1183,12 @@ static void op_query(request *q, reply *r)
         if (q->a.bad) { otc_station_free(st); set_error(r, "invalid_argument", "station_id"); return; }
         if (!strcmp(op, "reference_station")) {
             otc_station_t *ref = NULL;
-            if (st && otc_reference_station(R, st, &ref) == OTC_OK) {
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_reference_station(R, st, &ref);
+            if (rc == OTC_OK) {
                 cJSON_AddItemToObject(o, "station_id", j_take(s_st_id(ref, &bad)));
                 otc_station_free(ref);
             } else {
+                if (rc != OTC_E_NOT_FOUND) bad = 1;
                 cJSON_AddNullToObject(o, "station_id");
             }
         } else if (!strcmp(op, "subordinates_of")) {
@@ -1116,12 +1197,17 @@ static void op_query(request *q, reply *r)
             if (st) {
                 LIST_CALL(rc, const char *, ids, count, otc_subordinates_of(R, st, NULL, 0, &count),
                           otc_subordinates_of(R, st, ids, cap_, &count));
-                if (rc != OTC_OK) bad = 1;
+                if (rc != OTC_OK) {   /* ids may be NULL with a count: never read them */
+                    free((void *)ids);
+                    otc_station_free(st);
+                    set_status(r, rc, "otc_subordinates_of");
+                    return;
+                }
             }
-            cJSON_AddItemToObject(o, "station_ids", ids_array(ids, count));
+            cJSON_AddItemToObject(o, "station_ids", st ? ids_array(ids, count) : cJSON_CreateNull());
             free((void *)ids);
         } else if (!strcmp(op, "station_validation")) {
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = st ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = st ? otc_station_validation_count(st) : 0;
             for (i = 0; i < n; i++) {
                 const otc_validation_t *v = NULL;
@@ -1133,7 +1219,9 @@ static void op_query(request *q, reply *r)
             otc_offsets_t off;
             memset(&off, 0, sizeof off);
             off.struct_size = sizeof off;
-            if (st && otc_station_offsets(st, &off) == OTC_OK) {
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_station_offsets(st, &off);
+            if (rc != OTC_OK && rc != OTC_E_NOT_FOUND) bad = 1;
+            if (rc == OTC_OK) {
                 cJSON *x = cJSON_CreateObject();
                 cJSON_AddItemToObject(x, "reference_station_id", j_cstr(off.reference_station_id));
                 cJSON_AddItemToObject(x, "time_offset_high_min", j_num(off.time_offset_high_min));
@@ -1149,13 +1237,15 @@ static void op_query(request *q, reply *r)
             }
         } else if (!strcmp(op, "recommended_set")) {
             const otc_set *set = NULL;
-            if (st && otc_station_recommended_set(st, &set) == OTC_OK)
-                cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, &bad)));
-            else
+            rc = !st ? OTC_E_NOT_FOUND : fault("lookup") ? OTC_E_IO : otc_station_recommended_set(st, &set);
+            if (rc == OTC_OK) cJSON_AddItemToObject(o, "set_id", j_take(s_set_id(set, &bad)));
+            else {
+                if (rc != OTC_E_NOT_FOUND) bad = 1;
                 cJSON_AddNullToObject(o, "set_id");
+            }
         } else if (!strcmp(op, "constant_sets")) {
             bool inc = arg_bool(&q->a, "include_no_constants", false);
-            cJSON *arr = cJSON_CreateArray();
+            cJSON *arr = st ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = st ? otc_station_set_count(st, inc) : 0;
             if (q->a.bad) { cJSON_Delete(arr); otc_station_free(st); set_error(r, "invalid_argument", "include_no_constants"); return; }
             for (i = 0; i < n; i++) {
@@ -1165,12 +1255,12 @@ static void op_query(request *q, reply *r)
             }
             cJSON_AddItemToObject(o, "set_ids", arr);
         } else if (!strcmp(op, "constant_set")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             if (set) cJSON_AddItemToObject(o, "set", enc_set(set, &bad));
             else cJSON_AddNullToObject(o, "set");
         } else if (!strcmp(op, "constituents")) {
-            const otc_set *set = find_set(q, st);
-            cJSON *arr = cJSON_CreateArray();
+            const otc_set *set = find_set(q, st, &bad);
+            cJSON *arr = set ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = set ? otc_set_constituent_count(set) : 0;
             for (i = 0; i < n; i++) {
                 const otc_constituent_t *c = NULL;
@@ -1179,7 +1269,7 @@ static void op_query(request *q, reply *r)
             }
             cJSON_AddItemToObject(o, "constituents", arr);
         } else if (!strcmp(op, "constituent")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             const char *name = arg_str(&q->a, "name");
             const otc_constituent_t *c = NULL;
             if (set && name && otc_set_constituent(set, name, &c) == OTC_OK)
@@ -1187,7 +1277,7 @@ static void op_query(request *q, reply *r)
             else
                 cJSON_AddNullToObject(o, "constituent");
         } else if (!strcmp(op, "provenance")) {
-            const otc_set *set = find_set(q, st);
+            const otc_set *set = find_set(q, st, &bad);
             if (set) {
                 cJSON *p = cJSON_CreateObject();
                 const otc_provenance_build *b = NULL;
@@ -1197,25 +1287,25 @@ static void op_query(request *q, reply *r)
                     cJSON_AddItemToObject(bo, "built_at", j_take(s_build_built_at(b, &bad)));
                     cJSON_AddItemToObject(bo, "fetched_at", j_take(s_build_fetched_at(b, &bad)));
                     cJSON_AddItemToObject(bo, "run_id", j_take(s_build_run_id(b, &bad)));
-                    cJSON_AddItemToObject(bo, "tool_versions", j_parse_or_null(s_build_tool_versions(b, &bad)));
+                    cJSON_AddItemToObject(bo, "tool_versions", j_parse_or_null(s_build_tool_versions(b, &bad), &bad));
                     cJSON_AddItemToObject(p, "build", bo);
                 } else {
                     cJSON_AddNullToObject(p, "build");
                 }
                 cJSON_AddItemToObject(p, "carried_from_release", j_take(s_prov_carried(set, &bad)));
                 cJSON_AddItemToObject(p, "adapter_version", j_take(s_prov_adapter_version(set, &bad)));
-                cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad)));
+                cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad), &bad));
                 cJSON_AddItemToObject(p, "selection_reason", j_take(s_prov_selection_reason(set, &bad)));
-                cJSON_AddItemToObject(p, "decision", j_parse_or_null(s_prov_decision(set, &bad)));
+                cJSON_AddItemToObject(p, "decision", j_parse_or_null(s_prov_decision(set, &bad), &bad));
                 cJSON_AddItemToObject(o, "provenance", p);
-                cJSON_AddItemToObject(o, "raw", j_parse_or_null(s_set_prov_json(set, &bad)));
+                cJSON_AddItemToObject(o, "raw", j_parse_or_null(s_set_prov_json(set, &bad), &bad));
             } else {
                 cJSON_AddNullToObject(o, "provenance");
                 cJSON_AddNullToObject(o, "raw");
             }
         } else if (!strcmp(op, "set_validation")) {
-            const otc_set *set = find_set(q, st);
-            cJSON *arr = cJSON_CreateArray();
+            const otc_set *set = find_set(q, st, &bad);
+            cJSON *arr = set ? cJSON_CreateArray() : cJSON_CreateNull();
             size_t i, n = set ? otc_set_validation_count(set) : 0;
             for (i = 0; i < n; i++) {
                 const otc_validation_t *v = NULL;
@@ -1231,19 +1321,19 @@ static void op_query(request *q, reply *r)
                 set_error(r, "invalid_argument", "object");
                 return;
             } else if (!strcmp(obj, "station")) {
-                if (st) raw = j_parse_or_null(s_st_raw(st, &bad));
+                if (st) raw = j_parse_or_null(s_st_raw(st, &bad), &bad);
             } else if (!strcmp(obj, "tombstone")) {
                 otc_tombstone_t *t = NULL;
                 const char *id = arg_str(&q->a, "station_id");
                 if (id && otc_tombstone(R, id, &t) == OTC_OK) {
-                    raw = j_parse_or_null(s_tb_raw(t, &bad));
+                    raw = j_parse_or_null(s_tb_raw(t, &bad), &bad);
                     otc_tombstone_free(t);
                 }
             } else if (!strcmp(obj, "set")) {
-                const otc_set *set = find_set(q, st);
-                if (set) raw = j_parse_or_null(s_set_raw(set, &bad));
+                const otc_set *set = find_set(q, st, &bad);
+                if (set) raw = j_parse_or_null(s_set_raw(set, &bad), &bad);
             } else if (!strcmp(obj, "constituent")) {
-                const otc_set *set = find_set(q, st);
+                const otc_set *set = find_set(q, st, &bad);
                 const char *name = arg_str(&q->a, "name");
                 size_t i, n = set ? otc_set_constituent_count(set) : 0;
                 for (i = 0; i < n && name; i++) {
@@ -1253,7 +1343,7 @@ static void op_query(request *q, reply *r)
                         char *buf;
                         if (otc_constituent_raw_json(set, i, NULL, 0, &need) != OTC_OK) { bad = 1; break; }
                         buf = (char *)malloc(need);
-                        if (buf && otc_constituent_raw_json(set, i, buf, need, &need) == OTC_OK) raw = j_parse_or_null(buf);
+                        if (buf && otc_constituent_raw_json(set, i, buf, need, &need) == OTC_OK) raw = j_parse_or_null(buf, &bad);
                         else { free(buf); bad = 1; }
                         break;
                     }
@@ -1261,11 +1351,15 @@ static void op_query(request *q, reply *r)
             } else if (!strcmp(obj, "convention")) {
                 const otc_convention *c = NULL;
                 const char *id = arg_str(&q->a, "convention_id");
-                if (id && otc_release_convention(R, id, &c) == OTC_OK) raw = j_parse_or_null(s_conv_raw(c, &bad));
+                if (id && otc_release_convention(R, id, &c) == OTC_OK) raw = j_parse_or_null(s_conv_raw(c, &bad), &bad);
             } else if (!strcmp(obj, "licence")) {
                 const otc_licence *l = NULL;
                 const char *id = arg_str(&q->a, "licence_id");
-                if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad));
+                if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad), &bad);
+            } else {   /* README "raw": station, tombstone, set, constituent, convention or licence */
+                otc_station_free(st);
+                set_error(r, "uncaught:UnknownRawObject", obj);
+                return;
             }
             cJSON_AddItemToObject(o, "raw", raw ? raw : cJSON_CreateNull());
         } else {
@@ -1275,6 +1369,8 @@ static void op_query(request *q, reply *r)
         }
         otc_station_free(st);
     }
+    /* an argument read after the first check (set_id, name, ...) with the wrong type: never a null result */
+    if (q->a.bad && !r->code) { set_error(r, "invalid_argument", "an argument has the wrong type"); return; }
     if (bad) set_error(r, "uncaught:BufferProtocol", "an accessor broke the buffer or list rules");
 }
 
@@ -1318,16 +1414,15 @@ static cJSON *take_strings(char **v, size_t n, int basenames, int sort)
     return arr;
 }
 
-/* Swaps the current release for the one at path (a Release held from before stays open). */
-static otc_status swap_to(const char *ds)
+/* Swaps the current release for datestamp ds (a Release held from before stays open). */
+static otc_status swap_to(const char *ds, otc_error *err)
 {
     otc_fetch_options fo;
-    otc_error err;
     otc_release *rel = NULL;
     otc_status rc;
     char *path;
-    fetch_options(&fo, &err);
-    rc = otc_fetch_open(&fo, ds, NULL, &rel);
+    fetch_options(&fo, err);   /* the caller's error struct: the detail of a failed open reaches the reply */
+    rc = otc_fetch_open(&fo, fault("swap") ? "20000101" : ds, NULL, &rel);   /* fault: the open fails */
     if (rc != OTC_OK) return rc;
     path = current_jsonl_path(ds);
     if (g_current && !is_held(g_current)) otc_close(g_current);
@@ -1337,8 +1432,9 @@ static otc_status swap_to(const char *ds)
     return OTC_OK;
 }
 
-/* otc_fetch_update, then the new release replaces the current one (spec 4.3 "update"). */
-static otc_status do_update(const char *from, int *updated, char *to, size_t to_len, otc_error *err)
+/* otc_fetch_update, then the new release replaces the current one (spec 4.3 "update"). *nomove is set when the
+ * library says it updated but the runner cannot find a new datestamp in the path it got (never "updated" then). */
+static otc_status do_update(const char *from, int *updated, char *to, size_t to_len, otc_error *err, int *nomove)
 {
     otc_fetch_options fo;
     char path[4096];
@@ -1346,15 +1442,22 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
     otc_status rc;
     fetch_options(&fo, err);
     *updated = 0;
+    *nomove = 0;
     snprintf(to, to_len, "%s", from);
     rc = otc_fetch_update(&fo, from, path, sizeof path, &up);
     if (rc != OTC_OK || !up) return rc;
+    if (fault("update-path")) snprintf(path, sizeof path, "%s", "/no/such/file.bin");   /* fault: an odd path */
     {   /* the datestamp of the new file: OTC_{D}.jsonl */
         const char *b = base_of(path);
         size_t n = strlen(b);
-        if (n > 10 && !strncmp(b, "OTC_", 4)) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
+        if (n > 10 && !strncmp(b, "OTC_", 4) && !strcmp(b + n - 6, ".jsonl")) snprintf(to, to_len, "%.*s", (int)(n - 10), b + 4);
     }
-    rc = swap_to(to);
+    if (!strcmp(to, from)) {
+        snprintf(err->message, sizeof err->message, "otc_fetch_update reported an update to %s, which names no newer release", path);
+        *nomove = 1;
+        return OTC_OK;
+    }
+    rc = swap_to(to, err);
     if (rc == OTC_OK) *updated = 1;
     return rc;
 }
@@ -1404,7 +1507,9 @@ static void op_fetch(request *q, reply *r)
             set_error(r, "pinned_release", "update: the client was opened on a pinned release or a file");
             return;
         }
-        rc = do_update(ds, &updated, to, sizeof to, &err);
+        int nomove = 0;
+        rc = do_update(ds, &updated, to, sizeof to, &err, &nomove);
+        if (nomove) { set_error(r, "uncaught:UpdateNoMove", err.message); return; }
         cJSON_AddBoolToObject(r->result, "updated", updated);
         cJSON_AddStringToObject(r->result, "from", ds);
         cJSON_AddStringToObject(r->result, "to", to);
@@ -1452,7 +1557,7 @@ static void maybe_auto_update(void)
 {
     char ds[64], to[64];
     size_t need;
-    int updated;
+    int updated, nomove = 0;
     otc_error err;
     double now;
     if (!g_client.auto_update || g_client.pinned || !g_current) return;
@@ -1460,7 +1565,7 @@ static void maybe_auto_update(void)
     if (now - g_client.last_check < g_client.update_interval) return;
     g_client.last_check = now;
     if (otc_release_datestamp(g_current, ds, sizeof ds, &need) != OTC_OK) return;
-    if (do_update(ds, &updated, to, sizeof to, &err) != OTC_OK)
+    if (do_update(ds, &updated, to, sizeof to, &err, &nomove) != OTC_OK || nomove)
         fprintf(stderr, "automatic update failed: %s\n", err.message);
 }
 
@@ -1491,20 +1596,25 @@ static char *run_query(request *q)
 typedef struct thread_job {
     request q;      /* each thread has its own copy (args.bad is written per call) */
     char *out;
+    int index;
 } thread_job;
+
+static void thread_run(thread_job *j)
+{
+    j->out = run_query(&j->q);
+    if (j->index == 0 && fault("thread0-null")) { cJSON_free(j->out); j->out = NULL; }   /* a thread with no reply */
+}
 
 #ifdef _WIN32
 static DWORD WINAPI thread_main(LPVOID p)
 {
-    thread_job *j = (thread_job *)p;
-    j->out = run_query(&j->q);
+    thread_run((thread_job *)p);
     return 0;
 }
 #else
 static void *thread_main(void *p)
 {
-    thread_job *j = (thread_job *)p;
-    j->out = run_query(&j->q);
+    thread_run((thread_job *)p);
     return NULL;
 }
 #endif
@@ -1522,6 +1632,7 @@ static char *run_threaded(request *q, int n)
     if (!jobs || !th) { free(jobs); free(th); return run_query(q); }
     for (i = 0; i < n; i++) {
         jobs[i].q = *q;
+        jobs[i].index = i;
 #ifdef _WIN32
         th[i] = CreateThread(NULL, 0, thread_main, &jobs[i], 0, NULL);
         if (!th[i]) break;
@@ -1538,9 +1649,10 @@ static char *run_threaded(request *q, int n)
         pthread_join(th[i], NULL);
 #endif
     }
-    for (i = 0; i < started; i++) {
-        if (!first) first = jobs[i].out;
-        else if (!jobs[i].out || strcmp(first, jobs[i].out) != 0) same = 0;
+    for (i = 0; i < started; i++) {   /* every thread must give a reply, and all must be the same */
+        if (!jobs[i].out) same = 0;
+        else if (!first) first = jobs[i].out;
+        else if (strcmp(first, jobs[i].out) != 0) same = 0;
     }
     for (i = 0; i < started; i++)
         if (jobs[i].out != first) cJSON_free(jobs[i].out);
@@ -1613,7 +1725,10 @@ static char *handle(const char *line, int threads)
         out = render(&r);
     } else if (!strcmp(q.op, "hold_release")) {
         const char *name = arg_str(&q.a, "name");
-        if (!name || !g_current || g_n_held >= MAX_HELD) set_error(&r, "invalid_argument", "hold_release");
+        /* runner failures, not SDK error codes: a case must not pass on them */
+        if (!g_current) set_error(&r, "uncaught:NoRelease", "hold_release: no release is open");
+        else if (!name) set_error(&r, "uncaught:BadRequest", "hold_release needs a name");
+        else if (g_n_held >= MAX_HELD) set_error(&r, "uncaught:TooManyHeld", "hold_release: too many held releases");
         else {
             g_held[g_n_held].name = xstrdup(name);
             g_held[g_n_held].rel = g_current;
@@ -1642,6 +1757,7 @@ int main(void)
     const char *t = getenv("OTC_RUNNER_THREADS");
     int threads = t ? atoi(t) : 1;
     size_t i;
+    g_fault = getenv("OTC_RUNNER_FAULT");
     printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s]}}\n",
            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
            OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\"" : "\"fs\", \"stream\"");

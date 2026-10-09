@@ -38,7 +38,9 @@ def test_profile_runner_must_claim_every_feature(tmp_path, name):
 def test_explicit_profile_applies_to_any_runner(tmp_path):
     cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
     r = run_driver("--runner", f"{sys.executable} {NULL_RUNNER} --features fs,json", "--cases", str(cases), "--profile", "python")
-    assert r.returncode == 2, r.stderr[-300:]
+    assert r.returncode == 2 and "Traceback" not in r.stderr, r.stderr[-300:]
+    # the failure names the profile and the features the runner lacks (not just any exit 2)
+    assert "profile python" in r.stderr and all(f in r.stderr for f in ("eager", "fetch", "stream")), r.stderr[-300:]
 
 
 # --- update/auto discriminates (F3)
@@ -74,7 +76,12 @@ def test_cache_rows_check_file_values(cid):
     st = [s for s in runner_steps(cases_by_id()[cid]) if s["op"] == "release_files"]
     assert st, f"{cid} has no release_files step"
     files = st[-1]["expect"]["files"]
-    assert isinstance(files, list) and files and all(isinstance(f["sha256"], str) and isinstance(f["size"], int) for f in files)
+    # the rows are the pointer entry's files, value for value (url absolute against the base URL)
+    index = json.loads((CONF / "fixtures" / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+    entry = next(e for e in index["releases"] if e["datestamp"] == "20991231.2")
+    rows = sorted([{"name": f["name"], "url": "${server}/good/" + f["url"], "size": f["size"], "sha256": f["sha256"]}
+                   for f in entry["files"]], key=lambda f: f["name"])
+    assert files == rows, (files, rows)
 
 
 # --- a pinned download needs no pointer or index (F6)
@@ -131,9 +138,21 @@ def test_almost_runner_fails_on_later_steps(tmp_path):
     r = run_driver("--runner", f"{sys.executable} {ALMOST_RUNNER}", "--only", "^stations/", "--all-steps", "--report", str(report),
                    timeout=300)
     assert r.returncode == 1, r.stdout[-500:]
-    doc = json.loads(report.read_text())
-    assert doc["counts"]["PASS"] == 0 and doc["counts"]["FAIL"] > 0
+    check_almost_report(json.loads(report.read_text()))
+
+
+def check_almost_report(doc):
+    """Every case failed after the open step; no case passed or was skipped (a SKIP has no failures list)."""
+    assert doc["counts"]["PASS"] == 0 and doc["counts"]["SKIP"] == 0 and doc["counts"]["FAIL"] > 0, doc["counts"]
     for c in doc["cases"]:
+        assert c["status"] == "FAIL", (c["id"], c["status"])
         steps = [f["step"] for f in c["failures"]]
         assert 0 not in steps or "@" not in c["id"], (c["id"], c["failures"][:1])
         assert any(s and s > 0 for s in steps), c["id"]
+
+
+def test_almost_report_check_rejects_a_skip():
+    doc = {"counts": {"PASS": 0, "FAIL": 1, "SKIP": 1},
+           "cases": [{"id": "x@json", "status": "FAIL", "failures": [{"step": 1}]}, {"id": "y", "status": "SKIP", "missing_features": ["fs"]}]}
+    with pytest.raises(AssertionError):
+        check_almost_report(doc)

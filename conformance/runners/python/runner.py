@@ -25,12 +25,11 @@ from pathlib import Path
 FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 
 
-def _version():
-    try:
-        import opentideconstants
-        return opentideconstants.__version__
-    except Exception:  # the hello must go out even when the SDK does not import
-        return "0.0.0"
+def _load_sdk():
+    """The SDK module, its version and its error base class. A runner that cannot find all three fails the
+    handshake (stderr and exit status 3): a stand-in would hide a missing class or version."""
+    import opentideconstants
+    return opentideconstants, opentideconstants.__version__, opentideconstants.OpenTideConstantsError
 
 
 # --------------------------------------------------------------------------- encodings (README "Result encodings")
@@ -259,8 +258,9 @@ class Runner:
         if op == "attribution":
             t = self.target(req)
             if "station_ids" in a:
+                # an unknown or removed id gives None, which goes to the SDK as it is (D2 a: invalid_argument)
                 stations = [t.station(i) for i in a["station_ids"]]
-                return {"attribution": t.attribution([s for s in stations if s is not None])}
+                return {"attribution": t.attribution(stations)}
             return {"attribution": t.attribution()}
         if op in ("station", "require_station"):
             return {"station": enc_station(getattr(self.target(req), op)(a["station_id"]))}
@@ -290,10 +290,10 @@ class Runner:
             return {"station_id": None if ref is None else ref.station_id}
         if op == "subordinates_of":
             st = self.station(req, a)
-            return {"station_ids": [] if st is None else [s.station_id for s in self.target(req).subordinates_of(st)]}
+            return {"station_ids": None if st is None else [s.station_id for s in self.target(req).subordinates_of(st)]}
         if op == "station_validation":
             st = self.station(req, a)
-            return {"validation": [] if st is None else enc_validation(st.validation)}
+            return {"validation": None if st is None else enc_validation(st.validation)}
         if op == "subordinate_offsets":
             st = self.station(req, a)
             off = None if st is None else st.subordinate_offsets
@@ -305,12 +305,12 @@ class Runner:
         if op == "constant_sets":
             st = self.station(req, a)
             kw = {"include_no_constants": a["include_no_constants"]} if "include_no_constants" in a else {}
-            return {"set_ids": [] if st is None else [cs.set_id for cs in st.constant_sets(**kw)]}
+            return {"set_ids": None if st is None else [cs.set_id for cs in st.constant_sets(**kw)]}
         if op == "constant_set":
             return {"set": enc_set(self.set(req, a))}
         if op == "constituents":
             cs = self.set(req, a)
-            return {"constituents": [] if cs is None else [pick(x, CONSTITUENT) for x in cs.constituents]}
+            return {"constituents": None if cs is None else [pick(x, CONSTITUENT) for x in cs.constituents]}
         if op == "constituent":
             cs = self.set(req, a)
             x = None if cs is None else cs.constituent(a["name"])
@@ -322,7 +322,7 @@ class Runner:
             return {"provenance": enc_provenance(cs.provenance), "raw": plain(cs.provenance.raw)}
         if op == "set_validation":
             cs = self.set(req, a)
-            return {"validation": [] if cs is None else enc_validation(cs.validation)}
+            return {"validation": None if cs is None else enc_validation(cs.validation)}
         if op == "raw":
             obj = a["object"]
             r = self.release(req)
@@ -345,6 +345,23 @@ class Runner:
         raise ValueError(f"unknown op {op!r}")
 
 
+def finite(v):
+    """The reply as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded."""
+    if isinstance(v, float):
+        if math.isnan(v):
+            return None
+        if math.isinf(v):
+            raise ValueError(f"the SDK returned {v}, which JSON cannot carry")
+        return v
+    if isinstance(v, dict):
+        return {k: finite(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [finite(x) for x in v]
+    if v is None or isinstance(v, (str, int)):
+        return v
+    raise TypeError(f"the runner cannot encode a {type(v).__name__} as JSON")
+
+
 ERROR_FIELDS = ("url", "status", "file", "expected", "actual", "path")
 
 
@@ -354,42 +371,73 @@ def main():
     a = ap.parse_args()
     if not a.installed:
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python" / "src"))
+    try:
+        _, version, base = _load_sdk()
+    except Exception as e:  # noqa: BLE001 - no hello: the driver reports a failed handshake with this stderr
+        print(f"cannot load the SDK: {type(e).__name__}: {e}", file=sys.stderr)
+        return 3
     out = sys.stdout
-    out.write(json.dumps({"hello": {"runner": "python", "version": _version(), "features": FEATURES}}) + "\n")
+    out.write(json.dumps({"hello": {"runner": "python", "version": version, "features": FEATURES}}) + "\n")
     out.flush()
     runner = Runner()
     for line in sys.stdin:
         if not line.strip():
             continue
-        req = json.loads(line)
         try:
-            reply = {"ok": True, "result": runner.handle(req)}
+            req = json.loads(line)
+            if not isinstance(req, dict):
+                raise ValueError(f"a request must be a JSON object, got {line.strip()[:80]!r}")
+        except ValueError as e:  # a request the runner cannot read: an error reply, and the runner goes on
+            print(f"bad request line: {e}", file=sys.stderr)
+            out.write(json.dumps({"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": f"bad request line: {e}"}}) + "\n")
+            out.flush()
+            continue
+        try:
+            reply = {"ok": True, "result": finite(runner.handle(req))}
         except Exception as e:  # noqa: BLE001 - the protocol reports every exception
-            base = None
-            try:
-                base = runner._sdk().OpenTideConstantsError
-            except Exception:
-                pass
-            if base is not None and isinstance(e, base):
-                fields = {}
-                for f in ERROR_FIELDS:
-                    v = getattr(e, f, None)
-                    if v is not None:
-                        fields[f] = v if isinstance(v, (int, str, float)) else str(v)
-                if getattr(e, "tombstone", None) is not None:
-                    try:
-                        fields["tombstone"] = enc_tombstone(e.tombstone)
-                    except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
-                        fields["tombstone"] = f"uncaught:{type(te).__name__}"
-                reply = {"ok": False, "error": {"code": e.code, "message": str(e), "fields": fields}}
+            if isinstance(e, base):
+                reply = encode_sdk_error(e)
             else:
                 print(f"uncaught {type(e).__name__}: {e}", file=sys.stderr)
                 reply = {"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": str(e)}}
-        out.write(json.dumps(reply) + "\n")
-        out.flush()
+        write_reply(out, reply)
     if runner.client is not None:
-        runner.client.close()
+        try:
+            runner.client.close()
+        except Exception as e:  # noqa: BLE001 - a close that fails is reported: stderr and exit status 1
+            print(f"close failed at shutdown: {type(e).__name__}: {e}", file=sys.stderr)
+            return 1
     return 0
+
+
+def encode_sdk_error(e):
+    """The reply for an SDK error. An error while the runner encodes it is an uncaught: reply."""
+    try:
+        fields = {}
+        for f in ERROR_FIELDS:
+            v = getattr(e, f, None)
+            if v is not None:
+                fields[f] = v if isinstance(v, (int, str, float)) else str(v)
+        code = e.code
+        if getattr(e, "tombstone", None) is not None:
+            try:
+                fields["tombstone"] = enc_tombstone(e.tombstone)
+            except Exception as te:  # noqa: BLE001 - a tombstone the runner cannot encode fails the step
+                fields["tombstone"] = code = f"uncaught:{type(te).__name__}"  # also the code: a code-only check fails
+        return {"ok": False, "error": {"code": code, "message": str(e), "fields": finite(fields)}}
+    except Exception as x:  # noqa: BLE001
+        print(f"cannot encode the SDK error {type(e).__name__}: {type(x).__name__}: {x}", file=sys.stderr)
+        return {"ok": False, "error": {"code": f"uncaught:{type(x).__name__}", "message": f"cannot encode the SDK error: {x}"}}
+
+
+def write_reply(out, reply):
+    """Write one reply line; a reply that is not JSON-encodable becomes an uncaught: reply (still one line)."""
+    try:
+        line = json.dumps(reply, allow_nan=False)
+    except (TypeError, ValueError) as e:
+        line = json.dumps({"ok": False, "error": {"code": f"uncaught:{type(e).__name__}", "message": f"cannot encode the reply: {e}"}})
+    out.write(line + "\n")
+    out.flush()
 
 
 if __name__ == "__main__":

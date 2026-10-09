@@ -12,8 +12,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -98,8 +97,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -152,8 +150,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -225,8 +222,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -341,8 +337,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -417,13 +412,14 @@
    "id": "download/from-cache",
    "title": "download-from-cache: the cache holds the release, the server is stopped, no request",
    "spec": "4.3.2, 7.1",
-   "requires": [],
+   "requires": [
+    "stream"
+   ],
    "steps": [
     {
      "op": "open",
      "args": {
       "base_url": "${server}/good/",
-      "cache_dir": "${cache}",
       "mode": "stream"
      },
      "expect": {
@@ -543,8 +539,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -617,8 +612,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -662,8 +656,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -704,8 +697,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",

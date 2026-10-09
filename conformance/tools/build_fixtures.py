@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["jsonschema==4.25.1"]
+# dependencies = ["jsonschema==4.25.1", "rfc3339-validator==0.1.4", "rfc3986-validator==0.1.1"]
 # ///
 """Build and check the conformance fixture releases (SDK spec §7.1).
 
@@ -25,21 +25,42 @@ are made up for tests. They are not tidal data.
      the error code, or "load" for the higher-minor release.
 
 The schemas (format 1.0 and the 1.0 index) come from the site repository, pinned
-by commit and SHA-256. Pass --schema-dir DIR for local copies; each must have the
-pinned SHA-256.
+by commit and SHA-256, and a copy of each is kept in conformance/schemas/ (spec
+D25), so --check needs no network. --schema-dir DIR reads other local copies, and
+--download-schemas fetches them from the site repository; either way each must have
+the pinned SHA-256.
 """
 import argparse
 import copy
 import gzip
 import hashlib
 import json
+import os
+import re
 import shutil
 import sys
 import tempfile
 import urllib.request
+import zlib
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
+
+# The schemas use format date-time and uri. jsonschema checks them only with a format checker and the packages
+# above; without them every format passes. So the checker is required, and proven to work before any check.
+FORMATS = FormatChecker()
+
+
+def _require_formats():
+    probes = [("not-a-date", "date-time"), ("2099-13-45T00:00:00Z", "date-time"), ("not a uri", "uri")]
+    broken = [f"{v!r} as {f}" for v, f in probes if FORMATS.conforms(v, f)]
+    if broken:
+        raise SystemExit("the jsonschema format checker does not check " + ", ".join(broken) +
+                         " (install rfc3339-validator and rfc3986-validator; uv run installs them from the script header)")
+
+
+def validator(schema):
+    return Draft202012Validator(schema, format_checker=FORMATS)
 
 # Format 1.0 and its index schema, from the site repository at the merge that published format 1.0,
 # pinned by commit and SHA-256.
@@ -60,7 +81,9 @@ TOO_NEW = "1.99"
 NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-GENERATED = ["good", "order", "v1", "reader", "major", "bad", "fixtures.json"]
+VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "fold", "nogz",
+             "bad", "fixtures.json"]
 
 BASE = "20991231"
 SECOND = "20991231.2"
@@ -431,8 +454,12 @@ def gz(data, reuse):
             if gzip.decompress(old) == data:
                 _GZ_SEEN.setdefault(sha(data), old)
                 return old
-        except (OSError, EOFError):
-            pass
+        except (OSError, EOFError, zlib.error) as e:
+            # a bad root's committed .json.gz is not honest gzip on purpose (truncated, a byte changed); anywhere else
+            # an unreadable committed file is worth a line: it is regenerated, and --check then reports the difference
+            if "bad" not in reuse.parts:
+                print(f"note: committed {reuse} is not readable gzip ({type(e).__name__}: {e}); compressing afresh",
+                      file=sys.stderr)
     seen = _GZ_SEEN.get(sha(data))
     if seen is not None:
         return seen
@@ -510,17 +537,19 @@ def write_root(root, docs, *, reuse_root=None, tamper=None, version_dois=None, m
 # --------------------------------------------------------------------------- bad fixtures
 
 def corrupt_same_size(files, sums, entry, reuse):
-    """Change one byte in every station data file; keep the honest SHA-256 list and pointer."""
+    """Change one byte in every station data file, at the same size; keep the honest SHA-256 list and pointer. So
+    the hash differs and the size does not (a size check alone cannot catch it). The .json.gz gets one byte of its
+    compressed body changed: it is not valid gzip any more, but a reader hashes it before it decompresses it."""
     out = dict(files)
     for name in list(out):
         if name.endswith(".json") and not name.endswith(".meta.json"):
             out[name] = out[name].replace(b"San Francisco", b"San Franciscx", 1)
         elif name.endswith(".jsonl"):
             out[name] = out[name].replace(b"San Francisco", b"San Franciscx", 1)
-    for name in list(out):
-        if name.endswith(".json.gz"):
-            plain = out[name[:-3]]
-            out[name] = gz(plain, reuse / name if reuse else None)
+        elif name.endswith(".json.gz"):
+            data = bytearray(out[name])
+            data[len(data) // 2] ^= 0x01
+            out[name] = bytes(data)
     return out, sums, entry
 
 
@@ -580,6 +609,114 @@ def unresolved_doc():
     return doc
 
 
+def rehash(files, sums, entry, new_sums=None):
+    """The .sha256 list and the pointer entry made honest again for changed files (so a defect is the only one)."""
+    sums = new_sums if new_sums is not None else sha256_list(files)
+    entry = copy.deepcopy(entry)
+    for f in entry["files"]:
+        data = sums if f["name"].endswith(".sha256") else files.get(f["name"])
+        if data is not None:
+            f["size"], f["sha256"] = len(data), sha(data)
+    return files, sums, entry
+
+
+def honest(change):
+    """A tamper that changes the files with change(files) and keeps every digest honest."""
+    def t(files, sums, entry, reuse):
+        files = dict(files)
+        change(files)
+        return rehash(files, sums, entry)
+    return t
+
+
+def _gz_differs(files):
+    name = next(n for n in files if n.endswith(".json.gz"))
+    files[name] = gzip.compress(files[name[:-3]].replace(b"San Francisco", b"San Franciscx", 1), compresslevel=9, mtime=0)
+
+
+def _jsonl_differs(files):
+    name = next(n for n in files if n.endswith(".jsonl"))
+    files[name] = files[name].replace(b"San Francisco", b"San Franciscx", 1)
+
+
+def _meta_differs(files):
+    name = next(n for n in files if n.endswith(".meta.json"))
+    files[name] = files[name].replace(b"Example Mapping Authority.", b"Example Mapping Authority!", 1)
+
+
+def size_mismatch(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    next(f for f in entry["files"] if f["name"].endswith(".jsonl"))["size"] += 1
+    return files, sums, entry
+
+
+def sums_extra_file(files, sums, entry, reuse):
+    return rehash(files, sums, entry, sums + f"{sha(b'extra')}  OTC_{BASE}.csv\n".encode())
+
+
+def sha256_file_differs(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    next(f for f in entry["files"] if f["name"].endswith(".sha256"))["sha256"] = sha(b"not the .sha256 file")
+    return files, sums, entry
+
+
+def sums_disagree(files, sums, entry, reuse):
+    name = next(n for n in files if n.endswith(".jsonl")).encode()
+    lines = [(sha(b"wrong digest").encode() + b"  " + name) if l.endswith(b"  " + name) else l for l in sums.splitlines()]
+    return rehash(files, sums, entry, b"\n".join(lines) + b"\n")
+
+
+def index_content_digest_bad(files, sums, entry, reuse):
+    entry = copy.deepcopy(entry)
+    entry["content_sha256"] = "not a digest"
+    return files, sums, entry
+
+
+def changed_doc(change):
+    def make():
+        doc = release_doc(BASE)
+        change(doc)
+        doc["stations"].sort(key=lambda s: str(s["station_id"]))
+        return [doc]
+    return make
+
+
+def _station(doc, sid):
+    return next(s for s in doc["stations"] if s["station_id"] == sid)
+
+
+def index_honest(files, sums, entry, reuse):
+    """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
+    entry = copy.deepcopy(entry)
+    entry.update(format_version=FORMAT, min_reader_version=FORMAT, created="2099-12-31T00:00:00Z")
+    return files, sums, entry
+
+
+def _duplicate_set(doc):
+    st = _station(doc, "OTC-T-0001")
+    st["constant_sets"].append(copy.deepcopy(st["constant_sets"][0]))
+
+
+def _duplicate_station(doc):
+    st = copy.deepcopy(_station(doc, "OTC-T-0020"))
+    st["constant_sets"][0]["set_id"] = "OTC-T-0020/noaa-copy"
+    st["recommended_set_id"] = "OTC-T-0020/noaa-copy"
+    doc["stations"].append(st)
+
+
+def _jsonl_one_byte(files, sums, entry, reuse):
+    files = dict(files)
+    name = next(n for n in files if n.endswith(".jsonl"))
+    files[name] = files[name].replace(b"San Francisco", b"San Franciscx", 1)
+    return files, sums, entry
+
+
+def _too_new_broken():
+    doc = small_doc(BASE)
+    doc["stations"][0]["constant_sets"][0]["licence_id"] = "no-such-licence"
+    return [versioned(doc, TOO_NEW)]
+
+
 BAD = [
     ("wrong-sha256", "checksum_mismatch", "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
      lambda: [release_doc(BASE)], corrupt_same_size),
@@ -597,6 +734,68 @@ BAD = [
      lambda: [versioned(small_doc(BASE), TOO_NEW)], None),
     ("no-build", "load", "OTC-T-0004's set has no provenance.build (malformed: format 1.0 requires it); it must load, with build null",
      lambda: [no_build_doc()], None),
+    # Cross-SDK rules of review round 1 (PK03, PK06, PK07): each SDK must refuse these with invalid_release.
+    ("min-reader-malformed", "invalid_release", "release.min_reader_version is \"2\" (not MAJOR.MINOR; D9)",
+     changed_doc(lambda d: d["release"].update(min_reader_version="2")), index_honest),
+    ("format-version-malformed", "invalid_release", "format_version is \"1.x\" (not MAJOR.MINOR; D9)",
+     changed_doc(lambda d: d.update(format_version="1.x")), index_honest),
+    ("active-and-removed-same-id", "invalid_release", "OTC-T-0020 is both an active station and a tombstone (D5)",
+     changed_doc(lambda d: d["stations"].append(tombstone("OTC-T-0020", "Minimal Station", BASE, "duplicate", "OTC-T-0001"))), None),
+    ("duplicate-set-id", "invalid_release", "OTC-T-0001 has two sets with the set_id OTC-T-0001/noaa (D5)",
+     changed_doc(_duplicate_set), None),
+    ("unresolved-reference-station", "invalid_release", "OTC-T-0003's subordinate_offsets.reference_station_id is OTC-T-9999",
+     changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(reference_station_id="OTC-T-9999")), None),
+    ("unresolved-offsets-licence", "invalid_release", "OTC-T-0003's subordinate_offsets.licence_id is no-such-licence",
+     changed_doc(lambda d: _station(d, "OTC-T-0003")["subordinate_offsets"].update(licence_id="no-such-licence")), None),
+    ("duplicate-convention-id", "invalid_release", "two conventions with the convention_id noaa-greenwich-v1 (D5)",
+     changed_doc(lambda d: d["conventions"].append(copy.deepcopy(d["conventions"][2]))), None),
+    ("station-id-not-string", "invalid_release", "OTC-T-0020's station_id is the number 20 (malformed: schema-invalid)",
+     changed_doc(lambda d: _station(d, "OTC-T-0020").update(station_id=20)), None),
+    ("lat-string", "invalid_release", "OTC-T-0010's lat is the string \"0.0\" (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat="0.0")), None),
+    ("aliases-not-object", "invalid_release", "OTC-T-0006's aliases is a list (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0006").update(aliases=["TOS"])), None),
+    ("qc-flags-not-array", "invalid_release", "OTC-T-0002's first set has qc_flags as an object (malformed)",
+     changed_doc(lambda d: _station(d, "OTC-T-0002")["constant_sets"][0].update(qc_flags={"flag": "carried_over"})), None),
+    ("convention-without-id", "invalid_release", "the first convention has no convention_id (malformed; the .meta.json path reads it too)",
+     changed_doc(lambda d: d["conventions"][1].pop("convention_id")), None),
+    ("created-not-string", "invalid_release", "release.created is the number 2099 (malformed)",
+     changed_doc(lambda d: d["release"].update(created=2099)), index_honest),
+    ("source-versions-not-object", "invalid_release", "release.source_versions is a list (malformed)",
+     changed_doc(lambda d: d["release"].update(source_versions=["gesla 4.1"])), None),
+    # Reference-reader coverage (review round 1, B2-T1): each rule of the reader decides one of these outcomes, so
+    # turning a rule off fails --check. The first three are reader-only (D37: SDKs do not cross-check the files of a
+    # release; each file is checked against OTC_{D}.sha256).
+    ("gz-differs", "checksum_mismatch", "honest digests, but the .json.gz decompresses to other data than the .json (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_gz_differs)),
+    ("jsonl-differs", "invalid_release", "honest digests, but a .jsonl line differs from the .json station (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_jsonl_differs)),
+    ("meta-differs", "invalid_release", "honest digests, but the .meta.json differs from the .json without stations (reader only, D37)",
+     lambda: [release_doc(BASE)], honest(_meta_differs)),
+    ("size-mismatch", "checksum_mismatch", "the pointer and index give the .jsonl one byte more than its size; every SHA-256 is right",
+     lambda: [release_doc(BASE)], size_mismatch),
+    ("sums-extra-file", "checksum_mismatch", "OTC_20991231.sha256 lists a file the pointer does not list (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sums_extra_file),
+    ("sha256-file-differs", "checksum_mismatch", "the pointer's SHA-256 of OTC_20991231.sha256 is not the file's (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sha256_file_differs),
+    ("sums-disagree", "checksum_mismatch", "OTC_20991231.sha256 gives another SHA-256 for the .jsonl than the pointer; the file matches the pointer (spec 5.2 step 4.1)",
+     lambda: [release_doc(BASE)], sums_disagree),
+    ("unresolved-licence", "invalid_release", "OTC-T-0010's set has licence_id no-such-licence",
+     changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0].update(licence_id="no-such-licence")), None),
+    ("unresolved-recommended", "invalid_release", "OTC-T-0010's recommended_set_id names no set of the station",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(recommended_set_id="OTC-T-0010/no-such-set")), None),
+    ("duplicate-alias", "invalid_release", "OTC-T-0002 has the noaa alias 9900001 of OTC-T-0001 (spec 4.4: alias ids are unique in a system)",
+     changed_doc(lambda d: _station(d, "OTC-T-0002")["aliases"].update(noaa="9900001")), None),
+    ("duplicate-station-id", "invalid_release", "OTC-T-0020 appears twice (the second line's set has another set_id, so the station id is the only duplicate)",
+     changed_doc(_duplicate_station), None),
+    ("lat-nan", "invalid_release", "OTC-T-0010's lat is NaN, which is not JSON (RFC 8259) though Python's json module writes and reads it",
+     changed_doc(lambda d: _station(d, "OTC-T-0010").update(lat=float("nan"))), None),
+    ("jsonl-wrong-sha256", "checksum_mismatch", "only the .jsonl has one byte changed (same size); the .json and .json.gz are honest, so only the hash check catches it",
+     lambda: [release_doc(BASE)], _jsonl_one_byte),
+    ("index-invalid", "load", "the release is good, but its OTC_index.json entry has a content_sha256 that is not a digest (the index fails otc-index-1.0)",
+     lambda: [release_doc(BASE)], index_content_digest_bad, {"index_invalid": True}),
+    ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
+     _too_new_broken, None, {"valid_as_1_0": False}),
 ]
 
 
@@ -611,7 +810,8 @@ def restore_station_build(st):
     """One station (a .jsonl line) with every missing provenance.build put back."""
     st = copy.deepcopy(st)
     for cs in st.get("constant_sets", []):
-        cs["provenance"].setdefault("build", dict(BUILD))
+        if isinstance(cs.get("provenance"), dict):   # the same sets the detection picks
+            cs["provenance"].setdefault("build", dict(BUILD))
     return st
 
 
@@ -710,6 +910,61 @@ def small_doc(datestamp, full=False, concept_doi="10.5072/zenodo.1"):
     return doc
 
 
+VALUES = "20991231.2"
+FOLD_D = "20991231.2"
+
+
+def values_doc():
+    """Values the SDKs gave four answers for (review round 1, PK08), in a valid 1.0 release:
+    a created time with an offset and a fraction, a validation previous_release with a non-number value, a station
+    name with a NUL inside, and one that ends in NUL."""
+    doc = small_doc(VALUES)
+    doc["release"]["created"] = "2099-12-31T02:00:00.5+02:00"
+    s1 = doc["stations"][0]
+    s1["validation"] = [{"set_id": f"{s1['station_id']}/noaa", "reference_source": "noaa", "window": "2099-01",
+                         "time_mae_min": 1.5, "height_mae_m": 0.01, "previous_release": {"time_mae_min": "n/a", "height_mae_m": 0.02}}]
+    doc["stations"] += [gauge_station("OTC-T-0151", "Me\u0000da", "MLT", 35.9, 14.5, "Europe/Malta", 0.4),
+                        gauge_station("OTC-T-0152", "Pier\u0000", "MLT", 35.8, 14.4, "Europe/Malta", 0.4)]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
+def kept_reason_doc():
+    """A constituent kept_reason of 48 bytes (the schema sets no maxLength; PK08 B2-1, D13)."""
+    doc = small_doc(VALUES)
+    doc["stations"][0]["constant_sets"][0]["constituents"][0]["kept_reason"] = "snr above 2.0 and stable across the yearly fits"
+    return doc
+
+
+def source_name_doc():
+    """A constituent source_name of 31 characters that are 62 UTF-8 bytes (maxLength counts characters; PK08 B2-2)."""
+    doc = small_doc(VALUES)
+    doc["stations"][0]["constant_sets"][0]["constituents"][0]["source_name"] = "\u00d8" * 31
+    return doc
+
+
+FOLD_NAMES = [("OTC-T-0161", "\u0126amrun"), ("OTC-T-0162", "\u0166orvik"), ("OTC-T-0163", "\u014aaliq"),
+              ("OTC-T-0164", "\u0138immik"), ("OTC-T-0165", "\u03a0\u03cc\u03c1\u03bf\u03c2"),
+              ("OTC-T-0166", "Paral\u00b7lel"), ("OTC-T-0167", "Saint\u00a0Malo")]
+
+
+def fold_doc():
+    """Station names for the fold rules of D12: \u03c2 (final sigma), \u0127, \u0167, \u014b, \u0138, the middle dot and NBSP."""
+    doc = small_doc(FOLD_D)
+    doc["stations"] += [gauge_station(sid, name, "MLT", 35.0 + i / 10, 14.0, "Europe/Malta", 0.3)
+                        for i, (sid, name) in enumerate(FOLD_NAMES)]
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
+def no_gz(files, sums, entry, reuse):
+    """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
+    files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
+    entry = copy.deepcopy(entry)
+    entry["files"] = [f for f in entry["files"] if not f["name"].endswith(".json.gz")]
+    return rehash(files, sums, entry)
+
+
 ROOTS = [
     # (root, docs, version DOIs, zenodo_material, manifest entry)
     ("good", lambda: [release_doc(BASE), release_doc(SECOND)], {SECOND: "10.5072/zenodo.2"}, (),
@@ -726,6 +981,15 @@ ROOTS = [
       "expect": "load", "expect_by_release": {READER_NEW: {"error": "reader_too_old"}}, "defect": None,
       "note": f"the pointers name {READER_NEW} (min_reader_version {TOO_NEW}); a 1.0 reader takes {READER_OK} "
               "from OTC_index.json (spec 5.2 step 2a)"}),
+    ("values", lambda: [values_doc()], {VALUES: "10.5072/zenodo.5"}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None,
+      "note": "created with an offset and a fraction, a non-number in validation.previous_release, station names with a NUL"}),
+    ("values-kept-reason", lambda: [kept_reason_doc()], {}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a kept_reason of 48 bytes"}),
+    ("values-source-name", lambda: [source_name_doc()], {}, (),
+     {"releases": [VALUES], "latest": VALUES, "expect": "load", "defect": None, "note": "a source_name of 31 characters, 62 bytes"}),
+    ("fold", lambda: [fold_doc()], {}, (),
+     {"releases": [FOLD_D], "latest": FOLD_D, "expect": "load", "defect": None, "note": "station names for the D12 fold rules"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
@@ -746,11 +1010,14 @@ def build(out, reuse):
     for name, docs, vdois, material, entry in ROOTS:
         write_root(out / name, docs(), reuse_root=(reuse / name) if reuse else None, version_dois=vdois, material=material)
         manifest["fixtures"].append({"root": name, **entry})
-    for name, expect, defect, docs, tamper in BAD:
+    write_root(out / "nogz", [release_doc(SECOND)], reuse_root=(reuse / "nogz") if reuse else None, tamper=no_gz)
+    manifest["fixtures"].append({"root": "nogz", "releases": [SECOND], "latest": SECOND, "expect": "load", "defect": None,
+                                 "note": "the release publishes no .json.gz"})
+    for name, expect, defect, docs, tamper, *extra in BAD:
         write_root(out / "bad" / name, docs(), reuse_root=(reuse / "bad" / name) if reuse else None, tamper=tamper)
         manifest["fixtures"].append({"root": f"bad/{name}", "releases": [BASE], "latest": BASE,
                                      "expect": expect if expect == "load" else {"error": expect},
-                                     "defect": defect})
+                                     "defect": defect, **(extra[0] if extra else {})})
     (out / "fixtures.json").write_bytes(dumps_pretty(manifest))
 
 
@@ -777,12 +1044,37 @@ def fetch_schema(version, schema_dir=None):
 
 def load_schemas(schema_dir=None):
     """Every pinned schema: {"1.0": ..., "index-1.0": ...}."""
+    _require_formats()
     return {v: fetch_schema(v, schema_dir) for v in SCHEMAS}
 
 
 def version_key(v):
     major, minor = (int(x) for x in str(v).split("."))
     return major, minor
+
+
+def _not_json(token):
+    raise ValueError(f"{token} is not JSON")
+
+
+def strict_json(text):
+    """json.loads that refuses NaN and Infinity (they are not JSON, RFC 8259; Python accepts them)."""
+    return json.loads(text, parse_constant=_not_json)
+
+
+def checked_version(v, what):
+    """A MAJOR.MINOR version from a release (spec 7.4); anything else is invalid_release (D9), never a raw error."""
+    if not isinstance(v, str) or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", v):
+        raise Fail("invalid_release", f"{what} {v!r} is not MAJOR.MINOR")
+    return version_key(v)
+
+
+def read_file(root, name):
+    """A file the release names. A missing one is what an SDK sees as a 404 for a listed file (D32: network)."""
+    try:
+        return (root / name).read_bytes()
+    except FileNotFoundError:
+        raise Fail("network", f"{name} is listed but missing") from None
 
 
 def resolve(schema, node):
@@ -826,6 +1118,10 @@ def strip_unknown(schema, value, node):
 
 def cross_ref_errors(doc):
     errs = []
+    for what, key in (("conventions", "convention_id"), ("licences", "licence_id")):
+        ids = [x[key] for x in doc[what]]
+        if len(ids) != len(set(ids)):
+            errs.append(f"duplicate {key} in {what}")
     conv = {c["convention_id"] for c in doc["conventions"]}
     lic = {l["licence_id"] for l in doc["licences"]}
     table = {(c["constituent_table_version"], c["name"]) for c in doc["constituents"]}
@@ -869,7 +1165,8 @@ def cross_ref_errors(doc):
             if cs["licence_id"] not in lic:
                 errs.append(f"{cs['set_id']}: licence_id {cs['licence_id']} does not resolve")
             tv = conv_table.get(cs["convention_id"])
-            for c in cs["constituents"] + cs.get("dropped_constituents", []):
+            current = [c for b in cs.get("current_bins", []) for c in b.get("constituents", [])]
+            for c in cs["constituents"] + cs.get("dropped_constituents", []) + current:
                 if tv and (tv, c["name"]) not in table:
                     errs.append(f"{cs['set_id']}: constituent {c['name']} not in table {tv}")
             at = conv_astro.get(cs["convention_id"])
@@ -882,19 +1179,27 @@ def cross_ref_errors(doc):
         rec = s["recommended_set_id"]
         if rec is not None and rec not in own:
             errs.append(f"{sid}: recommended_set_id {rec} does not resolve")
+        # The schema's rules (active_station if/then/else): a reference station with a set that has constants names
+        # a recommended set; a subordinate has subordinate_offsets, current_offsets or a set, and may have no
+        # recommended set (a subordinate current station has only current_offsets, like the site's example.json).
         all_no_constants = bool(s["constant_sets"]) and all(cs["qc_status"] == "no_constants" for cs in s["constant_sets"])
-        if rec is None and not (s["type"] == "subordinate" and "subordinate_offsets" in s) and not all_no_constants:
-            errs.append(f"{sid}: recommended_set_id is null but the station is not a subordinate with offsets")
+        if rec is None and s["type"] == "reference" and not all_no_constants:
+            errs.append(f"{sid}: a reference station with usable sets has no recommended_set_id")
         if rec in own and next(cs for cs in s["constant_sets"] if cs["set_id"] == rec)["qc_status"] in ("no_constants", "excluded"):
             errs.append(f"{sid}: the recommended set {rec} has no usable constants")
-        if s["type"] == "subordinate" and "subordinate_offsets" not in s:
-            errs.append(f"{sid}: subordinate without subordinate_offsets")
+        if s["type"] == "subordinate" and not ("subordinate_offsets" in s or "current_offsets" in s or s["constant_sets"]):
+            errs.append(f"{sid}: subordinate with no subordinate_offsets, current_offsets or constant set")
         off = s.get("subordinate_offsets")
         if off:
             if off["reference_station_id"] not in active_ids:
                 errs.append(f"{sid}: reference_station_id {off['reference_station_id']} does not resolve")
             if "licence_id" in off and off["licence_id"] not in lic:
                 errs.append(f"{sid}: offsets licence_id {off['licence_id']} does not resolve")
+        for co in s.get("current_offsets", []):
+            if co["reference_station_id"] not in active_ids:
+                errs.append(f"{sid}: current_offsets reference_station_id {co['reference_station_id']} does not resolve")
+            if "licence_id" in co and co["licence_id"] not in lic:
+                errs.append(f"{sid}: current_offsets licence_id {co['licence_id']} does not resolve")
         for v in s.get("validation", []):
             if v["set_id"] not in own:
                 errs.append(f"{sid}: validation set_id {v['set_id']} does not resolve")
@@ -903,6 +1208,9 @@ def cross_ref_errors(doc):
                 owner = seen_alias.setdefault((system, a), sid)
                 if owner != sid:
                     errs.append(f"alias {system}:{a} used by {owner} and {sid}")
+    for t in doc["stations"]:
+        if t["status"] == "removed" and t.get("merged_into") is not None and t["merged_into"] not in active_ids:
+            errs.append(f"{t['station_id']}: merged_into {t['merged_into']} does not resolve")
     return errs
 
 
@@ -914,13 +1222,15 @@ def open_release(root, datestamp, schemas):
         raise Fail("release_not_found", datestamp)
     sums_path = root / f"OTC_{datestamp}.sha256"
     sums = {}
-    for line in sums_path.read_text(encoding="utf-8").splitlines():
-        digest, name = line.split("  ", 1)
-        sums[name] = digest
+    for line in read_file(root, sums_path.name).decode("utf-8", "replace").splitlines():
+        m = re.fullmatch(r"([0-9a-f]{64})  (\S.*)", line)
+        if not m:
+            raise Fail("checksum_mismatch", f"{sums_path.name}: a line that is not '<sha256>  <name>': {line[:80]!r}")
+        sums[m.group(2)] = m.group(1)
     # Spec 5.2 step 4.1: the pointer and the .sha256 file must agree.
     for f in entry["files"]:
         if f["name"] == sums_path.name:
-            if sha(sums_path.read_bytes()) != f["sha256"]:
+            if sha(read_file(root, sums_path.name)) != f["sha256"]:
                 raise Fail("checksum_mismatch", f"{f['name']}: pointer and file differ")
             continue
         if sums.get(f["name"]) != f["sha256"]:
@@ -929,30 +1239,38 @@ def open_release(root, datestamp, schemas):
         raise Fail("checksum_mismatch", "pointer and .sha256 list different files")
     # Step 4.2: size and SHA-256 of every file.
     for f in entry["files"]:
-        data = (root / f["name"]).read_bytes()
+        data = read_file(root, f["name"])
         if len(data) != f["size"]:
             raise Fail("checksum_mismatch", f"{f['name']}: size {len(data)} vs {f['size']}")
         if sha(data) != f["sha256"]:
             raise Fail("checksum_mismatch", f"{f['name']}: sha256 {sha(data)} vs {f['sha256']}")
-    body = (root / f"OTC_{datestamp}.json").read_bytes()
-    if gzip.decompress((root / f"OTC_{datestamp}.json.gz").read_bytes()) != body:
-        raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
+    body = read_file(root, f"OTC_{datestamp}.json")
+    if f"OTC_{datestamp}.json.gz" in {f["name"] for f in entry["files"]}:   # a release need not publish .json.gz
+        try:
+            unzipped = gzip.decompress(read_file(root, f"OTC_{datestamp}.json.gz"))
+        except (OSError, EOFError, zlib.error) as e:
+            raise Fail("checksum_mismatch", f".json.gz is not gzip: {type(e).__name__}: {e}") from None
+        if unzipped != body:
+            raise Fail("checksum_mismatch", ".json.gz does not decompress to .json")
     try:
-        doc = json.loads(body)
-        meta = json.loads((root / f"OTC_{datestamp}.meta.json").read_bytes())
-        lines = [json.loads(l) for l in (root / f"OTC_{datestamp}.jsonl").read_text(encoding="utf-8").splitlines()]
+        doc = strict_json(body)
+        meta = strict_json(read_file(root, f"OTC_{datestamp}.meta.json"))
+        lines = [strict_json(l) for l in read_file(root, f"OTC_{datestamp}.jsonl").decode("utf-8").splitlines()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
+    if not isinstance(doc, dict):
+        raise Fail("invalid_release", "the release is not a JSON object")
     # Spec 7.4: the major must be supported, and release.min_reader_version must be readable.
-    major, minor = version_key(doc.get("format_version", ""))
+    major, minor = checked_version(doc.get("format_version"), "format_version")
     if major not in SUPPORTED_MAJORS:
         raise Fail("unsupported_format", f"format_version {doc['format_version']}")
     min_reader = (doc.get("release") or {}).get("min_reader_version")
-    if min_reader is not None and version_key(min_reader) > READER_FORMAT:
+    if min_reader is not None and checked_version(min_reader, "release.min_reader_version") > READER_FORMAT:
         raise Fail("reader_too_old", f"release {datestamp} needs a reader for format {min_reader}; "
                                      f"this reader reads format {'%d.%d' % READER_FORMAT}")
-    checked, dropped = validate_release(doc, meta, lines, schemas,
-                                        allow_missing_build=root.resolve() == (FIXTURES / "bad" / "no-build").resolve())
+    # spec 4.6: a set with no provenance.build is malformed 1.0, but an SDK loads it (build null): a general rule.
+    # The tolerance is reported in unknown_fields, so a root outside bad/ that needs it fails --check.
+    checked, dropped = validate_release(doc, meta, lines, schemas, allow_missing_build=True)
     if lines != doc["stations"]:
         raise Fail("invalid_release", ".jsonl lines differ from .json stations")
     if meta != {k: v for k, v in doc.items() if k != "stations"}:
@@ -963,14 +1281,17 @@ def open_release(root, datestamp, schemas):
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
-    Only for bad/no-build (allow_missing_build) is a set with no provenance.build tolerated: the .json, every
-    .jsonl line and the .meta.json are then checked with the build put back, so it is the only defect.
+    With allow_missing_build a set with no provenance.build is tolerated (spec 4.6): the .json, every .jsonl line
+    and the .meta.json are then checked with the build put back, so it is the only defect, and the tolerance is
+    listed in the returned paths.
     Returns (the checked document, the dropped paths) or raises Fail."""
     version = version_key(doc["format_version"])
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
     tolerated = []
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
-    missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", []) if "build" not in cs.get("provenance", {})]
+    # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
+    missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", [])
+               if isinstance(cs.get("provenance"), dict) and "build" not in cs["provenance"]]
     if missing and allow_missing_build:
         tolerated = [f"no provenance.build in {m}" for m in missing]
         doc = restore_build(doc)
@@ -995,14 +1316,15 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
                 if cs["qc_status"] not in known_qc:
                     dropped.append(f"{cs['set_id']}: qc_status {cs['qc_status']!r} (read as other)")
                     cs["qc_status"] = "flagged"
-    errs = [f"{list(e.path)} {e.message}" for e in Draft202012Validator(schema).iter_errors(checked)]
-    errs += cross_ref_errors(checked)
+    errs = [f"{list(e.path)} {e.message}" for e in validator(schema).iter_errors(checked)]
+    if not errs:   # the cross-references assume the types the schema gives
+        errs = cross_ref_errors(checked)
     if errs:
         raise Fail("invalid_release", "; ".join(errs[:5]))
     if exact is not None:
         defs = {"$schema": schema["$schema"], "$defs": schema["$defs"]}
-        meta_v = Draft202012Validator({**defs, "$ref": "#/$defs/meta"})
-        st_v = Draft202012Validator({**defs, "$ref": "#/$defs/station"})
+        meta_v = validator({**defs, "$ref": "#/$defs/meta"})
+        st_v = validator({**defs, "$ref": "#/$defs/station"})
         errs = [f"meta {e.message}" for e in meta_v.iter_errors(meta)]
         errs += [f"jsonl line {i + 1}: {e.message}" for i, l in enumerate(lines) for e in st_v.iter_errors(l)]
         if errs:
@@ -1013,20 +1335,30 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
 def as_readable(root, datestamp, schemas):
     """For a release that no 1.0 reader reads (min_reader_version 1.99, or format 2.0): its data must still be a
     valid format 1.0 release once the two version fields say 1.0, so the version is its only defect."""
-    doc = json.loads((root / f"OTC_{datestamp}.json").read_bytes())
-    doc["format_version"] = FORMAT
-    doc["release"]["min_reader_version"] = FORMAT
-    doc.pop("future_top_level", None)
-    meta = {k: v for k, v in doc.items() if k != "stations"}
-    validate_release(doc, meta, doc["stations"], schemas)
+    def as_10(d):
+        d["format_version"] = FORMAT
+        d["release"]["min_reader_version"] = FORMAT
+        d.pop("future_top_level", None)
+        return d
+
+    doc = as_10(json.loads((root / f"OTC_{datestamp}.json").read_bytes()))
+    meta = as_10(json.loads((root / f"OTC_{datestamp}.meta.json").read_bytes()))
+    lines = [json.loads(l) for l in (root / f"OTC_{datestamp}.jsonl").read_text(encoding="utf-8").splitlines()]
+    # the .jsonl and .meta.json of such a release are read too (format/reader-too-old opens the .jsonl): they must
+    # agree with the .json, and each is validated on its own
+    if lines != doc["stations"]:
+        raise Fail("invalid_release", ".jsonl lines differ from .json stations")
+    if meta != {k: v for k, v in doc.items() if k != "stations"}:
+        raise Fail("invalid_release", ".meta.json differs from .json without stations")
+    validate_release(doc, meta, lines, schemas)
 
 
 def index_errors(root, schemas):
     """OTC_index.json validates against otc-index-1.0, each pointer against its release_info."""
     schema = schemas["index-1.0"]
     errs = [f"OTC_index.json {list(e.path)} {e.message}"
-            for e in Draft202012Validator(schema).iter_errors(json.loads((root / "OTC_index.json").read_bytes()))]
-    info = Draft202012Validator({"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/release_info"})
+            for e in validator(schema).iter_errors(json.loads((root / "OTC_index.json").read_bytes()))]
+    info = validator({"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/release_info"})
     for p in sorted(root.glob("OTC_latest*.json")):
         errs += [f"{p.name} {e.message}" for e in info.iter_errors(json.loads(p.read_bytes()))]
     return errs
@@ -1059,10 +1391,16 @@ def check_pointers(root, fixture):
     latest = json.loads((root / "OTC_latest.json").read_bytes())
     if latest != index["releases"][0] or latest["datestamp"] != fixture["latest"]:
         errs.append("OTC_latest.json is not the newest index entry")
-    major = int(latest["format_version"].split(".")[0])
-    per_major = root / f"OTC_latest-f{major}.json"
-    if not per_major.exists() or json.loads(per_major.read_bytes()) != latest:
-        errs.append(f"{per_major.name} missing or differs from OTC_latest.json")
+    # every per-major pointer is the newest index entry of its major (not only the latest release's major)
+    majors = sorted({int(e["format_version"].split(".")[0]) for e in index["releases"]})
+    for major in majors:
+        newest = next(e for e in index["releases"] if int(e["format_version"].split(".")[0]) == major)
+        per_major = root / f"OTC_latest-f{major}.json"
+        if not per_major.exists() or json.loads(per_major.read_bytes()) != newest:
+            errs.append(f"{per_major.name} missing or not the newest index entry of major {major}")
+    extra = sorted(p.name for p in root.glob("OTC_latest-f*.json") if p.name not in {f"OTC_latest-f{m}.json" for m in majors})
+    if extra:
+        errs.append(f"per-major pointers with no release of that major: {extra}")
     return errs
 
 
@@ -1096,7 +1434,13 @@ def check(schema_dir=None):
     for fx in manifest["fixtures"]:
         root = FIXTURES / fx["root"]
         errs = check_pointers(root, fx)
-        errs += index_errors(root, schemas)
+        ierrs = index_errors(root, schemas)
+        if fx.get("index_invalid"):   # this fixture's index must fail otc-index-1.0
+            if not ierrs:
+                errs.append("the index should fail otc-index-1.0, and it passes")
+            print(f"{'PASS' if ierrs else 'FAIL'}  {fx['root']:30} index fails otc-index-1.0 as it should  [{'; '.join(ierrs)[:120]}]")
+        else:
+            errs += ierrs
         for d in fx["releases"]:
             expect = (fx.get("expect_by_release") or {}).get(d, fx["expect"])
             try:
@@ -1112,9 +1456,15 @@ def check(schema_dir=None):
             if outcome in ({"error": "reader_too_old"}, {"error": "unsupported_format"}):
                 try:
                     as_readable(root, d, schemas)
+                    readable = None
                 except Fail as e:
+                    readable = e
+                if fx.get("valid_as_1_0", True) and readable is not None:
                     ok = False
-                    errs.append(f"{d}: not a valid {FORMAT} release apart from its versions: {e}")
+                    errs.append(f"{d}: not a valid {FORMAT} release apart from its versions: {readable}")
+                elif not fx.get("valid_as_1_0", True) and readable is None:
+                    ok = False
+                    errs.append(f"{d}: should not be a valid {FORMAT} release apart from its versions, and it is")
             print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} {d:11} expect {json.dumps(expect):32} got {json.dumps(outcome)}  [{detail}]")
         if "latest_readable" in fx:
             got = readable_latest(root)
@@ -1122,22 +1472,24 @@ def check(schema_dir=None):
             if not ok:
                 errs.append(f"latest for a {'%d.%d' % READER_FORMAT} reader is {got}, not {fx['latest_readable']}")
             print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} latest for a {'%d.%d' % READER_FORMAT} reader is {got}")
-        if not fx["root"].startswith("bad/"):
-            # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
-            for d in fx["releases"]:
-                try:
-                    got = open_release(root, d, schemas)
-                except Fail:
-                    continue
-                if got["unknown_fields"]:
-                    errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
-        if fx["expect"] == "load" and fx["root"].startswith("bad/"):
-            # The higher-minor release must actually carry unknown fields.
+        for d in fx["releases"]:
+            expect = (fx.get("expect_by_release") or {}).get(d, fx["expect"])
+            if expect != "load":
+                continue   # an error outcome is checked above
             try:
-                if not open_release(root, fx["releases"][0], schemas)["unknown_fields"]:
-                    errs.append("higher-minor fixture has no unknown fields")
-            except Fail:
-                pass
+                got = open_release(root, d, schemas)
+            except Fail as e:
+                errs.append(f"{d}: does not load: {e}")   # also reported above; never skipped in silence
+                continue
+            if not fx["root"].startswith("bad/") and got["unknown_fields"]:
+                # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
+                errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
+            if version_key(got["format_version"]) > READER_FORMAT:
+                # A release in a higher minor must carry fields this reader does not know, at several levels: only
+                # schema paths count ($.-prefixed), not the other tolerances (a qc_status read as other, a missing build).
+                schema_paths = [x for x in got["unknown_fields"] if x.startswith("$.")]
+                if len(schema_paths) < 2:
+                    errs.append(f"{d}: a format {got['format_version']} release with too few unknown fields: {schema_paths}")
         problems += [f"{fx['root']}: {e}" for e in errs]
     if problems:
         print(f"{len(problems)} PROBLEMS")
@@ -1151,23 +1503,38 @@ def check(schema_dir=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="check the committed fixtures; write nothing")
-    parser.add_argument("--schema-dir", help="a directory with local copies of the pinned schemas "
-                                             "(otc-1.0.schema.json, otc-index-1.0.schema.json); default: download them")
+    parser.add_argument("--schema-dir", default=str(VENDORED_SCHEMAS),
+                        help="a directory with copies of the pinned schemas (otc-1.0.schema.json, otc-index-1.0.schema.json); "
+                             "default: conformance/schemas")
+    parser.add_argument("--download-schemas", action="store_true",
+                        help="fetch the pinned schemas from the site repository instead of reading --schema-dir")
     args = parser.parse_args()
     if args.check:
-        return check(args.schema_dir)
-    with tempfile.TemporaryDirectory() as tmp:
-        build(Path(tmp), FIXTURES if FIXTURES.exists() else None)
-        for name in GENERATED:
-            target = FIXTURES / name
-            if target.is_dir():
-                shutil.rmtree(target)
-            elif target.exists():
-                target.unlink()
-        FIXTURES.mkdir(parents=True, exist_ok=True)
-        for name in GENERATED:
-            src = Path(tmp) / name
-            (shutil.copytree if src.is_dir() else shutil.copy2)(src, FIXTURES / name)
+        return check(None if args.download_schemas else args.schema_dir)
+    FIXTURES.mkdir(parents=True, exist_ok=True)
+    # Build next to the fixtures (the same file system), then swap each generated target in with a rename. If a
+    # swap fails part-way, the targets already moved are put back: the fixtures are all new or all old.
+    with tempfile.TemporaryDirectory(dir=FIXTURES.parent, prefix=".fixtures-") as tmp:
+        new, old = Path(tmp) / "new", Path(tmp) / "old"
+        build(new, FIXTURES)
+        old.mkdir()
+        moved, placed = [], []
+        try:
+            for name in GENERATED:
+                target = FIXTURES / name
+                if target.exists():
+                    os.replace(target, old / name)
+                    moved.append(name)
+                os.replace(new / name, target)
+                placed.append(name)
+        except BaseException:
+            for name in placed:
+                target = FIXTURES / name
+                (shutil.rmtree if target.is_dir() else os.unlink)(target)
+            for name in moved:
+                os.replace(old / name, FIXTURES / name)
+            print(f"could not write the fixtures; the old ones are back under {FIXTURES}", file=sys.stderr)
+            raise
     print(f"wrote fixtures under {FIXTURES}")
     return 0
 
