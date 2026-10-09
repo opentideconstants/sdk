@@ -1131,7 +1131,6 @@
   {
    "case": "rules/pk11/bad-sha256-file-differs-latest",
    "runners": [
-    "c-fetch",
     "python",
     "typescript"
    ],
@@ -1141,7 +1140,6 @@
   {
    "case": "rules/pk11/bad-sums-extra-file-latest",
    "runners": [
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

@@ -1777,16 +1777,28 @@ static const char *row_of(char **names, char **digests, size_t n, const char *na
     return NULL;
 }
 
-static otc_status check_pointer(fctx *c, const otc_release_info *info, char **names, char **digests, size_t n)
+/* Spec 5.2 step 4.1: the pointer (or index entry) and OTC_{D}.sha256 agree. The
+ * .sha256 file's own digest is the pointer's row for it, each data file's row
+ * is the pointer's, and the .sha256 lists no file the pointer does not list.
+ * sums_hex is the SHA-256 of the .sha256 file. */
+static otc_status check_pointer(fctx *c, const otc_release_info *info, char **names, char **digests, size_t n,
+                                const char *sums_name, const char *sums_hex)
 {
     size_t i;
-    if (!info) return OTC_OK;
+    const otc_file_info *self;
+    if (!info || !info->n_files) return OTC_OK;
+    self = info_file(info, sums_name);
+    if (self && self->sha256 && strcmp(self->sha256, sums_hex) != 0)
+        return fail_checksum(c, sums_name, self->sha256, sums_hex, "the pointer's SHA-256 of the .sha256 file does not match it");
     for (i = 0; i < info->n_files; i++) {
         const char *row = row_of(names, digests, n, info->files[i].name);
         if (row && info->files[i].sha256 && strcmp(row, info->files[i].sha256) != 0)
             return fail_checksum(c, info->files[i].name, row, info->files[i].sha256,
                                  "the pointer and the .sha256 file disagree");
     }
+    for (i = 0; i < n; i++)
+        if (!info_file(info, names[i]))
+            return fail_checksum(c, names[i], digests[i], "", "the .sha256 file lists a file that the pointer does not");
     return OTC_OK;
 }
 
@@ -1854,7 +1866,7 @@ static void utc_now(char out[32])
 static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_info *info, otc_release **rel_out)
 {
     char *dir = rel_dir(c, ds), *sha_tmp = NULL, *sha_url = NULL, *jsonl_path = NULL;
-    char **names = NULL, **digests = NULL, sha_name[NAME_CAP];
+    char **names = NULL, **digests = NULL, sha_name[NAME_CAP], sums_hex[65];
     size_t n_rows = 0, n_pend = 0, i;
     pending pend[4];
     cJSON *old = NULL, *ver = NULL, *files;
@@ -1880,13 +1892,14 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     if (!sha_url || !sha_tmp) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
     st = http_get(c, sha_url, NULL, 1, sha_tmp, &r, &res);
     if (st == OTC_OK && res == GET_NOT_FOUND) st = fail(c, OTC_E_RELEASE_NOT_FOUND, sha_url, "release %s not found (%s)", ds, sha_url);
+    memcpy(sums_hex, r.hex, sizeof sums_hex);
     resp_free(&r);
     if (st != OTC_OK) goto out;
     if ((st = otc__sha256_rows(sha_tmp, &names, &digests, &n_rows)) != OTC_OK) {
         st = fail(c, st == OTC_E_NOMEM ? st : OTC_E_CACHE, sha_tmp, "cannot read %s", sha_tmp);
         goto out;
     }
-    if ((st = check_pointer(c, info, names, digests, n_rows)) != OTC_OK) goto out;
+    if ((st = check_pointer(c, info, names, digests, n_rows, sha_name, sums_hex)) != OTC_OK) goto out;
 
     /* 2. the data files (a file already there and recorded with the same SHA-256 is kept) */
     old = read_verified(c, ds);
@@ -2613,14 +2626,16 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         if (st != OTC_OK) goto out;
     }
     if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) { fail(&c, st, NULL, "out of memory"); goto out; }
-    if ((st = check_pointer(&c, info, names, digests, n_rows)) != OTC_OK) goto out;
     {
         struct Sha_256 s;
         uint8_t h[SIZE_OF_SHA_256_HASH];
+        char sums_name[NAME_CAP];
         sha_256_init(&s, h);
         sha_256_write(&s, sha_body, sha_len);
         sha_256_close(&s);
         hex_of(h, sha_digest);
+        snprintf(sums_name, sizeof sums_name, "OTC_%s.sha256", ds);
+        if ((st = check_pointer(&c, info, names, digests, n_rows, sums_name, sha_digest)) != OTC_OK) goto out;
     }
     /* the targets: the formats asked for, the .meta.json, then the .sha256 */
     for (i = 0; FMT[i].ext; i++) {
