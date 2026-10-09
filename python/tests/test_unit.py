@@ -335,6 +335,67 @@ class LockAndPruneTest(unittest.TestCase):
             srv.close()
 
 
+class StreamIndexTest(unittest.TestCase):
+    """The stream index is checked, not trusted (spec §6.2, CR D4, D17; review PK05)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.cache = self.root / "cache"
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream").close()
+        finally:
+            srv.close()
+        self.index = self.cache / "v1" / "releases" / "20991231.2" / "index-v1.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def reopen(self):
+        return otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+
+    def test_index_entry_with_a_null_lat_is_stale(self):
+        idx = json.loads(self.index.read_text(encoding="utf-8"))
+        idx["stations"][0]["lat"] = None
+        self.index.write_text(json.dumps(idx), encoding="utf-8")
+        with self.reopen() as c:
+            self.assertTrue(len(c.near(lat=37.8, lon=-122.4, radius_km=5000)) > 0)
+
+    def test_deeply_nested_index_is_stale_not_a_recursion_error(self):
+        self.index.write_text("[" * 200000 + "]" * 200000, encoding="utf-8")
+        with self.reopen() as c:
+            self.assertEqual(c.station("OTC-T-0001").station_id, "OTC-T-0001")
+
+    def test_line_that_does_not_match_its_entry_is_invalid_release_and_drops_the_index(self):
+        idx = json.loads(self.index.read_text(encoding="utf-8"))
+        a, b = idx["stations"][0], idx["stations"][1]
+        a["station_id"], b["station_id"] = b["station_id"], a["station_id"]
+        idx["stations"][0], idx["stations"][1] = b, a  # keep the entries in offset order
+        idx["stations"].sort(key=lambda e: e["offset"])
+        self.index.write_text(json.dumps(idx), encoding="utf-8")
+        with self.reopen() as c:
+            with self.assertRaises(otc.InvalidReleaseError) as cm:
+                c.station(a["station_id"])
+            self.assertIn("index-v1.json", str(cm.exception))
+        self.assertFalse(self.index.exists())
+        with self.reopen() as c:
+            self.assertEqual(c.station(a["station_id"]).station_id, a["station_id"])
+
+    def test_lone_surrogate_is_invalid_release(self):
+        lines = (FIXTURES / "good" / "OTC_20991231.2.jsonl").read_text(encoding="utf-8").splitlines()
+        lines[0] = lines[0].replace('"name": "', '"name": "\\ud800', 1).replace('"name":"', '"name":"\\ud800', 1)
+        self.assertIn("\\ud800", lines[0])
+        d = self.root / "rel"
+        d.mkdir()
+        (d / "OTC_20991231.2.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (d / "OTC_20991231.2.meta.json").write_bytes((FIXTURES / "good" / "OTC_20991231.2.meta.json").read_bytes())
+        for mode in ("eager", "stream"):
+            with self.assertRaises(otc.InvalidReleaseError, msg=mode):
+                otc.OpenTideConstants(file=str(d / "OTC_20991231.2.jsonl"), mode=mode).close()
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

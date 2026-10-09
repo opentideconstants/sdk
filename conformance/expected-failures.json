@@ -50,14 +50,6 @@
    "reason": "step 3 assert_index: index-v1.json: stations[2] (OTC-T-0152): name_folded is 'pier', expected 'pier\\x00'"
   },
   {
-   "case": "cross/index-offset-past-eof[c>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-xje9y55d/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[c>ruby]",
    "runners": [
     "cross"
@@ -90,14 +82,6 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
-   "case": "cross/index-offset-past-eof[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-xmibidzu/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[ruby>typescript]",
    "runners": [
     "cross"
@@ -106,28 +90,12 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
-   "case": "cross/index-offset-past-eof[typescript>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-do9ntpdh/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
    "case": "cross/index-offset-past-eof[typescript>ruby]",
    "runners": [
     "cross"
    ],
    "package": "PK05",
    "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
-  },
-  {
-   "case": "cross/index-station-id-swapped[c>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
    "case": "cross/index-station-id-swapped[c>ruby]",
@@ -178,14 +146,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[ruby>python]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[ruby>typescript]",
    "runners": [
     "cross"
@@ -195,14 +155,6 @@
   },
   {
    "case": "cross/index-station-id-swapped[typescript>c]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
-   "case": "cross/index-station-id-swapped[typescript>python]",
    "runners": [
     "cross"
    ],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -29,6 +30,7 @@ INDEX_VERSION = 1
 LRU_SIZE = 256
 _USABLE = ("ok", "flagged")  # qc_status of a set with constants (spec §4.3); QcStatus members compare equal
 DATA_URL = "https://data.opentideconstants.org/"
+_log = logging.getLogger("opentideconstants")
 
 
 # --------------------------------------------------------------------------- reading files
@@ -40,11 +42,34 @@ def _read_bytes(path: Path) -> bytes:
         raise FileError(f"cannot read {path}: {e}", path=str(path), cause=e) from e
 
 
+_SURROGATE_ESCAPE = re.compile(rb"\\u[dD][89a-fA-F]")
+
+
+def _no_lone_surrogate(v, what):
+    """A JSON text whose \\u escapes make an unpaired surrogate is not valid Unicode: invalid_release (CR D17)."""
+    stack = [v]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, str):
+            try:
+                x.encode("utf-8")
+            except UnicodeEncodeError as e:
+                raise InvalidReleaseError(f"{what}: a string with an unpaired surrogate") from e
+        elif isinstance(x, dict):
+            stack.extend(x.keys())
+            stack.extend(x.values())
+        elif isinstance(x, list):
+            stack.extend(x)
+
+
 def _json(data: bytes, what: str):
     try:
-        return json.loads(data.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as e:
+        v = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, RecursionError) as e:
         raise InvalidReleaseError(f"{what}: not JSON: {e}") from e
+    if _SURROGATE_ESCAPE.search(data):
+        _no_lone_surrogate(v, what)
+    return v
 
 
 _VERSION_RE = re.compile(r"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")  # ASCII digits only, no leading zeros
@@ -172,6 +197,7 @@ def _usable_index(idx, name, sha256, size, conv, lic):
             or not is_int(idx.get("jsonl_size")) or idx["jsonl_size"] != size or not isinstance(idx.get("stations"), list):
         return None
     out = []
+    end = 0
     for e in idx["stations"]:
         if not isinstance(e, dict) or not is_int(e.get("offset")) or not is_int(e.get("length")) \
                 or not isinstance(e.get("station_id"), str) or not isinstance(e.get("status"), str) \
@@ -180,6 +206,13 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list):
             return None
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
+            return None
+        # the bounds check (CR D4): a line inside the file, after the one before it
+        if e["length"] <= 0 or e["offset"] < end or e["offset"] + e["length"] > size:
+            return None
+        end = e["offset"] + e["length"]
+        if e["status"] == "active" and (not isinstance(e["lat"], (int, float)) or not isinstance(e["lon"], (int, float))
+                                        or not math.isfinite(e["lat"]) or not math.isfinite(e["lon"])):
             return None
         for cs in e["sets"]:
             if not isinstance(cs, dict) or not all(k in cs and (cs[k] is None or isinstance(cs[k], str)) for k in _SET_KEYS) \
@@ -221,10 +254,11 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "__weakref__")
+                 "_index_path", "__weakref__")
 
-    def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None):
+    def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None):
         self._meta = meta
+        self._index_path = index_path
         rel = meta.get("release")
         if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
             raise InvalidReleaseError("release.datestamp is missing")
@@ -392,7 +426,25 @@ class Release:
             data = self._fh.read(e["length"])
         except OSError as ex:
             raise FileError(f"cannot read {self._jsonl}: {ex}", path=str(self._jsonl), cause=ex) from ex
-        return _json(data, f"{self._jsonl} line of {e['station_id']}")
+        try:
+            if len(data) != e["length"]:
+                raise InvalidReleaseError(f"short read of {self._jsonl} at {e['offset']}")
+            d = _json(data, f"{self._jsonl} line of {e['station_id']}")
+            if not isinstance(d, dict) or d.get("station_id") != e["station_id"]:
+                raise InvalidReleaseError(f"the line at offset {e['offset']} of {self._jsonl} is not "
+                                          f"{e['station_id']}")
+        except InvalidReleaseError as ex:
+            # the index does not match the file (CR D4): name it and drop it, so the next open rebuilds it
+            if self._index_path is not None:
+                try:
+                    self._index_path.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError as ux:
+                    _log.warning("cannot delete %s: %s", self._index_path, ux)
+                raise InvalidReleaseError(f"{self._index_path.name} does not match the release: {ex}") from ex
+            raise
+        return d
 
     def station(self, station_id: str) -> Optional[Station]:
         _check_type("station_id", station_id, (str,), allow_none=False)
@@ -616,7 +668,7 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         lic = {x.licence_id: x for x in (Licence._parse(c) for c in meta.get("licences") or ())}
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path, index_sha256)
-            return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path)
+            return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path)
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
@@ -682,7 +734,7 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
             entries = _usable_index(idx, path.name, index_sha256 or file_sha256(path), size, conv, lic)
             if entries is not None:
                 return entries
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             pass  # a stale or broken index is rebuilt
     entries = []
     h = hashlib.sha256()
