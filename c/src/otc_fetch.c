@@ -1384,7 +1384,13 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     st = http_get(c, url, etag, 1, NULL, &r, &res);
     if (st != OTC_OK) goto done;
     if (res == GET_NOT_FOUND) goto done;
-    if (res == GET_NOT_MODIFIED && body) {
+    if (res == GET_NOT_MODIFIED && !body) {
+        /* no stored copy, so no If-None-Match was sent: a 304 is a server fault, never a 200 (R2-107) */
+        st = fail(c, OTC_E_NETWORK, url, "HTTP 304 for %s with no If-None-Match", url);
+        if (c->err) c->err->http_status = 304;
+        goto done;
+    }
+    if (res == GET_NOT_MODIFIED) {
         logf_(c, 0, "pointer %s: 304", name);
         *doc = otc__json_parse(body, strlen(body));
         if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, path, "%s: not JSON", path); goto done; }
