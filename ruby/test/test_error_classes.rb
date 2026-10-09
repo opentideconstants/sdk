@@ -98,15 +98,20 @@ class ErrorClassTest < Minitest::Test
     end
 
     # R41b: a home directory that cannot be used is a cache error, not a raw ArgumentError.
+    # The skip comes before the environment is changed, and the ensure
+    # restores only what was saved (a skip must not turn into an error).
     def test_no_home_directory
         skip "POSIX default root" if Gem.win_platform?
-        old = ENV.to_h.slice("HOME", "XDG_CACHE_HOME", "OPENTIDECONSTANTS_CACHE_DIR")
-        ENV["HOME"] = ""
-        ENV.delete("XDG_CACHE_HOME")
-        ENV.delete("OPENTIDECONSTANTS_CACHE_DIR")
-        assert_raises(OTC::CacheError) { OTC::Cache.default_root }
-    ensure
-        %w[HOME XDG_CACHE_HOME OPENTIDECONSTANTS_CACHE_DIR].each { |k| ENV[k] = old[k] }
+        keys = %w[HOME XDG_CACHE_HOME OPENTIDECONSTANTS_CACHE_DIR]
+        old = ENV.to_h.slice(*keys)
+        begin
+            ENV["HOME"] = ""
+            ENV.delete("XDG_CACHE_HOME")
+            ENV.delete("OPENTIDECONSTANTS_CACHE_DIR")
+            assert_raises(OTC::CacheError) { OTC::Cache.default_root }
+        ensure
+            keys.each { |k| ENV[k] = old[k] }
+        end
     end
 
     # R32: a cache file that exists but cannot be read is an io error, not "not cached".
