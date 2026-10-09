@@ -2,7 +2,16 @@ cmake_minimum_required(VERSION 3.14)
 project(opentideconstants VERSION 0.1.0 LANGUAGES C)
 
 option(OTC_WITH_FETCH "Build the otc_fetch module (needs libcurl)" OFF)
-option(OTC_BUILD_RUNNER "Build the conformance runner" ON)
+# The conformance runner lives outside c/ (conformance/runners/c), so it is built
+# by default only when c/ is the top-level project of the repository; a project
+# that vendors c/ with add_subdirectory does not need it (and may not have it).
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR
+   AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../conformance/runners/c/runner.c)
+    set(OTC_BUILD_RUNNER_DEFAULT ON)
+else()
+    set(OTC_BUILD_RUNNER_DEFAULT OFF)
+endif()
+option(OTC_BUILD_RUNNER "Build the conformance runner" ${OTC_BUILD_RUNNER_DEFAULT})
 set(OTC_SANITIZE "" CACHE STRING "Sanitizers for the library and the runner, e.g. address,undefined")
 
 set(CMAKE_C_STANDARD 99)
