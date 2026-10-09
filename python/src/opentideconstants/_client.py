@@ -488,14 +488,16 @@ class OpenTideConstants:
                                     expected=sha, actual=f.sha256)
 
     def _fetch_file(self, url: str, dest_dir: Path, expected_sha: Optional[str], expected_size, final_name: str,
-                    gz: bool = False):
-        """Download url to a temporary file in dest_dir, check size and SHA-256, return the temporary path."""
+                    datestamp: str, gz: bool = False):
+        """Download url to a temporary file in dest_dir, check size and SHA-256, return the temporary path. The file
+        is one that OTC_{datestamp}.sha256 lists, so a 404 is a network error with status 404 (spec §4.8, CR D32)."""
         tmp = tmp_name(dest_dir)
         try:
             with open(tmp, "w+b") as f:
                 r = self._http.get(url, accept_gzip=not gz, sink=f)
                 if r.status == 404:
-                    raise ReleaseNotFoundError(f"{url}: 404")
+                    raise NetworkError(f"{url}: 404; file listed in OTC_{datestamp}.sha256 is missing on the server",
+                                       url=url, status=404)
                 f.flush()
                 os.fsync(f.fileno())
             if (expected_size is not None and r.size != expected_size) or r.sha256 != expected_sha:
@@ -532,13 +534,13 @@ class OpenTideConstants:
                     for n in (f"{base}.jsonl", f"{base}.meta.json"):
                         if n not in rows:
                             raise InvalidReleaseError(f"{n} is not in the .sha256 file")
-                        tmp = self._fetch_file(url_of(n), d, rows[n], size_of(n), n)
+                        tmp = self._fetch_file(url_of(n), d, rows[n], size_of(n), n, datestamp)
                         wanted.append((n, tmp))
                         written[n] = os.path.getsize(tmp)
                     data_name = f"{base}.jsonl"
                 elif f"{base}.json.gz" in rows:
                     gzn, jn = f"{base}.json.gz", f"{base}.json"
-                    tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, gz=True)
+                    tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, datestamp, gz=True)
                     wanted.append((gzn, tmp_gz))  # removed in the finally below if anything fails
                     try:
                         raw = gzip.decompress(Path(tmp_gz).read_bytes())
@@ -564,7 +566,7 @@ class OpenTideConstants:
                     data_name = jn
                 else:
                     jn = f"{base}.json"
-                    tmp = self._fetch_file(url_of(jn), d, rows[jn], size_of(jn), jn)
+                    tmp = self._fetch_file(url_of(jn), d, rows[jn], size_of(jn), jn, datestamp)
                     wanted.append((jn, tmp))
                     written[jn] = os.path.getsize(tmp)
                     data_name = jn
@@ -915,7 +917,7 @@ class OpenTideConstants:
                 else:
                     url = ptr[n].url if n in ptr and ptr[n].url else self._url(n)
                     try:
-                        tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
+                        tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest), ds,
                                                gz=n.endswith(".gz"))
                     except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
                         raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
