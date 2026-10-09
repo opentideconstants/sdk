@@ -485,3 +485,13 @@ def test_proxy_relay_success_is_not_a_harness_error(tmp_path, monkeypatch):
         proxy.shutdown()
     assert [e["status"] for e in proxy.log.entries()] == [200], proxy.log.entries()
     assert failures == [] and stats["harness_errors"] == 0, (failures, stats)
+
+
+# --- R2-145: an explicit --expected-failures path that does not exist is a usage error, not "no entries"
+
+def test_missing_explicit_expected_failures_file_exits_2(tmp_path):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases),
+                   "--expected-failures", str(tmp_path / "nope.json"), env={"FAKE_REPLY": OK_REPLY})
+    assert r.returncode == 2 and "nope.json" in r.stderr and "Traceback" not in r.stderr, (r.returncode, r.stdout[-300:], r.stderr[-300:])
+    assert "PASS  a" not in r.stdout, r.stdout[-300:]

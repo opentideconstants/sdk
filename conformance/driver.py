@@ -1406,6 +1406,11 @@ def main():
         return 0
     if not a.runner and not a.cross:
         ap.error("--runner (or --cross, two or more times) is required")
+    # only the default file may be absent (no entries); a path given on the command line must exist (a typo would
+    # silently run with no entries)
+    if not a.no_expected_failures and a.expected_failures != str(EXPECTED_FAILURES) and not Path(a.expected_failures).is_file():
+        print(f"--expected-failures {a.expected_failures}: no such file", file=sys.stderr)
+        return 2
     named = {}
     for spec in (a.cross or []):
         name, sep, command = spec.partition("=")
