@@ -4,26 +4,10 @@
   {
    "case": "download/latest-network-error-use-cache",
    "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-03 ruby",
-   "reason": "download(:latest) raises the network error instead of writing the newest cached release (CR D22)"
-  },
-  {
-   "case": "download/latest-network-error-use-cache",
-   "runners": [
     "typescript"
    ],
    "package": "PK-R2-03 typescript",
    "reason": "download() of latest raises the network error instead of writing the newest cached release (CR D22)"
-  },
-  {
-   "case": "cache/prune-partial-failure",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK-R2-03 ruby",
-   "reason": "a prune that fails leaves CacheError#removed empty: the releases removed before the failure are lost (CR2 DR18)"
   },
   {
    "case": "cache/prune-partial-failure",
