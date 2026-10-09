@@ -157,3 +157,60 @@ def test_c_version_define_with_a_different_version_and_spaces_after_the_hash(tre
     assert '#define OTC_VERSION "0.1.0"' in text
     h.write_text(text.replace('#define OTC_VERSION "0.1.0"', '#  define OTC_VERSION "0.2.0"', 1), encoding="utf-8")
     assert_fails(tree, "c", "'0.2.0'")
+
+
+# --- R2-182: every Python binding of the name counts; a binding whose value cannot be read fails
+
+PY_UNREADABLE = {
+    "import-from-alias": "from ._zz_other import OTHER as SUPPORTED_FORMAT_VERSION",
+    "import-module-alias": "import os as SUPPORTED_FORMAT_VERSION",
+    "import-from-outside-the-package": "from os import SUPPORTED_FORMAT_VERSION",
+    "nested-tuple-target": 'a, (SUPPORTED_FORMAT_VERSION, b) = 1, ("2.0", 3)',
+    "starred-target": 'a, *SUPPORTED_FORMAT_VERSION = 1, "2.0"',
+    "list-target": '[SUPPORTED_FORMAT_VERSION] = ["2.0"]',
+    "for-target": 'for SUPPORTED_FORMAT_VERSION in ["2.0"]:\n    pass',
+    "with-target": 'import contextlib\nwith contextlib.nullcontext("2.0") as SUPPORTED_FORMAT_VERSION:\n    pass',
+    "comprehension-target": 'x = [SUPPORTED_FORMAT_VERSION for SUPPORTED_FORMAT_VERSION in ["2.0"]]',
+    "except-name": 'try:\n    pass\nexcept Exception as SUPPORTED_FORMAT_VERSION:\n    pass',
+    "globals-subscript": 'globals()["SUPPORTED_FORMAT_VERSION"] = "2.0"',
+    "globals-update-keyword": 'globals().update(SUPPORTED_FORMAT_VERSION="2.0")',
+    "globals-update-dict": 'globals().update({"SUPPORTED_FORMAT_VERSION": "2.0"})',
+    "setattr": 'import sys\nsetattr(sys.modules[__name__], "SUPPORTED_FORMAT_VERSION", "2.0")',
+    "function-def": "def SUPPORTED_FORMAT_VERSION():\n    return '2.0'",
+    "class-def": "class SUPPORTED_FORMAT_VERSION:\n    pass",
+    "del": 'del SUPPORTED_FORMAT_VERSION',
+    "match-capture": 'match "2.0":\n    case SUPPORTED_FORMAT_VERSION:\n        pass',
+    "augmented": 'SUPPORTED_FORMAT_VERSION += ".1"',
+}
+
+
+@pytest.mark.parametrize("form", sorted(PY_UNREADABLE))
+def test_python_binding_that_cannot_be_read_fails(tree, form):
+    plant(tree, "python/src/opentideconstants/_zz.py", PY_UNREADABLE[form])
+    assert_fails(tree, "python", "_zz.py")
+
+
+@pytest.mark.parametrize("decl", [
+    'SUPPORTED_FORMAT_VERSION = "2.0"',
+    'A = SUPPORTED_FORMAT_VERSION = "2.0"',
+    'SUPPORTED_FORMAT_VERSION: str = "2.0"',
+    'import types\nns = types.SimpleNamespace()\nns.SUPPORTED_FORMAT_VERSION = "2.0"',
+    'if (SUPPORTED_FORMAT_VERSION := "2.0"):\n    pass',
+])
+def test_python_literal_declaration_with_another_value_fails(tree, decl):
+    plant(tree, "python/src/opentideconstants/_zz.py", decl)
+    assert_fails(tree, "python", "different values", "'2.0'")
+
+
+@pytest.mark.parametrize("src", [
+    "from ._release import SUPPORTED_FORMAT_VERSION as SUPPORTED_FORMAT_VERSION",
+    "from opentideconstants._release import SUPPORTED_FORMAT_VERSION",
+    'A = SUPPORTED_FORMAT_VERSION = "1.0"',
+    "SUPPORTED_FORMAT_VERSION: str",
+    'import opentideconstants as m\nx = getattr(m, "SUPPORTED_FORMAT_VERSION")',
+    '# SUPPORTED_FORMAT_VERSION = "2.0"\n"""SUPPORTED_FORMAT_VERSION = "2.0" in a docstring"""',
+])
+def test_python_forms_that_are_not_a_conflicting_declaration_pass(tree, src):
+    plant(tree, "python/src/opentideconstants/_zz.py", src)
+    rc, out = run(tree)
+    assert rc == 0, out

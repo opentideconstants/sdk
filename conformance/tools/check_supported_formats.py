@@ -22,9 +22,13 @@ check fails when, for any language:
 
 The declaration is read from the source, so the check needs no toolchain. Every declaration counts, in
 every source file of the SDK:
-  - Python: python/src/**/*.py and *.pyi, parsed with the ast module; an assignment, an annotated
-    assignment with a value, an augmented assignment or a walrus to the name (or to an attribute of that
-    name). A docstring or a comment is not a declaration.
+  - Python: python/src/**/*.py and *.pyi, parsed with the ast module. Every binding of the name counts: an
+    assignment, an annotated assignment with a value or a walrus to the name (or to an attribute of that name)
+    gives its value. Any other binding cannot be read, so it fails: an unpacking, augmented, for, with,
+    comprehension, except or match target, del, a def, class or parameter of that name, an import alias to it
+    (from x import Y as SUPPORTED_FORMAT_VERSION), an import of it from outside the package, and a string-keyed
+    write (globals()[...] =, setattr, update(SUPPORTED_FORMAT_VERSION=...), a dict key). A docstring or a
+    comment is not a declaration.
   - Ruby: ruby/lib/**/*.rb; a line that starts with the constant (optionally Module::-qualified) and
     assigns it with =, ||= or &&=, and any const_set of the name. Comment lines and =begin/=end blocks
     are not declarations.
@@ -120,6 +124,76 @@ def version_from_package_json():
 # ---- the declared SUPPORTED_FORMAT_VERSION: a list of (file, version or None for "cannot read")
 
 
+PY_READ_CALLS = {"getattr", "hasattr", "get"}  # a call that names the constant as a string but does not bind it
+
+
+def python_bindings(tree):
+    """Every binding of NAME in a module, as (version or None, why). A plain assignment, an annotated assignment
+    or a walrus whose target is the name (or an attribute of that name) gives the literal's value. Any other
+    binding gives None (cannot read): an unpacking, augmented, for, with, comprehension, except or match target,
+    del, a def or class or parameter of that name, an import alias to it, an import of it from outside the
+    package, a string-keyed write (globals()[...] =, setattr(..., "NAME", ...), update(NAME=...) or a dict key)."""
+    found, seen = [], set()
+
+    def named(t):
+        return (isinstance(t, ast.Name) and t.id == NAME) or (isinstance(t, ast.Attribute) and t.attr == NAME)
+
+    def value_of(node, value):
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) and re.fullmatch(VERSION_RE, value.value):
+            return value.value, None
+        return None, f"line {node.lineno}: not a quoted MAJOR.MINOR literal"
+
+    def unreadable(node, what):
+        found.append((None, f"line {node.lineno}: {what} binds {NAME}; its value cannot be read"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(named(t) for t in node.targets):
+            seen.update(id(t) for t in node.targets if named(t))
+            found.append(value_of(node, node.value))
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and named(node.target):
+            seen.add(id(node.target))
+            if node.value is not None:  # an annotation only (x: str) declares no value
+                found.append(value_of(node, node.value))
+        elif isinstance(node, ast.AugAssign) and named(node.target):
+            seen.add(id(node.target))
+            unreadable(node, "an augmented assignment")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Name, ast.Attribute)) and named(node) and isinstance(node.ctx, (ast.Store, ast.Del)) \
+                and id(node) not in seen:
+            unreadable(node, "a del" if isinstance(node.ctx, ast.Del) else "an unpacking, for, with or comprehension target")
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == NAME:
+            unreadable(node, "a def or class")
+        elif isinstance(node, ast.arg) and node.arg == NAME:
+            unreadable(node, "a parameter")
+        elif isinstance(node, ast.ExceptHandler) and node.name == NAME:
+            unreadable(node, "an except clause")
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == NAME \
+                or isinstance(node, ast.MatchMapping) and node.rest == NAME:
+            unreadable(node, "a match pattern")
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                if (a.asname or a.name) == NAME:
+                    unreadable(node, "an import")
+        elif isinstance(node, ast.ImportFrom):
+            inside = node.level > 0 or (node.module or "").split(".")[0] == "opentideconstants"
+            for a in node.names:
+                if a.asname == NAME and a.name != NAME:
+                    unreadable(node, "an import alias")
+                elif (a.asname or a.name) == NAME and not inside:
+                    unreadable(node, f"an import from {node.module}")
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del)) \
+                and isinstance(node.slice, ast.Constant) and node.slice.value == NAME:
+            unreadable(node, "a string-keyed write")
+        elif isinstance(node, ast.Call):
+            func = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+            if any(k.arg == NAME for k in node.keywords) or (
+                    func not in PY_READ_CALLS and any(isinstance(a, ast.Constant) and a.value == NAME for a in node.args)):
+                unreadable(node, f"a call to {func or 'a function'}")
+        elif isinstance(node, ast.Dict) and any(isinstance(k, ast.Constant) and k.value == NAME for k in node.keys):
+            unreadable(node, "a dict key")
+    return found
+
+
 def python_declarations():
     out = []
     for p in files(["python/src/**/*.py", "python/src/**/*.pyi"]):
@@ -132,27 +206,7 @@ def python_declarations():
             out.append((rel(p), None, f"not valid Python: {e}"))
             continue
 
-        def named(t):
-            return (isinstance(t, ast.Name) and t.id == NAME) or (isinstance(t, ast.Attribute) and t.attr == NAME)
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                targets = [t for tgt in node.targets for t in (tgt.elts if isinstance(tgt, (ast.Tuple, ast.List)) else [tgt])]
-                value = node.value if any(named(t) for t in node.targets) else None
-                if not any(named(t) for t in targets):
-                    continue
-            elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and named(node.target):
-                value = node.value
-                if value is None:  # an annotation only (x: str) declares no value
-                    continue
-            elif isinstance(node, ast.AugAssign) and named(node.target):
-                value = None
-            else:
-                continue
-            if isinstance(value, ast.Constant) and isinstance(value.value, str) and re.fullmatch(VERSION_RE, value.value):
-                out.append((rel(p), value.value, None))
-            else:
-                out.append((rel(p), None, f"line {node.lineno}: not a quoted MAJOR.MINOR literal"))
+        out += [(rel(p), v, why) for v, why in python_bindings(tree)]
     return out
 
 
