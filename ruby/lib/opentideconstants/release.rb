@@ -52,6 +52,8 @@ class OpenTideConstants
             @changelog_url = rel["changelog_url"]
             @conventions = Array(meta["conventions"]).map { |c| Convention.new(c) }.freeze
             @licences = Array(meta["licences"]).map { |l| Licence.new(l) }.freeze
+            Release.no_repeats!(@conventions.map(&:convention_id), "convention_id")
+            Release.no_repeats!(@licences.map(&:licence_id), "licence_id")
             @convention_by_id = @conventions.to_h { |c| [c.convention_id, c] }.freeze
             @licence_by_id = @licences.to_h { |l| [l.licence_id, l] }.freeze
             load_stations(stations)
@@ -75,6 +77,14 @@ class OpenTideConstants
             return if Release.readable_version?(mrv)
             d = rel["datestamp"]
             raise ReaderTooOldError, "release #{d} needs a reader for format #{mrv}; this SDK reads format #{SUPPORTED_FORMAT_VERSION}"
+        end
+
+        # invalid_release when a value appears twice (spec §6.1, CR D5).
+        def self.no_repeats!(values, what)
+            seen = Set.new
+            values.each do |v|
+                raise InvalidReleaseError, "#{what} #{v.inspect} appears twice" unless seen.add?(v)
+            end
         end
 
         # [major, minor] of a "MAJOR.MINOR" format version, or nil.
@@ -412,12 +422,16 @@ class OpenTideConstants
             tomb_pos = []
             raws = {}
             names = Set.new
+            ids = Set.new
+            @set_ids = Set.new
             @set_sources = []
             @set_qc = []
             stations.each do |raw, pos, len|
                 raise InvalidReleaseError, "a station is not an object" unless raw.is_a?(Hash)
                 sid = raw["station_id"]
                 raise InvalidReleaseError, "a station has no station_id" unless sid.is_a?(String)
+                # One id across the active stations and the tombstones together (CR D5).
+                raise InvalidReleaseError, "station_id #{sid} appears twice" unless ids.add?(sid)
                 if raw["status"] == "removed"
                     tombs << Tombstone.new(raw)
                     tomb_pos << [tombs.last, pos, len]
@@ -428,6 +442,12 @@ class OpenTideConstants
             end
             entries.sort_by!(&:station_id)
             @by_id = entries.to_h { |e| [e.station_id, e] }
+            entries.each do |e|
+                next if e.reference_id.nil? || (e.reference_id.is_a?(String) && @by_id.key?(e.reference_id))
+                raise InvalidReleaseError, "station #{e.station_id}: reference_station_id #{e.reference_id.inspect} " \
+                                           "names no active station"
+            end
+            @set_ids = nil
             entries.each { |e| e.kind = kind_of(e, []) }
             if @mode == :eager
                 entries.each { |e| e.station = build_station(raws[e.station_id], e.kind) }
@@ -459,6 +479,7 @@ class OpenTideConstants
             sources = Set.new
             sets.each do |cs|
                 raise InvalidReleaseError, "station #{sid}: a set is not an object" unless cs.is_a?(Hash)
+                raise InvalidReleaseError, "set_id #{cs['set_id'].inspect} appears twice" unless @set_ids.add?(cs["set_id"])
                 unless @convention_by_id.key?(cs["convention_id"])
                     raise InvalidReleaseError, "set #{cs['set_id']}: convention #{cs['convention_id'].inspect} does not resolve"
                 end
@@ -510,11 +531,23 @@ class OpenTideConstants
             kind_of(ref, seen + [e.station_id])
         end
 
+        # Indexes a station's aliases. They map a system to a String id or an
+        # Array of String ids, and a (system, id) pair names one station only
+        # (spec §4.4, CR D5); anything else is invalid_release.
         def index_aliases(sid, aliases)
             @aliases ||= Hash.new { |h, k| h[k] = {} }
-            return unless aliases.is_a?(Hash)
+            return if aliases.nil?
+            raise InvalidReleaseError, "station #{sid}: aliases is not an object" unless aliases.is_a?(Hash)
             aliases.each do |system, ids|
-                (ids.is_a?(Array) ? ids : [ids]).each { |id| @aliases[system.to_s][id] = sid }
+                list = ids.is_a?(Array) ? ids : [ids]
+                unless list.all?(String)
+                    raise InvalidReleaseError, "station #{sid}: alias #{system} must be a String id or a list of them"
+                end
+                list.each do |id|
+                    other = @aliases[system.to_s][id]
+                    raise InvalidReleaseError, "alias #{system} #{id} appears twice (#{other} and #{sid})" if other
+                    @aliases[system.to_s][id] = sid
+                end
             end
         end
     end

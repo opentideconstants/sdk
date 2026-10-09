@@ -114,6 +114,27 @@ module TestSupport
         File.join(FIXTURES, root, name)
     end
 
+    # Writes a copy of good/OTC_<d>.json changed by the block (it gets the
+    # parsed document) as OTC_<d>.<ext> (json or jsonl, with its .meta.json)
+    # in a new directory, with no .sha256. Returns the path.
+    def release_file(ext = "json", d = "20991231.2")
+        doc = JSON.parse(File.read(fixture("good", "OTC_#{d}.json")))
+        yield doc
+        dir = tmpdir
+        if ext == "jsonl"
+            stations = doc.delete("stations")
+            File.write(File.join(dir, "OTC_#{d}.meta.json"), JSON.generate(doc))
+            File.write(File.join(dir, "OTC_#{d}.jsonl"), stations.map { |st| JSON.generate(st) + "\n" }.join)
+        else
+            File.write(File.join(dir, "OTC_#{d}.json"), JSON.generate(doc))
+        end
+        File.join(dir, "OTC_#{d}.#{ext}")
+    end
+
+    def station_in(doc, id)
+        doc["stations"].find { |st| st["station_id"] == id }
+    end
+
     # A logger that keeps its lines.
     class Log
         attr_reader :lines

@@ -348,7 +348,6 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -358,7 +357,6 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -368,7 +366,6 @@
    "case": "rules/pk06/bad-active-and-removed-same-id-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -380,7 +377,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -390,7 +386,6 @@
    "case": "rules/pk06/bad-duplicate-alias-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -400,7 +395,6 @@
    "case": "rules/pk06/bad-duplicate-alias-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -410,7 +404,6 @@
    "case": "rules/pk06/bad-duplicate-alias-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -422,7 +415,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -432,7 +424,6 @@
    "case": "rules/pk06/bad-duplicate-convention-id-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -442,7 +433,6 @@
    "case": "rules/pk06/bad-duplicate-convention-id-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -452,7 +442,6 @@
    "case": "rules/pk06/bad-duplicate-convention-id-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -464,7 +453,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -474,7 +462,6 @@
    "case": "rules/pk06/bad-duplicate-set-id-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -484,7 +471,6 @@
    "case": "rules/pk06/bad-duplicate-set-id-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -494,7 +480,6 @@
    "case": "rules/pk06/bad-duplicate-set-id-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -506,7 +491,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -516,7 +500,6 @@
    "case": "rules/pk06/bad-duplicate-station-id-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -526,7 +509,6 @@
    "case": "rules/pk06/bad-duplicate-station-id-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -536,7 +518,6 @@
    "case": "rules/pk06/bad-duplicate-station-id-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -546,7 +527,6 @@
    "case": "rules/pk06/bad-duplicate-station-id-jsonl-stream",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -599,7 +579,6 @@
    "case": "rules/pk06/bad-unresolved-reference-station-json",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -609,7 +588,6 @@
    "case": "rules/pk06/bad-unresolved-reference-station-json-gz",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -619,7 +597,6 @@
    "case": "rules/pk06/bad-unresolved-reference-station-jsonl",
    "runners": [
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -631,7 +608,6 @@
     "c",
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK06",
@@ -640,7 +616,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -649,7 +624,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-json-gz",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -658,7 +632,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
@@ -667,7 +640,6 @@
   {
    "case": "rules/pk07/bad-aliases-not-object-jsonl-stream",
    "runners": [
-    "ruby",
     "typescript"
    ],
    "package": "PK07",
