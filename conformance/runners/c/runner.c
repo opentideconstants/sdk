@@ -616,12 +616,32 @@ static double arg_num(args *a, const char *name, double dflt)
     return v->valuedouble;
 }
 
-static size_t arg_limit(args *a, const char *name)
+/*
+ * A limit argument. Absent or null is "no limit". An explicit 0 is a value the SDK must judge (spec 4.4, D36: limit
+ * must be 1 or more), so it is passed on as 0 only when the API has a separate no-limit value (OTC_NO_LIMIT);
+ * without one, 0 means "no limit" to the library, and the runner must not hide the difference: *zero is set and
+ * the op answers uncaught:LimitZero.
+ */
+static size_t arg_limit(args *a, const char *name, int *zero)
 {
-    double v = arg_num(a, name, 0.0);
-    if (v < 0 || v != floor(v)) { a->bad = 1; return 0; }
-    return (size_t)v;
+    const cJSON *v = a->obj ? cJSON_GetObjectItemCaseSensitive(a->obj, name) : NULL;
+    double d;
+#ifdef OTC_NO_LIMIT
+    const size_t none = OTC_NO_LIMIT;
+#else
+    const size_t none = 0;
+#endif
+    *zero = 0;
+    if (!v || cJSON_IsNull(v)) return none;
+    d = arg_num(a, name, 0.0);
+    if (a->bad || d < 0 || d != floor(d)) { a->bad = 1; return none; }
+#ifndef OTC_NO_LIMIT
+    if (d == 0) { *zero = 1; return none; }
+#endif
+    return (size_t)d;
 }
+
+#define LIMIT_ZERO_MESSAGE "limit 0: this C API has no separate no-limit value, so the runner cannot pass 0 (D36)"
 
 static bool arg_bool(args *a, const char *name, bool dflt)
 {
@@ -1057,10 +1077,12 @@ static void op_query(request *q, reply *r)
         otc_filter f;
         otc_hit *hits = NULL;
         size_t count = 0, i, limit;
+        int zero = 0;
         const char *name = arg_str(&q->a, "name"), *match = arg_str(&q->a, "match");
         cJSON *arr;
         arg_filter(&q->a, &f);
-        limit = arg_limit(&q->a, "limit");
+        limit = arg_limit(&q->a, "limit", &zero);
+        if (zero) { set_error(r, "uncaught:LimitZero", LIMIT_ZERO_MESSAGE); return; }
         if (match) {
             if (!strcmp(match, "exact")) f.match_exact = true;
             else q->a.bad = 1;
@@ -1080,8 +1102,10 @@ static void op_query(request *q, reply *r)
         double lat = arg_num(&q->a, "lat", NAN), lon = arg_num(&q->a, "lon", NAN);
         double radius = arg_num(&q->a, "radius_km", NAN);
         cJSON *ids, *dist;
+        int zero = 0;
         arg_filter(&q->a, &f);
-        limit = arg_limit(&q->a, "limit");
+        limit = arg_limit(&q->a, "limit", &zero);
+        if (zero) { set_error(r, "uncaught:LimitZero", LIMIT_ZERO_MESSAGE); return; }
         if (q->a.bad) { set_error(r, "invalid_argument", "near arguments"); return; }
         LIST_CALL(rc, otc_nearby, hits, count, otc_near(R, lat, lon, radius, &f, limit, NULL, 0, &count),
                   otc_near(R, lat, lon, radius, &f, limit, hits, cap_, &count));

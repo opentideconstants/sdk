@@ -159,3 +159,73 @@ def test_c_verify_with_no_file_left_is_not_verified(tmp_path, lang):
         p.stdin.close()
         p.wait(timeout=10)
     assert reply.get("ok") is False, reply
+
+
+class CRunner:
+    """A C runner process driven one request at a time."""
+
+    def __init__(self, lang, env=None):
+        cmd, e = runner_cmd(lang)
+        self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                  env=dict(os.environ, **e, **(env or {})), cwd=str(CONF.parent))
+        self.p.stdout.readline()
+
+    def __call__(self, op, **args):
+        self.p.stdin.write(json.dumps({"op": op, "args": args}) + "\n")
+        self.p.stdin.flush()
+        line = self.p.stdout.readline()
+        assert line, f"the runner died on {op} {args}"
+        return strict(line)
+
+    def close(self):
+        self.p.stdin.close()
+        return self.p.wait(timeout=10)
+
+
+@pytest.fixture
+def c_good(tmp_path):
+    path = _copy_release(tmp_path)
+    r = CRunner("c")
+    assert r("open", file=str(path), mode="stream")["ok"]
+    yield r
+    r.close()
+
+
+# --- C110: an explicit limit 0 is not the same as no limit (D36: limit 0 is invalid_argument)
+
+def test_c_limit_zero_is_not_no_limit(c_good):
+    every = c_good("search", name="harbour")
+    assert every["ok"] and len(every["result"]["station_ids"]) > 1, every
+    zero = c_good("search", name="harbour", limit=0)
+    assert zero != every and zero["ok"] is False, zero
+    zero = c_good("near", lat=50.75, lon=-1.2, radius_km=500, limit=0)
+    assert zero["ok"] is False, zero
+
+
+# --- C65: an unknown mode or on_network_error string is invalid_argument, not a silent default
+
+@pytest.mark.parametrize("args", [{"mode": "streem"}, {"on_network_error": "rase"}])
+def test_c_unknown_enum_option_is_invalid_argument(tmp_path, args):
+    path = _copy_release(tmp_path)
+    r = CRunner("c")
+    try:
+        reply = r("open", file=str(path), **args)
+    finally:
+        r.close()
+    assert reply["ok"] is False and reply["error"]["code"] == "invalid_argument", reply
+
+
+# --- C111: a wrong-typed argument is invalid_argument wherever it is read; raw rejects an unknown object
+
+@pytest.mark.parametrize("op,args", [("constant_set", {"station_id": "OTC-T-0001", "set_id": 5}),
+                                     ("tombstone", {"station_id": 5}),
+                                     ("constituent", {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/noaa", "name": 5}),
+                                     ("constant_sets", {"station_id": "OTC-T-0001", "include_no_constants": "yes"})])
+def test_c_wrong_typed_argument_is_invalid_argument(c_good, op, args):
+    reply = c_good(op, **args)
+    assert reply["ok"] is False and reply["error"]["code"] == "invalid_argument", reply
+
+
+def test_c_raw_unknown_object_is_a_runner_failure(c_good):
+    reply = c_good("raw", object="no-such-object", station_id="OTC-T-0001")
+    assert reply["ok"] is False and reply["error"]["code"].startswith("uncaught:"), reply
