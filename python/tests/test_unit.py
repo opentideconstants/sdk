@@ -610,11 +610,28 @@ class ErrorClassTest(unittest.TestCase):
         with self.assertRaises(otc.OfflineError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
 
-    def test_unreadable_verified_is_an_io_error_not_absent(self):
+    def test_unreadable_verified_is_a_cache_error_not_absent(self):
+        # spec §5.2 step 6 (CR2 DR16): a cached file that cannot be read is cache
         d = self.cached()
         (d / ".verified").chmod(0)
-        with self.assertRaises(otc.FileError):
+        with self.assertRaises(otc.CacheError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
+
+    def test_unreadable_cached_index_is_a_cache_error_not_absent(self):
+        # R2-090: an unreadable cached OTC_index.json was "absent", so releases() offline said offline_unavailable
+        d = self.cached()
+        with otc.OpenTideConstants(cache_dir=str(self.cache), offline=True) as c:
+            idx = self.cache / "v1" / "pointer" / "OTC_index.json"
+            idx.parent.mkdir(parents=True, exist_ok=True)
+            idx.write_bytes((FIXTURES / "good" / "OTC_index.json").read_bytes())
+            self.assertTrue(c.releases())
+            idx.chmod(0)
+            try:
+                with self.assertRaises(otc.CacheError):
+                    c.releases()
+            finally:
+                idx.chmod(0o600)
+        self.assertTrue(d.is_dir())
 
     def test_download_with_a_cached_sha256_that_is_not_text(self):
         d = self.cached()

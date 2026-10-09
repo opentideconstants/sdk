@@ -12,7 +12,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from ._errors import CacheError, FileError, InvalidReleaseError
+from ._errors import CacheError, InvalidReleaseError
 
 LAYOUT = "v1"
 # spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
@@ -102,14 +102,14 @@ class Cache:
 
     def read_verified(self, datestamp: str):
         """The .verified object, or None when it is absent or not a usable record (then the release is not
-        trusted). A .verified that exists but cannot be read is FileError, not "not cached"."""
+        trusted). A .verified that exists but cannot be read is CacheError, not "not cached" (spec §5.2 step 6)."""
         p = self.release_dir(datestamp) / ".verified"
         try:
             text = p.read_text(encoding="utf-8")
         except (FileNotFoundError, NotADirectoryError):
             return None
         except OSError as e:
-            raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
+            raise CacheError(f"cannot read {p}: {e}") from e
         except UnicodeDecodeError:
             return None
         try:
@@ -135,7 +135,7 @@ class Cache:
         except (FileNotFoundError, NotADirectoryError):
             return []
         except OSError as e:
-            raise FileError(f"cannot list {d}: {e}", path=str(d), cause=e) from e
+            raise CacheError(f"cannot list {d}: {e}") from e
         return sorted(names, key=datestamp_key, reverse=True)
 
     def remove_release(self, datestamp: str) -> bool:
@@ -161,19 +161,30 @@ class Cache:
         return True
 
     def read_pointer(self, name: str):
+        """The cached body and ETag of a pointer or index file, or (None, None) when either is not there. A file
+        that is there but cannot be read is CacheError, never "absent" (spec §5.2 step 6)."""
         d = self.pointer_dir()
-        try:
-            body = (d / name).read_bytes()
-            etag = (d / (name + ".etag")).read_text(encoding="utf-8").strip()
-            return body, etag
-        except OSError:
+        body = self.read_pointer_body(name)
+        if body is None:
             return None, None
+        p = d / (name + ".etag")
+        try:
+            return body, p.read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, NotADirectoryError, UnicodeDecodeError):
+            return None, None
+        except OSError as e:
+            raise CacheError(f"cannot read {p}: {e}") from e
 
     def read_pointer_body(self, name: str):
+        """The cached body of a pointer or index file, or None when it is not there (CacheError when it cannot be
+        read)."""
+        p = self.pointer_dir() / name
         try:
-            return (self.pointer_dir() / name).read_bytes()
-        except OSError:
+            return p.read_bytes()
+        except (FileNotFoundError, NotADirectoryError):
             return None
+        except OSError as e:
+            raise CacheError(f"cannot read {p}: {e}") from e
 
     def write_pointer(self, name: str, body: bytes, etag) -> None:
         """Store a pointer or index body and its ETag. The old ETag is removed first, so a body is never paired

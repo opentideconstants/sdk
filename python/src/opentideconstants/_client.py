@@ -254,8 +254,8 @@ class OpenTideConstants:
             size = rec.get("size")
             try:
                 actual_size = p.stat().st_size
-            except OSError as e:  # removed or unreadable since it was found
-                raise FileError(f"cannot read {p}: {e}", path=str(p), cause=e) from e
+            except OSError as e:  # removed or unreadable since it was found: cache, never absent (spec §5.2)
+                raise CacheError(f"cannot read {p}: {e}") from e
             if size is not None and actual_size != size:
                 raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
                                     expected=rec.get("sha256"), actual=file_sha256(p))

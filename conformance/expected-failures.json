@@ -97,7 +97,6 @@
   {
    "case": "cache/releases-dir-unreadable-offline",
    "runners": [
-    "python",
     "ruby"
    ],
    "package": "PK-R2-10",
@@ -115,7 +114,6 @@
   {
    "case": "cache/verified-unreadable-offline",
    "runners": [
-    "python",
     "ruby",
     "typescript"
    ],
