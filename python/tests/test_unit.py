@@ -799,6 +799,27 @@ class DownloadTest(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in out.iterdir()) if out.exists() else [], [])
 
 
+class AttributionTest(RepeatedIdsTest):
+    """Attribution edge cases (spec §4.6, CR D2; review PK15)."""
+
+    def test_null_provider_prints_the_attribution_alone_and_is_never_merged(self):
+        def edit(m):
+            for x in m["licences"][:2]:
+                x["provider"] = None
+        with otc.OpenTideConstants(file=self.write(edit_meta=edit)) as c:
+            text = c.attribution()
+            self.assertNotIn("None", text)
+            for x in c.release.licences[:2]:
+                self.assertIn(x.attribution, text)
+
+    def test_a_station_from_another_release_is_invalid_argument(self):
+        with otc.OpenTideConstants(file=str(FIXTURES / "v1" / "OTC_20991231.3.jsonl")) as other:
+            foreign = other.stations()[0]
+        with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
+            with self.assertRaises(otc.InvalidArgumentError):
+                c.attribution([foreign])
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

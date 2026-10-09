@@ -668,15 +668,21 @@ class Release:
     def attribution(self, stations: Optional[Sequence[Station]] = None) -> str:
         """The CC BY 4.0 attribution text for what an app shows (spec §4.6)."""
         self._check_open()
-        if stations is None:
+        if stations is not None and (isinstance(stations, (str, bytes)) or not hasattr(stations, "__iter__")):
+            raise InvalidArgumentError("stations must be a list of Station objects")
+        stations = None if stations is None else list(stations)
+        if not stations:  # None or an empty list: every licence in the release (CR D2 c)
             lic_ids = {x.licence_id for x in self._licences}
         else:
-            if isinstance(stations, (str, bytes)) or not hasattr(stations, "__iter__"):
-                raise InvalidArgumentError("stations must be a list of Station objects")
             lic_ids = set()
             for st in stations:
                 if not isinstance(st, Station):
                     raise InvalidArgumentError("stations must be a list of Station objects")
+                own = self.station(st.station_id)
+                if own is None or (own is not st and own.raw != st.raw):
+                    # unknown, removed or from another release: never skipped silently (CR D2 a)
+                    raise InvalidArgumentError(f"station {st.station_id} is not an active station of release "
+                                               f"{self.datestamp}")
                 if st.recommended_set is not None:
                     lic_ids.add(st.recommended_set.licence.licence_id)
                 off = st.subordinate_offsets
@@ -688,8 +694,11 @@ class Release:
                         lic_ids.add(ref.recommended_set.licence.licence_id)
         parts, seen = [], set()
         for lid in sorted(lic_ids):
-            lic = self._lic_by_id.get(lid)
-            if lic is None or lic.provider in seen:
+            lic = self._lic_by_id[lid]  # every licence reference resolves at load
+            if lic.provider is None:
+                parts.append(f"{lic.attribution}")  # no prefix, never merged (CR D2 b)
+                continue
+            if lic.provider in seen:
                 continue
             seen.add(lic.provider)
             parts.append(f"{lic.provider}: {lic.attribution}")
