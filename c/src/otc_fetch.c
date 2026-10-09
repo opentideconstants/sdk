@@ -1982,17 +1982,9 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         const cJSON *f;
         cJSON_ArrayForEach(f, otc__jget(old, "files")) cJSON_AddItemToObject(files, f->string, cJSON_Duplicate(f, 1));
     }
-    if (info) {
-        for (i = 0; i < info->n_files; i++) {
-            const otc_file_info *f = &info->files[i];
-            cJSON *o = cJSON_CreateObject();
-            cJSON_AddItemToObject(o, "sha256", str_or_null(f->sha256));
-            cJSON_AddItemToObject(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull());
-            cJSON_AddItemToObject(o, "url", str_or_null(f->url));
-            cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
-            cJSON_AddItemToObject(files, f->name, o);
-        }
-    } else {
+    /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
+     * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */
+    {
         for (i = 0; i < n_rows; i++) {
             char *p = path2(dir, names[i]), *u = url_resolve(c->base_url, names[i]);
             int64_t size = p ? otc__path_size(p) : -1;
@@ -2002,11 +1994,20 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
             if (size >= 0) cJSON_AddNumberToObject(o, "size", (double)size);
             else if (cJSON_IsNumber(prev)) cJSON_AddNumberToObject(o, "size", prev->valuedouble);
             else cJSON_AddNullToObject(o, "size");
-            cJSON_AddItemToObject(o, "url", str_or_null(u));
+            cJSON_AddItemToObject(o, "url", info ? cJSON_CreateNull() : str_or_null(u));
             cJSON_DeleteItemFromObjectCaseSensitive(files, names[i]);
             cJSON_AddItemToObject(files, names[i], o);
             free(p);
             free(u);
+        }
+        for (i = 0; info && i < info->n_files; i++) {
+            const otc_file_info *f = &info->files[i];
+            cJSON *o = cJSON_CreateObject();
+            cJSON_AddItemToObject(o, "sha256", str_or_null(f->sha256));
+            cJSON_AddItemToObject(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull());
+            cJSON_AddItemToObject(o, "url", str_or_null(f->url));
+            cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
+            cJSON_AddItemToObject(files, f->name, o);
         }
     }
     cJSON_AddItemToObject(ver, "files", files);
