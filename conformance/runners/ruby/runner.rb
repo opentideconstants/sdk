@@ -103,8 +103,8 @@ class Runner
         when "release_metadata"
             r = rel(target)
             { "datestamp" => r.datestamp, "created" => time(r.created), "format_version" => r.format_version,
-              "doi" => r.doi, "concept_doi" => r.concept_doi, "source_versions" => r.source_versions,
-              "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }
+              "concept_doi" => r.concept_doi, "source_versions" => r.source_versions,
+              "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }.merge(present(r, %w[zenodo_version_doi]))
         when "release_files"
             { "files" => rel(target).files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
         when "releases" then { "releases" => @client.releases.map { |i| release_info(i) } }
@@ -201,6 +201,16 @@ class Runner
             set = find_set(args, target)
             p = set && set.provenance
             { "provenance" => p && provenance(p), "raw" => p && p.raw }
+        when "provenance_build"
+            set = find_set(args, target)
+            b = set && set.provenance.build
+            { "build" => b && build(b) }
+        when "carried_from_release"
+            set = find_set(args, target)
+            { "carried_from_release" => set && set.provenance.carried_from_release }
+        when "time_base"
+            set = find_set(args, target)
+            { "time_base" => set && time_base(set.time_base) }
         when "set_validation"
             set = find_set(args, target)
             { "validation" => set ? set.validation.map { |v| validation(v) } : [] }
@@ -247,9 +257,36 @@ class Runner
         { "name" => f.name, "url" => f.url, "size" => f.size, "sha256" => f.sha256 }
     end
 
+    # The fields the SDK has. A field it does not have yet is left out of the result, so a case that checks it
+    # fails with "missing" and a case that does not check it is not affected.
+    def present(obj, names)
+        names.select { |n| obj.respond_to?(n) }.to_h { |n| [n, obj.public_send(n)] }
+    end
+
     def release_info(i)
-        { "datestamp" => i.datestamp, "format_version" => i.format_version, "doi" => i.doi,
-          "files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
+        { "datestamp" => i.datestamp, "format_version" => i.format_version }
+            .merge(present(i, %w[concept_doi zenodo_version_doi content_sha256]))
+            .merge("files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] })
+    end
+
+    def build(b)
+        { "build_commit" => b.build_commit, "built_at" => time(b.built_at), "fetched_at" => time(b.fetched_at),
+          "run_id" => b.run_id, "tool_versions" => b.tool_versions && b.tool_versions.to_h { |k, v| [k.to_s, v] } }
+    end
+
+    def hget(h, k)
+        h.key?(k) ? h[k] : h[k.to_sym]
+    end
+
+    # TimeBase: typed fields; correction is an object {from, to} or nil; evidence is a list of objects.
+    def time_base(t)
+        return nil if t.nil?
+        corr = t.correction
+        { "code" => s(t.code), "reason" => t.reason, "declared" => t.declared, "published" => t.published,
+          "correction" => corr && { "from" => hget(corr, "from"), "to" => hget(corr, "to") },
+          "months_dropped" => t.months_dropped.to_a, "decided_in" => t.decided_in,
+          "decided_build_commit" => t.decided_build_commit,
+          "evidence" => t.evidence.map { |e| %w[comparator_kind comparator_id distance_km lag_min detail].to_h { |k| [k, hget(e, k)] } } }
     end
 
     def stats(st)

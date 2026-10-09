@@ -239,7 +239,6 @@ static cJSON *j_parse_or_null(char *text)
 DEF_STR(s_rel_datestamp, otc_release_datestamp, otc_release)
 DEF_STR(s_rel_created, otc_release_created, otc_release)
 DEF_STR(s_rel_format_version, otc_release_format_version, otc_release)
-DEF_STR(s_rel_doi, otc_release_doi, otc_release)
 DEF_STR(s_rel_concept_doi, otc_release_concept_doi, otc_release)
 DEF_STR(s_rel_build_commit, otc_release_build_commit, otc_release)
 DEF_STR(s_rel_changelog_url, otc_release_changelog_url, otc_release)
@@ -774,7 +773,8 @@ static void op_query(request *q, reply *r)
         cJSON_AddItemToObject(o, "datestamp", j_take(s_rel_datestamp(R, &bad)));
         cJSON_AddItemToObject(o, "created", j_take(s_rel_created(R, &bad)));
         cJSON_AddItemToObject(o, "format_version", j_take(s_rel_format_version(R, &bad)));
-        cJSON_AddItemToObject(o, "doi", j_take(s_rel_doi(R, &bad)));
+        /* zenodo_version_doi (spec 4.3) has no C accessor yet: the key is left out, so a case that checks it fails
+         * with "missing" until the C library reads format 0.6 and this runner maps it. */
         cJSON_AddItemToObject(o, "concept_doi", j_take(s_rel_concept_doi(R, &bad)));
         for (i = 0; i < n; i++) {
             char k[256], v[256];
@@ -1165,6 +1165,12 @@ static void op_query(request *q, reply *r)
                 if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad));
             }
             cJSON_AddItemToObject(o, "raw", raw ? raw : cJSON_CreateNull());
+        } else if (!strcmp(op, "provenance_build") || !strcmp(op, "carried_from_release") || !strcmp(op, "time_base")) {
+            /* Format 0.6 (spec 4.6, 7.4): provenance.build, provenance.carried_from_release and the set's time_base
+             * annotation. The C API for them is not defined yet; the C 0.6 work adds it and maps it here. */
+            otc_station_free(st);
+            set_error(r, "uncaught:Unimplemented", op);
+            return;
         } else {
             otc_station_free(st);
             set_error(r, "uncaught:UnknownOp", op);
@@ -1184,8 +1190,8 @@ static cJSON *enc_release_info(const otc_release_info *ri, int *bad)
                                               ? cJSON_CreateString(buf) : cJSON_CreateNull());
     cJSON_AddItemToObject(o, "format_version", otc_release_info_format_version(ri, buf, sizeof buf, &need) == OTC_OK
                                                    ? cJSON_CreateString(buf) : cJSON_CreateNull());
-    cJSON_AddItemToObject(o, "doi", otc_release_info_doi(ri, buf, sizeof buf, &need) == OTC_OK
-                                        ? cJSON_CreateString(buf) : cJSON_CreateNull());
+    /* concept_doi, zenodo_version_doi and content_sha256 (spec 3) have no C accessors yet: left out, so the
+     * cases that check a ReleaseInfo fail until the C library reads format 0.6 and this runner maps them. */
     for (i = 0; i < n; i++) {
         const otc_file_info *fi = NULL;
         if (otc_release_info_file_at(ri, i, &fi) != OTC_OK) { *bad = 1; break; }

@@ -108,11 +108,35 @@ def enc_files(files):
     return sorted([pick(f, FILE_INFO) for f in files], key=lambda f: f["name"])
 
 
+def present(obj, fields):
+    """The fields the SDK has. A field it does not have yet is left out of the result, so a case that checks it
+    fails with "missing" and a case that does not check it is not affected."""
+    return {f: plain(getattr(obj, f)) for f in fields if hasattr(obj, f)}
+
+
 def enc_release_info(info):
     if info is None:
         return None
-    return {"datestamp": info.datestamp, "format_version": info.format_version, "doi": info.doi,
+    return {"datestamp": info.datestamp, "format_version": info.format_version,
+            **present(info, ["concept_doi", "zenodo_version_doi", "content_sha256"]),
             "files": enc_files(info.files)}
+
+
+BUILD = ["build_commit", "built_at", "fetched_at", "run_id", "tool_versions"]
+TIME_BASE = ["code", "reason", "declared", "published", "decided_in", "decided_build_commit"]
+EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"]
+
+
+def enc_time_base(t):
+    """TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects."""
+    if t is None:
+        return None
+    out = pick(t, TIME_BASE)
+    corr = plain(t.correction)
+    out["correction"] = None if corr is None else {"from": corr.get("from"), "to": corr.get("to")}
+    out["months_dropped"] = plain(list(t.months_dropped))
+    out["evidence"] = [{k: e.get(k) for k in EVIDENCE} for e in plain(list(t.evidence))]
+    return out
 
 
 def enc_validation(rows):
@@ -179,8 +203,9 @@ class Runner:
             return {"code": None if e is None else e.code}
         if op == "release_metadata":
             r = self.release(req)
-            return pick(r, ["datestamp", "created", "format_version", "doi", "concept_doi", "source_versions",
-                            "build_commit", "changelog_url"])
+            return {**pick(r, ["datestamp", "created", "format_version", "concept_doi", "source_versions",
+                               "build_commit", "changelog_url"]),
+                    **present(r, ["zenodo_version_doi"])}
         if op == "release_files":
             return {"files": enc_files(self.release(req).files)}
         if op == "releases":
@@ -285,6 +310,16 @@ class Runner:
             if cs is None:
                 return {"provenance": None, "raw": None}
             return {"provenance": pick(cs.provenance, PROVENANCE), "raw": plain(cs.provenance.raw)}
+        if op == "provenance_build":
+            cs = self.set(req, a)
+            b = None if cs is None else cs.provenance.build
+            return {"build": None if b is None else pick(b, BUILD)}
+        if op == "carried_from_release":
+            cs = self.set(req, a)
+            return {"carried_from_release": None if cs is None else cs.provenance.carried_from_release}
+        if op == "time_base":
+            cs = self.set(req, a)
+            return {"time_base": None if cs is None else enc_time_base(cs.time_base)}
         if op == "set_validation":
             cs = self.set(req, a)
             return {"validation": [] if cs is None else enc_validation(cs.validation)}

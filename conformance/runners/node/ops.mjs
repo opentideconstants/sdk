@@ -87,9 +87,50 @@ function encFiles(files) {
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
+// The fields the SDK has. A field it does not have yet (undefined) is left out of the result, so a case that
+// checks it fails with "missing" and a case that does not check it is not affected.
+function present(obj, fields) {
+    const out = {};
+    for (const f of fields) if (obj[f] !== undefined) out[f] = obj[f];
+    return out;
+}
+
 function encInfo(i) {
     if (i == null) return null;
-    return { datestamp: i.datestamp, format_version: i.format_version, doi: i.doi, files: encFiles(i.files) };
+    return {
+        datestamp: i.datestamp, format_version: i.format_version,
+        ...present(i, ["concept_doi", "zenodo_version_doi", "content_sha256"]),
+        files: encFiles(i.files),
+    };
+}
+
+// A field the op needs: undefined means the SDK does not have it, which fails the step.
+function need(obj, field) {
+    if (obj[field] === undefined) throw new Error(`the SDK has no ${field}`);
+    return obj[field];
+}
+
+function encBuild(b) {
+    if (b == null) return null;
+    return {
+        build_commit: need(b, "build_commit"), built_at: iso(need(b, "built_at")), fetched_at: iso(need(b, "fetched_at")),
+        run_id: need(b, "run_id"), tool_versions: need(b, "tool_versions"),
+    };
+}
+
+const EVIDENCE = ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"];
+
+// TimeBase: typed fields; correction is an object {from, to} or null; evidence is a list of objects.
+function encTimeBase(t) {
+    if (t == null) return null;
+    const corr = need(t, "correction");
+    return {
+        code: need(t, "code"), reason: need(t, "reason"), declared: need(t, "declared"), published: need(t, "published"),
+        correction: corr == null ? null : { from: corr.from ?? null, to: corr.to ?? null },
+        months_dropped: [...need(t, "months_dropped")], decided_in: need(t, "decided_in"),
+        decided_build_commit: need(t, "decided_build_commit"),
+        evidence: [...need(t, "evidence")].map((e) => pick(e, EVIDENCE)),
+    };
 }
 
 function encStats(s) {
@@ -140,9 +181,9 @@ export function makeRunner(sdk) {
         release_metadata(a, msg) {
             const r = release(msg);
             return {
-                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version, doi: r.doi,
+                datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version,
                 concept_doi: r.concept_doi, source_versions: r.source_versions, build_commit: r.build_commit,
-                changelog_url: r.changelog_url,
+                changelog_url: r.changelog_url, ...present(r, ["zenodo_version_doi"]),
             };
         },
         release_files: (a, msg) => ({ files: encFiles(release(msg).files) }),
@@ -243,6 +284,18 @@ export function makeRunner(sdk) {
             const cs = lookSet(msg, a);
             const p = cs ? cs.provenance : null;
             return p ? { provenance: pick(p, PROVENANCE), raw: p.raw } : { provenance: null, raw: null };
+        },
+        provenance_build(a, msg) {
+            const cs = lookSet(msg, a);
+            return { build: cs ? encBuild(need(cs.provenance, "build")) : null };
+        },
+        carried_from_release(a, msg) {
+            const cs = lookSet(msg, a);
+            return { carried_from_release: cs ? need(cs.provenance, "carried_from_release") : null };
+        },
+        time_base(a, msg) {
+            const cs = lookSet(msg, a);
+            return { time_base: cs ? encTimeBase(need(cs, "time_base")) : null };
         },
         set_validation(a, msg) {
             const cs = lookSet(msg, a);
