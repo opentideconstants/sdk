@@ -149,7 +149,12 @@ class OpenTideConstants
     end
 
     # Hashes the loaded files again and compares them with OTC_{D}.sha256.
+    # A client on a file with no .sha256 next to it has nothing to compare
+    # with: checksum_mismatch (CR D20).
     def verify
+        if @loaded_from == :file_unverified
+            raise ChecksumError.new("no OTC_#{@release.datestamp}.sha256 next to the file", file: @file, expected: nil, actual: nil)
+        end
         @release.send(:verify)
     end
 
@@ -507,8 +512,8 @@ class OpenTideConstants
     end
 
     def open_pinned(d)
-        if usable_cached?(d)
-            @release = load_cached(d)
+        if (rel = load_cached_unless_corrupt(d))
+            @release = rel
             @loaded_from = :cache
             return
         end
@@ -522,11 +527,23 @@ class OpenTideConstants
     def load_from_entry(entry, url)
         d = entry["datestamp"]
         raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
-        if usable_cached?(d)
+        if (rel = load_cached_unless_corrupt(d))
             note_version_doi(entry)
-            return [load_cached(d), :cache]
+            return [rel, :cache]
         end
         [fetch_release(d, entry, url), :download]
+    end
+
+    # The cached release d when it is usable, else nil. A cached file that
+    # fails verify_on_open is deleted (load_cached does it), and then, when
+    # online, nil, so the caller downloads it again (spec §4.8).
+    def load_cached_unless_corrupt(d)
+        return nil unless usable_cached?(d)
+        load_cached(d)
+    rescue ChecksumError => e
+        raise if @offline
+        log(:warn, "#{e.message}; downloading #{d} again")
+        nil
     end
 
     # The data files a load in this mode reads, in order of preference.
@@ -548,7 +565,15 @@ class OpenTideConstants
         dir = cache.release_dir(d)
         paths = names.map { |n| File.join(dir, n) }
         checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
-        Reader.verify_checks(checks) if @verify_on_open
+        if @verify_on_open
+            begin
+                Reader.verify_checks(checks)
+            rescue ChecksumError => e
+                log(:warn, "#{e.message}; deleting the cached file")
+                cache.remove_file(e.file)
+                raise
+            end
+        end
         files = ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
@@ -615,6 +640,14 @@ class OpenTideConstants
         dir = cache.release_dir(d)
         rows, sha_bytes = Downloader.fetch_sha256(self, d, entry, pointer_url)
         pointer_files = entry ? Array(entry["files"]).to_h { |f| [f["name"], f] } : {}
+        # Eager mode reads the .json, from .json.gz when the release has one.
+        gz = "OTC_#{d}.json.gz"
+        json = "OTC_#{d}.json"
+        need = @mode == :stream ? %W[OTC_#{d}.jsonl OTC_#{d}.meta.json] : [rows[gz] ? gz : json, json]
+        need.uniq.each do |name|
+            # Check the list before any download (a file it does not list cannot be checked).
+            raise ChecksumError.new("#{name} is not listed in OTC_#{d}.sha256", file: name, expected: nil, actual: nil) unless rows[name]
+        end
         url_of = lambda do |name|
             f = pointer_files[name]
             f && f["url"] ? resolve(pointer_url, f["url"]) : @base_url + name
@@ -640,9 +673,11 @@ class OpenTideConstants
                                                 pointer_files.dig(name, "size"))
                 verified[name]["size"] = size
             end
+        elsif !rows[gz]
+            size = Downloader.fetch_checked(self, url_of.call(json), dir, File.join(dir, json), json, rows[json],
+                                            pointer_files.dig(json, "size"))
+            verified[json]["size"] = size
         else
-            gz = "OTC_#{d}.json.gz"
-            json = "OTC_#{d}.json"
             tmp_gz = Cache.tmp_path(dir)
             begin
                 Downloader.fetch_checked(self, url_of.call(gz), dir, nil, gz, rows[gz], pointer_files.dig(gz, "size"),

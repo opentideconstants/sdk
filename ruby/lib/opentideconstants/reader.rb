@@ -27,15 +27,18 @@ class OpenTideConstants
             [path]
         end
 
-        # Parses "<sha256>  <name>" lines into {name => sha256}.
-        def parse_sha256(text)
+        # One sha256sum line: 64 hex digits, white space, an optional "*", the name.
+        SHA256_LINE = /\A(\h{64})\s+\*?(\S.*?)\s*\z/.freeze
+
+        # Parses "<sha256>  <name>" lines into {name => sha256} (lower case).
+        # A line in any other form is invalid_release (source names the file).
+        def parse_sha256(text, source = "the .sha256 file")
             rows = {}
-            text.each_line do |line|
-                line = line.strip
-                next if line.empty?
-                digest, name = line.split(/\s+/, 2)
-                next if name.nil?
-                rows[name.delete_prefix("*").strip] = digest.downcase
+            text.each_line.with_index(1) do |line, n|
+                next if line.strip.empty?
+                m = SHA256_LINE.match(line.chomp)
+                raise InvalidReleaseError, "#{source} line #{n} is not \"<sha256>  <name>\": #{line.chomp[0, 100].inspect}" unless m
+                rows[m[2]] = m[1].downcase
             end
             rows
         end
@@ -53,7 +56,7 @@ class OpenTideConstants
             read.each { |p| raise FileError.new("no such file: #{p}", path: p) unless File.file?(p) }
             sha_path = File.join(File.dirname(path), "#{prefix}.sha256")
             if File.file?(sha_path)
-                rows = parse_sha256(read_text(sha_path))
+                rows = parse_sha256(read_text(sha_path), File.basename(sha_path))
                 checks = {}
                 read.each do |p|
                     name = File.basename(p)

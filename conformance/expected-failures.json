@@ -1260,7 +1260,6 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK11",
@@ -1271,27 +1270,10 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK11",
    "reason": "step 3 open: expected a result, got error 'checksum_mismatch' (SHA-256 of OTC_20991231.2.jsonl does not match its .sha256 row)"
-  },
-  {
-   "case": "rules/pk11/eager-json-without-gz",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK11",
-   "reason": "step 0 open: expected a result, got error 'release_not_found' (http://127.0.0.1:51342/nogz/OTC_20991231.2.json.gz: HTTP 404)"
-  },
-  {
-   "case": "rules/pk11/pointer-sha256-uppercase",
-   "runners": [
-    "ruby"
-   ],
-   "package": "PK11",
-   "reason": "step 1 open: expected a result, got error 'checksum_mismatch' (OTC_20991231.2.sha256 does not match the pointer)"
   },
   {
    "case": "rules/pk11/sha256-absolute-url",
@@ -1323,8 +1305,7 @@
    "case": "rules/pk11/verify-unverified-file",
    "runners": [
     "c",
-    "c-fetch",
-    "ruby"
+    "c-fetch"
    ],
    "package": "PK11",
    "reason": "step 2 verify: expected error 'checksum_mismatch', got error 'io' (cannot read /tmp/otc-conf-l65mpecj/rel/OTC_20991231.2.sha256)"
