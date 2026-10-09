@@ -73,6 +73,10 @@ jobs:
         run: |
           python conformance/tools/build_cases.py --check
           python conformance/driver.py --check-cases
+      - name: The fixtures are current and valid (schemas 0.2, 0.5, 0.6 and the 0.6 index)
+        run: uv run conformance/tools/build_fixtures.py --check
+      - name: supported-formats.json matches each SDK's SUPPORTED_FORMAT_VERSION
+        run: python conformance/tools/check_supported_formats.py
       - name: Cross-SDK cases (Python, Ruby, TypeScript, C)
         shell: bash
         run: |
