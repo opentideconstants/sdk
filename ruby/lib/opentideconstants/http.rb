@@ -159,8 +159,8 @@ class OpenTideConstants
         end
 
         # The URI a redirect goes to, or NetworkError: a 6th redirect, a
-        # missing or bad Location, a scheme other than http or https, or a
-        # redirect from https to http (spec §5.7, CR D1).
+        # missing or bad Location, a scheme other than http or https, no host,
+        # or a redirect from https to http (spec §5.7, CR D1).
         def follow(from, location, url, count)
             raise NetworkError.new("GET #{url}: more than #{MAX_REDIRECTS} redirects", url: url, status: nil) if count > MAX_REDIRECTS
             if location.nil? || location.strip.empty?
@@ -169,6 +169,10 @@ class OpenTideConstants
             to = from + location.strip
             unless %w[http https].include?(to.scheme)
                 raise NetworkError.new("GET #{from}: a redirect to #{to} is not http or https", url: url, status: nil)
+            end
+            # a Location such as "https:" or "//:8080/x" has no host: Net::HTTP would connect to localhost
+            if to.host.nil? || to.host.empty?
+                raise NetworkError.new("GET #{from}: a redirect to #{location.strip.inspect} has no host", url: url, status: nil)
             end
             if from.scheme == "https" && to.scheme == "http"
                 raise NetworkError.new("GET #{from}: a redirect from https to http (#{to}) is not followed", url: url, status: nil)
