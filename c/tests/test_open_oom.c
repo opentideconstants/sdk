@@ -13,9 +13,9 @@
     "\"evidence\":[{\"comparator_kind\":\"x\"}]}},{\"set_id\":\"t\",\"source\":\"y\",\"qc_status\":\"no_constants\"," \
     "\"convention_id\":\"c1\",\"licence_id\":\"l1\"}],\"validation\":[{\"set_id\":\"s\",\"window\":\"w\"}]}"
 
-/* An open that gave OTC_OK although an allocation failed: the one case known
- * today is build_files, which reads a failed path join as "size unknown" (-1)
- * and goes on. Gives 1 when a file of rel has size -1. */
+/* An open that gave OTC_OK although an allocation failed: build_files read a
+ * failed path join as "size unknown" (-1) and went on (PK-R2-23, fixed).
+ * Gives 1 when a file of rel has size -1. */
 static int has_unknown_size(const otc_release *rel)
 {
     size_t i;
@@ -27,9 +27,8 @@ static int has_unknown_size(const otc_release *rel)
 }
 
 /* Judges one run whose result is not OK or NOMEM, or is OK although an
- * allocation failed. Only two such results are known library defects (PK-R2-23:
- * a failed allocation must give OTC_E_NOMEM). They are counted, and PENDING at
- * the end; any other is a failure:
+ * allocation failed. Each is a failure (a failed allocation must give
+ * OTC_E_NOMEM); the two forms PK-R2-23 fixed are counted and named at the end:
  *  - INVALID_RELEASE when the failed allocation was cJSON's (a parse that runs
  *    out of memory reads as "not JSON")
  *  - OK with a file of size -1 (build_files swallows a failed otc__join) */
@@ -109,8 +108,8 @@ int main(void)
     printf("oom: %d runs\n", runs);
     if (g_cjson_invalid)
         fprintf(stderr, "%ld runs: a failed cJSON allocation reads as invalid_release, not out_of_memory\n", g_cjson_invalid);
-    PENDING("PK-R2-23", g_cjson_invalid == 0);
-    PENDING("PK-R2-23", g_ok_unknown_size == 0);
+    CHECK(g_cjson_invalid == 0);
+    CHECK(g_ok_unknown_size == 0);
     free(path);
     free(dir);
     return test_done("test_open_oom");

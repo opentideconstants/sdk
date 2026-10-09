@@ -117,15 +117,17 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
 {
     char *buf = (char *)malloc(length + 1);
     cJSON *v;
+    otc_status st;
     *out = NULL;
-    if (!buf) return OTC_E_NOMEM;
+    if (!buf) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     if (otc__file_pread(rel->file, buf, length, offset) != 0) {
         free(buf);
         return otc__fail(rel, OTC_E_IO, "cannot read %s at offset %lu", rel->path, (unsigned long)offset);
     }
     buf[length] = '\0';
-    v = otc__json_parse(buf, length);
+    st = otc__json_parse_st(buf, length, &v);
     free(buf);
+    if (st == OTC_E_NOMEM) return otc__fail(rel, st, "out of memory");
     if (!v) return otc__fail(rel, OTC_E_INVALID_RELEASE, "a line of %s is not JSON (it changed after open?)", rel->path);
     *out = v;
     return OTC_OK;
@@ -444,8 +446,9 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
 
 static otc_status index_line(builder *b, const char *line, size_t len, uint64_t offset)
 {
-    cJSON *root = otc__json_parse(line, len);
-    otc_status st;
+    cJSON *root;
+    otc_status st = otc__json_parse_st(line, len, &root);
+    if (st == OTC_E_NOMEM) return st;
     if (!root) return bad_line(b, "not JSON");
     if (!cJSON_IsObject(root)) {
         cJSON_Delete(root);
@@ -629,7 +632,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
     /* a name with a NUL does not survive cJSON: such an index is read from the .jsonl instead */
     if (otc__json_has_nul(text, len)) goto done;
-    doc = otc__json_parse(text, len);
+    if (otc__json_parse_st(text, len, &doc) == OTC_E_NOMEM) { st = OTC_E_NOMEM; goto done; }
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
     if (otc__strcmp_null(otc__jstr(doc, "datestamp"), ds) || otc__strcmp_null(otc__jstr(doc, "jsonl"), jsonl_name)
@@ -689,11 +692,12 @@ static void put(cJSON *o, const char *key, cJSON *item, int *ok)
 static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint64_t offset)
 {
     ix_ctx *x = (ix_ctx *)ctx;
-    cJSON *d = otc__json_parse(text, len), *o, *sets, *al;
+    cJSON *d, *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
     const char *rec, *name, *kind = NULL;
     int ok = 1;
-    if (!d) return OTC_E_INVALID_RELEASE;
+    otc_status pst = otc__json_parse_st(text, len, &d);
+    if (pst != OTC_OK) return pst;
     o = cJSON_CreateObject();
     sets = cJSON_CreateArray();
     al = cJSON_CreateObject();
@@ -853,7 +857,10 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
     const cJSON *convs, *lics, *c;
     long major;
     size_t i;
-    r->meta = otc__json_parse(text, len);
+    if (otc__json_parse_st(text, len, &r->meta) == OTC_E_NOMEM) {
+        otc__err_set(err, OTC_E_NOMEM, meta_path, "out of memory");
+        return OTC_E_NOMEM;
+    }
     if (!r->meta || !cJSON_IsObject(r->meta)) {
         otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "%s is not a JSON object", meta_path);
         return OTC_E_INVALID_RELEASE;
@@ -954,9 +961,10 @@ static otc_status build_files(otc_release *r, const char *dir, char **names, cha
     for (i = 0; i < n; i++) {
         const char *name = n_rows ? names[i] : (i == 0 ? jsonl_name : meta_name);
         char *full = otc__join(dir, name);
+        if (!full) return OTC_E_NOMEM;   /* never "size unknown": the size is there, the path is not */
         r->files[i].name = otc__strdup(name);
         r->files[i].sha256 = n_rows ? otc__strdup(digests[i]) : NULL;
-        r->files[i].size = full ? otc__path_size(full) : -1;
+        r->files[i].size = otc__path_size(full);
         free(full);
         if (!r->files[i].name || (n_rows && !r->files[i].sha256)) return OTC_E_NOMEM;
     }

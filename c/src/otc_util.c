@@ -230,27 +230,38 @@ otc_dropped_reason otc__parse_dropped_reason(const char *s)
 
 /* ------------------------------------------------------------- JSON parse */
 
+/* cJSON reports every failure as NULL: a failed allocation in it (malloc sets
+ * errno to ENOMEM) is told apart from text that is not JSON by errno. */
 #ifdef _WIN32
 static SRWLOCK g_parse_lock = SRWLOCK_INIT;
-cJSON *otc__json_parse(const char *text, size_t len)
-{
-    cJSON *v;
-    AcquireSRWLockExclusive(&g_parse_lock);
-    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
-    ReleaseSRWLockExclusive(&g_parse_lock);
-    return v;
-}
+#define PARSE_LOCK() AcquireSRWLockExclusive(&g_parse_lock)
+#define PARSE_UNLOCK() ReleaseSRWLockExclusive(&g_parse_lock)
 #else
 static pthread_mutex_t g_parse_lock = PTHREAD_MUTEX_INITIALIZER;
+#define PARSE_LOCK() pthread_mutex_lock(&g_parse_lock)
+#define PARSE_UNLOCK() pthread_mutex_unlock(&g_parse_lock)
+#endif
+
+otc_status otc__json_parse_st(const char *text, size_t len, cJSON **out)
+{
+    cJSON *v;
+    int e;
+    PARSE_LOCK();
+    errno = 0;
+    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
+    e = errno;
+    PARSE_UNLOCK();
+    *out = v;
+    if (v) return OTC_OK;
+    return e == ENOMEM ? OTC_E_NOMEM : OTC_E_INVALID_RELEASE;
+}
+
 cJSON *otc__json_parse(const char *text, size_t len)
 {
     cJSON *v;
-    pthread_mutex_lock(&g_parse_lock);
-    v = cJSON_ParseWithLengthOpts(text, len + 1, NULL, 1);   /* the whole text: trailing text fails */
-    pthread_mutex_unlock(&g_parse_lock);
+    (void)otc__json_parse_st(text, len, &v);
     return v;
 }
-#endif
 
 /* ----------------------------------------------------------------- strings */
 
