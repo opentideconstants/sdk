@@ -44,8 +44,9 @@ class OpenTideConstants
             raise InvalidReleaseError, "release object missing" unless rel.is_a?(Hash) && rel["datestamp"].is_a?(String)
             @datestamp = rel["datestamp"]
             @created = Util.time(rel["created"])
-            unless rel["source_versions"].nil? || rel["source_versions"].is_a?(Hash)
-                raise InvalidReleaseError, "release.source_versions is not an object"
+            sv = rel["source_versions"]
+            unless sv.nil? || (sv.is_a?(Hash) && sv.values.all?(String))
+                raise InvalidReleaseError, "release.source_versions is not an object of strings"
             end
             %w[conventions licences].each do |k|
                 list = meta[k]
@@ -345,8 +346,10 @@ class OpenTideConstants
             Release.real?(v)
         end
 
+        # A real number that is finite as a double: an Integer too large for a
+        # double (400 digits) is not.
         def self.real?(v)
-            v.is_a?(Numeric) && v.real? && v.finite?
+            v.is_a?(Numeric) && v.real? && v.to_f.finite?
         end
 
         def check_point!(lat, lon)
@@ -554,9 +557,41 @@ class OpenTideConstants
                       pos: pos, len: len, station: nil)
         end
 
-        STRING_KEYS = %w[name country type timezone status recommended_set_id].freeze
-        SET_STRING_KEYS = %w[source source_type quantity qc_status source_record_id source_version].freeze
-        OFFSET_NUMBERS = %w[time_offset_high_min time_offset_low_min height_offset_high height_offset_low].freeze
+        # The JSON type of each known field that the SDK reads (spec §7.3:
+        # tolerant is not lax; CR2 PK-R2-05). Absent or null is always allowed
+        # here; required fields are checked where they are used. :t a String,
+        # :n a finite number, :i a finite number with an integral value, :o an
+        # object, :l a list of objects, :s a list of Strings, :a a list. The
+        # same table is in the Python, TypeScript and C SDKs.
+        STATION_TYPES = { "name" => :t, "country" => :t, "timezone" => :t, "type" => :t, "recommended_set_id" => :t,
+                          "status" => :t, "constant_sets" => :l, "validation" => :l, "subordinate_offsets" => :o,
+                          "current_offsets" => :a }.freeze
+        OFFSET_TYPES = { "reference_station_id" => :t, "licence_id" => :t, "height_adjusted_type" => :t,
+                         "time_offset_high_min" => :n, "time_offset_low_min" => :n, "height_offset_high" => :n,
+                         "height_offset_low" => :n }.freeze
+        VALIDATION_TYPES = { "set_id" => :t, "reference_source" => :t, "reference_station" => :t, "window" => :t,
+                             "reference_distance_km" => :n, "time_mae_min" => :n, "time_p95_min" => :n,
+                             "time_bias_min" => :n, "height_mae_m" => :n, "range_error_m" => :n,
+                             "missed_events" => :i, "extra_events" => :i, "previous_release" => :o }.freeze
+        SET_TYPES = { "set_id" => :t, "source" => :t, "source_type" => :t, "quantity" => :t, "source_record_id" => :t,
+                      "source_version" => :t, "convention_id" => :t, "licence_id" => :t, "qc_status" => :t,
+                      "constituents" => :l, "dropped_constituents" => :l, "qc_flags" => :l, "record_span" => :o,
+                      "datum" => :o, "time_base" => :o, "provenance" => :o, "current_bins" => :a }.freeze
+        SPAN_TYPES = { "good_samples" => :i }.freeze
+        DATUM_TYPES = { "msl_offset_m" => :n, "named" => :o }.freeze
+        CONSTITUENT_TYPES = { "name" => :t, "source_name" => :t, "doodson" => :t, "kept_reason" => :t,
+                              "speed_deg_per_hour" => :n, "amplitude_m" => :n, "phase_deg" => :n,
+                              "amp_uncertainty_m" => :n, "phase_uncertainty_deg" => :n }.freeze
+        QC_FLAG_TYPES = { "flag" => :t, "reason" => :t, "values" => :o }.freeze
+        DROPPED_TYPES = { "name" => :t, "dropped_reason" => :t, "detail" => :t }.freeze
+        TIME_BASE_TYPES = { "code" => :t, "reason" => :t, "declared" => :t, "published" => :t, "decided_in" => :t,
+                            "decided_build_commit" => :t, "correction" => :o, "months_dropped" => :s,
+                            "evidence" => :l }.freeze
+        CORRECTION_TYPES = { "from" => :t, "to" => :t }.freeze
+        EVIDENCE_TYPES = { "comparator_kind" => :t, "comparator_id" => :t, "detail" => :t, "distance_km" => :n,
+                           "lag_min" => :n }.freeze
+        PROVENANCE_TYPES = { "adapter_version" => :t, "carried_from_release" => :t, "selection_reason" => :t,
+                             "input_sha256" => :s, "decision" => :o }.freeze
 
         # The shape checks of a tombstone line: its fields are strings or null.
         def self.check_tombstone!(raw)
@@ -566,62 +601,74 @@ class OpenTideConstants
             end
         end
 
+        def self.type_ok?(v, type)
+            return true if v.nil?
+            case type
+            when :t then v.is_a?(String)
+            when :n then real?(v)
+            when :i then real?(v) && v == v.to_i
+            when :o then v.is_a?(Hash)
+            when :l then v.is_a?(Array) && v.all?(Hash)
+            when :s then v.is_a?(Array) && v.all?(String)
+            else v.is_a?(Array)
+            end
+        end
+
+        def self.check_types!(obj, table, what)
+            table.each do |k, type|
+                raise InvalidReleaseError, "#{what}: #{k} has the wrong type" unless type_ok?(obj[k], type)
+            end
+        end
+
         # The shape checks of an active station line (spec §6.1, §7.3): every
         # field that the SDK reads has the type of the format, also the nested
         # ones, so a malformed station fails the load with invalid_release in
         # eager and stream mode alike, never a raw error at the first query.
         def self.check_station!(raw)
             sid = raw["station_id"]
-            bad = ->(what) { raise InvalidReleaseError, "station #{sid}: #{what}" }
-            str = ->(v) { v.nil? || v.is_a?(String) }
-            num = ->(v) { v.nil? || real?(v) }
-            list = ->(v, what) { v.nil? || (v.is_a?(Array) && v.all?(Hash)) or bad.call("#{what} is not a list of objects") }
-            bad.call("name is not a string") unless raw["name"].is_a?(String)
-            STRING_KEYS.each { |k| bad.call("#{k} is not a string") unless str.call(raw[k]) }
-            bad.call("lat is not a number in [-90, 90]") unless real?(raw["lat"]) && raw["lat"].between?(-90, 90)
-            bad.call("lon is not a number in [-180, 180]") unless real?(raw["lon"]) && raw["lon"].between?(-180, 180)
-            off = raw["subordinate_offsets"]
-            unless off.nil?
-                bad.call("subordinate_offsets is not an object") unless off.is_a?(Hash)
-                %w[licence_id height_adjusted_type].each { |k| bad.call("subordinate_offsets.#{k} is not a string") unless str.call(off[k]) }
-                OFFSET_NUMBERS.each { |k| bad.call("subordinate_offsets.#{k} is not a number") unless num.call(off[k]) }
+            what = "station #{sid}"
+            raise InvalidReleaseError, "#{what}: name is not a string" unless raw["name"].is_a?(String)
+            check_types!(raw, STATION_TYPES, what)
+            unless real?(raw["lat"]) && raw["lat"].between?(-90, 90)
+                raise InvalidReleaseError, "#{what}: lat is not a number in [-90, 90]"
             end
-            list.call(raw["validation"], "validation")
-            Array(raw["validation"]).each do |v|
-                %w[set_id reference_source reference_station window].each { |k| bad.call("validation #{k} is not a string") unless str.call(v[k]) }
+            unless real?(raw["lon"]) && raw["lon"].between?(-180, 180)
+                raise InvalidReleaseError, "#{what}: lon is not a number in [-180, 180]"
             end
-            Array(raw["constant_sets"]).each { |cs| check_set!(cs, bad, str, list) }
+            check_types!(raw["subordinate_offsets"], OFFSET_TYPES, "#{what}: subordinate_offsets") if raw["subordinate_offsets"]
+            Array(raw["validation"]).each { |v| check_types!(v, VALIDATION_TYPES, "#{what}: validation") }
+            Array(raw["constant_sets"]).each { |cs| check_set!(cs, what) }
         end
 
-        def self.check_set!(cs, bad, str, list)
-            bad.call("a set has no set_id") unless cs["set_id"].is_a?(String)
-            what = ->(k) { "set #{cs['set_id']}: #{k}" }
-            SET_STRING_KEYS.each { |k| bad.call("#{what.call(k)} is not a string") unless str.call(cs[k]) }
-            list.call(cs["qc_flags"], what.call("qc_flags"))
-            list.call(cs["dropped_constituents"], what.call("dropped_constituents"))
-            list.call(cs["constituents"], what.call("constituents"))
-            Array(cs["constituents"]).each { |c| bad.call("#{what.call('a constituent')} has no name") unless c["name"].is_a?(String) }
+        def self.check_set!(cs, station)
+            raise InvalidReleaseError, "#{station}: a set has no set_id" unless cs["set_id"].is_a?(String)
+            what = "#{station}: set #{cs['set_id']}"
+            check_types!(cs, SET_TYPES, what)
+            { "record_span" => SPAN_TYPES, "datum" => DATUM_TYPES, "time_base" => TIME_BASE_TYPES,
+              "provenance" => PROVENANCE_TYPES }.each do |k, table|
+                check_types!(cs[k], table, "#{what}: #{k}") if cs[k]
+            end
+            Array(cs["constituents"]).each do |c|
+                raise InvalidReleaseError, "#{what}: a constituent has no name" unless c["name"].is_a?(String)
+                check_types!(c, CONSTITUENT_TYPES, "#{what}: constituents")
+            end
+            Array(cs["dropped_constituents"]).each { |x| check_types!(x, DROPPED_TYPES, "#{what}: dropped_constituents") }
+            Array(cs["qc_flags"]).each do |f|
+                check_types!(f, QC_FLAG_TYPES, "#{what}: qc_flags")
+                unless (f["values"] || {}).values.all? { |x| x.nil? || real?(x) }
+                    raise InvalidReleaseError, "#{what}: a qc_flags value is not a number or null"
+                end
+            end
             span = cs["record_span"]
-            unless span.nil?
-                bad.call("#{what.call('record_span')} is not an object") unless span.is_a?(Hash)
+            if span
                 Util.time(span["start"])
                 Util.time(span["end"])
             end
-            datum = cs["datum"]
-            unless datum.nil?
-                named = datum.is_a?(Hash) ? datum["named"] : nil
-                unless datum.is_a?(Hash) && (named.nil? || (named.is_a?(Hash) && named.values.all? { |x| x.nil? || real?(x) }))
-                    bad.call("#{what.call('datum')} is not an object of numbers")
-                end
-            end
-            tb = cs["time_base"]
-            unless tb.nil?
-                bad.call("#{what.call('time_base')} is not an object") unless tb.is_a?(Hash)
-                months = tb["months_dropped"]
-                bad.call("#{what.call('time_base.months_dropped')} is not a list of strings") unless months.nil? || (months.is_a?(Array) && months.all?(String))
-                bad.call("#{what.call('time_base.evidence')} is not a list") unless tb["evidence"].nil? || tb["evidence"].is_a?(Array)
-            end
-            bad.call("#{what.call('provenance')} is not an object") unless cs["provenance"].nil? || cs["provenance"].is_a?(Hash)
+            named = (cs["datum"] || {})["named"] || {}
+            raise InvalidReleaseError, "#{what}: datum.named has a value that is not a number" unless named.values.all? { |x| real?(x) }
+            tb = cs["time_base"] || {}
+            check_types!(tb["correction"], CORRECTION_TYPES, "#{what}: time_base.correction") if tb["correction"]
+            Array(tb["evidence"]).each { |e| check_types!(e, EVIDENCE_TYPES, "#{what}: time_base.evidence") }
         end
 
         def quantity_kind(q)

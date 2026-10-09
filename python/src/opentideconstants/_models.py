@@ -284,7 +284,7 @@ class Validation:
         prev = d.get("previous_release")
         if isinstance(prev, dict):
             # a value that is not a number is null, as in the other SDKs (spec §4.6)
-            prev = MappingProxyType({k: (prev.get(k) if _finite(prev.get(k)) else None) for k in _PREVIOUS})
+            prev = MappingProxyType({k: (prev.get(k) if _is_finite(prev.get(k)) else None) for k in _PREVIOUS})
         else:
             prev = None
         return cls(d.get("set_id"), d.get("reference_source"), d.get("reference_station"),
@@ -446,8 +446,101 @@ class Stats:
 # --------------------------------------------------------------------------- building a Station from its JSON
 
 
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+def _is_finite(v) -> bool:
+    """A JSON number whose double value is finite. An integer too large for a double (400 digits) is not."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(v))
+    except OverflowError:
+        return False
+
+
+# The JSON type of each known field that the SDK reads (spec 7.3: tolerant is not lax; CR2 PK-R2-05). Absent or
+# null is always allowed here; required fields are checked where they are used. T a string, N a finite number,
+# I a finite number with an integral value, O an object, L a list of objects, S a list of strings, A a list.
+# The same table is in the Ruby, TypeScript and C SDKs.
+_STATION_TYPES = {"name": "T", "country": "T", "timezone": "T", "type": "T", "recommended_set_id": "T", "status": "T",
+                  "constant_sets": "L", "validation": "L", "subordinate_offsets": "O", "current_offsets": "A"}
+_OFFSET_TYPES = {"reference_station_id": "T", "licence_id": "T", "height_adjusted_type": "T",
+                 "time_offset_high_min": "N", "time_offset_low_min": "N", "height_offset_high": "N", "height_offset_low": "N"}
+_VALIDATION_TYPES = {"set_id": "T", "reference_source": "T", "reference_station": "T", "window": "T",
+                     "reference_distance_km": "N", "time_mae_min": "N", "time_p95_min": "N", "time_bias_min": "N",
+                     "height_mae_m": "N", "range_error_m": "N", "missed_events": "I", "extra_events": "I",
+                     "previous_release": "O"}
+_SET_TYPES = {"set_id": "T", "source": "T", "source_type": "T", "quantity": "T", "source_record_id": "T",
+              "source_version": "T", "convention_id": "T", "licence_id": "T", "qc_status": "T", "constituents": "L",
+              "dropped_constituents": "L", "qc_flags": "L", "record_span": "O", "datum": "O", "time_base": "O",
+              "provenance": "O", "current_bins": "A"}
+_SPAN_TYPES = {"good_samples": "I"}
+_DATUM_TYPES = {"msl_offset_m": "N", "named": "O"}
+_CONSTITUENT_TYPES = {"name": "T", "source_name": "T", "doodson": "T", "kept_reason": "T", "speed_deg_per_hour": "N",
+                      "amplitude_m": "N", "phase_deg": "N", "amp_uncertainty_m": "N", "phase_uncertainty_deg": "N"}
+_QC_FLAG_TYPES = {"flag": "T", "reason": "T", "values": "O"}
+_DROPPED_TYPES = {"name": "T", "dropped_reason": "T", "detail": "T"}
+_TIME_BASE_TYPES = {"code": "T", "reason": "T", "declared": "T", "published": "T", "decided_in": "T",
+                    "decided_build_commit": "T", "correction": "O", "months_dropped": "S", "evidence": "L"}
+_CORRECTION_TYPES = {"from": "T", "to": "T"}
+_EVIDENCE_TYPES = {"comparator_kind": "T", "comparator_id": "T", "detail": "T", "distance_km": "N", "lag_min": "N"}
+_PROVENANCE_TYPES = {"adapter_version": "T", "carried_from_release": "T", "selection_reason": "T",
+                     "input_sha256": "S", "decision": "O"}
+
+
+def _type_ok(v, t) -> bool:
+    if v is None:
+        return True
+    if t == "T":
+        return isinstance(v, str)
+    if t == "N":
+        return _is_finite(v)
+    if t == "I":
+        return _is_finite(v) and float(v) == int(v)
+    if t == "O":
+        return isinstance(v, dict)
+    if t == "L":
+        return isinstance(v, list) and all(isinstance(x, dict) for x in v)
+    if t == "S":
+        return isinstance(v, list) and all(isinstance(x, str) for x in v)
+    return isinstance(v, list)  # "A"
+
+
+def _check_types(d, table, what):
+    for k, t in table.items():
+        if not _type_ok(d.get(k), t):
+            raise InvalidReleaseError(f"{what}: {k} has the wrong type: {d.get(k)!r:.80}")
+
+
+def check_station_types(d) -> None:
+    """Every known field of an active station line has its JSON type (spec 7.3, §6.1), so a malformed line fails
+    the load with invalid_release in eager and stream mode, never a value read as null or a raw error later."""
+    sid = d.get("station_id")
+    _check_types(d, _STATION_TYPES, f"station {sid}")
+    if d.get("subordinate_offsets") is not None:
+        _check_types(d["subordinate_offsets"], _OFFSET_TYPES, f"station {sid}: subordinate_offsets")
+    for v in d.get("validation") or ():
+        _check_types(v, _VALIDATION_TYPES, f"station {sid}: validation")
+    for cs in d.get("constant_sets") or ():
+        what = f"station {sid}: set {cs.get('set_id')}"
+        _check_types(cs, _SET_TYPES, what)
+        for k, table in (("record_span", _SPAN_TYPES), ("datum", _DATUM_TYPES), ("time_base", _TIME_BASE_TYPES),
+                         ("provenance", _PROVENANCE_TYPES)):
+            if cs.get(k) is not None:
+                _check_types(cs[k], table, f"{what}: {k}")
+        named = (cs.get("datum") or {}).get("named") or {}
+        if not all(_is_finite(x) for x in named.values()):
+            raise InvalidReleaseError(f"{what}: datum.named has a value that is not a number")
+        for k, table in (("constituents", _CONSTITUENT_TYPES), ("qc_flags", _QC_FLAG_TYPES),
+                         ("dropped_constituents", _DROPPED_TYPES)):
+            for x in cs.get(k) or ():
+                _check_types(x, table, f"{what}: {k}")
+        for f in cs.get("qc_flags") or ():
+            if not all(x is None or _is_finite(x) for x in (f.get("values") or {}).values()):
+                raise InvalidReleaseError(f"{what}: a qc_flags value is not a number or null")
+        tb = cs.get("time_base") or {}
+        if tb.get("correction") is not None:
+            _check_types(tb["correction"], _CORRECTION_TYPES, f"{what}: time_base.correction")
+        for e in tb.get("evidence") or ():
+            _check_types(e, _EVIDENCE_TYPES, f"{what}: time_base.evidence")
 
 
 def build_station(d, conventions, licences, kind):
@@ -455,6 +548,7 @@ def build_station(d, conventions, licences, kind):
     is not checked here). conventions/licences: id -> object. Raises InvalidReleaseError when a reference does
     not resolve or a field is malformed."""
     try:
+        check_station_types(d)
         sid = d["station_id"]
         rid = d.get("recommended_set_id")
         rows = tuple(Validation._parse(v) for v in (d.get("validation") or ()))
@@ -495,7 +589,7 @@ def build_station(d, conventions, licences, kind):
         for system, ids in (d.get("aliases") or {}).items():
             aliases[system] = tuple(ids) if isinstance(ids, list) else (ids,)
         lat, lon = d.get("lat"), d.get("lon")
-        if not (_finite(lat) and -90 <= lat <= 90 and _finite(lon) and -180 <= lon <= 180):
+        if not (_is_finite(lat) and -90 <= lat <= 90 and _is_finite(lon) and -180 <= lon <= 180):
             raise InvalidReleaseError(f"{sid}: lat/lon must be numbers in range, not {lat!r}, {lon!r}")
         return Station(
             sid, d.get("name"), d.get("country"), float(lat), float(lon),

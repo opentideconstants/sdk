@@ -1,6 +1,7 @@
 /* PK07 value checks on the real library.
  * C48: an integer field (missed_events, good_samples ...) with a fraction is
- *      not cut to an integer: it reads as missing (-1).
+ *      never cut to an integer: the open fails with OTC_E_INVALID_RELEASE, as
+ *      in every SDK (CR2 PK-R2-05: a known field of the wrong JSON type).
  * C98: a line of only spaces or tabs is skipped (as the other SDKs do);
  *      text after a line's object is invalid_release, not ignored.
  * C34: the kind filter "other" is not a kind value: it matches no station,
@@ -38,20 +39,32 @@ int main(void)
     otc_release *rel;
     otc_station_t *st = NULL;
     /* C48 */
+    {
+        char *d2 = test_tmpdir(), *path;
+        otc_release *r2 = NULL;
+        test_write(d2, "OTC_20990101.meta.json", TEST_META("20990101"));
+        test_write(d2, "OTC_20990101.jsonl", "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,"
+                   "\"lon\":1,\"type\":\"reference\",\"constant_sets\":[],"
+                   "\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n");
+        path = test_join(d2, "OTC_20990101.jsonl");
+        CHECK_STATUS(otc_open_file(path, NULL, &r2), OTC_E_INVALID_RELEASE);
+        otc_close(r2);
+        free(path);
+        free(d2);
+    }
     rel = open_lines("{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"A\",\"lat\":1,\"lon\":1,\"type\":\"reference\","
-                     "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"missed_events\":1.5,\"extra_events\":2}]}\n", &dir);
+                     "\"constant_sets\":[],\"validation\":[{\"set_id\":\"s\",\"extra_events\":2.0}]}\n", &dir);
     CHECK(rel != NULL);
     if (rel && otc_station(rel, "OTC-X-1", &st) == OTC_OK) {
         const otc_validation_t *v = NULL;
         CHECK_STATUS(otc_station_validation_at(st, 0, &v), OTC_OK);
         if (v) {
-            CHECK(v->missed_events == -1);
-            CHECK(v->extra_events == 2);
+            CHECK(v->missed_events == -1);   /* absent */
+            CHECK(v->extra_events == 2);     /* 2.0: an integral value */
             /* C35 */
             CHECK(!v->has_previous_release);
             CHECK(isnan(v->previous_release.time_mae_min) && isnan(v->previous_release.range_error_m));
             CHECK(v->previous_release.missed_events == -1 && v->previous_release.extra_events == -1);
-            if (v->missed_events != -1) fprintf(stderr, "missed_events 1.5 read as %lld\n", (long long)v->missed_events);
         }
     }
     otc_station_free(st);

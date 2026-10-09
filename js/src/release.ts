@@ -105,7 +105,10 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     if (!Array.isArray(conventions) || !Array.isArray(licences)) throw new InvalidReleaseError("conventions or licences is missing");
     const created = release["created"];
     if (created !== undefined && created !== null && typeof created !== "string") throw new InvalidReleaseError("release.created is not a string");
-    if (!shapeOk(release["source_versions"], "object")) throw new InvalidReleaseError("release.source_versions is not an object");
+    const sv = release["source_versions"];
+    if (sv !== undefined && sv !== null && !(isObject(sv) && Object.values(sv).every((x) => typeof x === "string"))) {
+        throw new InvalidReleaseError("release.source_versions is not an object of strings");
+    }
     if (!conventions.every(isObject) || !licences.every(isObject)) throw new InvalidReleaseError("a convention or licence is not a JSON object");
     const cs = conventions.filter(isObject);
     const ls = licences.filter(isObject);
@@ -123,18 +126,71 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     return deepFreeze({ format_version: fv, release, conventions: cs, licences: ls });
 }
 
-type Shape = "object" | "array";
-/** The structured fields of a station and of a set: present and not null means this JSON type (spec 7.3, PK07). */
-const STATION_SHAPE: Record<string, Shape> = {
-    aliases: "object", constant_sets: "array", validation: "array", subordinate_offsets: "object", current_offsets: "array",
+/**
+ * The JSON type of each known field that the SDK reads (spec 7.3: tolerant is not lax; CR2 PK-R2-05). Absent or
+ * null is always allowed here; required fields are checked where they are used. T a string, N a finite number,
+ * I a finite number with an integral value, O an object, L a list of objects, S a list of strings, A a list.
+ * The same table is in the Python, Ruby and C SDKs.
+ */
+type FieldType = "T" | "N" | "I" | "O" | "L" | "S" | "A";
+type FieldTypes = Readonly<Record<string, FieldType>>;
+const STATION_TYPES: FieldTypes = {
+    name: "T", country: "T", timezone: "T", type: "T", recommended_set_id: "T", status: "T",
+    aliases: "O", constant_sets: "L", validation: "L", subordinate_offsets: "O", current_offsets: "A",
 };
-const SET_SHAPE: Record<string, Shape> = {
-    constituents: "array", dropped_constituents: "array", qc_flags: "array", record_span: "object", datum: "object",
-    time_base: "object", provenance: "object", current_bins: "array",
+const OFFSET_TYPES: FieldTypes = {
+    reference_station_id: "T", licence_id: "T", height_adjusted_type: "T",
+    time_offset_high_min: "N", time_offset_low_min: "N", height_offset_high: "N", height_offset_low: "N",
+};
+const VALIDATION_TYPES: FieldTypes = {
+    set_id: "T", reference_source: "T", reference_station: "T", window: "T", reference_distance_km: "N",
+    time_mae_min: "N", time_p95_min: "N", time_bias_min: "N", height_mae_m: "N", range_error_m: "N",
+    missed_events: "I", extra_events: "I", previous_release: "O",
+};
+const SET_TYPES: FieldTypes = {
+    set_id: "T", source: "T", source_type: "T", quantity: "T", source_record_id: "T", source_version: "T",
+    convention_id: "T", licence_id: "T", qc_status: "T", constituents: "L", dropped_constituents: "L", qc_flags: "L",
+    record_span: "O", datum: "O", time_base: "O", provenance: "O", current_bins: "A",
+};
+const SPAN_TYPES: FieldTypes = { good_samples: "I" };
+const DATUM_TYPES: FieldTypes = { msl_offset_m: "N", named: "O" };
+const CONSTITUENT_TYPES: FieldTypes = {
+    name: "T", source_name: "T", doodson: "T", kept_reason: "T", speed_deg_per_hour: "N", amplitude_m: "N",
+    phase_deg: "N", amp_uncertainty_m: "N", phase_uncertainty_deg: "N",
+};
+const QC_FLAG_TYPES: FieldTypes = { flag: "T", reason: "T", values: "O" };
+const DROPPED_TYPES: FieldTypes = { name: "T", dropped_reason: "T", detail: "T" };
+const TIME_BASE_TYPES: FieldTypes = {
+    code: "T", reason: "T", declared: "T", published: "T", decided_in: "T", decided_build_commit: "T",
+    correction: "O", months_dropped: "S", evidence: "L",
+};
+const CORRECTION_TYPES: FieldTypes = { from: "T", to: "T" };
+const EVIDENCE_TYPES: FieldTypes = { comparator_kind: "T", comparator_id: "T", detail: "T", distance_km: "N", lag_min: "N" };
+const PROVENANCE_TYPES: FieldTypes = {
+    adapter_version: "T", carried_from_release: "T", selection_reason: "T", input_sha256: "S", decision: "O",
 };
 
-function shapeOk(v: Json | undefined, want: Shape): boolean {
-    return v === undefined || v === null || (want === "array" ? Array.isArray(v) : isObject(v));
+function finite(v: Json | undefined): v is number {
+    return typeof v === "number" && Number.isFinite(v);
+}
+
+function typeOk(v: Json | undefined, t: FieldType): boolean {
+    if (v === undefined || v === null) return true;
+    switch (t) {
+        case "T": return typeof v === "string";
+        case "N": return finite(v);
+        case "I": return finite(v) && Number.isInteger(v);
+        case "O": return isObject(v);
+        case "L": return Array.isArray(v) && v.every(isObject);
+        case "S": return Array.isArray(v) && v.every((x) => typeof x === "string");
+        default: return Array.isArray(v);
+    }
+}
+
+/** The members of an object, as a list of objects (absent or null: none). Call after its type is checked. */
+function objects(o: JsonObject, k: string): JsonObject[] {
+    const v = o[k];
+    return Array.isArray(v) ? v.filter(isObject) : [];
 }
 
 /**
@@ -142,25 +198,46 @@ function shapeOk(v: Json | undefined, want: Shape): boolean {
  * instead of a field that is silently dropped or a raw TypeError at query time.
  */
 function checkShape(doc: JsonObject, id: string): void {
-    const bad = (what: string) => new InvalidReleaseError(`station ${id}: ${what} has the wrong type`);
-    for (const [k, want] of Object.entries(STATION_SHAPE)) if (!shapeOk(doc[k], want)) throw bad(k);
+    const check = (o: JsonObject, table: FieldTypes, what: string) => {
+        for (const [k, t] of Object.entries(table)) {
+            if (!typeOk(o[k], t)) throw new InvalidReleaseError(`station ${id}: ${what}${k} has the wrong type`);
+        }
+    };
+    check(doc, STATION_TYPES, "");
     const a = doc["aliases"];
     if (isObject(a)) {
         for (const [system, ids] of Object.entries(a)) {
-            if (!(typeof ids === "string" || (Array.isArray(ids) && ids.every((x) => typeof x === "string")))) throw bad(`aliases.${system}`);
+            if (!(typeof ids === "string" || (Array.isArray(ids) && ids.every((x) => typeof x === "string")))) {
+                throw new InvalidReleaseError(`station ${id}: aliases.${system} has the wrong type`);
+            }
         }
     }
-    for (const k of ["constant_sets", "validation"]) {
-        const list = doc[k];
-        if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k}`);
-    }
-    for (const cs of arr(doc, "constant_sets").filter(isObject)) {
-        const sid = typeof cs["set_id"] === "string" ? cs["set_id"] : "?";
-        for (const [k, want] of Object.entries(SET_SHAPE)) if (!shapeOk(cs[k], want)) throw bad(`${k} of set ${sid}`);
-        for (const k of ["constituents", "dropped_constituents", "qc_flags"]) {
-            const list = cs[k];
-            if (Array.isArray(list) && !list.every(isObject)) throw bad(`an element of ${k} of set ${sid}`);
+    const off = obj(doc, "subordinate_offsets");
+    if (off) check(off, OFFSET_TYPES, "subordinate_offsets.");
+    for (const v of objects(doc, "validation")) check(v, VALIDATION_TYPES, "validation ");
+    for (const cs of objects(doc, "constant_sets")) {
+        const where = `set ${typeof cs["set_id"] === "string" ? cs["set_id"] : "?"}: `;
+        check(cs, SET_TYPES, where);
+        for (const [k, table] of [["record_span", SPAN_TYPES], ["datum", DATUM_TYPES], ["time_base", TIME_BASE_TYPES],
+            ["provenance", PROVENANCE_TYPES]] as const) {
+            const o = obj(cs, k);
+            if (o) check(o, table, `${where}${k}.`);
         }
+        const named = obj(obj(cs, "datum"), "named");
+        if (named && !Object.values(named).every(finite)) throw new InvalidReleaseError(`station ${id}: ${where}datum.named has a value that is not a number`);
+        for (const c of objects(cs, "constituents")) check(c, CONSTITUENT_TYPES, `${where}constituents.`);
+        for (const x of objects(cs, "dropped_constituents")) check(x, DROPPED_TYPES, `${where}dropped_constituents.`);
+        for (const f of objects(cs, "qc_flags")) {
+            check(f, QC_FLAG_TYPES, `${where}qc_flags.`);
+            const values = obj(f, "values");
+            if (values && !Object.values(values).every((x) => x === null || finite(x))) {
+                throw new InvalidReleaseError(`station ${id}: ${where}a qc_flags value is not a number or null`);
+            }
+        }
+        const tb = obj(cs, "time_base");
+        const corr = obj(tb, "correction");
+        if (corr) check(corr, CORRECTION_TYPES, `${where}time_base.correction.`);
+        for (const e of tb ? objects(tb, "evidence") : []) check(e, EVIDENCE_TYPES, `${where}time_base.evidence.`);
     }
 }
 
@@ -199,7 +276,10 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
         if (cs["set_id"] === recId) rec = cs;
     }
     if (status === "active") {
-        if (typeof doc["lat"] !== "number" || typeof doc["lon"] !== "number") throw new InvalidReleaseError(`station ${id} has no lat or lon`);
+        const lat = doc["lat"], lon = doc["lon"];
+        if (!finite(lat) || !finite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+            throw new InvalidReleaseError(`station ${id}: lat and lon must be numbers in range`);
+        }
         if (recId !== null && rec === null) throw new InvalidReleaseError(`station ${id}: recommended_set_id ${recId} does not resolve`);
     }
     const off = obj(doc, "subordinate_offsets");
