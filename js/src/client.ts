@@ -495,7 +495,14 @@ export class OpenTideConstants {
         if (ctx.store) {
             // a cached release keeps the version DOI of the newest entry read for it (spec 4.3)
             for (const e of idx) {
-                const v = await readVerified(ctx.store, e.datestamp);
+                let v: Awaited<ReturnType<typeof readVerified>> = null;
+                try {
+                    v = await readVerified(ctx.store, e.datestamp);
+                } catch (x) {
+                    // one malformed .verified never fails releases(); the note is best effort (R2-087)
+                    if (!(x instanceof OpenTideConstantsError)) throw x;
+                    log(ctx, "warn", `cannot read the .verified of ${e.datestamp}: ${x.message}`);
+                }
                 if (v) await syncZenodo(ctx, v, e);
             }
         }

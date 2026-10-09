@@ -362,7 +362,15 @@ export async function cachedDatestamps(ctx: Ctx): Promise<string[]> {
     const out: string[] = [];
     for (const d of await store.list("releases")) {
         if (!isDatestamp(d)) continue;
-        const v = await readVerified(store, d);
+        let v: Verified | null;
+        try {
+            v = await readVerified(store, d);
+        } catch (e) {
+            // a .verified with a malformed version is that release's problem: skip it, never the whole list (R2-087)
+            if (!(e instanceof InvalidReleaseError)) throw e;
+            log(ctx, "warn", `skipping the cached release ${d}: ${e.message}`);
+            continue;
+        }
         if (!v) continue;
         if (!readable({ format_version: v.format_version ?? null, min_reader_version: v.min_reader_version ?? null })) continue;
         if (v.format_version === null || v.format_version === undefined || v.min_reader_version === undefined) {

@@ -42,14 +42,6 @@
    "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
   },
   {
-   "case": "cache/old-verified-bad-version-offline",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-10",
-   "reason": "a corrupt cached release is not healed and the next older one is not tried, or a cache read failure is not cache (CR2 DR16)"
-  },
-  {
    "case": "cache/only-cached-corrupt-network-error",
    "runners": [
     "c-fetch"

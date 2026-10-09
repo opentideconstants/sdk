@@ -436,3 +436,30 @@ test("R2-085 (CR2 DR16): update() heals a cached release whose file has the wron
         srv.close();
     }
 });
+
+test("R2-087 (CR2 DR16): one .verified with a malformed version fails neither the offline open nor releases()", async () => {
+    const srv = http.createServer((req, res) => {
+        try {
+            res.end(fs.readFileSync(path.join(GOOD, path.basename(decodeURIComponent(new URL(req.url, "http://x").pathname)))));
+        } catch {
+            res.statusCode = 404;
+            res.end();
+        }
+    });
+    await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+    const cacheDir = tmpdir();
+    const o = { baseUrl: `http://127.0.0.1:${srv.address().port}/`, cacheDir, mode: "stream" };
+    try {
+        for (const release of ["20991231", "20991231.2"]) (await otc.OpenTideConstants.open({ ...o, release })).close();
+        const vp = path.join(cacheDir, "v1", "releases", "20991231", ".verified");
+        fs.writeFileSync(vp, JSON.stringify({ ...JSON.parse(fs.readFileSync(vp, "utf8")), format_version: "x" }));
+        const off = await otc.OpenTideConstants.open({ ...o, offline: true });
+        assert.equal(off.release.datestamp, "20991231.2");
+        off.close();
+        const c = await otc.OpenTideConstants.open(o);
+        assert.ok((await c.releases()).length >= 2);
+        c.close();
+    } finally {
+        srv.close();
+    }
+});
