@@ -85,19 +85,23 @@ class Http:
         self.proxy = proxy
         self.log = logger or logging.getLogger("opentideconstants")
         self._ctx = None
+        # ca_file, else SSL_CERT_FILE: checked at construction, before any network access; io, never retried and
+        # never a reason to fall back to the cache (spec §4.2, §5.7, CR D19, CR2 DR20)
+        what = "ca_file"
+        if ca_file is None and os.environ.get("SSL_CERT_FILE"):
+            ca_file, what = os.environ["SSL_CERT_FILE"], "SSL_CERT_FILE"
         if ca_file is not None:
-            # checked at construction, before any network access; never retried (spec §4.2, CR D19)
             try:
                 with open(ca_file, "rb"):
                     pass
             except (OSError, TypeError) as e:
-                raise FileError(f"cannot read ca_file {ca_file}: {e}", path=str(ca_file),
+                raise FileError(f"cannot read {what} {ca_file}: {e}", path=str(ca_file),
                                 cause=e if isinstance(e, OSError) else None) from e
             try:
                 self._ctx = ssl.create_default_context(cafile=ca_file)
             except ssl.SSLError as e:
-                raise InvalidArgumentError(f"ca_file {ca_file} is not a PEM certificate file: {e}") from e
-        self.ca_file = ca_file or os.environ.get("SSL_CERT_FILE")
+                raise InvalidArgumentError(f"{what} {ca_file} is not a PEM certificate file: {e}") from e
+        self.ca_file = ca_file
 
     # ---- connection
 
