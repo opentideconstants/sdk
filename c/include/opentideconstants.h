@@ -630,7 +630,8 @@ typedef struct otc_fetch_options {
     const char          *base_url;      /* NULL: OPENTIDECONSTANTS_BASE_URL, else https://data.opentideconstants.org/ */
     bool                 offline;       /* also OPENTIDECONSTANTS_OFFLINE=1; no socket is ever opened */
     double               timeout_s;     /* 0: the defaults (connect 10 s, read 60 s); else both */
-    const char          *proxy;         /* NULL: HTTP(S)_PROXY / http(s)_proxy and NO_PROXY / no_proxy */
+    const char          *proxy;         /* NULL: libcurl reads http_proxy (lower case only, for httpoxy),
+                                           https_proxy / HTTPS_PROXY, ALL_PROXY and NO_PROXY (spec 5.7) */
     const char          *ca_file;       /* NULL: SSL_CERT_FILE, else libcurl's default */
     const char          *user_agent;    /* a suffix, added after one space */
     otc_on_network_error on_network_error; /* latest only: USE_CACHE (default) or RAISE */

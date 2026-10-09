@@ -1347,7 +1347,6 @@
   {
    "case": "rules/pk12/http-proxy-uppercase-cgi",
    "runners": [
-    "c-fetch",
     "python",
     "typescript"
    ],

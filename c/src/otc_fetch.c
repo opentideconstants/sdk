@@ -656,13 +656,6 @@ static size_t on_header(char *line, size_t sz, size_t nm, void *user)
     return n;
 }
 
-static const char *proxy_env(int https)
-{
-    const char *v = https ? env_get("https_proxy") : env_get("http_proxy");
-    if (!v) v = https ? env_get("HTTPS_PROXY") : env_get("HTTP_PROXY");
-    return v;
-}
-
 enum { GET_OK = 0, GET_NOT_MODIFIED, GET_NOT_FOUND };
 
 /*
@@ -680,8 +673,11 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
     int attempt, https = !strncmp(url, "https://", 8);
     long last_status = 0;
     char last_msg[512];
-    const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : proxy_env(https);
-    const char *noproxy = (c->o && c->o->proxy) ? "" : (env_get("no_proxy") ? env_get("no_proxy") : env_get("NO_PROXY"));
+    /* The proxy option wins. Without it libcurl reads the environment itself (spec
+     * 5.7, CR D7): only lower-case http_proxy for http (httpoxy: in CGI a client's
+     * Proxy: header arrives as HTTP_PROXY), https_proxy / HTTPS_PROXY, ALL_PROXY and
+     * NO_PROXY. So neither CURLOPT_PROXY nor CURLOPT_NOPROXY is set then. */
+    const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : NULL;
     const char *ca = (c->o && c->o->ca_file) ? c->o->ca_file : env_get("SSL_CERT_FILE");
     *result = GET_OK;
     if (strncmp(url, "http://", 7) != 0 && !https) {
@@ -733,9 +729,10 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
             hdrs = curl_slist_append(hdrs, inm);
         }
         if (hdrs) curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
-        if (proxy) curl_easy_setopt(h, CURLOPT_PROXY, proxy);
-        else curl_easy_setopt(h, CURLOPT_PROXY, "");
-        if (noproxy) curl_easy_setopt(h, CURLOPT_NOPROXY, noproxy);
+        if (proxy) {
+            curl_easy_setopt(h, CURLOPT_PROXY, proxy);
+            curl_easy_setopt(h, CURLOPT_NOPROXY, "");
+        }
         if (ca) curl_easy_setopt(h, CURLOPT_CAINFO, ca);
         rc = curl_easy_perform(h);
         curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &r->status);
