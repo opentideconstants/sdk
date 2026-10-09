@@ -110,6 +110,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     reader?: LineReader | null;
     close?: () => void;
     zenodoVersionDoi?: string | null;
+    /** Called when a line read through `index` does not match its entry: delete index-v1.json (spec 6.2, CR D4). */
+    dropIndex?: () => void;
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -125,10 +127,25 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
         source = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
     } else {
         const read: LineReader = opts.reader ?? ((o, l) => (jsonl as Uint8Array).subarray(o, o + l));
+        const fromIndex = Boolean(opts.index);
+        // a line read through the index must be the entry's line: whole, JSON, and the same station_id (CR D4)
+        const bad = (why: string, cause?: unknown): InvalidReleaseError => {
+            const where = fromIndex ? "index-v1.json" : "the .jsonl index";
+            if (fromIndex) opts.dropIndex?.();
+            return new InvalidReleaseError(`${where} does not match the .jsonl: ${why}`, cause === undefined ? undefined : { cause });
+        };
         source = {
             doc: (e) => {
-                const v: unknown = JSON.parse(utf8.decode(read(e.offset, e.length)));
-                if (!isObject(v)) throw new InvalidReleaseError(`the line of ${e.station_id} is not a JSON object`);
+                const bytes = read(e.offset, e.length);
+                if (bytes.length !== e.length) throw bad(`the line of ${e.station_id} is ${bytes.length} bytes, not ${e.length}`);
+                let v: unknown;
+                try {
+                    v = JSON.parse(utf8.decode(bytes));
+                } catch (x) {
+                    throw bad(`the line of ${e.station_id} at offset ${e.offset} is not JSON`, x);
+                }
+                if (!isObject(v)) throw bad(`the line of ${e.station_id} is not a JSON object`);
+                if (v["station_id"] !== e.station_id) throw bad(`the line at offset ${e.offset} is ${JSON.stringify(v["station_id"])}, not ${e.station_id}`);
                 return deepFreeze(v);
             },
             close: opts.close ?? (() => undefined),

@@ -188,3 +188,23 @@ test("T15: prune(null) is not a raw TypeError, and prune on a read-only release 
         c.close();
     }
 });
+
+test("T41/T18/T95/D4: usableIndex rejects out-of-bounds, unordered, wrongly folded, wrongly kinded and unresolved entries", async () => {
+    const { usableIndex } = await import("../dist/release.js");
+    const set = (o) => ({ set_id: "S/a", source: "x", source_type: "gauge", quantity: "water_level", qc_status: "ok",
+        convention_id: "c1", licence_id: "l1", constituents: ["M2"], ...o });
+    const entry = (o) => ({ offset: 0, length: 10, station_id: "S", status: "active", name: "Ålesund", name_folded: "alesund",
+        country: null, type: "reference", lat: 1, lon: 2, kind: "tide", aliases: {}, reference_station_id: null,
+        offsets_licence_id: null, recommended_set_id: "S/a", sets: [set({})], ...o });
+    const doc = (stations) => ({ index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations });
+    const use = (stations) => usableIndex(doc(stations), "20991231", "ab", 100, new Set(["c1"]), new Set(["l1"]));
+    assert.ok(use([entry({})]), "the good index is usable");
+    assert.equal(use([entry({ offset: 95 })]), null, "offset + length past jsonl_size");
+    assert.equal(use([entry({ length: 0 })]), null, "length 0");
+    assert.equal(use([entry({ offset: 20 }), entry({ station_id: "T", offset: 10 })]), null, "offsets not increasing");
+    assert.equal(use([entry({ name_folded: "x" })]), null, "name_folded is not the fold of name");
+    assert.equal(use([entry({ kind: "current" })]), null, "kind is not the kind of the recommended set");
+    assert.equal(use([entry({ status: "removed", sets: [set({ convention_id: "nope" })] })]), null, "a tombstone's set reference");
+    assert.equal(use([entry({ sets: [set({ set_id: null })], recommended_set_id: null, kind: null })]), null, "set_id null");
+    assert.equal(use([entry({ offsets_licence_id: "nope" })]), null, "offsets licence");
+});

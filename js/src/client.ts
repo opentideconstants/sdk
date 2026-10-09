@@ -65,6 +65,7 @@ function nodeDir(node: NodeMod, dir: string): SyncDir {
         writeIndex: (bytes) => {
             try { node.writeAtomicSync(p("index-v1.json"), bytes); } catch { /* the index is rebuilt next time */ }
         },
+        removeIndex: () => node.removeFileSync(p("index-v1.json")),
     };
 }
 
@@ -186,8 +187,9 @@ export class OpenTideConstants {
         if (!store) throw new OfflineError("no cache");
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
-        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d);
-        return loadCached(dir, v, d, ctx.mode);
+        const warn = (m: string) => log(ctx, "warn", m);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
+        return loadCached(dir, v, d, ctx.mode, warn);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
@@ -276,7 +278,7 @@ export class OpenTideConstants {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
             if (!vb) return;
             const v = JSON.parse(dec.decode(vb)) as Verified;
-            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode);
+            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m));
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {

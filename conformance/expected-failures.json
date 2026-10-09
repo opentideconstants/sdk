@@ -66,14 +66,6 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
   },
   {
-   "case": "cross/index-offset-past-eof[c>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
-  },
-  {
    "case": "cross/index-offset-past-eof[python>ruby]",
    "runners": [
     "cross"
@@ -82,28 +74,12 @@
    "reason": "step 9 station: expected a result, got error 'uncaught:TypeError' (no implicit conversion of nil into String /usr/local/rbenv/versions/3.2.2/lib/ruby/gems/3.2.0/gems/json-2.19.5/lib/json/common.rb:355:in `parse' | /usr/local/rbenv/versions/"
   },
   {
-   "case": "cross/index-offset-past-eof[python>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
-  },
-  {
    "case": "cross/index-offset-past-eof[ruby>python]",
    "runners": [
     "cross"
    ],
    "package": "PK05",
    "reason": "step 9 station: expected a result, got error 'invalid_release' (/tmp/otc-conf-xmibidzu/cache/v1/releases/20991231.2/OTC_20991231.2.jsonl line of OTC-T-0022: not JSON: Expecting value: line 1 column 1 (char 0))"
-  },
-  {
-   "case": "cross/index-offset-past-eof[ruby>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 9 station: expected a result, got error 'uncaught:SyntaxError' (SyntaxError: Unexpected end of JSON input\n    at JSON.parse (<anonymous>)\n    at Object.doc (file:///Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/js/di"
   },
   {
    "case": "cross/index-offset-past-eof[typescript>python]",
@@ -138,14 +114,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[c>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[python>c]",
    "runners": [
     "cross"
@@ -162,14 +130,6 @@
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
-   "case": "cross/index-station-id-swapped[python>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
    "case": "cross/index-station-id-swapped[ruby>c]",
    "runners": [
     "cross"
@@ -184,14 +144,6 @@
    ],
    "package": "PK05",
    "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0002\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
-  },
-  {
-   "case": "cross/index-station-id-swapped[ruby>typescript]",
-   "runners": [
-    "cross"
-   ],
-   "package": "PK05",
-   "reason": "step 10 station: expected error 'invalid_release', got a result {\"station\": {\"station_id\": \"OTC-T-0001\", \"name\": \"South San Francisco\", \"country\": \"USA\", \"lat\": 37.665, \"lon\": -122.38, \"type\": \"reference\", \"kind\": \"tide\", \"timezone\": \"Ameri"
   },
   {
    "case": "cross/index-station-id-swapped[typescript>c]",
@@ -592,35 +544,10 @@
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
   },
   {
-   "case": "rules/pk06/bad-unresolved-offsets-licence-json",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK06",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk06/bad-unresolved-offsets-licence-json-gz",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK06",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
-   "case": "rules/pk06/bad-unresolved-offsets-licence-jsonl",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK06",
-   "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"
-  },
-  {
    "case": "rules/pk06/bad-unresolved-offsets-licence-jsonl-stream",
    "runners": [
     "c",
-    "c-fetch",
-    "typescript"
+    "c-fetch"
    ],
    "package": "PK06",
    "reason": "step 0 open: expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", \"format_version\": \"1.0\"}"

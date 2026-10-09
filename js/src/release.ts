@@ -150,11 +150,8 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     }
     const off = obj(doc, "subordinate_offsets");
     const offLic = off ? str(off, "licence_id") : null;
-    let kind: string | null = null;
-    if (rec) {
-        const q = str(rec, "quantity");
-        kind = q === "water_level" ? "tide" : q === "current" ? "current" : "other";
-    }
+    if (offLic !== null && !licences.has(offLic)) throw new InvalidReleaseError(`station ${id}: subordinate_offsets.licence_id ${offLic} does not resolve`);
+    const kind = rec ? kindOfQuantity(str(rec, "quantity")) : null;
     const name = str(doc, "name");
     return entryFromStored({
         offset, length, station_id: id, status,
@@ -205,8 +202,10 @@ export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha25
 
 /**
  * @internal The entries of a fresh index-v1.json, or null when it is stale or cannot be used (spec 6.2).
- * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed and every
- * reference resolving.
+ * Fresh: index_version 1, this release's .jsonl by name, SHA-256 and size, every entry well formed, every entry in
+ * bounds (length > 0, offset + length <= jsonl_size, offsets increasing; CR D4), and every reference resolving
+ * exactly as a pass over the lines would check it (indexDoc). The derived values (name_folded, kind) must be the
+ * ones this SDK computes, so an index another writer got wrong is rebuilt, not trusted.
  */
 export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string | null, jsonlSize: number | null,
     conventions: Set<string>, licences: Set<string>): IndexEntry[] | null {
@@ -216,11 +215,18 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
     if (!Array.isArray(stations)) return null;
     const strOrNull = (x: unknown) => x === null || typeof x === "string";
     const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
-    const isInt = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0;
+    const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0;
     const out: IndexEntry[] = [];
+    let lastOffset = -1;
     for (const e of stations) {
         if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
+        const offset = e["offset"];
+        const length = e["length"];
+        if (length <= 0 || offset + length > jsonlSize || offset <= lastOffset) return null;
+        lastOffset = offset;
         if (!ENTRY_STR.every((k) => k in e && strOrNull(e[k])) || !("lat" in e) || !("lon" in e) || !numOrNull(e["lat"]) || !numOrNull(e["lon"])) return null;
+        const name = e["name"];
+        if (e["name_folded"] !== (typeof name === "string" ? foldName(name) : null)) return null;
         const aliases = e["aliases"];
         if (!isObject(aliases) || !Object.values(aliases).every((ids) => Array.isArray(ids) && ids.every((x) => typeof x === "string"))) return null;
         const sets = e["sets"];
@@ -229,17 +235,28 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
             if (!isObject(cs) || !SET_KEYS.every((k) => k in cs && strOrNull(cs[k]))) return null;
             const cons = cs["constituents"];
             if (!Array.isArray(cons) || !cons.every((x) => typeof x === "string")) return null;
-            if (e["status"] === "active" && (!conventions.has(cs["convention_id"] as string) || !licences.has(cs["licence_id"] as string))) return null;
+            // the same checks as indexDoc, for every status
+            if (typeof cs["set_id"] !== "string" || !conventions.has(cs["convention_id"] as string) || !licences.has(cs["licence_id"] as string)) return null;
         }
+        if (e["offsets_licence_id"] !== null && !licences.has(e["offsets_licence_id"] as string)) return null;
         if (e["status"] === "active") {
-            if (e["offsets_licence_id"] !== null && !licences.has(e["offsets_licence_id"] as string)) return null;
             if (e["recommended_set_id"] !== null && !sets.some((cs) => isObject(cs) && cs["set_id"] === e["recommended_set_id"])) return null;
             if (e["lat"] === null || e["lon"] === null) return null;
         }
         const stored = e as unknown as StoredEntry;
-        out.push(entryFromStored({ ...stored, kind: stored.kind }));
+        const rec = stored.recommended_set_id === null ? undefined : stored.sets.find((cs) => cs.set_id === stored.recommended_set_id);
+        // kind is derived, not trusted: from the recommended set here, and from the reference station below
+        out.push(entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null }));
     }
+    resolveKinds(out);
+    const given = stations as unknown as StoredEntry[];
+    if (out.some((x, i) => x.status === "active" && x.kind !== (given[i]?.kind ?? null))) return null;
     return out;
+}
+
+/** @internal The station kind of a recommended set's quantity (spec 6.2 `kind`). */
+export function kindOfQuantity(q: string | null): string | null {
+    return q === "water_level" ? "tide" : q === "current" ? "current" : "other";
 }
 
 /** @internal Resolve the kind of subordinate stations with offsets only (from their reference station). */
@@ -687,7 +704,9 @@ export class Release {
     }
 
     #doc(e: IndexEntry): JsonObject {
-        return this.#source.doc(e, this.#pos.get(e) ?? 0);
+        const i = this.#pos.get(e);
+        if (i === undefined) throw new InvalidReleaseError(`station ${e.station_id} is not an entry of release ${this.datestamp}`);
+        return this.#source.doc(e, i);
     }
 
     #station(e: IndexEntry): Station {

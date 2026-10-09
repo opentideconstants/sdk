@@ -523,10 +523,12 @@ export interface SyncDir {
     size(name: string): number | null;
     lineReader(name: string): { read: LineReader; close: () => void } | null;
     writeIndex(bytes: Uint8Array): void;
+    /** Delete index-v1.json (a line did not match it). Throws when it cannot; the caller logs that. */
+    removeIndex(): void;
 }
 
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
-export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode): Release {
+export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
     const files: FileInfo[] = Object.entries(verified.files)
@@ -573,14 +575,28 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         // .verified gives the .jsonl digest the index records; without it there is no index to write
         if (jsonlSha !== null) dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
     }
+    const dropIndex = () => {
+        try {
+            dir.removeIndex();
+        } catch (e) {
+            warn(`cannot delete index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
     const lr = dir.lineReader(n.jsonl);
-    if (lr) return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo });
+    if (lr) {
+        try {
+            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex });
+        } catch (e) {
+            lr.close();
+            throw e;
+        }
+    }
     const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo });
+    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex });
 }
 
 /** Read a cache directory into a SyncDir (the browser, where storage is async). */
-export async function prefetchDir(store: CacheStore, d: string): Promise<SyncDir> {
+export async function prefetchDir(store: CacheStore, d: string, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
     const dir = relDir(d);
     const files = new Map<string, Uint8Array>();
     for (const name of await store.list(dir)) {
@@ -592,6 +608,7 @@ export async function prefetchDir(store: CacheStore, d: string): Promise<SyncDir
         size: (name) => files.get(name)?.length ?? null,
         lineReader: () => null,
         writeIndex: (bytes) => void store.write(`${dir}/index-v1.json`, bytes).catch(() => undefined),
+        removeIndex: () => void store.remove(`${dir}/index-v1.json`).catch((e: unknown) => warn(`cannot delete index-v1.json of ${d}: ${String(e)}`)),
     };
 }
 

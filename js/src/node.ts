@@ -381,6 +381,10 @@ export function listDir(dir: string): string[] {
     }
 }
 
+export function removeFileSync(file: string): void {
+    fs.rmSync(file, { force: true });
+}
+
 /** Remove a directory tree; throws when any of it is left (rmSync can report success on a read-only tree). */
 export function removeDirSync(dir: string): void {
     fs.rmSync(dir, { recursive: true, force: true });
