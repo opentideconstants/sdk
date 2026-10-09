@@ -574,12 +574,20 @@ def no_build_doc():
     return doc
 
 
+def restore_station_build(st):
+    """One station (a .jsonl line) with every missing provenance.build put back."""
+    st = copy.deepcopy(st)
+    for cs in st.get("constant_sets", []):
+        cs["provenance"].setdefault("build", dict(BUILD))
+    return st
+
+
 def restore_build(doc):
-    """The repair that makes bad/no-build valid again: so a missing build is its only defect."""
+    """The repair that makes bad/no-build valid again, so a missing build is its only defect. A .meta.json
+    (no stations) comes back unchanged."""
     doc = copy.deepcopy(doc)
-    for s in doc["stations"]:
-        for cs in s.get("constant_sets", []):
-            cs["provenance"].setdefault("build", dict(BUILD))
+    if "stations" in doc:
+        doc["stations"] = [restore_station_build(s) for s in doc["stations"]]
     return doc
 
 
@@ -883,7 +891,8 @@ def open_release(root, datestamp, schemas):
     if min_reader is not None and version_key(min_reader) > READER_FORMAT:
         raise Fail("reader_too_old", f"release {datestamp} needs a reader for format {min_reader}; "
                                      f"this reader reads format {'%d.%d' % READER_FORMAT}")
-    checked, dropped = validate_release(doc, meta, lines, schemas)
+    checked, dropped = validate_release(doc, meta, lines, schemas,
+                                        allow_missing_build=root.resolve() == (FIXTURES / "bad" / "no-build").resolve())
     if lines != doc["stations"]:
         raise Fail("invalid_release", ".jsonl lines differ from .json stations")
     if meta != {k: v for k, v in doc.items() if k != "stations"}:
@@ -891,20 +900,22 @@ def open_release(root, datestamp, schemas):
     return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
 
 
-def validate_release(doc, meta, lines, schemas):
+def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
+    Only for bad/no-build (allow_missing_build) is a set with no provenance.build tolerated: the .json, every
+    .jsonl line and the .meta.json are then checked with the build put back, so it is the only defect.
     Returns (the checked document, the dropped paths) or raises Fail."""
     version = version_key(doc["format_version"])
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
     tolerated = []
-    # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null). Check the rest.
+    # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
     missing = [cs["set_id"] for st in doc["stations"] for cs in st.get("constant_sets", []) if "build" not in cs.get("provenance", {})]
-    if missing:
+    if missing and allow_missing_build:
         tolerated = [f"no provenance.build in {m}" for m in missing]
         doc = restore_build(doc)
-        meta = {k: v for k, v in doc.items() if k != "stations"}
-        lines = doc["stations"]
+        meta = restore_build(meta)
+        lines = [restore_station_build(l) for l in lines]
     exact = next((v for k, v in known if k == version), None)
     dropped = []
     if exact is not None:
@@ -1051,6 +1062,15 @@ def check(schema_dir=None):
             if not ok:
                 errs.append(f"latest for a {'%d.%d' % READER_FORMAT} reader is {got}, not {fx['latest_readable']}")
             print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} latest for a {'%d.%d' % READER_FORMAT} reader is {got}")
+        if not fx["root"].startswith("bad/"):
+            # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
+            for d in fx["releases"]:
+                try:
+                    got = open_release(root, d, schemas)
+                except Fail:
+                    continue
+                if got["unknown_fields"]:
+                    errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
         if fx["expect"] == "load" and fx["root"].startswith("bad/"):
             # The higher-minor release must actually carry unknown fields.
             try:
