@@ -35,6 +35,22 @@ defaults:
     shell: bash
 
 jobs:
+  # The suite's own checks: the fold table generator, the fold rules, and the
+  # driver and server self-tests (conformance/tests).
+  suite:
+    name: suite self-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: The fold table is a fresh generation (Unicode 16.0.0)
+        run: uv run conformance/tools/gen_fold_table.py --check
+      - name: The fold table gives the expected folded names
+        run: uv run conformance/tools/test_name_fold.py
+      - name: Driver and server self-tests
+        run: uv run --python 3.12 --with "pytest>=8,<9" python -m pytest conformance/tests -v -p no:cacheprovider
+
   cross:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
