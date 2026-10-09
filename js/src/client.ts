@@ -254,7 +254,8 @@ export class OpenTideConstants {
     // ------------------------------------------------------------------ automatic update (spec 5.6)
 
     #current(): Release {
-        if (this.#autoUpdate && !this.#pinned && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
+        // offline, the automatic check does not run at all (spec 5.6, CR D6)
+        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && Date.now() - this.#lastCheck >= this.#interval * 1000) {
             this.#lastCheck = Date.now();
             this.#autoUpdateNow(this.#node);
         }
@@ -396,6 +397,8 @@ export class OpenTideConstants {
     /** Download and switch to a newer release. A Release held from before keeps showing the old one. */
     async update(): Promise<UpdateResult> {
         if (this.#pinned) throw new PinnedReleaseError(this.#file ? "the client was opened on a file" : "the client was opened on a pinned release");
+        // offline: no socket, the same as latest and checkForUpdate (spec 5.5, CR D6)
+        if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });

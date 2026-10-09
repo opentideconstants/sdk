@@ -1072,18 +1072,9 @@
    "reason": "step 0 open: expected a result, got error 'invalid_release' (/Users/jpr5/.local/state/worktrees/opentideconstants-sdk/cr1-pk19/conformance/fixtures/values-source-name/OTC_20991231.2.jsonl line 1: a constituent string is longer than its sche"
   },
   {
-   "case": "rules/pk09/auto-update-offline-no-socket",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK09",
-   "reason": "step 8 assert_requests: requests(source=any, match=None, status=None, header=None): expected 0, saw 3: [(None, None), (None, None), (None, None)]"
-  },
-  {
    "case": "rules/pk09/update-offline-no-socket",
    "runners": [
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK09",
    "reason": "step 6 update: expected error 'offline_unavailable', got error 'network' (GET http://127.0.0.1:51342/good/OTC_20991231.2.sha256: Errno::ECONNRESET: Connection reset by peer)"

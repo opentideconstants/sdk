@@ -26,6 +26,7 @@ try {
         timeout: data.timeout, proxy: data.proxy, caFile: data.caFile, userAgent: data.userAgent,
         onNetworkError: "raise", logger: null, mode: data.mode,
     };
+    if (ctx.offline) throw new Error("offline: the automatic update check does not run");
     const entry = await getPointer(ctx);
     const how = await ensureRelease(ctx, entry.datestamp, entry);
     result = { ok: true, datestamp: entry.datestamp, how };
