@@ -63,6 +63,10 @@ class OpenTideConstants
         %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
             raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
         end
+        # user_agent goes into a header: no control character (CR2 DR20, spec 4.2, 5.7)
+        if user_agent && (!user_agent.valid_encoding? || user_agent.match?(/[[:cntrl:]]/))
+            raise InvalidArgumentError, "user_agent must have no control characters: #{user_agent.inspect}"
+        end
         raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
         base_url ||= ENV["OPENTIDECONSTANTS_BASE_URL"]
         base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
