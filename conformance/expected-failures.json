@@ -42,47 +42,6 @@
    ],
    "package": "PK-R2-05",
    "reason": "RED of G5 repeated constituent name (CR2 DR22, R2-044): py: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", ; rb: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", ; ts: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", ; c: [step 0 open] expected error 'invalid_release', got a result {\"loaded_from\": \"file\", \"datestamp\": \"20991231\", "
-  },
-  {
-   "case": "rules/r2-pk05/proto-keys@json",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-05",
-   "reason": "RED of G4 prototype keys (R2-043): ts: [step 1 station_by_alias] result.station_id: expected \"OTC-T-0001\", got null  (+2 more failed step(s))"
-  },
-  {
-   "case": "rules/r2-pk05/proto-keys@json.gz",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-05",
-   "reason": "RED of G4 prototype keys (R2-043): ts: [step 1 station_by_alias] result.station_id: expected \"OTC-T-0001\", got null  (+2 more failed step(s))"
-  },
-  {
-   "case": "rules/r2-pk05/proto-keys@jsonl",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-05",
-   "reason": "RED of G4 prototype keys (R2-043): ts: [step 1 station_by_alias] result.station_id: expected \"OTC-T-0001\", got null  (+2 more failed step(s))"
-  },
-  {
-   "case": "rules/r2-pk05/proto-keys@jsonl-stream",
-   "runners": [
-    "typescript"
-   ],
-   "package": "PK-R2-05",
-   "reason": "RED of G4 prototype keys (R2-043): ts: [step 1 station_by_alias] result.station_id: expected \"OTC-T-0001\", got null  (+2 more failed step(s))"
-  },
-  {
-   "case": "rules/r2-pk05/proto-keys@server",
-   "runners": [
-    "typescript",
-    "typescript-browser"
-   ],
-   "package": "PK-R2-05",
-   "reason": "RED of G4 prototype keys (R2-043): ts: [step 1 station_by_alias] result.station_id: expected \"OTC-T-0001\", got null  (+2 more failed step(s))"
   }
  ]
 }

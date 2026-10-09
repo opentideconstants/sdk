@@ -242,14 +242,14 @@ function checkShape(doc: JsonObject, id: string): void {
 }
 
 function aliasMap(doc: JsonObject): Record<string, string[]> {
-    const out: Record<string, string[]> = {};
+    // fromEntries defines own properties, so a system named __proto__ or constructor is kept as data; an assignment
+    // out[system] = ... would set the prototype instead (CR2 PK-R2-05)
     const a = obj(doc, "aliases");
-    if (!a) return out;
-    for (const [system, ids] of Object.entries(a)) {
-        if (typeof ids === "string") out[system] = [ids];
-        else if (Array.isArray(ids)) out[system] = ids.filter((x): x is string => typeof x === "string");
-    }
-    return out;
+    if (!a) return {};
+    return Object.fromEntries(Object.entries(a).flatMap(([system, ids]): [string, string[]][] => {
+        if (typeof ids === "string") return [[system, [ids]]];
+        return Array.isArray(ids) ? [[system, ids.filter((x): x is string => typeof x === "string")]] : [];
+    }));
 }
 
 /**
@@ -799,9 +799,10 @@ function occurrences(text: string, sub: string): number[] {
 }
 
 function countBy(values: Iterable<string | null>): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const v of values) if (v !== null) out[v] = (out[v] ?? 0) + 1;
-    return Object.freeze(Object.fromEntries(Object.entries(out).sort((a, b) => cmp(a[0], b[0]))));
+    // a Map: a value such as constructor or __proto__ is counted like any other, never read from Object.prototype
+    const out = new Map<string, number>();
+    for (const v of values) if (v !== null) out.set(v, (out.get(v) ?? 0) + 1);
+    return Object.freeze(Object.fromEntries([...out].sort((a, b) => cmp(a[0], b[0]))));
 }
 
 const LRU_SIZE = 256;
