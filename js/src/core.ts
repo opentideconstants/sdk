@@ -461,12 +461,22 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
         // checked before the digest: a captive portal or a proxy page is the network, not a bad release (CR2 DR13)
         throw new NetworkError(`${url}: the 200 response has no "<sha256>  <name>" row (a captive portal or a proxy page?)`, { url, status: res.status });
     }
+    return { bytes: res.body, rows: await checkSha256(ctx, d, entry, res.body) };
+}
+
+/**
+ * Check the bytes of OTC_{D}.sha256 against the pointer entry, if any, and return its rows: its own digest and size
+ * when the pointer lists it, at least one row, and the same files with the same digests as the pointer (spec 5.2
+ * step 4.1). For a fetched copy and for a cached one (CR2 DR40).
+ */
+export async function checkSha256(ctx: Ctx, d: string, entry: PointerEntry | null, bytes: Uint8Array): Promise<Map<string, string>> {
+    const n = names(d);
     if (entry) {
         // OTC_{D}.sha256 is itself listed in the pointer: check it first (spec 5.2 step 4.1, PK11 T78)
         const own = entry.files.find((f) => f.name === n.sha);
-        if (own) checkBytes(n.sha, await ctx.platform.sha256(res.body), res.body.length, own.sha256, own.size);
+        if (own) checkBytes(n.sha, await ctx.platform.sha256(bytes), bytes.length, own.sha256, own.size);
     }
-    const rows = parseSha256(res.body, n.sha);
+    const rows = parseSha256(bytes, n.sha);
     if (rows.size === 0) throw new InvalidReleaseError(`${n.sha} lists no files`);
     if (entry) {
         // the pointer and OTC_{D}.sha256 list the same files with the same digests (spec 5.2 step 4.1)
@@ -482,7 +492,7 @@ export async function fetchSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
             if (!named.has(name)) throw new ChecksumError(`${n.sha} lists ${name}, which the pointer does not`, { file: name, expected: null, actual: sha });
         }
     }
-    return { bytes: res.body, rows };
+    return rows;
 }
 
 /** Download one release file, which the release's .sha256 lists, and check its size and SHA-256 (spec 5.2 step 4). */

@@ -294,14 +294,40 @@ class OpenTideConstants
             [@release, nil, nil]
         end
 
+        # The rows and bytes of OTC_{D}.sha256: the cached copy of a verified
+        # release when it can be trusted, else fetched (CR2 DR40).
         def sha_rows(d, ver, entry, pointer_url)
             path = File.join(@client.send(:cache).release_dir(d), "OTC_#{d}.sha256")
-            if ver && File.file?(path)
-                bytes = File.binread(path)
-                return [Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8), File.basename(path)), bytes]
+            present = ver && File.file?(path)
+            rows = present ? cached_sha_rows(path, entry) : nil
+            return rows if rows
+            if @client.send(:offline)
+                why = present ? " with a usable #{File.basename(path)}" : ""
+                raise OfflineError, "offline and release #{d} is not cached#{why}"
             end
-            raise OfflineError, "offline and release #{d} is not cached" if @client.send(:offline)
             Downloader.fetch_sha256(@client, d, entry, pointer_url)
+        end
+
+        # [rows, bytes] of a cached OTC_{D}.sha256, or nil when it cannot be
+        # trusted: it cannot be read, it does not parse or lists no file, the
+        # pointer lists the .sha256 with another digest, or its rows disagree
+        # with the pointer (CR2 DR40, R2-058/059). The caller fetches it again.
+        def cached_sha_rows(path, entry)
+            name = File.basename(path)
+            bytes = File.binread(path)
+            rows = Reader.parse_sha256(bytes.dup.force_encoding(Encoding::UTF_8), name)
+            raise InvalidReleaseError, "#{name} lists no files" if rows.empty?
+            if entry
+                pf = Array(entry["files"]).find { |f| f["name"] == name }
+                if pf && pf["sha256"] && pf["sha256"].downcase != Digest::SHA256.hexdigest(bytes)
+                    raise ChecksumError.new("#{name} does not match the pointer", file: name, expected: pf["sha256"], actual: nil)
+                end
+                Downloader.check_agreement(entry, name, rows)
+            end
+            [rows, bytes]
+        rescue SystemCallError, IOError, InvalidReleaseError, ChecksumError => e
+            @client.send(:log, :warn, "the cached #{name} cannot be used (#{e.message}); fetching it again")
+            nil
         end
 
         # Copies a file from the cache with the block. A cached copy that fails

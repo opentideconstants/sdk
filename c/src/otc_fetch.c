@@ -3128,6 +3128,37 @@ static otc_status rename_all_in(fctx *c, const char *dir, char *const *staged, c
     return fail(c, OTC_E_IO, bad, "cannot write %s", bad);
 }
 
+/* The rows of an OTC_{D}.sha256 body, checked: it parses, lists at least one file, and agrees with the pointer entry
+ * info (if any): its own digest when the pointer lists it, and every row (spec 5.2 step 4.1). hex gets its digest.
+ * OTC_E_INVALID_RELEASE or OTC_E_CHECKSUM when it cannot be trusted; on failure the rows are freed. */
+static otc_status sums_accept(fctx *c, const char *ds, const otc_release_info *info, const char *body, size_t len,
+                              char ***names, char ***digests, size_t *n, char hex[65])
+{
+    struct Sha_256 s;
+    uint8_t h[SIZE_OF_SHA_256_HASH];
+    char sums_name[NAME_CAP];
+    otc_status st = otc__sha256_rows_text(body, names, digests, n);
+    if (st != OTC_OK) {
+        if (st == OTC_E_INVALID_RELEASE) return fail(c, st, NULL, "%s OTC_%s.sha256", otc__sha256_rows_what(st), ds);
+        return fail(c, st, NULL, "out of memory");
+    }
+    if (*n == 0) st = fail(c, OTC_E_INVALID_RELEASE, NULL, "OTC_%s.sha256 lists no files", ds);
+    if (st == OTC_OK) {
+        sha_256_init(&s, h);
+        sha_256_write(&s, body, len);
+        sha_256_close(&s);
+        hex_of(h, hex);
+        snprintf(sums_name, sizeof sums_name, "OTC_%s.sha256", ds);
+        st = check_pointer(c, info, *names, *digests, *n, sums_name, hex);
+    }
+    if (st != OTC_OK) {
+        otc__free_rows(*names, *digests, *n);
+        *names = *digests = NULL;
+        *n = 0;
+    }
+    return st;
+}
+
 otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, const char *dir, unsigned formats,
                             bool overwrite, char **paths, size_t cap, size_t *count)
 {
@@ -3198,6 +3229,25 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         cJSON_Delete(v);
         free(sp);
     }
+    if (cached) {
+        /* CR2 DR40: the cached copy is used only when it can be trusted: it parses, lists a file, and agrees with
+         * the pointer (its own digest when the pointer lists it, and every row). Otherwise it is fetched again. */
+        st = sums_accept(&c, ds, info, sha_body, sha_len, &names, &digests, &n_rows, sha_digest);
+        if (st == OTC_E_INVALID_RELEASE || st == OTC_E_CHECKSUM) {
+            logf_(&c, 2, "the cached OTC_%s.sha256 cannot be used (%s); fetching it again", ds, c.err->message);
+            otc__free_rows(names, digests, n_rows);
+            names = digests = NULL;
+            n_rows = 0;
+            free(sha_body);
+            sha_body = NULL;
+            sha_len = 0;
+            cached = 0;
+            otc_error_init(c.err);
+            st = OTC_OK;
+        } else if (st != OTC_OK) {
+            goto out;
+        }
+    }
     if (!cached) {
         char name[NAME_CAP], *url;
         http_resp r;
@@ -3221,28 +3271,21 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         resp_free(&r);
         free(url);
         if (st != OTC_OK) goto out;
-    }
-    if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) {
-        if (st == OTC_E_INVALID_RELEASE) fail(&c, st, NULL, "%s OTC_%s.sha256", otc__sha256_rows_what(st), ds);
-        else fail(&c, st, NULL, "out of memory");
-        goto out;
-    }
-    if (!cached && n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row stands in for the network */
-        st = fail(&c, OTC_E_NETWORK, NULL, "OTC_%s.sha256: the 200 response has no \"<sha256>  <name>\" row (a captive portal or proxy page?)",
-                  ds);
-        if (c.err) c.err->http_status = 200;
-        goto out;
-    }
-    {
-        struct Sha_256 s;
-        uint8_t h[SIZE_OF_SHA_256_HASH];
-        char sums_name[NAME_CAP];
-        sha_256_init(&s, h);
-        sha_256_write(&s, sha_body, sha_len);
-        sha_256_close(&s);
-        hex_of(h, sha_digest);
-        snprintf(sums_name, sizeof sums_name, "OTC_%s.sha256", ds);
-        if ((st = check_pointer(&c, info, names, digests, n_rows, sums_name, sha_digest)) != OTC_OK) goto out;
+        if ((st = otc__sha256_rows_text(sha_body, &names, &digests, &n_rows)) != OTC_OK) {
+            if (st == OTC_E_INVALID_RELEASE) fail(&c, st, NULL, "%s OTC_%s.sha256", otc__sha256_rows_what(st), ds);
+            else fail(&c, st, NULL, "out of memory");
+            goto out;
+        }
+        if (n_rows == 0) {   /* CR2 DR13: a 200 with no "<sha256>  <name>" row stands in for the network */
+            st = fail(&c, OTC_E_NETWORK, NULL, "OTC_%s.sha256: the 200 response has no \"<sha256>  <name>\" row (a captive portal or proxy page?)",
+                      ds);
+            if (c.err) c.err->http_status = 200;
+            goto out;
+        }
+        otc__free_rows(names, digests, n_rows);
+        names = digests = NULL;
+        n_rows = 0;
+        if ((st = sums_accept(&c, ds, info, sha_body, sha_len, &names, &digests, &n_rows, sha_digest)) != OTC_OK) goto out;
     }
     /* the targets: the formats asked for, the .meta.json, then the .sha256 */
     for (i = 0; FMT[i].ext; i++) {

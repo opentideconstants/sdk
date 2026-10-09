@@ -8,7 +8,7 @@ import {
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
     loadCached, log, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, usable, verifyCached,
-    checkBytes, type Ctx, type PointerEntry, type SyncDir,
+    checkBytes, checkSha256, type Ctx, type PointerEntry, type SyncDir,
 } from "./core.js";
 import {
     CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
@@ -713,11 +713,23 @@ export class OpenTideConstants {
         const n = releaseNames(d);
         const cdir = store.describe(relDir(d));
         const verified = await readVerified(store, d);
-        let shaBytes = verified ? node.readIfExists(node.nodePath.join(cdir, n.sha)) : null;
-        let rows: Map<string, string>;
-        if (shaBytes) rows = parseSha256(shaBytes, n.sha);
-        else {
-            if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
+        // the cached OTC_{D}.sha256 of a verified release, when it can be trusted; else it is fetched again (CR2 DR40)
+        let shaBytes: Uint8Array | null = null;
+        let rows: Map<string, string> | null = null;
+        let present = false;
+        if (verified) {
+            try {
+                shaBytes = node.readIfExists(node.nodePath.join(cdir, n.sha));
+                present = shaBytes !== null;
+                if (shaBytes) rows = await checkSha256(ctx, d, entry, shaBytes);
+            } catch (e) {
+                if (!(e instanceof FileError || e instanceof InvalidReleaseError || e instanceof ChecksumError)) throw e;
+                log(ctx, "warn", `the cached ${n.sha} cannot be used (${e.message}); fetching it again`);
+                rows = null;
+            }
+        }
+        if (!rows) {
+            if (ctx.offline) throw new OfflineError(`release ${d} is not cached${present ? ` with a usable ${n.sha}` : ""} and the client is offline`);
             ({ bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry));
         }
         const wanted = [...new Set(formats.map((f) => (f === "json" ? n.json : f === "json.gz" ? n.gz : n.jsonl)))];

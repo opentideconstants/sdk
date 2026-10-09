@@ -1226,6 +1226,394 @@
      }
     }
    ]
+  },
+  {
+   "id": "download/cached-sha256-not-the-pointers",
+   "title": "download of latest: the cached OTC_{D}.sha256 is well formed but its digest is not the pointer's: it is fetched again, and the files written are the release's",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "0000000000000000000000000000000000000000000000000000000000000000  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file"
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/cached-sha256-malformed",
+   "title": "download of latest and of a pinned release: the cached OTC_{D}.sha256 does not parse (it names a file twice): it is fetched again, and the files written are the release's",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file"
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/pinned"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/pinned/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/pinned/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/pinned/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/cached-sha256-unreadable",
+   "title": "download of latest: the cached OTC_{D}.sha256 cannot be read: it is fetched again, and the files written are the release's",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file"
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "mode": "000"
+    },
+    {
+     "op": "download",
+     "args": {
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "paths": [
+       "OTC_20991231.2.jsonl",
+       "OTC_20991231.2.meta.json",
+       "OTC_20991231.2.sha256"
+      ]
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "chmod",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "mode": "644"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "OTC_20991231.2.sha256"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.jsonl",
+     "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.meta.json",
+     "equals": "${fixtures}/good/OTC_20991231.2.meta.json"
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${tmp}/bundle/OTC_20991231.2.sha256",
+     "equals": "${fixtures}/good/OTC_20991231.2.sha256"
+    }
+   ]
+  },
+  {
+   "id": "download/cached-sha256-malformed-offline",
+   "title": "offline, the cached OTC_{D}.sha256 does not parse (it names a file twice): download cannot fetch it again: offline_unavailable, and nothing is written",
+   "spec": "4.3.2, 5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "restart_runner",
+     "env": {
+      "OPENTIDECONSTANTS_OFFLINE": "1"
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/good/OTC_20991231.2.jsonl",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "loaded_from": "file"
+     }
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231.2",
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "error": "offline_unavailable"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${tmp}/bundle",
+     "exactly": [],
+     "may_be_missing": true
+    }
+   ]
   }
  ]
 }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import logging
 import math
@@ -984,6 +985,26 @@ class OpenTideConstants:
                 self._log.info("prune: %s is locked by another process; it is kept", ds)
         return tuple(removed)
 
+    def _cached_sha256(self, datestamp: str, info: Optional[ReleaseInfo]):
+        """(body, rows) of the cached OTC_{D}.sha256 of a verified release, or None when it cannot be trusted (CR2
+        DR40): it cannot be read, it does not parse, or the pointer lists the .sha256 with another digest. The caller
+        then fetches it again, as for a release that is not cached."""
+        name = f"OTC_{datestamp}.sha256"
+        sp = self._cache.release_dir(datestamp) / name
+        try:
+            body = sp.read_bytes()
+            rows = _parse_sha256(body, str(sp))
+            if not rows:
+                raise InvalidReleaseError(f"{name} lists no files")
+        except (OSError, InvalidReleaseError) as e:
+            self._log.warning("the cached %s cannot be used (%s); fetching it again", name, e)
+            return None
+        ent = next((f for f in info.files if f.name == name), None) if info is not None else None
+        if ent is not None and ent.sha256 is not None and hashlib.sha256(body).hexdigest() != ent.sha256:
+            self._log.warning("the cached %s is not the one the pointer lists; fetching it again", name)
+            return None
+        return body, rows
+
     def download(self, release: str = "latest", *, to, formats: Sequence[str] = ("jsonl",),
                  overwrite: bool = False) -> Tuple[str, ...]:
         """Write a verified release into the folder ``to`` (spec §4.3.2): the requested formats plus
@@ -1025,15 +1046,12 @@ class OpenTideConstants:
         base = f"OTC_{ds}"
         cdir = self._cache.release_dir(ds)
         cached = self._cache.read_verified(ds) is not None and (cdir / f"{base}.sha256").is_file()
-        if cached:
-            sp = cdir / f"{base}.sha256"
-            try:
-                sha_body = sp.read_bytes()
-            except OSError as e:
-                raise FileError(f"cannot read {sp}: {e}", path=str(sp), cause=e) from e
-            rows = _parse_sha256(sha_body, str(sp))
+        cached_sha = self._cached_sha256(ds, info) if cached else None
+        if cached_sha is not None:
+            sha_body, rows = cached_sha
         elif self._offline:
-            raise OfflineError(f"offline, and release {ds} is not in the cache")
+            raise OfflineError(f"offline, and release {ds} is not in the cache"
+                               + (f" with a usable {base}.sha256" if cached else ""))
         else:
             sha_body, rows = self._get_sha256_rows(ds, info)
         self._check_pointer(info, rows)
@@ -1041,7 +1059,6 @@ class OpenTideConstants:
         for n in names:
             if n not in rows:
                 raise ReleaseNotFoundError(f"{n} is not part of release {ds}")
-        import hashlib
         sha_digest = hashlib.sha256(sha_body).hexdigest()
         targets = [(n, rows[n]) for n in names] + [(f"{base}.sha256", sha_digest)]
         # check every existing file before writing any file

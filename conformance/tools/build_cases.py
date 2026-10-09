@@ -1739,6 +1739,55 @@ def group_download():
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}"),
                      dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"], env={"OPENTIDECONSTANTS_OFFLINE": "1"}))
+    return out + download_cached_sha256_cases()
+
+
+def download_cached_sha256_cases():
+    """download reuses the cached OTC_{D}.sha256 of a verified release only when it can be trusted (CR2 DR40,
+    orchestrator decision 2026-10-09): when the pointer lists the .sha256, its digest must equal the pointer's, and a
+    cached copy that cannot be read or parsed is fetched again (offline: offline_unavailable)."""
+    out = []
+    G = f"{SRV}/good/"
+    d2 = "20991231.2"
+    B = "${tmp}/bundle"
+    sp = f"${{cache}}/v1/releases/{d2}/OTC_{d2}.sha256"
+    files = [f"OTC_{d2}.jsonl", f"OTC_{d2}.meta.json", f"OTC_{d2}.sha256"]
+    rows = sha256_rows("good", d2)
+    # well formed, and the rows of the files download writes are right: only the .json row differs from the release
+    other = "".join(f"{'0' * 64 if n == f'OTC_{d2}.json' else h}  {n}\n" for n, h in sorted(rows.items()))
+    # does not parse: it names a file twice, which is invalid_release in every SDK (CR2 DR14)
+    twice = "".join(f"{h}  {n}\n" for n, h in sorted(rows.items())) + f"{rows[f'OTC_{d2}.jsonl']}  OTC_{d2}.jsonl\n"
+
+    def dl(expect, **kw):
+        return net(step("download", expect, **kw), fs=True)
+
+    same = [drv("assert_sha256", path=f"{B}/{n}", equals=f"{FIX}/good/{n}") for n in files]
+    cached = [open_latest_step(G, mode="stream")]
+    # the client that downloads is opened on a file, so its open never reads the cached release (C opens a cached
+    # release against its cached .sha256)
+    file_client = step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}")
+    out.append(case("download/cached-sha256-not-the-pointers", "download of latest: the cached OTC_{D}.sha256 is well formed but its digest is not the pointer's: it is fetched again, and the files written are the release's", "4.3.2, 5.2",
+                    cached + [drv("write", path=sp, text=other), file_client,
+                              dl({"paths": files}, to=B), drv("assert_files", dir=B, exactly=files, no_tmp=True)] + same,
+                    requires=["fs", "stream"]))
+    out.append(case("download/cached-sha256-malformed", "download of latest and of a pinned release: the cached OTC_{D}.sha256 does not parse (it names a file twice): it is fetched again, and the files written are the release's", "4.3.2, 5.2",
+                    cached + [drv("write", path=sp, text=twice), file_client,
+                              dl({"paths": files}, to=B), drv("assert_files", dir=B, exactly=files, no_tmp=True)] + same +
+                    [dl({"paths": files}, release=d2, to="${tmp}/pinned")] +
+                    [drv("assert_sha256", path=f"${{tmp}}/pinned/{n}", equals=f"{FIX}/good/{n}") for n in files],
+                    requires=["fs", "stream"]))
+    out.append(case("download/cached-sha256-unreadable", "download of latest: the cached OTC_{D}.sha256 cannot be read: it is fetched again, and the files written are the release's", "4.3.2, 5.2",
+                    cached + [file_client, drv("chmod", path=sp, mode="000"),
+                              dl({"paths": files}, to=B), drv("chmod", path=sp, mode="644"),
+                              drv("assert_files", dir=B, exactly=files, no_tmp=True)] + same,
+                    requires=["fs", "stream"]))
+    out.append(case("download/cached-sha256-malformed-offline", "offline, the cached OTC_{D}.sha256 does not parse (it names a file twice): download cannot fetch it again: offline_unavailable, and nothing is written", "4.3.2, 5.2",
+                    cached + [drv("write", path=sp, text=twice), drv("server_stop"),
+                              drv("restart_runner", env={"OPENTIDECONSTANTS_OFFLINE": "1"}),
+                              step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", cache_dir="${cache}"),
+                              dl(err("offline_unavailable"), release=d2, to=B),
+                              drv("assert_files", dir=B, exactly=[], may_be_missing=True)],
+                    requires=["fs", "stream"]))
     return out
 
 
