@@ -1176,7 +1176,6 @@
   {
    "case": "rules/pk11/sha256-absolute-url",
    "runners": [
-    "c-fetch",
     "python"
    ],
    "package": "PK11",

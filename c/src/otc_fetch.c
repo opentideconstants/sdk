@@ -1887,7 +1887,10 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
 
     /* 1. the .sha256 list */
     snprintf(sha_name, sizeof sha_name, "OTC_%s.sha256", ds);
-    sha_url = url_resolve(c->base_url, sha_name);
+    {   /* the pointer's url for it when the pointer lists it (spec 4.3.1), else base_url */
+        const otc_file_info *pf = info_file(info, sha_name);
+        sha_url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c->base_url, sha_name);
+    }
     sha_tmp = tmp_path(dir);
     if (!sha_url || !sha_tmp) { st = fail(c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
     st = http_get(c, sha_url, NULL, 1, sha_tmp, &r, &res);
@@ -2610,7 +2613,10 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         int res;
         if (c.offline) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", ds); goto out; }
         snprintf(name, sizeof name, "OTC_%s.sha256", ds);
-        url = url_resolve(c.base_url, name);
+        {
+            const otc_file_info *pf = info_file(info, name);
+            url = (pf && pf->url) ? otc__strdup(pf->url) : url_resolve(c.base_url, name);
+        }
         if (!url) { st = fail(&c, OTC_E_NOMEM, NULL, "out of memory"); goto out; }
         memset(&r, 0, sizeof r);
         st = http_get(&c, url, NULL, 1, NULL, &r, &res);
