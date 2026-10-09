@@ -22,6 +22,45 @@
    "root": "order"
   },
   {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231",
+   "note": "format 0.5 (backward compatibility); validated against otc-0.5",
+   "releases": [
+    "20991231"
+   ],
+   "root": "v05"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.3",
+   "note": "format 0.6: qc_status ok, flagged, no_constants, carried-over sets, time_base annotations, provenance.build; 20991231.3 has a version DOI in the index, 20991230 is a release candidate with concept_doi null",
+   "releases": [
+    "20991231.3",
+    "20991230"
+   ],
+   "root": "v06"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "expect_by_release": {
+    "20991231.4": {
+     "error": "reader_too_old"
+    }
+   },
+   "latest": "20991231.4",
+   "latest_readable": "20991231.3",
+   "note": "the pointers name 20991231.4 (min_reader_version 0.99); a 0.6 reader takes 20991231.3 from OTC_index.json (spec 5.2 step 2a)",
+   "releases": [
+    "20991231.4",
+    "20991231.3",
+    "20991231.2"
+   ],
+   "root": "reader"
+  },
+  {
    "defect": "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
    "expect": {
     "error": "checksum_mismatch"
@@ -84,11 +123,41 @@
     "20991231"
    ],
    "root": "bad/unresolved-convention"
+  },
+  {
+   "defect": "the only release has min_reader_version 0.99, newer than any reader",
+   "expect": {
+    "error": "reader_too_old"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/min-reader"
   }
  ],
+ "reader_format_version": "0.6",
  "schema": {
   "sha256": "5645522d5cbc34d21918f274f1b22daae3e3622459fe74ec90c2b7b30f4d6894",
   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/88b6418edeeda065ba3e96ee26368faefcbd7f12/src/schema/otc-0.2.schema.json"
+ },
+ "schemas": {
+  "0.2": {
+   "sha256": "5645522d5cbc34d21918f274f1b22daae3e3622459fe74ec90c2b7b30f4d6894",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/88b6418edeeda065ba3e96ee26368faefcbd7f12/src/schema/otc-0.2.schema.json"
+  },
+  "0.5": {
+   "sha256": "efc42311ee8f3484bb0c66b1985fdf1d55411cc2df7517f28de89488176009e9",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-0.5.schema.json"
+  },
+  "0.6": {
+   "sha256": "97986948802aac69d0273cf26fcd9f0808d11a42e97de4fc1ccd3c4f51340557",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-0.6.schema.json"
+  },
+  "index-0.6": {
+   "sha256": "08fac762f2e620cfa4cdacabcfccceb329100c4c5459fc6d54deae23d1595449",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-index-0.6.schema.json"
+  }
  },
  "supported_format_majors": [
   0

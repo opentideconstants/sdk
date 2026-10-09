@@ -11,7 +11,7 @@ uv run conformance/tools/build_fixtures.py           # writes good/, order/, bad
 uv run conformance/tools/build_fixtures.py --check   # regenerates, compares byte for byte, validates, checks every bad fixture
 ```
 
-`--check` downloads format 0.2 of the schema from the site repository at a pinned commit and checks its SHA-256. `--schema PATH` uses a local copy instead.
+`--check` downloads the schemas from the site repository at pinned commits and checks their SHA-256: format 0.2, and formats 0.5 and 0.6 and the 0.6 index schema (`otc-index-0.6.schema.json`) from the merge of the 0.6 schema. Each release is validated against the schema of its format (a format with no schema of its own, like `bad/format-minor`, is read tolerantly against the newest schema below it). In a 0.6 root, `OTC_index.json` and the pointers are validated against the index schema. `--schema PATH` uses a local copy of the 0.2 schema; `--schema-dir DIR` a directory with local copies of all four.
 
 ## Layout
 
@@ -24,9 +24,13 @@ Each directory is a server root: the fixture HTTP server serves one of them as `
 | `bad/wrong-sha256/` | every station data file differs from its SHA-256 (same size, one byte changed) | `checksum_mismatch` |
 | `bad/truncated/` | the `.json`, `.json.gz` and `.jsonl` files are cut to half their size | `checksum_mismatch` |
 | `bad/pointer-mismatch/` | the files match `.sha256`, but the pointer and the index give other SHA-256 values | `checksum_mismatch` |
+| `v05/` | release `20991231` in format 0.5 (the `good/` `20991231` release without the current station), with the old pointer form | loads |
+| `v06/` | releases `20991231.3` (format 0.6, concept DOI, version DOI `10.5072/zenodo.3` in the index) and `20991230` (a release candidate, `concept_doi` null); index and pointers in the 0.6 index form | both load |
+| `reader/` | releases `20991231.2` and `20991231.3` (format 0.6) and `20991231.4` (format and `min_reader_version` `0.99`); the pointers name `20991231.4` | `.4`: `reader_too_old`; `latest` for a 0.6 reader is `.3` |
 | `bad/format-major/` | `format_version` `1.0` (pointer `OTC_latest-f1.json`, no `-f0`) | `unsupported_format` |
 | `bad/format-minor/` | `format_version` `0.3` with unknown fields at every level and an unknown alias system | loads; the unknown fields are in `raw` |
 | `bad/unresolved-convention/` | a set whose `convention_id` does not exist | `invalid_release` |
+| `bad/min-reader/` | the only release has `min_reader_version` `0.99` | `reader_too_old` |
 
 `fixtures.json` lists the same roots, releases and expected outcomes in machine-readable form.
 
@@ -65,3 +69,18 @@ Each release has `OTC_{D}.json`, `.json.gz`, `.jsonl`, `.meta.json` and `.sha256
 | `OTC-T-0022` New Pier | only in `20991231.2` |
 
 Release `20991231` has a null DOI, a build commit and a changelog URL. Release `20991231.2` has a DOI (test prefix `10.5072`) and leaves out the optional build commit and changelog URL.
+
+## Format 0.6 stations (`v06/`, release `20991231.3`)
+
+| Station | Covers |
+|---|---|
+| `OTC-T-0101` Six Ok Harbour | two `ok` sets: an official set with every `provenance.build` field, a gauge set with a `verified` time base and only `build.build_commit` |
+| `OTC-T-0102` Six Flagged Point | an `ok` set with a `corrected` time base (`correction`, `months_dropped`) and a `flagged` set with an `unverified` time base |
+| `OTC-T-0103` Six Mixed Quay | an `ok` official set and a `no_constants` gauge set (`too_short`): `gesla-fit` is not a usable source here |
+| `OTC-T-0104` Six Empty Reef | only a `no_constants` set (`fit_unusable`, `record_issues`): no recommended set |
+| `OTC-T-0105` Six Carried Pier | a `flagged` set carried over from `20991231.2` (`carried_over`, `provenance.carried_from_release`) |
+| `OTC-T-0106` Six Legacy Bank | the deprecated `accepted`, and `fallback` with `carried_from_release` |
+| `OTC-T-0107` Six Old Build | the deprecated top-level `provenance.build_commit` |
+| `OTC-T-0108` | a tombstone, `removed_reason` `merged`, `merged_into` `OTC-T-0101` |
+
+The release candidate `20991230` and the `reader/` releases hold only `OTC-T-0101` and `OTC-T-0107`. Entries in a 0.6 index have `min_reader_version`, `concept_doi`, `zenodo_version_doi` and `content_sha256` (a stand-in digest; the SDKs only pass it through); `v06`'s `20991231.3` entry also has `zenodo_material`, which the SDKs ignore.

@@ -13,16 +13,19 @@ are made up for tests. They are not tidal data.
 --check does three things:
   1. Regenerates every fixture in a temporary directory and compares it with
      the committed files, byte for byte.
-  2. Good fixtures: each release validates against format 0.2 (the .json against
-     the schema, the .meta.json against #/$defs/meta, each .jsonl line against
-     #/$defs/station), the cross-references resolve, and the .json, .json.gz,
-     .jsonl, .meta.json, .sha256, pointers and index agree.
+  2. Good fixtures: each release validates against the schema of its format
+     (0.2, 0.5 or 0.6: the .json against the schema, the .meta.json against
+     #/$defs/meta, each .jsonl line against #/$defs/station), the
+     cross-references resolve, and the .json, .json.gz, .jsonl, .meta.json,
+     .sha256, pointers and index agree. In a 0.6 root the index and the pointers
+     validate against otc-index-0.6.
   3. Bad fixtures: a small reference reader (the rules of spec §5.2, §7.3 and
      §7.4) opens each one, and the outcome must be the one in fixtures.json:
      the error code, or "load" for the higher-minor release.
 
-The schema is format 0.2 from the site repository, pinned by commit and SHA-256.
-Pass --schema PATH to use a local copy; it must have the pinned SHA-256.
+The schemas (formats 0.2, 0.5, 0.6 and the 0.6 index) come from the site repository,
+pinned by commit and SHA-256. Pass --schema PATH for a local copy of 0.2, or
+--schema-dir DIR for local copies of all four; each must have the pinned SHA-256.
 """
 import argparse
 import copy
@@ -40,11 +43,29 @@ from jsonschema import Draft202012Validator
 SCHEMA_COMMIT = "88b6418edeeda065ba3e96ee26368faefcbd7f12"
 SCHEMA_URL = f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_COMMIT}/src/schema/otc-0.2.schema.json"
 SCHEMA_SHA256 = "5645522d5cbc34d21918f274f1b22daae3e3622459fe74ec90c2b7b30f4d6894"
-KNOWN_FORMAT = (0, 2)
+# Formats 0.5 and 0.6 and the 0.6 index schema, from the site repository at the merge of
+# opentideconstants/opentideconstants#24 (schema 0.6), pinned by commit and SHA-256.
+SCHEMA_06_COMMIT = "66783a05ec603049bc778d7905388c242934744e"
+SCHEMAS = {
+    "0.2": (SCHEMA_URL, SCHEMA_SHA256),
+    "0.5": (f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_06_COMMIT}/src/schema/otc-0.5.schema.json",
+            "efc42311ee8f3484bb0c66b1985fdf1d55411cc2df7517f28de89488176009e9"),
+    "0.6": (f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_06_COMMIT}/src/schema/otc-0.6.schema.json",
+            "97986948802aac69d0273cf26fcd9f0808d11a42e97de4fc1ccd3c4f51340557"),
+    "index-0.6": (f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_06_COMMIT}/src/schema/otc-index-0.6.schema.json",
+                  "08fac762f2e620cfa4cdacabcfccceb329100c4c5459fc6d54deae23d1595449"),
+}
+SCHEMA_FILES = {"0.2": "otc-0.2.schema.json", "0.5": "otc-0.5.schema.json", "0.6": "otc-0.6.schema.json",
+                "index-0.6": "otc-index-0.6.schema.json"}
+# The reference reader reads format 0.6 (spec 7.4 SUPPORTED_FORMAT_VERSION): it refuses a release whose
+# release.min_reader_version is newer, with reader_too_old.
+READER_FORMAT = (0, 6)
 SUPPORTED_MAJORS = [0]
+# A format version no SDK reads yet, for the min_reader_version fixtures (spec 7.1 case format/reader-too-old).
+TOO_NEW = "0.99"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-GENERATED = ["good", "order", "bad", "fixtures.json"]
+GENERATED = ["good", "order", "v05", "v06", "reader", "bad", "fixtures.json"]
 
 BASE = "20991231"
 SECOND = "20991231.2"
@@ -454,6 +475,191 @@ BAD = [
 ]
 
 
+# --------------------------------------------------------------------------- formats 0.5 and 0.6
+
+V06 = "20991231.3"    # the 0.6 release of v06/ (concept DOI and version DOI)
+V06_RC = "20991230"   # an older 0.6 release of v06/ from before the concept DOI existed (concept_doi null)
+READER_OLD = "20991231.2"   # reader/: a 0.6 release
+READER_OK = "20991231.3"    # reader/: the newest release a 0.6 reader can read
+READER_NEW = "20991231.4"   # reader/: min_reader_version 0.99, the newest release
+
+
+def v05_doc():
+    """A format 0.5 release (backward compatibility): the good/ 20991231 release, valid against otc-0.5."""
+    doc = release_doc(BASE)
+    doc["format_version"] = "0.5"
+    # 0.5 gives a current set current_bins, not water-level constituents: leave the current station out
+    doc["stations"] = [s for s in doc["stations"] if s["station_id"] != "OTC-T-0019"]
+    return doc
+
+
+def tb(code, declared, published=None, **extra):
+    """A 0.6 time-base annotation."""
+    t = {"code": code, "reason": f"test: time base {code}", "declared": declared,
+         "published": published or declared, "decided_in": BASE}
+    t.update(extra)
+    return t
+
+
+VERIFIED = tb("verified", "utc_instant", decided_build_commit="0123456",
+              evidence=[{"comparator_kind": "official_constants", "comparator_id": "noaa:9900101",
+                         "distance_km": 0.0, "lag_min": 0.5, "detail": "M2 phase lag against the official constants"}])
+
+
+def span06(good_hours, start="2090-01-01T00:00:00Z", end="2098-12-31T23:00:00Z"):
+    return {"start": start, "end": end, "good_samples": int(good_hours), "good_hours": good_hours}
+
+
+def no_recommended(st):
+    st["recommended_set_id"] = None
+    return st
+
+
+def v06_stations(datestamp, full=True):
+    """The stations of a format 0.6 release. full=False keeps only OTC-T-0101 and OTC-T-0107."""
+    gauge = lambda sid, suffix, consts, **kw: cset(sid, suffix, "gesla-fit", "gauge", "otc-greenwich-v1",
+                                                   "gesla-derived", consts, **kw)
+    official = lambda sid, consts, **kw: cset(sid, "noaa", "noaa", "official", "noaa-greenwich-v1", "noaa", consts, **kw)
+    s1 = "OTC-T-0101"
+    st = [
+        # ok sets: provenance.build in full (official) and with only build_commit (gauge); a verified time base
+        active(s1, "Six Ok Harbour", "GBR", 50.9, -1.4, "Europe/London",
+               [official(s1, simple_constituents(1.2), qc_status="ok",
+                         provenance={"adapter_version": "0.0.0-test",
+                                     "input_sha256": [hashlib.sha256(b"noaa-06-input").hexdigest()],
+                                     "selection_reason": "official constants from the operating agency",
+                                     "decision": {"tier": "rule", "outcome": "accept", "rule": "D1", "reason": "official"},
+                                     "build": {"build_commit": "89abcdef", "built_at": "2099-12-31T06:00:00Z",
+                                               "fetched_at": "2099-12-30T18:00:00Z", "run_id": "otc-test-run-6",
+                                               "tool_versions": {"python": "3.12.7", "utide": "0.3.0"}}}),
+                gauge(s1, "gesla-fit", simple_constituents(1.19), qc_status="ok", time_base=VERIFIED,
+                      record_span=span06(70000.0),
+                      provenance={"adapter_version": "0.0.0-test", "build": {"build_commit": "89abcdef"}})],
+               recommended=f"{s1}/noaa", aliases={"noaa": "9900101"}),
+    ]
+    if full:
+        st += [
+            # a flagged set (unverified time base) and an ok set with a corrected time base
+            active("OTC-T-0102", "Six Flagged Point", "GBR", 50.7, -1.0, "Europe/London",
+                   [gauge("OTC-T-0102", "gesla-corrected", simple_constituents(1.1), qc_status="ok",
+                          record_span=span06(52000.5),
+                          time_base=tb("corrected", "utc_mean_start60", "utc_instant", decided_build_commit="0123456",
+                                       correction={"from": "utc_mean_start60", "to": "utc_instant"},
+                                       months_dropped=["2097-02", "2097-03"],
+                                       evidence=[{"comparator_kind": "official_predictions", "comparator_id": "kartverket:EXF",
+                                                  "distance_km": 3.2, "lag_min": -30.0}])),
+                    gauge("OTC-T-0102", "gesla-fit", simple_constituents(1.05), qc_status="flagged",
+                          record_span=span06(43800.0),
+                          qc_flags=[{"flag": "time_base", "reason": "no comparator gives a verdict"}],
+                          time_base=tb("unverified", "utc_plus_1", decided_in=SECOND,
+                                       evidence=[{"comparator_kind": "dst_selftest", "comparator_id": "OTC-T-0102/gesla-fit",
+                                                  "distance_km": None, "detail": "no daylight-saving signal"}]))],
+                   recommended="OTC-T-0102/gesla-corrected"),
+            # an ok set plus a no_constants set (too short) of another source
+            active("OTC-T-0103", "Six Mixed Quay", "GBR", 51.2, 1.4, "Europe/London",
+                   [official("OTC-T-0103", simple_constituents(1.4), qc_status="ok"),
+                    gauge("OTC-T-0103", "gesla-fit", [], qc_status="no_constants", no_constants_reason="too_short",
+                          record_span=span06(200.0, start="2098-12-01T00:00:00Z"), time_base=VERIFIED,
+                          qc_flags=[{"flag": "short_record", "reason": "200 hours of good data, below 360"}])],
+                   recommended="OTC-T-0103/noaa"),
+            # every set is no_constants: no recommended set
+            no_recommended(active("OTC-T-0104", "Six Empty Reef", "GBR", 52.5, 1.8, "Europe/London",
+                   [gauge("OTC-T-0104", "gesla-fit", [], qc_status="no_constants", no_constants_reason="fit_unusable",
+                          record_span=span06(9000.0), time_base=VERIFIED,
+                          record_issues=[{"issue": "flatline", "start": "2095-01-01T00:00:00Z", "end": "2098-12-31T23:00:00Z",
+                                          "reason": "the sensor reads one value"}],
+                          qc_flags=[{"flag": "broken_record", "reason": "no segment gives a usable fit"}])])),
+            # a carried-over set (flagged carried_over, gate fallback)
+            active("OTC-T-0105", "Six Carried Pier", "GBR", 53.0, 0.5, "Europe/London",
+                   [official("OTC-T-0105", simple_constituents(0.95), qc_status="flagged",
+                             qc_flags=[{"flag": "carried_over", "reason": "the source failed the coverage check in this build"}],
+                             provenance={"adapter_version": "0.0.0-test", "carried_from_release": SECOND,
+                                         "decision": {"tier": "fallback", "outcome": "fallback", "reason": "source check failed"}})]),
+            # the deprecated qc_status values: accepted, and fallback (a carry-over)
+            active("OTC-T-0106", "Six Legacy Bank", "GBR", 54.0, -0.5, "Europe/London",
+                   [official("OTC-T-0106", simple_constituents(0.85), qc_status="accepted"),
+                    cset("OTC-T-0106", "eot20", "eot20", "model", "otc-greenwich-v1", "eot20", simple_constituents(0.8),
+                         qc_status="fallback", qc_flags=[{"flag": "carried_over", "reason": "the model input failed a check"}],
+                         provenance={"adapter_version": "0.0.0-test", "carried_from_release": BASE,
+                                     "decision": {"tier": "fallback", "outcome": "fallback"}})],
+                   recommended="OTC-T-0106/noaa"),
+        ]
+    st += [
+        # the deprecated provenance.build_commit (no build object)
+        active("OTC-T-0107", "Six Old Build", "GBR", 55.0, -1.6, "Europe/London",
+               [official("OTC-T-0107", simple_constituents(1.6), qc_status="ok",
+                         provenance={"adapter_version": "0.0.0-test", "build_commit": "fedcba9"})]),
+    ]
+    if full:
+        st.append({"station_id": "OTC-T-0108", "status": "removed", "name": "Six Merged Steps", "removed_in": datestamp,
+                   "removed_reason": "merged", "merged_into": s1, "detail": "Same gauge as OTC-T-0101 (test tombstone)."})
+    return st
+
+
+def v06_doc(datestamp, *, full=True, concept_doi="10.5072/zenodo.1", fmt="0.6", min_reader="0.6"):
+    base = release_doc(BASE)
+    rel = {"datestamp": datestamp, "created": "2099-12-31T18:00:00Z", "min_reader_version": min_reader,
+           "fit_min_good_hours": 360, "concept_doi": concept_doi,
+           "source_versions": {"eot20": "20991231", "gesla": "4.1", "noaa": "20991231"},
+           "build_commit": "89abcdef0123456789abcdef0123456789abcdef",
+           "changelog_url": f"https://opentideconstants.org/changelog/#{datestamp}"}
+    if concept_doi is not None:
+        rel["doi"] = None  # deprecated in 0.6, always null; the release candidate leaves it out
+    else:
+        del rel["build_commit"]
+        del rel["changelog_url"]
+    doc = {"format_version": fmt, "release": rel, "conventions": base["conventions"], "licences": base["licences"],
+           "constituents": base["constituents"], "stations": v06_stations(datestamp, full)}
+    if fmt != "0.6":
+        doc["future_top_level"] = {"note": f"added by format {fmt} (test)"}
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
+
+
+def content_digest(datestamp):
+    """content_sha256 of an index entry. The SDKs only pass it through, so a stand-in digest is enough."""
+    return sha(f"content:{datestamp}".encode())
+
+
+def entry06(version_dois, material=()):
+    """A tamper hook that turns the honest pointer entry into a 0.6 index entry (otc-index-0.6 release_info)."""
+    def hook(files, sums, entry, reuse):
+        d = entry["datestamp"]
+        doc = json.loads(files[f"OTC_{d}.json"])
+        e = {"datestamp": d, "created": entry["created"], "format_version": entry["format_version"],
+             "min_reader_version": doc["release"]["min_reader_version"],
+             "concept_doi": doc["release"].get("concept_doi"), "zenodo_version_doi": version_dois.get(d),
+             "content_sha256": content_digest(d), "files": entry["files"]}
+        if d in material:
+            e["zenodo_material"] = True  # pipeline only; the SDKs ignore it (spec 5.1)
+        return files, sums, e
+    return hook
+
+
+NEW_FIXTURES = [
+    # (root, docs, tamper, manifest entry)
+    ("v05", lambda: [v05_doc()], None,
+     {"releases": [BASE], "latest": BASE, "expect": "load", "defect": None,
+      "note": "format 0.5 (backward compatibility); validated against otc-0.5"}),
+    ("v06", lambda: [v06_doc(V06_RC, full=False, concept_doi=None), v06_doc(V06)],
+     entry06({V06: "10.5072/zenodo.3"}, material={V06}),
+     {"releases": [V06, V06_RC], "latest": V06, "expect": "load", "defect": None,
+      "note": "format 0.6: qc_status ok, flagged, no_constants, carried-over sets, time_base annotations, "
+              "provenance.build; 20991231.3 has a version DOI in the index, 20991230 is a release candidate with "
+              "concept_doi null"}),
+    ("reader", lambda: [v06_doc(READER_OLD, full=False), v06_doc(READER_OK, full=False),
+                        v06_doc(READER_NEW, full=False, fmt=TOO_NEW, min_reader=TOO_NEW)],
+     entry06({READER_OK: "10.5072/zenodo.3"}),
+     {"releases": [READER_NEW, READER_OK, READER_OLD], "latest": READER_NEW, "latest_readable": READER_OK,
+      "expect": "load", "expect_by_release": {READER_NEW: {"error": "reader_too_old"}}, "defect": None,
+      "note": f"the pointers name {READER_NEW} (min_reader_version {TOO_NEW}); a 0.6 reader takes {READER_OK} "
+              "from OTC_index.json (spec 5.2 step 2a)"}),
+]
+BAD_MIN_READER = ("min-reader", "reader_too_old",
+                  f"the only release has min_reader_version {TOO_NEW}, newer than any reader",
+                  lambda: [v06_doc(BASE, full=False, fmt=TOO_NEW, min_reader=TOO_NEW)], entry06({}))
+
+
 def build(out, reuse):
     """Write good/, bad/ and fixtures.json under out. reuse = committed fixtures dir (for .gz bytes) or None."""
     write_root(out / "good", [release_doc(BASE), release_doc(SECOND)],
@@ -463,13 +669,18 @@ def build(out, reuse):
     manifest = {
         "description": "Conformance fixture releases (SDK spec 7.1). Synthetic data, CC0-1.0. Generated by conformance/tools/build_fixtures.py; do not edit.",
         "schema": {"url": SCHEMA_URL, "sha256": SCHEMA_SHA256},
+        "schemas": {v: {"url": u, "sha256": h} for v, (u, h) in SCHEMAS.items()},
         "supported_format_majors": SUPPORTED_MAJORS,
+        "reader_format_version": "%d.%d" % READER_FORMAT,
         "fixtures": [{"root": "good", "releases": [SECOND, BASE], "latest": SECOND, "expect": "load",
                       "defect": None},
                      {"root": "order", "releases": [COUNTER, SECOND], "latest": COUNTER, "expect": "load",
                       "defect": None}],
     }
-    for name, expect, defect, docs, tamper in BAD:
+    for name, docs, tamper, entry in NEW_FIXTURES:
+        write_root(out / name, docs(), reuse_root=(reuse / name) if reuse else None, tamper=tamper)
+        manifest["fixtures"].append({"root": name, **entry})
+    for name, expect, defect, docs, tamper in BAD + [BAD_MIN_READER]:
         write_root(out / "bad" / name, docs(), reuse_root=(reuse / "bad" / name) if reuse else None, tamper=tamper)
         manifest["fixtures"].append({"root": f"bad/{name}", "releases": [BASE], "latest": BASE,
                                      "expect": expect if expect == "load" else {"error": expect},
@@ -485,11 +696,29 @@ class Fail(Exception):
         self.code = code
 
 
-def load_schema(path):
-    data = Path(path).read_bytes() if path else urllib.request.urlopen(SCHEMA_URL, timeout=30).read()
-    if sha(data) != SCHEMA_SHA256:
-        raise SystemExit(f"schema SHA-256 {sha(data)} is not the pinned {SCHEMA_SHA256}")
-    return json.loads(data)
+def fetch_schema(version, schema_dir=None, legacy_path=None):
+    url, digest = SCHEMAS[version]
+    if version == "0.2" and legacy_path:
+        data = Path(legacy_path).read_bytes()
+    elif schema_dir:
+        data = (Path(schema_dir) / SCHEMA_FILES[version]).read_bytes()
+    else:
+        data = urllib.request.urlopen(url, timeout=30).read()
+    if sha(data) != digest:
+        raise SystemExit(f"schema {version} SHA-256 {sha(data)} is not the pinned {digest}")
+    schema = json.loads(data)
+    Draft202012Validator.check_schema(schema)
+    return schema
+
+
+def load_schemas(schema_dir=None, legacy_path=None):
+    """Every pinned schema: {"0.2": ..., "0.5": ..., "0.6": ..., "index-0.6": ...}."""
+    return {v: fetch_schema(v, schema_dir, legacy_path) for v in SCHEMAS}
+
+
+def version_key(v):
+    major, minor = (int(x) for x in str(v).split("."))
+    return major, minor
 
 
 def resolve(schema, node):
@@ -565,8 +794,11 @@ def cross_ref_errors(doc):
         rec = s["recommended_set_id"]
         if rec is not None and rec not in own:
             errs.append(f"{sid}: recommended_set_id {rec} does not resolve")
-        if rec is None and not (s["type"] == "subordinate" and "subordinate_offsets" in s):
+        all_no_constants = bool(s["constant_sets"]) and all(cs["qc_status"] == "no_constants" for cs in s["constant_sets"])
+        if rec is None and not (s["type"] == "subordinate" and "subordinate_offsets" in s) and not all_no_constants:
             errs.append(f"{sid}: recommended_set_id is null but the station is not a subordinate with offsets")
+        if rec in own and next(cs for cs in s["constant_sets"] if cs["set_id"] == rec)["qc_status"] in ("no_constants", "excluded"):
+            errs.append(f"{sid}: the recommended set {rec} has no usable constants")
         if s["type"] == "subordinate" and "subordinate_offsets" not in s:
             errs.append(f"{sid}: subordinate without subordinate_offsets")
         off = s.get("subordinate_offsets")
@@ -586,7 +818,7 @@ def cross_ref_errors(doc):
     return errs
 
 
-def open_release(root, datestamp, schema):
+def open_release(root, datestamp, schemas):
     """Reference reader: what an SDK must do with this release. Returns a summary dict or raises Fail."""
     index = json.loads((root / "OTC_index.json").read_bytes())
     entry = next((e for e in index["releases"] if e["datestamp"] == datestamp), None)
@@ -623,21 +855,45 @@ def open_release(root, datestamp, schema):
         lines = [json.loads(l) for l in (root / f"OTC_{datestamp}.jsonl").read_text(encoding="utf-8").splitlines()]
     except ValueError as e:
         raise Fail("invalid_release", f"not JSON: {e}")
-    # Spec 7.4: the major must be supported.
-    major, minor = (int(x) for x in str(doc.get("format_version", "")).split("."))
+    # Spec 7.4: the major must be supported, and release.min_reader_version (format 0.6) must be readable.
+    major, minor = version_key(doc.get("format_version", ""))
     if major not in SUPPORTED_MAJORS:
         raise Fail("unsupported_format", f"format_version {doc['format_version']}")
-    # Spec 7.3: a higher minor is read tolerantly; unknown fields stay in raw.
+    min_reader = (doc.get("release") or {}).get("min_reader_version")
+    if min_reader is not None and version_key(min_reader) > READER_FORMAT:
+        raise Fail("reader_too_old", f"release {datestamp} needs a reader for format {min_reader}; "
+                                     f"this reader reads format {'%d.%d' % READER_FORMAT}")
+    checked, dropped = validate_release(doc, meta, lines, schemas)
+    if lines != doc["stations"]:
+        raise Fail("invalid_release", ".jsonl lines differ from .json stations")
+    if meta != {k: v for k, v in doc.items() if k != "stations"}:
+        raise Fail("invalid_release", ".meta.json differs from .json without stations")
+    return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
+
+
+def validate_release(doc, meta, lines, schemas):
+    """Validate a release against the schema of its format. A format with no schema of its own is read
+    tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
+    Returns (the checked document, the dropped paths) or raises Fail."""
+    version = version_key(doc["format_version"])
+    known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
+    exact = next((v for k, v in known if k == version), None)
     dropped = []
-    checked = doc
-    if (major, minor) > KNOWN_FORMAT:
+    if exact is not None:
+        schema = schemas[exact]
+        checked = doc
+    else:
+        below = [v for k, v in known if k < version]
+        if not below:
+            raise Fail("invalid_release", f"no schema for format {doc['format_version']}")
+        schema = schemas[below[-1]]
         checked, dropped = strip_unknown(schema, doc, schema)
-        checked["format_version"] = "%d.%d" % KNOWN_FORMAT
+        checked["format_version"] = below[-1]
     errs = [f"{list(e.path)} {e.message}" for e in Draft202012Validator(schema).iter_errors(checked)]
     errs += cross_ref_errors(checked)
     if errs:
         raise Fail("invalid_release", "; ".join(errs[:5]))
-    if (major, minor) <= KNOWN_FORMAT:
+    if exact is not None:
         defs = {"$schema": schema["$schema"], "$defs": schema["$defs"]}
         meta_v = Draft202012Validator({**defs, "$ref": "#/$defs/meta"})
         st_v = Draft202012Validator({**defs, "$ref": "#/$defs/station"})
@@ -645,11 +901,44 @@ def open_release(root, datestamp, schema):
         errs += [f"jsonl line {i + 1}: {e.message}" for i, l in enumerate(lines) for e in st_v.iter_errors(l)]
         if errs:
             raise Fail("invalid_release", "; ".join(errs[:5]))
-    if lines != doc["stations"]:
-        raise Fail("invalid_release", ".jsonl lines differ from .json stations")
-    if meta != {k: v for k, v in doc.items() if k != "stations"}:
-        raise Fail("invalid_release", ".meta.json differs from .json without stations")
-    return {"stations": len(doc["stations"]), "format_version": doc["format_version"], "unknown_fields": dropped}
+    return checked, dropped
+
+
+def as_readable(root, datestamp, schemas):
+    """For a release that is too new for every reader (min_reader_version 0.99): its data must still be a valid
+    format 0.6 release once the two version fields say 0.6, so reader_too_old is its only defect."""
+    doc = json.loads((root / f"OTC_{datestamp}.json").read_bytes())
+    doc["format_version"] = "0.6"
+    doc["release"]["min_reader_version"] = "0.6"
+    doc.pop("future_top_level", None)
+    meta = {k: v for k, v in doc.items() if k != "stations"}
+    validate_release(doc, meta, doc["stations"], schemas)
+
+
+def index_errors(root, schemas):
+    """A 0.6 root: OTC_index.json validates against otc-index-0.6, each pointer against its release_info."""
+    schema = schemas["index-0.6"]
+    errs = [f"OTC_index.json {list(e.path)} {e.message}"
+            for e in Draft202012Validator(schema).iter_errors(json.loads((root / "OTC_index.json").read_bytes()))]
+    info = Draft202012Validator({"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/release_info"})
+    for p in sorted(root.glob("OTC_latest*.json")):
+        errs += [f"{p.name} {e.message}" for e in info.iter_errors(json.loads(p.read_bytes()))]
+    return errs
+
+
+def readable_latest(root):
+    """Spec 5.2 steps 2 and 2a: the pointer's release, or, if it is too new for this reader, the newest index
+    entry with a supported major and a readable min_reader_version."""
+    pointer = json.loads((root / f"OTC_latest-f{SUPPORTED_MAJORS[-1]}.json").read_bytes())
+
+    def readable(e):
+        mr = e.get("min_reader_version")
+        return version_key(e["format_version"])[0] in SUPPORTED_MAJORS and (mr is None or version_key(mr) <= READER_FORMAT)
+
+    if readable(pointer):
+        return pointer["datestamp"]
+    index = json.loads((root / "OTC_index.json").read_bytes())
+    return next((e["datestamp"] for e in index["releases"] if readable(e)), None)
 
 
 def check_pointers(root, fixture):
@@ -686,9 +975,8 @@ def compare_trees(fresh, committed):
     return errs
 
 
-def check(schema_path):
-    schema = load_schema(schema_path)
-    Draft202012Validator.check_schema(schema)
+def check(schema_path, schema_dir=None):
+    schemas = load_schemas(schema_dir, schema_path)
     problems = []
     if not (FIXTURES / "fixtures.json").exists():
         print(f"FAIL  no fixtures at {FIXTURES}")
@@ -702,22 +990,38 @@ def check(schema_path):
     for fx in manifest["fixtures"]:
         root = FIXTURES / fx["root"]
         errs = check_pointers(root, fx)
+        index = json.loads((root / "OTC_index.json").read_bytes())
+        if all("min_reader_version" in e for e in index["releases"]):
+            errs += index_errors(root, schemas)
         for d in fx["releases"]:
+            expect = (fx.get("expect_by_release") or {}).get(d, fx["expect"])
             try:
-                got = open_release(root, d, schema)
+                got = open_release(root, d, schemas)
                 outcome, detail = "load", f"{got['stations']} stations, format {got['format_version']}"
                 if got["unknown_fields"]:
                     detail += f", unknown fields kept in raw: {', '.join(got['unknown_fields'])}"
             except Fail as e:
                 outcome, detail = {"error": e.code}, str(e)
-            ok = outcome == fx["expect"]
+            ok = outcome == expect
             if not ok:
-                errs.append(f"{d}: expected {fx['expect']}, got {outcome} ({detail})")
-            print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} {d:11} expect {json.dumps(fx['expect']):32} got {json.dumps(outcome)}  [{detail}]")
+                errs.append(f"{d}: expected {expect}, got {outcome} ({detail})")
+            if outcome == {"error": "reader_too_old"}:
+                try:
+                    as_readable(root, d, schemas)
+                except Fail as e:
+                    ok = False
+                    errs.append(f"{d}: not a valid 0.6 release apart from its versions: {e}")
+            print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} {d:11} expect {json.dumps(expect):32} got {json.dumps(outcome)}  [{detail}]")
+        if "latest_readable" in fx:
+            got = readable_latest(root)
+            ok = got == fx["latest_readable"]
+            if not ok:
+                errs.append(f"latest for a {'%d.%d' % READER_FORMAT} reader is {got}, not {fx['latest_readable']}")
+            print(f"{'PASS' if ok else 'FAIL'}  {fx['root']:30} latest for a {'%d.%d' % READER_FORMAT} reader is {got}")
         if fx["expect"] == "load" and fx["root"].startswith("bad/"):
             # The higher-minor release must actually carry unknown fields.
             try:
-                if not open_release(root, fx["releases"][0], schema)["unknown_fields"]:
+                if not open_release(root, fx["releases"][0], schemas)["unknown_fields"]:
                     errs.append("higher-minor fixture has no unknown fields")
             except Fail:
                 pass
@@ -735,9 +1039,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="check the committed fixtures; write nothing")
     parser.add_argument("--schema", help="local copy of otc-0.2.schema.json (default: download the pinned copy)")
+    parser.add_argument("--schema-dir", help="a directory with local copies of every pinned schema "
+                                             "(otc-0.2, otc-0.5, otc-0.6, otc-index-0.6 .schema.json)")
     args = parser.parse_args()
     if args.check:
-        return check(args.schema)
+        return check(args.schema, args.schema_dir)
     with tempfile.TemporaryDirectory() as tmp:
         build(Path(tmp), FIXTURES if FIXTURES.exists() else None)
         for name in GENERATED:
