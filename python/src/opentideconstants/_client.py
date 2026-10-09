@@ -43,6 +43,10 @@ def _major(fv) -> Optional[int]:
 
 
 _SHA256_ROW = re.compile(rb"[0-9a-fA-F]{64}[ \t]+\*?\S")
+# A .sha256 line (CR2 DR41): 64 hex digits, spaces or tabs, an optional "*", the name (to the end of the line, without
+# trailing white space); or a blank line of ASCII white space only. Any other line is invalid_release.
+_SHA256_LINE = re.compile(r"([0-9a-fA-F]{64})[ \t]+\*?(.*?[^ \t\r\n\v\f])[ \t\r\n\v\f]*")
+_SHA256_BLANK = re.compile(r"[ \t\r\n\v\f]*")
 
 
 def _has_sha256_row(data: bytes) -> bool:
@@ -59,15 +63,17 @@ def _parse_sha256(data: bytes, what: str = ".sha256"):
     except UnicodeDecodeError as e:
         raise InvalidReleaseError(f"{what}: not UTF-8 ({e})") from e
     rows = {}
-    for line in text.splitlines():
-        if line.strip():
-            parts = line.split(None, 1)
-            if len(parts) != 2:
-                raise InvalidReleaseError(f"bad .sha256 line: {line!r}")
-            name = parts[1].strip().lstrip("*")
-            if name in rows:
-                raise InvalidReleaseError(f"{what}: {name} is listed twice")
-            rows[name] = parts[0].lower()
+    # lines end at LF (a CR before it is white space); a line holds only ASCII white space, or is a row (CR2 DR41)
+    for n, line in enumerate(text.split("\n"), 1):
+        if _SHA256_BLANK.fullmatch(line):
+            continue
+        m = _SHA256_LINE.fullmatch(line)
+        if not m:
+            raise InvalidReleaseError(f"{what}: line {n} is not \"<sha256>  <name>\": {line[:100]!r}")
+        name = m.group(2)
+        if name in rows:
+            raise InvalidReleaseError(f"{what}: {name} is listed twice")
+        rows[name] = m.group(1).lower()
     return rows
 
 

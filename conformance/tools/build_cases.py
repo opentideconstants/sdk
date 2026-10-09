@@ -982,6 +982,29 @@ def group_load():
         out.append(case(f"load/invalid-datestamp-{bad}", f"release={bad!r} does not match the datestamp pattern: invalid_argument", "4.2",
                         [net(step("open", err("invalid_argument"), release=bad, base_url=f"{SRV}/good/", cache_dir="${cache}"))],
                         requires=["fs"]))
+    # CR2 DR41 (spec 5.3): a line of a .sha256 file that is neither a row ("<64 hex digits>", spaces or tabs, an
+    # optional "*", the name) nor blank (only white space) is invalid_release in every SDK, never skipped. The bad line
+    # names a file that no other row names, so the error is not the repeated name of DR14
+    rows = sha256_rows("good", d)
+    good_rows = "".join(f"{h}  {n}\n" for n, h in sorted(rows.items()))
+    some = rows[f"OTC_{d}.json"]
+    rel_files = [f"{G}/OTC_{d}.jsonl", f"{G}/OTC_{d}.meta.json"]
+    for kind, title, line in [("junk", "a line that is not a row", "this is not a row\n"),
+                              ("no-name", "a digest with no name", f"{some}\n"),
+                              ("short-digest", "a digest of 63 hex digits", f"{some[:63]}  OTC_{d}.extra\n"),
+                              ("long-digest", "a digest of 65 hex digits", f"{some}0  OTC_{d}.extra\n"),
+                              ("no-separator", "no space between the digest and the name", f"{some}OTC_{d}.extra\n"),
+                              ("bad-hex", "a digest with a letter that is not hex", f"{some[:63]}g  OTC_{d}.extra\n")]:
+        out.append(case(f"load/sha256-malformed-{kind}", f"the .sha256 next to the file has {title} after its good rows: invalid_release (CR2 DR41)", "5.3, 4.8",
+                        [drv("copy", files=rel_files, to="${tmp}/rel"),
+                         drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=good_rows + line),
+                         step("open", err("invalid_release"), file=f"${{tmp}}/rel/OTC_{d}.jsonl")], requires=["fs"]))
+    crlf = "".join(f"{h} \t*{n}\r\n" for n, h in sorted(rows.items()))
+    out.append(case("load/sha256-blank-lines-crlf", "a .sha256 with CRLF line ends, a tab and \"*\" before the name, and blank lines of white space: the rows are read, and the file loads checked (CR2 DR41)", "5.3",
+                    [drv("copy", files=rel_files, to="${tmp}/rel"),
+                     drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text="\n \t\r\n" + crlf + "\f\v\n\n"),
+                     step("open", {"loaded_from": "file", "datestamp": d}, file=f"${{tmp}}/rel/OTC_{d}.jsonl"),
+                     step("verify", {"verified": True})], requires=["fs"]))
     out.append(case("load/valid-datestamp-not-found", "release 20991231.10 matches the pattern but does not exist: release_not_found", "4.2, 4.8",
                     [net(step("open", err("release_not_found"), release="20991231.10", base_url=f"{SRV}/good/", cache_dir="${cache}"))], requires=["fs"]))
     return out

@@ -766,7 +766,7 @@ otc_status otc__sha256_file(const char *path, char hex[65])
 
 const char *otc__sha256_rows_what(otc_status st)
 {
-    return st == OTC_E_INVALID_RELEASE ? "a name listed twice, or bytes that are not UTF-8, in" : "cannot read";
+    return st == OTC_E_INVALID_RELEASE ? "a line that is not a row, a name listed twice, or bytes that are not UTF-8, in" : "cannot read";
 }
 
 void otc__free_rows(char **names, char **digests, size_t n)
@@ -797,6 +797,31 @@ otc_status otc__sha256_rows(const char *sha_path, char ***names_out, char ***dig
     return st;
 }
 
+/* ASCII white space: SP, HT, LF, VT, FF, CR */
+static int is_sha_space(char ch) { return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\v' || ch == '\f' || ch == '\r'; }
+
+int otc__sha256_has_row(const char *text)
+{
+    const char *p = text;
+    while (*p) {
+        const char *eol = strchr(p, '\n'), *line_end = eol ? eol : p + strlen(p), *q = p;
+        size_t hl = 0;
+        while (q < line_end && is_sha_space(*q)) q++;   /* the same start of a row as the other SDKs (CR2 DR13) */
+        while (q < line_end && ((*q >= '0' && *q <= '9') || (*q >= 'a' && *q <= 'f') || (*q >= 'A' && *q <= 'F'))) {
+            q++;
+            hl++;
+        }
+        if (hl == 64 && q < line_end && (*q == ' ' || *q == '\t')) {
+            while (q < line_end && (*q == ' ' || *q == '\t')) q++;
+            if (q < line_end && *q == '*') q++;
+            if (q < line_end && !is_sha_space(*q)) return 1;
+        }
+        if (!eol) break;
+        p = eol + 1;
+    }
+    return 0;
+}
+
 otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***digests_out, size_t *n_out)
 {
     const char *p;
@@ -808,49 +833,55 @@ otc_status otc__sha256_rows_text(const char *text, char ***names_out, char ***di
     *n_out = 0;
     p = text;
     while (*p) {
-        const char *eol = strchr(p, '\n'), *line_end = eol ? eol : p + strlen(p), *q = p, *name;
+        const char *eol = strchr(p, '\n'), *line_end = eol ? eol : p + strlen(p), *q = p, *name, *e;
         size_t hl = 0;
+        /* a line of ASCII white space only is blank; any other line must be a row (CR2 DR41) */
+        while (q < line_end && is_sha_space(*q)) q++;
+        if (q == line_end) {
+            if (!eol) break;
+            p = eol + 1;
+            continue;
+        }
+        q = p;
         while (q < line_end && ((*q >= '0' && *q <= '9') || (*q >= 'a' && *q <= 'f') || (*q >= 'A' && *q <= 'F'))) {
             q++;
             hl++;
         }
-        if (hl == 64 && q < line_end && (*q == ' ' || *q == '\t')) {
-            const char *e = line_end;
-            name = q;
-            while (name < e && (*name == ' ' || *name == '\t')) name++;
-            if (name < e && *name == '*') name++;
-            while (e > name && (e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
-            if (e > name) {
-                if (n == cap) {
-                    size_t nc = cap ? cap * 2 : 8;
-                    char **a = (char **)realloc(names, nc * sizeof *a), **b;
-                    if (!a) { st = OTC_E_NOMEM; break; }
-                    names = a;
-                    b = (char **)realloc(digests, nc * sizeof *b);
-                    if (!b) { st = OTC_E_NOMEM; break; }
-                    digests = b;
-                    cap = nc;
-                }
-                names[n] = otc__strndup(name, (size_t)(e - name));
-                digests[n] = otc__strndup(p, 64);
-                if (!names[n] || !digests[n]) { free(names[n]); free(digests[n]); st = OTC_E_NOMEM; break; }
-                {
-                    size_t j;
-                    for (j = 0; j < n && strcmp(names[j], names[n]) != 0; j++) {}
-                    if (j < n) { free(names[n]); free(digests[n]); st = OTC_E_INVALID_RELEASE; break; }
-                }
-                {
-                    size_t i;
-                    for (i = 0; i < 64; i++)
-                        if (digests[n][i] >= 'A' && digests[n][i] <= 'F') digests[n][i] = (char)(digests[n][i] + 32);
-                }
-                n++;
-            }
+        if (hl != 64 || q == line_end || (*q != ' ' && *q != '\t')) { st = OTC_E_INVALID_RELEASE; break; }
+        e = line_end;
+        name = q;
+        while (name < e && (*name == ' ' || *name == '\t')) name++;
+        while (e > name && is_sha_space(e[-1])) e--;
+        if (name < e && *name == '*' && e > name + 1) name++;   /* "*" alone is the name, as in the other SDKs */
+        if (e == name) { st = OTC_E_INVALID_RELEASE; break; }   /* a digest with no name */
+        if (n == cap) {
+            size_t nc = cap ? cap * 2 : 8;
+            char **a = (char **)realloc(names, nc * sizeof *a), **b;
+            if (!a) { st = OTC_E_NOMEM; break; }
+            names = a;
+            b = (char **)realloc(digests, nc * sizeof *b);
+            if (!b) { st = OTC_E_NOMEM; break; }
+            digests = b;
+            cap = nc;
         }
+        names[n] = otc__strndup(name, (size_t)(e - name));
+        digests[n] = otc__strndup(p, 64);
+        if (!names[n] || !digests[n]) { free(names[n]); free(digests[n]); st = OTC_E_NOMEM; break; }
+        {
+            size_t j;
+            for (j = 0; j < n && strcmp(names[j], names[n]) != 0; j++) {}
+            if (j < n) { free(names[n]); free(digests[n]); st = OTC_E_INVALID_RELEASE; break; }
+        }
+        {
+            size_t i;
+            for (i = 0; i < 64; i++)
+                if (digests[n][i] >= 'A' && digests[n][i] <= 'F') digests[n][i] = (char)(digests[n][i] + 32);
+        }
+        n++;
         if (!eol) break;
         p = eol + 1;
     }
-    /* with no row at all the caller decides (a 200 with no row is a network error, CR2 DR13) */
+    /* a fetched body with no row at all is checked first, with otc__sha256_has_row (a network error, CR2 DR13) */
     if (st == OTC_OK && n > 0 && !utf8_valid((const unsigned char *)text, strlen(text))) st = OTC_E_INVALID_RELEASE;
     if (st != OTC_OK) { otc__free_rows(names, digests, n); return st; }
     *names_out = names;

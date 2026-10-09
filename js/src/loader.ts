@@ -232,9 +232,14 @@ export function parseSha256(bytes: Uint8Array, what = "the .sha256 file"): Map<s
         throw new InvalidReleaseError(`${what} is not UTF-8`, { cause: e });
     }
     const out = new Map<string, string>();
-    for (const line of text.split(/\r?\n/)) {
-        const m = /^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$/.exec(line);
-        if (!m || !m[1] || !m[2]) continue;
+    // lines end at LF (a CR before it is white space); a line holds only ASCII white space, or is a row: 64 hex digits,
+    // spaces or tabs, an optional "*", the name without trailing white space. Any other line is invalid_release (CR2 DR41)
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] as string;
+        if (/^[ \t\r\n\v\f]*$/.test(line)) continue;
+        const m = /^([0-9a-fA-F]{64})[ \t]+\*?([^\n]*?[^ \t\r\n\v\f])[ \t\r\n\v\f]*$/.exec(line);
+        if (!m || !m[1] || !m[2]) throw new InvalidReleaseError(`${what} line ${i + 1} is not "<sha256>  <name>": ${JSON.stringify(line.slice(0, 100))}`);
         if (out.has(m[2])) throw new InvalidReleaseError(`${what} lists ${m[2]} twice`);
         out.set(m[2], m[1].toLowerCase());
     }

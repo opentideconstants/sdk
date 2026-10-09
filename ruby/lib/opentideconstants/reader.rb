@@ -29,8 +29,11 @@ class OpenTideConstants
             [path]
         end
 
-        # One sha256sum line: 64 hex digits, white space, an optional "*", the name.
-        SHA256_LINE = /\A(\h{64})\s+\*?(\S.*?)\s*\z/.freeze
+        # One sha256sum line: 64 hex digits, spaces or tabs, an optional "*",
+        # the name without trailing white space (CR2 DR41, the same grammar in
+        # every SDK). A blank line holds ASCII white space only.
+        SHA256_LINE = /\A(\h{64})[ \t]+\*?(.*?[^ \t\r\n\v\f])[ \t\r\n\v\f]*\z/.freeze
+        SHA256_BLANK = /\A[ \t\r\n\v\f]*\z/.freeze
 
         # Parses "<sha256>  <name>" lines into {name => sha256} (lower case).
         # A line in any other form is invalid_release (source names the file).
@@ -40,10 +43,10 @@ class OpenTideConstants
             text = text.dup.force_encoding(Encoding::UTF_8)
             raise InvalidReleaseError, "#{source} is not UTF-8" unless text.valid_encoding?
             rows = {}
-            text.each_line.with_index(1) do |line, n|
-                next if line.strip.empty?
-                m = SHA256_LINE.match(line.chomp)
-                raise InvalidReleaseError, "#{source} line #{n} is not \"<sha256>  <name>\": #{line.chomp[0, 100].inspect}" unless m
+            text.split("\n", -1).each.with_index(1) do |line, n|
+                next if line.match?(SHA256_BLANK)
+                m = SHA256_LINE.match(line)
+                raise InvalidReleaseError, "#{source} line #{n} is not \"<sha256>  <name>\": #{line[0, 100].inspect}" unless m
                 raise InvalidReleaseError, "#{source} lists #{m[2]} twice (line #{n})" if rows.key?(m[2])
                 rows[m[2]] = m[1].downcase
             end

@@ -808,6 +808,237 @@
    ]
   },
   {
+   "id": "load/sha256-malformed-junk",
+   "title": "the .sha256 next to the file has a line that is not a row after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nthis is not a row\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-malformed-no-name",
+   "title": "the .sha256 next to the file has a digest with no name after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-malformed-short-digest",
+   "title": "the .sha256 next to the file has a digest of 63 hex digits after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105  OTC_20991231.2.extra\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-malformed-long-digest",
+   "title": "the .sha256 next to the file has a digest of 65 hex digits after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e0  OTC_20991231.2.extra\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-malformed-no-separator",
+   "title": "the .sha256 next to the file has no space between the digest and the name after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105eOTC_20991231.2.extra\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-malformed-bad-hex",
+   "title": "the .sha256 next to the file has a digest with a letter that is not hex after its good rows: invalid_release (CR2 DR41)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105g  OTC_20991231.2.extra\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/sha256-blank-lines-crlf",
+   "title": "a .sha256 with CRLF line ends, a tab and \"*\" before the name, and blank lines of white space: the rows are read, and the file loads checked (CR2 DR41)",
+   "spec": "5.3",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "\n \t\r\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e \t*OTC_20991231.2.json\r\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd \t*OTC_20991231.2.json.gz\r\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1 \t*OTC_20991231.2.jsonl\r\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350 \t*OTC_20991231.2.meta.json\r\n\f\u000b\n\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    }
+   ]
+  },
+  {
    "id": "load/valid-datestamp-not-found",
    "title": "release 20991231.10 matches the pattern but does not exist: release_not_found",
    "spec": "4.2, 4.8",

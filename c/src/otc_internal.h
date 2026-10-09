@@ -157,8 +157,11 @@ otc_status otc__sha256_handle(otc__file *f, char hex[65]);
 void otc__sha256_mem(const void *data, size_t len, char hex[65]);
 /* The digest of name in a sha256sum file (malloc'd hex), or NULL. *found_file is 0 if the file does not exist. */
 otc_status otc__sha256_rows(const char *sha_path, char ***names, char ***digests, size_t *n);
-/* The same for the text of a sha256sum file. Not UTF-8, or a name listed twice: OTC_E_INVALID_RELEASE (CR2 DR14). */
+/* The same for the text of a sha256sum file. Not UTF-8, or a name listed twice: OTC_E_INVALID_RELEASE (CR2 DR14).
+ * A line that is neither blank (ASCII white space only) nor a row is OTC_E_INVALID_RELEASE too (CR2 DR41). */
 otc_status otc__sha256_rows_text(const char *text, char ***names, char ***digests, size_t *n);
+/* 1 if a fetched .sha256 body has at least one "<sha256>  <name>" row: a 200 with none is the network (CR2 DR13) */
+int otc__sha256_has_row(const char *text);
 /* The start of an error message for a status of the two functions above: "cannot read" or what is wrong. */
 const char *otc__sha256_rows_what(otc_status st);
 void otc__free_rows(char **names, char **digests, size_t n);
