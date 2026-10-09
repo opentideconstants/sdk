@@ -2636,7 +2636,7 @@
   "OPENTIDECONSTANTS_BASE_URL": "base_url"
  },
  "reserved_phase2": {
-  "note": "Names reserved for the phase 2 prediction module (spec 4.9). Not built in phase 1: an SDK must not expose them yet, and the surface check ignores them.",
+  "note": "Names reserved for the phase 2 prediction module (spec 4.9). Not built in phase 1: an SDK must not expose the operations yet, and Ruby, Python and TypeScript must not define the error class until phase 2. Exception (CR D24): C may define the otc_status value OTC_E_UNSUPPORTED_CONVENTION now, so that its number stays fixed in the ABI; no phase 1 function returns it.",
   "operations": [
    {
     "object": "Client",
