@@ -128,8 +128,66 @@ export function openLineReader(file: string): { read: (offset: number, length: n
     };
 }
 
-/** How long a waiter waits before it treats a lock as stale (spec 5.4). */
-const STALE_LOCK_MS = 120_000;
+/**
+ * @internal The lock times of spec 5.4: how long a waiter waits before a lock may be stale, how old the lock itself
+ * must be to be stale (CR2 DR3), and the poll interval. The unit tests shorten the wait.
+ */
+export const lockTimers = { staleMs: 120_000, staleAgeMs: 120_000, pollMs: 500 };
+
+const STARTED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$/;
+
+/**
+ * @internal Milliseconds since the lock was taken (spec 5.4, CR2 DR3): from owner.json `started_at`, or from the
+ * mtime of the lock directory when owner.json is missing or cannot be read. null when the lock is gone or its age
+ * cannot be read: such a lock is never stale.
+ */
+export function lockAgeMs(lockDir: string): number | null {
+    let started: number | null = null;
+    try {
+        const owner: unknown = JSON.parse(fs.readFileSync(path.join(lockDir, "owner.json"), "utf8"));
+        const at = typeof owner === "object" && owner !== null ? (owner as { started_at?: unknown }).started_at : undefined;
+        const t = typeof at === "string" && STARTED_AT.test(at) ? Date.parse(at) : NaN;
+        if (Number.isFinite(t)) started = t;
+    } catch { /* missing or unreadable: the mtime below */ }
+    if (started === null) {
+        try {
+            started = fs.statSync(lockDir).mtimeMs;
+        } catch {
+            return null;
+        }
+    }
+    return Date.now() - started;
+}
+
+function lockIsStale(lockDir: string): boolean {
+    const age = lockAgeMs(lockDir);
+    return age !== null && age >= lockTimers.staleAgeMs;
+}
+
+/**
+ * @internal Take `<dir>/.lock` without waiting, for prune, which then removes the directory with its lock (spec 5.4
+ * non-blocking takes, CR2 DR3). A lock at least 120 s old is stale: it is removed and taken. False when another
+ * process holds a younger lock. A stale lock that cannot be removed is a CacheError.
+ */
+export function tryLockSync(dir: string): boolean {
+    const lockDir = path.join(dir, ".lock");
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            fs.mkdirSync(lockDir);
+            return true;
+        } catch (e) {
+            if (!isErrno(e, "EEXIST")) throw new CacheError(`cannot take the lock ${lockDir}`, { path: lockDir, cause: e });
+        }
+        // once only: a process that takes it after the removal holds a young lock
+        if (attempt > 0 || !lockIsStale(lockDir)) return false;
+        try {
+            fs.rmSync(lockDir, { recursive: true, force: true });
+        } catch (e) {
+            throw new CacheError(`cannot remove the stale lock ${lockDir}`, { path: lockDir, cause: e });
+        }
+    }
+    return false;
+}
 
 class NodeCache implements CacheStore {
     readonly base: string;
@@ -200,6 +258,7 @@ class NodeCache implements CacheStore {
         await this.mkdirs(rel);
         let started = Date.now();
         let failedSteals = 0;
+        let stolen = false;
         for (;;) {
             let made = false;
             try {
@@ -234,21 +293,27 @@ class NodeCache implements CacheStore {
                     }
                 };
             }
-            if (options.wait === false) return null;
-            if (options.done && await options.done()) return async () => undefined;
-            if (Date.now() - started > STALE_LOCK_MS) {
-                // stale: remove it and take it; 3 failed removals raise cache (CR D3)
+            // a non-blocking take (the DOI note) applies only the age test, and tries once more after a removal
+            if (options.wait === false && (stolen || !lockIsStale(lockDir))) return null;
+            if (options.wait !== false && options.done && await options.done()) return async () => undefined;
+            // stale only when this waiter has waited and the lock itself is old; the age is read just before the
+            // removal (spec 5.4, CR2 DR3)
+            if ((options.wait === false || Date.now() - started > lockTimers.staleMs) && lockIsStale(lockDir)) {
+                // stale: remove it and take it; 3 failed removals raise cache (CR D3); after a removal the wait restarts
+                let removed = true;
                 try {
                     await fsp.rm(lockDir, { recursive: true, force: true });
-                } catch { /* checked below */ }
-                if (fs.existsSync(lockDir)) {
-                    if (++failedSteals >= 3) throw new CacheError(`cannot remove the stale lock ${lockDir}`, { path: lockDir });
-                } else {
+                } catch {
+                    removed = false;
+                }
+                if (removed) {
                     started = Date.now();
+                    stolen = true;
                     continue;
                 }
+                if (++failedSteals >= 3 || options.wait === false) throw new CacheError(`cannot remove the stale lock ${lockDir}`, { path: lockDir });
             }
-            await new Promise((r) => setTimeout(r, 500));
+            await new Promise((r) => setTimeout(r, lockTimers.pollMs));
         }
     }
 }
@@ -545,5 +610,5 @@ import(url).catch((e) => {
 /** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
 export const nodeApi: NodeMod = {
     nodePlatform, nodePath, sha256Sync, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
-    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, writeInto, runBlocking,
+    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeInto, runBlocking,
 };

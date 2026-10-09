@@ -638,11 +638,17 @@ export class OpenTideConstants {
         const all = this.cachedReleases();
         const loaded = this.#file ? null : this.#release.datestamp;
         const removed = all.slice(keep).filter((d) => d !== loaded);
-        // a directory that cannot be removed is a cache error; the result lists only what was removed (spec 4.3)
+        // a directory that cannot be removed is a cache error; the result lists only what was removed (spec 4.3).
+        // The release lock is taken without waiting: a release that another process holds (a lock younger than
+        // 120 s) is kept, and the lock of a crashed process is taken over (spec 5.4, CR2 DR3).
         const done: string[] = [];
         for (const d of removed) {
             const p = store.describe(relDir(d));
             try {
+                if (!node.tryLockSync(p)) {
+                    log(this.#ctx, "info", `prune: ${d} is locked by another process; it is kept`);
+                    continue;
+                }
                 node.removeDirSync(p);
             } catch (e) {
                 throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, cause: e });
