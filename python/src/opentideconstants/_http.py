@@ -290,24 +290,33 @@ class Http:
 
 
 class _Gunzip:
-    """Decode a gzip body of one or more members (RFC 1952 allows several, one after another)."""
+    """Decode a gzip body of one or more members (RFC 1952 allows several, one after another). Zero bytes after a
+    member are padding and are skipped, as gzip.decompress does (R2-110)."""
 
     def __init__(self):
         self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        self._between = False  # a member has ended: zero padding or the next member may follow
 
     def decompress(self, data: bytes) -> bytes:
         out = []
         while data:
+            if self._between:
+                data = data.lstrip(b"\0")
+                if not data:
+                    break
+                self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                self._between = False
             out.append(self._d.decompress(data))
             if not self._d.eof:
                 break
             data = self._d.unused_data
-            if data:
-                self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            self._between = True
         return b"".join(out)
 
     def finish(self):
         """The rest of the output, or None when the last member is cut short."""
+        if self._between:
+            return b""
         tail = self._d.flush()
         return tail if self._d.eof else None
 

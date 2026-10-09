@@ -708,6 +708,25 @@ class HttpTest(unittest.TestCase):
         finally:
             srv.close()
 
+    def test_gzip_with_zero_padding_is_decoded(self):
+        # R2-110: zero bytes after the last member are padding (gzip.decompress accepts them), not a network error
+        import gzip
+        from opentideconstants import _http
+        for body in [gzip.compress(b"first") + b"\0" * 8,
+                     gzip.compress(b"first") + b"\0" * 3 + gzip.compress(b" second") + b"\0"]:
+            self.assertEqual(gzip.decompress(body).startswith(b"first"), True)
+            srv = _Server(script={"/x": (200, {"Content-Encoding": "gzip"}, body)})
+            saved = _http.BACKOFF_S
+            _http.BACKOFF_S = (0.0, 0.0)
+            try:
+                with self.subTest(body=body):
+                    self.assertEqual(_http.Http(user_agent="t").get(srv.url + "x", accept_gzip=True).body,
+                                     gzip.decompress(body))
+                    self.assertEqual(len(srv.requests), 1)
+            finally:
+                _http.BACKOFF_S = saved
+                srv.close()
+
     def test_truncated_gzip_is_retried(self):
         import gzip
         from opentideconstants import _http
