@@ -352,6 +352,7 @@ export class OpenTideConstants {
             log(ctx, "warn", `automatic update check failed: ${res.message ?? "unknown error"}`);
             return;
         }
+        this.#reachedPointer();
         const from = this.#release.datestamp;
         if (compareDatestamps(res.datestamp, from) <= 0) {
             log(ctx, "debug", `automatic update check: ${from} is current`);
@@ -382,6 +383,11 @@ export class OpenTideConstants {
         this.#all = [...this.#all.filter((r) => r.deref() !== undefined), new WeakRef(rel)];
     }
 
+    /** A check (manual or automatic) that reaches the latest pointer clears lastError; loadedFrom does not change (spec 4.3, CR2 DR4). */
+    #reachedPointer(): void {
+        this.#lastError = null;
+    }
+
     /** After close, every query and release-management call is io (spec 4.2, CR D21). */
     #check(): void {
         if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
@@ -399,7 +405,10 @@ export class OpenTideConstants {
         return this.#loadedFrom;
     }
 
-    /** The error that made the client fall back to the cache, or null. */
+    /**
+     * The error that made the client fall back to the cache, or the failure of the last automatic update; null after
+     * any check (manual or automatic) reaches the latest pointer, or when there is none (spec 4.3, CR2 DR4).
+     */
     get lastError(): OpenTideConstantsError | null {
         return this.#lastError;
     }
@@ -448,7 +457,9 @@ export class OpenTideConstants {
     async latest(): Promise<ReleaseInfo> {
         this.#check();
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
-        return toInfo(await getPointer(this.#ctx));
+        const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
+        return toInfo(entry);
     }
 
     /**
@@ -465,6 +476,7 @@ export class OpenTideConstants {
         let tooNew: OpenTideConstantsError | null = null;
         try {
             read = await readPointer(ctx);
+            this.#reachedPointer();
         } catch (e) {
             if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
             tooNew = e;
@@ -508,6 +520,7 @@ export class OpenTideConstants {
         if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
         const from = this.#release.datestamp;
         const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
         const how = await ensureRelease(this.#ctx, entry.datestamp, entry);
         this.#swap(await OpenTideConstants.#loadStored(this.#ctx, this.#node, entry.datestamp), how);

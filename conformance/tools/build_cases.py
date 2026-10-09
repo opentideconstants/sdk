@@ -1198,6 +1198,31 @@ def group_update():
                      # the first query must already see the new release: OTC-T-0021 is active in 20991231, removed in .2
                      step("station", {"station": None}, station_id="OTC-T-0021"),
                      step("release_metadata", {"datestamp": d2})], requires=["fs"]))
+    # CR2 DR4: any check that reaches the pointer (manual or automatic) clears last_error; loaded_from does not change
+    info2 = enc_release_info("good", d2, G)
+    fail_ptr = [{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]
+    auto_failed = [open_latest_step(G, auto_update=True, update_interval=1),
+                   drv("server_rules", rules=fail_ptr), drv("sleep", s=1.5),
+                   step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0001"),
+                   step("last_error", {"code": "network"}),
+                   drv("server_rules", rules=[])]
+    out.append(case("update/last-error-cleared-auto", "an automatic update fails (last_error network); the next automatic check reaches the pointer and finds nothing newer: last_error is null, loaded_from unchanged (CR2 DR4)", "4.3, 5.6",
+                    auto_failed + [drv("sleep", s=1.5),
+                                   step("station", {"station": {"$type": "object"}}, station_id="OTC-T-0001"),
+                                   step("last_error", {"code": None}),
+                                   step("loaded_from", {"loaded_from": "download"})],
+                    requires=["fs"], timeout_s=120))
+    after_error = [open_latest_step(G), drv("restart_runner"), drv("server_rules", rules=fail_ptr),
+                   net(step("open", {"loaded_from": "cache_after_error", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
+                   step("last_error", {"code": "network"}),
+                   drv("server_rules", rules=[])]
+    for op, expect in [("latest", {"release": info2}), ("check_for_update", {"release": None}),
+                       ("update", {"updated": False, "from": d2, "to": d2})]:
+        out.append(case(f"update/last-error-cleared-{op.replace('_', '-')}", f"loaded_from cache_after_error, then {op} reaches the pointer: last_error is null, and loaded_from stays cache_after_error (CR2 DR4)", "4.3",
+                        after_error + [net(step(op, expect)),
+                                       step("last_error", {"code": None}),
+                                       step("loaded_from", {"loaded_from": "cache_after_error"})],
+                        requires=["fs"], timeout_s=120))
     out.append(case("update/auto-off", "without auto_update the loaded release never changes", "5.6",
                     [drv("server_rules", rules=old_pointer),
                      net(step("open", {"datestamp": d1}, base_url=G, cache_dir="${cache}", update_interval=1)),

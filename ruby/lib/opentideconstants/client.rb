@@ -15,8 +15,9 @@ class OpenTideConstants
     # Where the release came from: :download, :cache, :cache_after_error, :file or :file_unverified.
     attr_reader :loaded_from
     # The error behind loaded_from :cache_after_error, or the error of the
-    # last automatic update that failed (spec §5.6); nil after an update
-    # succeeds, or when there is none.
+    # last automatic update that failed (spec §5.6); nil after any check
+    # (manual or automatic) reaches the latest pointer, or when there is none
+    # (CR2 DR4).
     attr_reader :last_error
     # The format major of a release on the server that this SDK cannot read
     # (newer than every supported major), as check_for_update last saw it; or nil.
@@ -261,6 +262,9 @@ class OpenTideConstants
     # when a release of a supported major exists, else unsupported_format.
     def resolve_latest
         entry, url = fetch_latest_pointer
+        # A check that reaches the pointer clears last_error; loaded_from does
+        # not change (spec §4.3, CR2 DR4).
+        @last_error = nil
         return [entry, url] if readable_entry?(entry)
         index_url = @base_url + "OTC_index.json"
         doc = fetch_pointer_doc("OTC_index.json", missing: :nil)

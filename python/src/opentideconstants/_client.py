@@ -432,6 +432,8 @@ class OpenTideConstants:
                 raise ReleaseNotFoundError(f"no latest pointer under {self._base_url}")
         doc, url = got
         info = self._info(doc, url)
+        # a check that reaches the pointer clears last_error; loaded_from does not change (spec §4.3, CR2 DR4)
+        self._last_error = None
         if readable(info.format_version, info._min_reader_version):
             return info
         if _major(info.format_version) not in SUPPORTED_FORMAT_MAJORS:
