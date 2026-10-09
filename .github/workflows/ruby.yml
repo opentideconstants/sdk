@@ -47,6 +47,8 @@ jobs:
       - name: The gem's fold table is the suite's
         shell: bash
         run: cmp conformance/name_fold.json ruby/lib/opentideconstants/name_fold.json
+      - name: Unit tests
+        run: ruby -Iruby/lib ruby/test/test_unit.rb
       - name: Build and install the gem
         shell: bash
         working-directory: ruby
