@@ -526,6 +526,7 @@
      },
      "expect": {
       "raw": {
+       "astro_table_id": "otc-test-astro-1",
        "canary": {
         "status": "not_applicable"
        },
@@ -556,6 +557,7 @@
      "expect": {
       "raw": {
        "attribution": "Synthetic test data in the style of a public-domain US agency.",
+       "commercial_use": true,
        "future_licence_field": true,
        "licence_id": "noaa",
        "provider": "Example Ocean Service",

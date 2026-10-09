@@ -8,14 +8,14 @@
    "files": [
     {
      "name": "OTC_20991231.10.json",
-     "sha256": "af4118c0d4bd2b9f2bc2fa2e8f6127f53a233fcdd83ffe81baf39972e6002c68",
-     "size": 28653,
+     "sha256": "d43d002e2784a86956be1ea5bfd5658145d4a5816d2b6ae6b25730e4bb400318",
+     "size": 29815,
      "url": "OTC_20991231.10.json"
     },
     {
      "name": "OTC_20991231.10.json.gz",
-     "sha256": "73646c711b7959b81f1475c7cc0415523684d684f6c00961bbfdb717b98feed9",
-     "size": 4203,
+     "sha256": "6c240561a05041420f194000d4a096b16ab458e184dfc423873cba1936264e14",
+     "size": 4475,
      "url": "OTC_20991231.10.json.gz"
     },
     {
@@ -26,13 +26,13 @@
     },
     {
      "name": "OTC_20991231.10.meta.json",
-     "sha256": "682e9e76646afa5d50d1695afc2a77a2572a1d40e5b85d70780d7abd9609399d",
-     "size": 2813,
+     "sha256": "5bcfeb86e2a5e6a94bf81f047f32d291536d0445cbee80055262ee5cabfc25dd",
+     "size": 3975,
      "url": "OTC_20991231.10.meta.json"
     },
     {
      "name": "OTC_20991231.10.sha256",
-     "sha256": "04a34fe595a0a2097f888a09ecd658725347ac5d81b705b353ae1eadeae0d8e6",
+     "sha256": "8f47d55032bf24e104fd2c9082a535b906727bdbf8998ccb20e655269fe113e1",
      "size": 357,
      "url": "OTC_20991231.10.sha256"
     }
@@ -49,14 +49,14 @@
    "files": [
     {
      "name": "OTC_20991231.2.json",
-     "sha256": "8e1b22a5499fdbe7ec5306f5ef8df167fca024fb44b98ae38e44175e8d8969b8",
-     "size": 28652,
+     "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e",
+     "size": 29814,
      "url": "OTC_20991231.2.json"
     },
     {
      "name": "OTC_20991231.2.json.gz",
-     "sha256": "612e2a5ee9029e16446a2369927318a480a81b45a6e654983cb8b09d5cb33a10",
-     "size": 4202,
+     "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd",
+     "size": 4474,
      "url": "OTC_20991231.2.json.gz"
     },
     {
@@ -67,13 +67,13 @@
     },
     {
      "name": "OTC_20991231.2.meta.json",
-     "sha256": "934556e41cbc33ab547677890f0aa92bd8f8ac66765b463b1ca3067eef315a1b",
-     "size": 2812,
+     "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+     "size": 3974,
      "url": "OTC_20991231.2.meta.json"
     },
     {
      "name": "OTC_20991231.2.sha256",
-     "sha256": "aeb3f82b0fe3f313053a4648e262cad3f55cfcb2d40f0cab8d451987aa2f4f4f",
+     "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088",
      "size": 353,
      "url": "OTC_20991231.2.sha256"
     }
