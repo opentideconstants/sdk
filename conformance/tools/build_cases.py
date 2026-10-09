@@ -1764,6 +1764,15 @@ def group_rules():
                                ["OTC-T-0176", "OTC-T-0174"])]
     out.append(mcase("rules/pk15/attribution-chain", "attribution of subordinate stations 1, 2 and 3 links from their reference station: every offsets licence on the path and the first recommended set's licence, where the walk stops (CR2 DR1)", "4.6",
                      chain_steps, root="chain", release="20991231.2"))
+    # PK-R2-01 (CR2 DR2): a licence attribution that is not a string, or a provider that is neither a string nor
+    # null, is invalid_release at load, in every load path
+    for root in ["licence-attribution-null", "licence-attribution-not-string", "licence-provider-not-string"]:
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"rules/pk15/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open (CR2 DR2)", "4.6, 4.8",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
     return out
 
 

@@ -689,6 +689,10 @@ def _station(doc, sid):
     return next(s for s in doc["stations"] if s["station_id"] == sid)
 
 
+def _licence(doc, lid):
+    return next(x for x in doc["licences"] if x["licence_id"] == lid)
+
+
 def index_honest(files, sums, entry, reuse):
     """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
     entry = copy.deepcopy(entry)
@@ -798,6 +802,13 @@ BAD = [
      lambda: [release_doc(BASE)], _jsonl_one_byte),
     ("index-invalid", "load", "the release is good, but its OTC_index.json entry has a content_sha256 that is not a digest (the index fails otc-index-1.0)",
      lambda: [release_doc(BASE)], index_content_digest_bad, {"index_invalid": True}),
+    # CR2 DR2: a licence attribution that is not a string, or a provider that is neither a string nor null
+    ("licence-attribution-null", "invalid_release", "the eot20 licence's attribution is null (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(attribution=None)), None),
+    ("licence-attribution-not-string", "invalid_release", "the eot20 licence's attribution is the number 5 (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(attribution=5)), None),
+    ("licence-provider-not-string", "invalid_release", "the eot20 licence's provider is the number 7 (CR2 DR2)",
+     changed_doc(lambda d: _licence(d, "eot20").update(provider=7)), None),
     ("too-new-broken", "reader_too_old", f"min_reader_version {TOO_NEW}, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
      _too_new_broken, None, {"valid_as_1_0": False}),
 ]

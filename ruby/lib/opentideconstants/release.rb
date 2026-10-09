@@ -57,6 +57,13 @@ class OpenTideConstants
                     raise InvalidReleaseError, "#{k} must be a list of objects with a #{id}"
                 end
             end
+            # The attribution text prints both (spec §4.6, CR2 DR2); a null
+            # provider is allowed (CR D2 b).
+            Array(meta["licences"]).each do |l|
+                next if l["attribution"].is_a?(String) && (l["provider"].nil? || l["provider"].is_a?(String))
+                raise InvalidReleaseError,
+                      "licence #{l['licence_id']}: attribution must be a string and provider a string or null"
+            end
             @format_version = meta["format_version"]
             @concept_doi = rel["concept_doi"]
             @zenodo_version_doi = zenodo_version_doi

@@ -323,6 +323,11 @@ class Release:
             self._licences = tuple(Licence._parse(x) for x in meta.get("licences") or ())
         except (KeyError, TypeError, AttributeError) as e:
             raise InvalidReleaseError(f"conventions or licences: {e!r}") from e
+        for x in self._licences:
+            # the attribution text prints both (spec §4.6, CR2 DR2); a null provider is allowed (CR D2 b)
+            if not isinstance(x.attribution, str) or not (x.provider is None or isinstance(x.provider, str)):
+                raise InvalidReleaseError(f"licence {x.licence_id!r}: attribution must be a string and provider a "
+                                          f"string or null")
         self._conv_by_id = {c.convention_id: c for c in self._conventions}
         self._lic_by_id = {x.licence_id: x for x in self._licences}
         parse_time(rel.get("created"), "release.created")

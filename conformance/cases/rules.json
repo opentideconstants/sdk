@@ -4403,6 +4403,264 @@
      }
     }
    ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-json",
+   "title": "bad/licence-attribution-null opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-json-gz",
+   "title": "bad/licence-attribution-null opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-jsonl",
+   "title": "bad/licence-attribution-null opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-null-jsonl-stream",
+   "title": "bad/licence-attribution-null opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-null/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-json",
+   "title": "bad/licence-attribution-not-string opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-json-gz",
+   "title": "bad/licence-attribution-not-string opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-jsonl",
+   "title": "bad/licence-attribution-not-string opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-attribution-not-string-jsonl-stream",
+   "title": "bad/licence-attribution-not-string opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-attribution-not-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-json",
+   "title": "bad/licence-provider-not-string opened as .json (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.json",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-json-gz",
+   "title": "bad/licence-provider-not-string opened as .json.gz (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.json.gz",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-jsonl",
+   "title": "bad/licence-provider-not-string opened as .jsonl (eager): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.jsonl",
+      "mode": "eager"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
+  },
+  {
+   "id": "rules/pk15/bad-licence-provider-not-string-jsonl-stream",
+   "title": "bad/licence-provider-not-string opened as .jsonl (stream): invalid_release at open (CR2 DR2)",
+   "spec": "4.6, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/licence-provider-not-string/OTC_20991231.jsonl",
+      "mode": "stream"
+     },
+     "expect": {
+      "error": "invalid_release"
+     }
+    }
+   ]
   }
  ]
 }

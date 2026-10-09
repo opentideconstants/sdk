@@ -941,6 +941,15 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
             otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "licence_id %s appears twice", r->lic[i].id);
             return OTC_E_INVALID_RELEASE;
         }
+        {   /* the attribution text prints both (spec 4.6, CR2 DR2); a null provider is allowed (CR D2 b) */
+            const cJSON *att = otc__jget(c, "attribution");
+            const cJSON *prov = otc__jget(c, "provider");
+            if (!cJSON_IsString(att) || (prov && !cJSON_IsNull(prov) && !cJSON_IsString(prov))) {
+                otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path,
+                             "licence %s: attribution must be a string and provider a string or null", r->lic[i].id);
+                return OTC_E_INVALID_RELEASE;
+            }
+        }
         i++;
     }
     return OTC_OK;

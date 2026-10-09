@@ -112,6 +112,13 @@ export function parseHeader(doc: unknown): ReleaseHeader {
     if (cs.some((c) => typeof c["convention_id"] !== "string") || ls.some((l) => typeof l["licence_id"] !== "string")) {
         throw new InvalidReleaseError("a convention or licence has no id");
     }
+    for (const l of ls) {
+        // the attribution text prints both (spec 4.6, CR2 DR2); a null provider is allowed (CR D2 b)
+        const provider = l["provider"];
+        if (typeof l["attribution"] !== "string" || !(provider === undefined || provider === null || typeof provider === "string")) {
+            throw new InvalidReleaseError(`licence ${String(l["licence_id"])}: attribution must be a string and provider a string or null`);
+        }
+    }
     for (const [list, key] of [[cs, "convention_id"], [ls, "licence_id"]] as const) {
         const seen = new Set<string>();
         for (const x of list) {
@@ -1117,7 +1124,8 @@ export class Release {
         const seen = new Set<string>();
         for (const id of [...ids].sort(cmp)) {
             const l = this.licence(id);
-            if (!l) continue; // cannot happen: every licence reference is checked at load
+            // the load checks every licence reference; a licence missing here is never dropped from the CC BY text
+            if (!l) throw new InvalidReleaseError(`licence ${id} does not resolve`);
             if (l.provider === null) {
                 // no provider: the attribution alone, never merged with another entry (CR D2)
                 parts.push(l.attribution ?? "");

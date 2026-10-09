@@ -519,6 +519,39 @@
    "root": "bad/index-invalid"
   },
   {
+   "defect": "the eot20 licence's attribution is null (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-attribution-null"
+  },
+  {
+   "defect": "the eot20 licence's attribution is the number 5 (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-attribution-not-string"
+  },
+  {
+   "defect": "the eot20 licence's provider is the number 7 (CR2 DR2)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-provider-not-string"
+  },
+  {
    "defect": "min_reader_version 1.99, and its data is not valid 1.0 (an unresolved licence): the version gate comes first",
    "expect": {
     "error": "reader_too_old"

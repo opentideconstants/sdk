@@ -11,7 +11,7 @@ static otc_status open_with(const char *fv_json, const char *mrv_json)
     otc_status st;
     snprintf(meta, sizeof meta,
              "{\"format_version\":%s,\"release\":{\"datestamp\":\"20990101\"%s%s},"
-             "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\"}]}",
+             "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"attribution\":\"A\"}]}",
              fv_json, mrv_json ? ",\"min_reader_version\":" : "", mrv_json ? mrv_json : "");
     test_write(dir, "OTC_20990101.meta.json", meta);
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "Somewhere") "\n");
