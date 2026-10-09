@@ -866,7 +866,7 @@ def group_format():
     B = "${tmp}/bundle"
     names = [f"OTC_{R_OK}.jsonl", f"OTC_{R_OK}.meta.json", f"OTC_{R_OK}.sha256"]
     out.append(case("format/download-latest-skips-too-new", "download with no release resolves latest the same way: the newest readable release", "4.3.2, 5.2, 7.4",
-                    [net(step("open", {"loaded_from": "download", "datestamp": R_OLD}, release=R_OLD, base_url=RD, cache_dir="${cache}")),
+                    [net(step("open", {"loaded_from": "download", "datestamp": R_OLD}, release=R_OLD, base_url=RD)),
                      net(step("download", {"paths": names}, to=B), fs=True),
                      drv("assert_files", dir=B, exactly=names), no_new,
                      index_once],
@@ -1198,6 +1198,12 @@ def group_update():
     return out
 
 
+def open_latest_no_cache(G, **kw):
+    """open latest with no cache_dir (a file-system option): for the cases a runner without fs (a browser) runs.
+    The SDK uses its default cache, which the driver puts in the case's temporary directory."""
+    return net(step("open", {"loaded_from": "download", "datestamp": "20991231.2"}, base_url=G, **kw))
+
+
 def open_latest_step(G, **kw):
     args = {"base_url": G, "cache_dir": "${cache}"}
     args.update(kw)
@@ -1257,45 +1263,45 @@ def group_download():
         return [drv("assert_sha256", path=f"{B}/{n}", equals=f"{FIX}/good/{n}") for n in names]
 
     out.append(case("download/then-open", "download-then-open: download writes jsonl, meta and sha256; file: on the result is loaded_from file and verify passes", "4.3.2, 7.1",
-                    [open_latest_step(G),
+                    [open_latest_no_cache(G),
                      dl({"paths": default_files}, release=d2, to=B),
                      drv("assert_files", dir=B, exactly=default_files)] + same(default_files) +
                     [step("open", {"loaded_from": "file", "datestamp": d2}, file=f"{B}/OTC_{d2}.jsonl"),
                      step("verify", {"verified": True})], requires=[]))
     out.append(case("download/latest-default", "download with no release resolves latest through the pointer", "4.3.2",
-                    [open_latest_step(G), dl({"paths": default_files}, to=B), drv("assert_files", dir=B, exactly=default_files)], requires=[]))
+                    [open_latest_no_cache(G), dl({"paths": default_files}, to=B), drv("assert_files", dir=B, exactly=default_files)], requires=[]))
     out.append(case("download/identical", "download-identical: a second download writes nothing and returns an empty list", "4.3.2, 7.1",
-                    [open_latest_step(G), dl({"paths": default_files}, release=d2, to=B), dl({"paths": []}, release=d2, to=B),
+                    [open_latest_no_cache(G), dl({"paths": default_files}, release=d2, to=B), dl({"paths": []}, release=d2, to=B),
                      drv("assert_files", dir=B, exactly=default_files)], requires=[]))
     out.append(case("download/mismatch", "download-mismatch: a changed file fails with file_exists and stays; overwrite repairs it", "4.3.2, 7.1",
-                    [open_latest_step(G), dl({"paths": default_files}, release=d2, to=B),
+                    [open_latest_no_cache(G), dl({"paths": default_files}, release=d2, to=B),
                      drv("corrupt", path=f"{B}/OTC_{d2}.jsonl", offset=10),
                      dl(err("file_exists", path={"$contains": f"OTC_{d2}.jsonl"}), release=d2, to=B),
                      drv("assert_sha256", path=f"{B}/OTC_{d2}.jsonl", equals=f"{FIX}/good/OTC_{d2}.jsonl", negate=True),
                      dl({"paths": [f"OTC_{d2}.jsonl"]}, release=d2, to=B, overwrite=True)] + same(default_files), requires=[]))
     out.append(case("download/conflict-changes-nothing", "a conflict is found before any write: a missing file is not written either", "4.3.2",
-                    [open_latest_step(G), dl({"paths": default_files}, release=d2, to=B),
+                    [open_latest_no_cache(G), dl({"paths": default_files}, release=d2, to=B),
                      drv("corrupt", path=f"{B}/OTC_{d2}.jsonl", offset=10), drv("delete", path=f"{B}/OTC_{d2}.meta.json"),
                      dl(err("file_exists"), release=d2, to=B),
                      drv("assert_files", dir=B, exactly=[f"OTC_{d2}.jsonl", f"OTC_{d2}.sha256"])], requires=[]))
     out.append(case("download/from-cache", "download-from-cache: the cache holds the release, the server is stopped, no request", "4.3.2, 7.1",
-                    [open_latest_step(G, mode="stream"), drv("server_stop"), drv("clear_log"),
+                    [open_latest_no_cache(G, mode="stream"), drv("server_stop"), drv("clear_log"),
                      dl({"paths": default_files}, release=d2, to=B), drv("assert_requests", source="any", count=0)] + same(default_files), requires=["stream"]))
     out.append(case("download/bad-checksum", "download-bad-checksum: the server sends a file with a wrong SHA-256; checksum_mismatch and the file is not in the folder", "4.3.2, 7.1",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=f"{SRV}/bad/wrong-sha256/", cache_dir="${cache}"),
                      dl(err("checksum_mismatch"), release=d1, to=B),
                      drv("assert_files", dir=B, absent=[f"OTC_{d1}.jsonl"], no_tmp=True, may_be_missing=True)], requires=["fs"]))
     out.append(case("download/formats", "download every format: json, json.gz, jsonl, plus meta and sha256", "4.3.2",
-                    [open_latest_step(G),
+                    [open_latest_no_cache(G),
                      dl({"paths": sorted([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"] + default_files)}, release=d2, to=B, formats=["json", "json.gz", "jsonl"]),
                      drv("assert_files", dir=B, exactly=sorted([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"] + default_files))] +
                     same([f"OTC_{d2}.json", f"OTC_{d2}.json.gz"]), requires=[]))
     out.append(case("download/invalid-format", "an unknown format: invalid_argument", "4.3.2",
-                    [open_latest_step(G), dl(err("invalid_argument"), release=d2, to=B, formats=["csv"])], requires=[]))
+                    [open_latest_no_cache(G), dl(err("invalid_argument"), release=d2, to=B, formats=["csv"])], requires=[]))
     out.append(case("download/invalid-release", "a bad datestamp: invalid_argument", "4.3.2",
-                    [open_latest_step(G), dl(err("invalid_argument"), release="2099", to=B)], requires=[]))
+                    [open_latest_no_cache(G), dl(err("invalid_argument"), release="2099", to=B)], requires=[]))
     out.append(case("download/not-found", "a datestamp the server does not have: release_not_found", "4.3.2",
-                    [open_latest_step(G), dl(err("release_not_found"), release="20991230", to=B)], requires=[]))
+                    [open_latest_no_cache(G), dl(err("release_not_found"), release="20991230", to=B)], requires=[]))
     out.append(case("download/offline-not-cached", "offline, a release not in the cache: offline_unavailable", "4.3.2",
                     [step("open", {"loaded_from": "file"}, file=f"{FIX}/good/OTC_{d2}.jsonl", base_url=G, cache_dir="${cache}", offline=True),
                      dl(err("offline_unavailable"), release=d1, to=B)], requires=["fs"]))

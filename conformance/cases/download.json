@@ -12,8 +12,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -98,8 +97,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -152,8 +150,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -225,8 +222,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -341,8 +337,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -425,7 +420,6 @@
      "op": "open",
      "args": {
       "base_url": "${server}/good/",
-      "cache_dir": "${cache}",
       "mode": "stream"
      },
      "expect": {
@@ -545,8 +539,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -619,8 +612,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -664,8 +656,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",
@@ -706,8 +697,7 @@
     {
      "op": "open",
      "args": {
-      "base_url": "${server}/good/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/good/"
      },
      "expect": {
       "loaded_from": "download",

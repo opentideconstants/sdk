@@ -440,6 +440,8 @@ def step_needs(st):
                 need.add("json")
         elif "base_url" in a or "release" in a or "cache_dir" in a or not a:
             need.add("fetch")   # no file: the release comes from the network module
+        if "cache_dir" in a:
+            need.add("fs")      # README "Hello": cache_dir is a file-system option
     if op in FETCH_OPS:
         need.add("fetch")
     if op == "download":

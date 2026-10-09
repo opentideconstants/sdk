@@ -992,8 +992,7 @@
      "op": "open",
      "args": {
       "release": "20991231.2",
-      "base_url": "${server}/reader/",
-      "cache_dir": "${cache}"
+      "base_url": "${server}/reader/"
      },
      "expect": {
       "loaded_from": "download",
