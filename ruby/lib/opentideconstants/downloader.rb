@@ -160,13 +160,15 @@ class OpenTideConstants
         def resolve_release
             if @release == :latest
                 if @client.send(:offline)
-                    d = @client.send(:cache).cached_releases.first
-                    raise OfflineError, "offline and no release is cached" unless d
+                    d = @client.send(:newest_cached, usable: false)
+                    raise OfflineError, "offline and no readable release is cached" unless d
                     return [d, nil, nil]
                 end
-                entry, url = @client.send(:fetch_latest_pointer)
-                @client.send(:check_major!, entry["format_version"])
-                return [entry["datestamp"], entry, url]
+                # The newest release this SDK reads, as for opening latest (spec §4.3.2, §5.2 step 2a).
+                entry, url = @client.send(:resolve_latest)
+                d = entry["datestamp"]
+                raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
+                return [d, entry, url]
             end
             [@release, nil, nil]
         end

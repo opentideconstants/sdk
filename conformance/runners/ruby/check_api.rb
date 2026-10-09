@@ -97,7 +97,8 @@ class_for = {
     "Release" => OTC::Release, "ReleaseInfo" => OTC::ReleaseInfo, "FileInfo" => OTC::FileInfo,
     "Station" => OTC::Station, "Tombstone" => OTC::Tombstone, "ConstantSet" => OTC::ConstantSet,
     "Constituent" => OTC::Constituent, "Convention" => OTC::Convention, "Licence" => OTC::Licence,
-    "Provenance" => OTC::Provenance, "QcFlag" => OTC::QcFlag, "DroppedConstituent" => OTC::DroppedConstituent,
+    "Provenance" => OTC::Provenance, "ProvenanceBuild" => OTC::ProvenanceBuild, "TimeBase" => OTC::TimeBase,
+    "QcFlag" => OTC::QcFlag, "DroppedConstituent" => OTC::DroppedConstituent,
     "Validation" => OTC::Validation, "SubordinateOffsets" => OTC::SubordinateOffsets, "Nearby" => OTC::Nearby,
     "UpdateResult" => OTC::UpdateResult, "RecordSpan" => OTC::RecordSpan, "Datum" => OTC::Datum,
     "Stats" => OTC::Stats

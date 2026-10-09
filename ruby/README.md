@@ -31,6 +31,8 @@ Queries: `station`, `require_station`, `tombstone`, `station_by_alias`, `station
 
 Every error is a subclass of `OpenTideConstants::Error` and has a stable `code`.
 
+The gem reads format 1.0 (`OpenTideConstants::SUPPORTED_FORMAT_VERSION`). A release whose `min_reader_version` is newer fails with `reader_too_old`; `latest` skips it and loads the newest release the gem reads. `station.constant_sets` leaves out `no_constants` sets unless you pass `include_no_constants: true`. `release.citation` and `otc.attribution` give the exact text to cite.
+
 Bundle a release with your app:
 
 ```ruby

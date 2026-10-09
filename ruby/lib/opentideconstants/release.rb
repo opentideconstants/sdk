@@ -13,20 +13,23 @@ class OpenTideConstants
     class Release
         EARTH_RADIUS_KM = 6371.0088
         FILTER_KEYS = %i[country type kind source source_type].freeze
+        # The qc_status values of a set with constants.
+        USABLE_QC = %i[ok flagged].freeze
 
         # A small per-station summary, used by the filters and the indexes.
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
                            :aliases, :pos, :len, :station, keyword_init: true)
 
-        attr_reader :datestamp, :created, :format_version, :doi, :concept_doi, :source_versions,
+        attr_reader :datestamp, :created, :format_version, :concept_doi, :zenodo_version_doi, :source_versions,
                     :build_commit, :changelog_url, :files, :conventions, :licences, :constituent_names
 
         # meta: the release document without its stations. stations: an
         # enumerator of [raw_station, pos, len]. files: [FileInfo]. checks:
         # {path => expected sha256} for #verify. io: the open .jsonl file in
-        # stream mode (or nil).
-        def initialize(meta:, stations:, mode:, files:, checks:, io: nil)
+        # stream mode (or nil). zenodo_version_doi: from the pointer or index
+        # entry of this datestamp (the release document does not hold it).
+        def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil)
             @mode = mode
             @io = io
             @io_lock = Mutex.new
@@ -39,8 +42,8 @@ class OpenTideConstants
             @datestamp = rel["datestamp"]
             @created = Util.time(rel["created"])
             @format_version = meta["format_version"]
-            @doi = rel["doi"]
             @concept_doi = rel["concept_doi"]
+            @zenodo_version_doi = zenodo_version_doi
             @source_versions = (rel["source_versions"] || {}).freeze
             @build_commit = rel["build_commit"]
             @changelog_url = rel["changelog_url"]
@@ -52,15 +55,40 @@ class OpenTideConstants
             freeze
         end
 
-        # Raises unsupported_format unless the format major is supported (§7.4).
+        # Raises unsupported_format unless the format major is supported, and
+        # reader_too_old when release.min_reader_version is newer than
+        # SUPPORTED_FORMAT_VERSION (§7.4).
         def self.check_format!(meta)
             raise InvalidReleaseError, "not a release document" unless meta.is_a?(Hash)
             fv = meta["format_version"]
-            raise InvalidReleaseError, "format_version missing" unless fv.is_a?(String) && fv =~ /\A(\d+)\.(\d+)\z/
-            major = Regexp.last_match(1).to_i
-            unless SUPPORTED_FORMAT_MAJORS.include?(major)
+            raise InvalidReleaseError, "format_version missing" unless Release.version_key(fv)
+            unless Release.supported_major?(fv)
                 raise UnsupportedFormatError, "format_version #{fv} is not supported (supported majors: #{SUPPORTED_FORMAT_MAJORS.join(', ')})"
             end
+            rel = meta["release"]
+            mrv = rel.is_a?(Hash) ? rel["min_reader_version"] : nil
+            return if mrv.nil?
+            raise InvalidReleaseError, "bad release.min_reader_version #{mrv.inspect}" unless Release.version_key(mrv)
+            return if Release.readable_version?(mrv)
+            d = rel["datestamp"]
+            raise ReaderTooOldError, "release #{d} needs a reader for format #{mrv}; this SDK reads format #{SUPPORTED_FORMAT_VERSION}"
+        end
+
+        # [major, minor] of a "MAJOR.MINOR" format version, or nil.
+        def self.version_key(v)
+            m = /\A(\d+)\.(\d+)\z/.match(v.to_s) if v.is_a?(String)
+            m && [m[1].to_i, m[2].to_i]
+        end
+
+        def self.supported_major?(format_version)
+            key = version_key(format_version)
+            !key.nil? && SUPPORTED_FORMAT_MAJORS.include?(key[0])
+        end
+
+        # True when this SDK reads a release whose min_reader_version is v.
+        def self.readable_version?(v)
+            key = version_key(v)
+            !key.nil? && (key <=> version_key(SUPPORTED_FORMAT_VERSION)) <= 0
         end
 
         # ---- release-level values
@@ -88,10 +116,13 @@ class OpenTideConstants
                       qc_status: count.call(@set_qc))
         end
 
-        # The dataset citation (spec §4.6); the year is the first four digits of the datestamp.
+        # The dataset citation (spec §4.6); the year is the first four digits
+        # of the datestamp. It links the concept DOI, and adds the version DOI
+        # when the release has its own Zenodo version.
         def citation
-            ident = @doi ? "https://doi.org/#{@doi}" : default_url
-            "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{ident}"
+            link = @concept_doi ? "https://doi.org/#{@concept_doi}" : default_url
+            version = @zenodo_version_doi ? " (version DOI: https://doi.org/#{@zenodo_version_doi})" : ""
+            "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{link}#{version}"
         end
 
         # The CC BY 4.0 attribution text for what an app shows (spec §4.6).
@@ -122,7 +153,7 @@ class OpenTideConstants
                 seen << lic.provider
                 parts << "#{lic.provider}: #{lic.attribution}"
             end
-            ident = @doi ? "doi:#{@doi}" : default_url
+            ident = @concept_doi ? "doi:#{@concept_doi}" : default_url
             "Tidal constants: OpenTideConstants #{@datestamp}, #{ident}, CC BY 4.0. Sources: " + parts.join("; ")
         end
 
@@ -418,9 +449,13 @@ class OpenTideConstants
                     raise InvalidReleaseError, "set #{cs['set_id']}: licence #{cs['licence_id'].inspect} does not resolve"
                 end
                 rec = cs if !rec_id.nil? && cs["set_id"] == rec_id
-                sources << cs["source"] unless cs["qc_status"] == "excluded"
-                @set_sources << cs["source"]
-                @set_qc << Util.enum(cs["qc_status"], ENUMS[:qc_status])
+                qc = Util.enum(cs["qc_status"], ENUMS[:qc_status])
+                # Only a set with constants (ok or flagged) is a usable source (spec §4.3, §4.4).
+                if USABLE_QC.include?(qc)
+                    sources << cs["source"]
+                    @set_sources << cs["source"]
+                end
+                @set_qc << qc
                 Array(cs["constituents"]).each { |c| names << c["name"] if c.is_a?(Hash) && c["name"] }
             end
             raise InvalidReleaseError, "station #{sid}: recommended set #{rec_id} does not exist" if rec_id && rec.nil?

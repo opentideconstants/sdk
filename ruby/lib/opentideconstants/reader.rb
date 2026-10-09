@@ -83,39 +83,40 @@ class OpenTideConstants
         end
 
         # Loads a release from a data file whose checks are already done.
-        def load(path, mode:, files:, checks:, index: nil, index_rows: nil)
+        def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil)
             _, _, ext = parse_name(path)
             case ext
             when "json"
                 doc = parse_json(read_text(path))
-                eager_from_doc(doc, files: files, checks: checks)
+                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
             when "json.gz"
                 doc = parse_json(gunzip(path))
-                eager_from_doc(doc, files: files, checks: checks)
+                eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
             when "jsonl"
                 meta_path = files_read(path)[1]
                 meta = parse_json(read_text(meta_path))
                 Release.check_format!(meta)
-                load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows)
+                load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
+                                       zenodo_version_doi: zenodo_version_doi)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
         end
 
-        def eager_from_doc(doc, files:, checks:)
+        def eager_from_doc(doc, files:, checks:, zenodo_version_doi: nil)
             Release.check_format!(doc)
             stations = doc["stations"]
             raise InvalidReleaseError, "stations missing" unless stations.is_a?(Array)
             meta = doc.reject { |k, _| k == "stations" }
             Release.new(meta: meta, stations: stations.map { |s| [s, nil, nil] }, mode: :eager,
-                        files: files, checks: checks)
+                        files: files, checks: checks, zenodo_version_doi: zenodo_version_doi)
         end
 
         # index: the entries of a fresh index-v1.json (spec §6.2); the stations
         # then come from it, and only the tombstone lines are read. Otherwise
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
-        def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil)
+        def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil)
             io = File.open(path, "rb")
             lines = Enumerator.new do |y|
                 if index
@@ -135,7 +136,7 @@ class OpenTideConstants
             end
             begin
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
-                                  io: mode == :stream ? io : nil)
+                                  io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi)
             ensure
                 io.close if mode != :stream || rel.nil?
             end

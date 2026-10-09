@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
     s.authors     = ["Jordan Ritter"]
     s.homepage    = "https://opentideconstants.org"
     s.license     = "MIT"
-    s.files       = ["README.md", "LICENSE", "lib/opentideconstants.rb"] +
+    s.files       = ["README.md", "LICENSE", "supported-formats.json", "lib/opentideconstants.rb"] +
                     Dir.glob("lib/opentideconstants/*.{rb,json}", base: __dir__).sort
     s.require_paths = ["lib"]
     s.required_ruby_version = ">= 3.0"

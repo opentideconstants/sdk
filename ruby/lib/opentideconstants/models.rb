@@ -36,12 +36,14 @@ class OpenTideConstants
         station_status: %w[active removed],
         source_type: %w[official gauge model],
         quantity: %w[water_level current],
-        qc_status: %w[accepted fallback excluded],
+        removed_reason: %w[merged duplicate],
+        qc_status: %w[ok flagged no_constants],
         phase_reference: %w[greenwich_utc local],
         nodal_handling: %w[f_u_at_prediction none],
         height_adjusted_type: %w[R A],
         dropped_reason: %w[rayleigh noise long_period_rule non_tidal_rule convention other],
-        qc_flag: %w[time_base broken_record microtidal non_tidal_signal short_record sibling_disagreement],
+        qc_flag: %w[time_base broken_record microtidal non_tidal_signal short_record sibling_disagreement carried_over],
+        time_base_code: %w[verified corrected unverified disputed],
         alias_system: %w[noaa gesla ticon xtide kartverket slackwater webcaltides]
     }.freeze
 
@@ -60,13 +62,15 @@ class OpenTideConstants
 
     # An entry of the latest pointer or the release index; no station data.
     class ReleaseInfo
-        attr_reader :datestamp, :format_version, :doi, :files
+        attr_reader :datestamp, :format_version, :concept_doi, :zenodo_version_doi, :content_sha256, :files
 
         def initialize(raw, files)
             Util.deep_freeze(raw)
             @datestamp = raw["datestamp"]
             @format_version = raw["format_version"]
-            @doi = raw["doi"]
+            @concept_doi = raw["concept_doi"]
+            @zenodo_version_doi = raw["zenodo_version_doi"]
+            @content_sha256 = raw["content_sha256"]
             @files = files.freeze
             freeze
         end
@@ -125,30 +129,76 @@ class OpenTideConstants
         end
     end
 
-    class Provenance
-        attr_reader :build_commit, :adapter_version, :input_sha256, :time_base, :selection_reason, :decision, :raw
+    # The build metadata of a set (provenance.build).
+    class ProvenanceBuild
+        attr_reader :build_commit, :built_at, :fetched_at, :run_id, :tool_versions
 
         def initialize(raw)
-            raw ||= {}
-            @raw = Util.deep_freeze(raw)
+            Util.deep_freeze(raw)
             @build_commit = raw["build_commit"]
+            @built_at = Util.time(raw["built_at"])
+            @fetched_at = Util.time(raw["fetched_at"])
+            @run_id = raw["run_id"]
+            @tool_versions = raw["tool_versions"].is_a?(Hash) ? raw["tool_versions"] : nil
+            freeze
+        end
+    end
+
+    # How a set was made and chosen. The schema allows more fields than the
+    # typed ones; they stay in #raw.
+    class Provenance
+        attr_reader :build, :adapter_version, :input_sha256, :carried_from_release, :selection_reason, :decision, :raw
+
+        def initialize(raw)
+            raw = {} unless raw.is_a?(Hash)
+            @raw = Util.deep_freeze(raw)
+            # A missing build happens only in malformed input: nil, and the load goes on (spec §4.6).
+            @build = raw["build"].is_a?(Hash) ? ProvenanceBuild.new(raw["build"]) : nil
             @adapter_version = raw["adapter_version"]
             @input_sha256 = raw["input_sha256"]
-            @time_base = raw["time_base"]
+            @carried_from_release = raw["carried_from_release"]
             @selection_reason = raw["selection_reason"]
             @decision = raw["decision"]
             freeze
         end
     end
 
+    # The time-base annotation of a gauge set's record (spec §4.5). correction
+    # is a frozen Hash {"from", "to"} or nil; each evidence entry is a frozen
+    # Hash with the keys comparator_kind, comparator_id, distance_km, lag_min
+    # and detail (nil when the file leaves one out).
+    class TimeBase
+        EVIDENCE_KEYS = %w[comparator_kind comparator_id distance_km lag_min detail].freeze
+
+        attr_reader :code, :reason, :declared, :published, :correction, :months_dropped, :decided_in,
+                    :decided_build_commit, :evidence
+
+        def initialize(raw)
+            Util.deep_freeze(raw)
+            @code = Util.enum(raw["code"], ENUMS[:time_base_code])
+            @reason = raw["reason"]
+            @declared = raw["declared"]
+            @published = raw["published"]
+            corr = raw["correction"]
+            @correction = corr.is_a?(Hash) ? { "from" => corr["from"], "to" => corr["to"] }.freeze : nil
+            @months_dropped = Array(raw["months_dropped"]).freeze
+            @decided_in = raw["decided_in"]
+            @decided_build_commit = raw["decided_build_commit"]
+            @evidence = Array(raw["evidence"]).select { |e| e.is_a?(Hash) }
+                                              .map { |e| EVIDENCE_KEYS.to_h { |k| [k, e[k]] }.freeze }.freeze
+            freeze
+        end
+    end
+
+    # One QC flag of a set: the flag, a one-line reason, and numbers by name (or nil).
     class QcFlag
-        attr_reader :flag, :verdict, :values
+        attr_reader :flag, :reason, :values
 
         def initialize(raw)
             Util.deep_freeze(raw)
             @flag = Util.enum(raw["flag"], ENUMS[:qc_flag])
-            @verdict = raw["verdict"]
-            @values = raw["values"]
+            @reason = raw["reason"]
+            @values = raw["values"].is_a?(Hash) ? raw["values"] : nil
             freeze
         end
     end
@@ -231,7 +281,7 @@ class OpenTideConstants
     # The constants from one source record (spec §4.5).
     class ConstantSet
         attr_reader :set_id, :source, :source_type, :quantity, :source_record_id, :source_version, :record_span,
-                    :datum, :qc_status, :qc_flags, :dropped_constituents, :convention, :licence, :provenance,
+                    :datum, :qc_status, :qc_flags, :dropped_constituents, :time_base, :convention, :licence, :provenance,
                     :validation, :constituents, :raw
 
         def initialize(raw, convention:, licence:, validation:, recommended:)
@@ -247,6 +297,7 @@ class OpenTideConstants
             @qc_status = Util.enum(raw["qc_status"], ENUMS[:qc_status])
             @qc_flags = (raw["qc_flags"] || []).map { |f| QcFlag.new(f) }.freeze
             @dropped_constituents = (raw["dropped_constituents"] || []).map { |d| DroppedConstituent.new(d) }.freeze
+            @time_base = raw["time_base"].is_a?(Hash) ? TimeBase.new(raw["time_base"]) : nil
             @convention = convention
             @licence = licence
             @provenance = Provenance.new(raw["provenance"])
@@ -311,12 +362,13 @@ class OpenTideConstants
         end
 
         # The recommended set first, then the others by set_id. Sets with
-        # qc_status excluded are left out unless include_excluded is true.
-        def constant_sets(include_excluded: false)
-            unless include_excluded == true || include_excluded == false
-                raise InvalidArgumentError, "include_excluded must be true or false"
+        # qc_status no_constants (listed, with no fitted constants) are left
+        # out unless include_no_constants is true.
+        def constant_sets(include_no_constants: false)
+            unless include_no_constants == true || include_no_constants == false
+                raise InvalidArgumentError, "include_no_constants must be true or false"
             end
-            list = include_excluded ? @sets : @sets.reject { |s| s.qc_status == :excluded }
+            list = include_no_constants ? @sets : @sets.reject { |s| s.qc_status == :no_constants }
             rec = list.select(&:recommended?)
             (rec + (list - rec).sort_by(&:set_id)).freeze
         end
@@ -326,9 +378,10 @@ class OpenTideConstants
         end
     end
 
-    # A removed station.
+    # A removed station id: why it was removed and, when merged, the station
+    # that holds its records.
     class Tombstone
-        attr_reader :station_id, :name, :status, :removed_in, :removed_reason, :raw
+        attr_reader :station_id, :name, :status, :removed_in, :removed_reason, :merged_into, :detail, :raw
 
         def initialize(raw)
             @raw = Util.deep_freeze(raw)
@@ -336,7 +389,9 @@ class OpenTideConstants
             @name = raw["name"]
             @status = Util.enum(raw["status"], ENUMS[:station_status])
             @removed_in = raw["removed_in"]
-            @removed_reason = raw["removed_reason"]
+            @removed_reason = Util.enum(raw["removed_reason"], ENUMS[:removed_reason])
+            @merged_into = raw["merged_into"]
+            @detail = raw["detail"]
             freeze
         end
     end
