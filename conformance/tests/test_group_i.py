@@ -94,3 +94,11 @@ def test_set_without_provenance_is_invalid_not_keyerror(schemas):
     with pytest.raises(bf.Fail) as e:
         bf.validate_release(doc, meta, doc["stations"], schemas, allow_missing_build=True)
     assert e.value.code == "invalid_release"
+
+
+# --- B2-T2: a missing provenance.build is tolerated by a general rule (spec 4.6), not by the path of one root
+
+def test_missing_build_tolerated_in_any_root(tmp_path, schemas):
+    root = _root(tmp_path, doc=bf.no_build_doc())
+    got = bf.open_release(root, bf.BASE, schemas)
+    assert any("no provenance.build" in x for x in got["unknown_fields"]), got

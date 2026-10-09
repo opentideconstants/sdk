@@ -981,8 +981,9 @@ def open_release(root, datestamp, schemas):
     if min_reader is not None and checked_version(min_reader, "release.min_reader_version") > READER_FORMAT:
         raise Fail("reader_too_old", f"release {datestamp} needs a reader for format {min_reader}; "
                                      f"this reader reads format {'%d.%d' % READER_FORMAT}")
-    checked, dropped = validate_release(doc, meta, lines, schemas,
-                                        allow_missing_build=root.resolve() == (FIXTURES / "bad" / "no-build").resolve())
+    # spec 4.6: a set with no provenance.build is malformed 1.0, but an SDK loads it (build null): a general rule.
+    # The tolerance is reported in unknown_fields, so a root outside bad/ that needs it fails --check.
+    checked, dropped = validate_release(doc, meta, lines, schemas, allow_missing_build=True)
     if lines != doc["stations"]:
         raise Fail("invalid_release", ".jsonl lines differ from .json stations")
     if meta != {k: v for k, v in doc.items() if k != "stations"}:
@@ -993,8 +994,9 @@ def open_release(root, datestamp, schemas):
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
-    Only for bad/no-build (allow_missing_build) is a set with no provenance.build tolerated: the .json, every
-    .jsonl line and the .meta.json are then checked with the build put back, so it is the only defect.
+    With allow_missing_build a set with no provenance.build is tolerated (spec 4.6): the .json, every .jsonl line
+    and the .meta.json are then checked with the build put back, so it is the only defect, and the tolerance is
+    listed in the returned paths.
     Returns (the checked document, the dropped paths) or raises Fail."""
     version = version_key(doc["format_version"])
     known = sorted((version_key(v), v) for v in schemas if not v.startswith("index"))
