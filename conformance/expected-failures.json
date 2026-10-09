@@ -375,8 +375,6 @@
   {
    "case": "rules/pk06/bad-active-and-removed-same-id-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"
@@ -417,8 +415,6 @@
   {
    "case": "rules/pk06/bad-duplicate-alias-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"
@@ -459,8 +455,6 @@
   {
    "case": "rules/pk06/bad-duplicate-convention-id-jsonl-stream",
    "runners": [
-    "c",
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

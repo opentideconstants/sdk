@@ -872,6 +872,10 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
             otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "a convention has no convention_id");
             return OTC_E_INVALID_RELEASE;
         }
+        if (otc__find_convention(r, r->conv[i].id) != &r->conv[i]) {   /* spec 6.1 (CR D5) */
+            otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "convention_id %s appears twice", r->conv[i].id);
+            return OTC_E_INVALID_RELEASE;
+        }
         i++;
     }
     i = 0;
@@ -880,6 +884,10 @@ static otc_status load_meta(otc_release *r, const char *meta_path, otc_error *er
         r->lic[i].id = otc__jstr(c, "licence_id");
         if (!r->lic[i].id) {
             otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "a licence has no licence_id");
+            return OTC_E_INVALID_RELEASE;
+        }
+        if (otc__find_licence(r, r->lic[i].id) != &r->lic[i]) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "licence_id %s appears twice", r->lic[i].id);
             return OTC_E_INVALID_RELEASE;
         }
         i++;
@@ -1016,6 +1024,26 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     }
     if (r->n_tomb > 1) qsort(r->tomb, r->n_tomb, sizeof *r->tomb, tomb_cmp);
     if (r->n_alias > 1) qsort(r->alias, r->n_alias, sizeof *r->alias, alias_cmp);
+    /* spec 6.1 (CR D5): an id is used once across the active stations and the
+     * tombstones, and a (system, alias id) pair once */
+    for (i = 0; i < r->n_tomb; i++) {
+        const char *dup = (i > 0 && !strcmp(r->tomb[i - 1].id, r->tomb[i].id)) ? "is removed twice"
+                          : otc__find_entry(r, r->tomb[i].id)                    ? "is both active and removed"
+                                                                                 : NULL;
+        if (dup) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, path, "station %s %s", r->tomb[i].id, dup);
+            st = OTC_E_INVALID_RELEASE;
+            goto done;
+        }
+    }
+    for (i = 1; i < r->n_alias; i++) {
+        if (!alias_cmp(&r->alias[i - 1], &r->alias[i])) {
+            otc__err_set(err, OTC_E_INVALID_RELEASE, path, "the %s alias %s belongs to both %s and %s",
+                         r->alias[i].system, r->alias[i].alias, r->alias[i - 1].station, r->alias[i].station);
+            st = OTC_E_INVALID_RELEASE;
+            goto done;
+        }
+    }
     if (r->n_cnames > 1) qsort(r->cnames, r->n_cnames, sizeof *r->cnames, cname_cmp);
     for (i = 0; i < r->n_st; i++) r->st[i].kind = resolve_kind(r, &r->st[i], 0);
     otc__kv_sort(&r->source_counts);
