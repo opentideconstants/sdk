@@ -417,3 +417,18 @@ def test_ruby_nil_stats_field_is_an_error():
 def test_runner_without_sdk_error_class_or_version_fails_the_handshake(lang, mode):
     rc, hello, out, err = talk(lang, [OPEN], mode=mode)
     assert hello is None and rc != 0 and err.strip(), (rc, hello, out, err[-300:])
+
+
+# --- T62: an error that escapes in the browser page (pageerror) fails the step it happened in
+
+def test_browser_pageerror_fails_the_step():
+    if not (CONF.parent / "js" / "node_modules" / "playwright").exists():
+        pytest.skip("no Playwright in js/node_modules")
+    lines = [{"op": "open", "args": {"base_url": "http://127.0.0.1:9/"}}, {"op": "station_count"}, {"op": "loaded_from"}]
+    p = subprocess.run(["node", str(RUNNERS / "node" / "browser-runner.mjs")],
+                       input="".join(json.dumps(x) + "\n" for x in lines), capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, OTC_BROWSER_SDK_DIR=str(FAKE / "browser-pageerror")), cwd=str(CONF.parent))
+    out = [strict(x) for x in p.stdout.splitlines()[1:]]
+    assert len(out) == 3 and out[0]["ok"], (p.stdout[-500:], p.stderr[-500:])
+    assert out[1]["ok"] is False and out[1]["error"]["code"] == "uncaught:PageError", out[1]
+    assert out[2]["ok"] is True, out[2]
