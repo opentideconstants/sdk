@@ -58,7 +58,7 @@ jobs:
       - name: The fold table gives the expected folded names
         run: uv run conformance/tools/test_name_fold.py
       - name: Driver and server self-tests
-        run: uv run --python 3.12 --with "pytest>=8,<9" python -m pytest conformance/tests -v -p no:cacheprovider
+        run: uv run --python 3.12 --with "pytest>=8,<9" --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 --with rfc3986-validator==0.1.1 python -m pytest conformance/tests -v -p no:cacheprovider
 
   cross:
     name: ${{ matrix.os }}
