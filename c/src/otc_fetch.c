@@ -2519,26 +2519,31 @@ otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *majo
 }
 
 otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
-                            bool *updated)
+                            size_t *needed, bool *updated)
 {
     fctx c;
     otc_release_info *ri = NULL;
     otc_release *rel = NULL;
     otc_loaded_from lf;
     otc_status st = ctx_init(&c, opts);
+    size_t need = 0;
     if (updated) *updated = false;
+    if (needed) *needed = 0;
     if (path && len) path[0] = '\0';
-    if (st == OTC_OK && (!updated || !valid_datestamp(current) || !path || !len))
-        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; path, len and updated must be set");
+    /* path NULL with len 0 is a size query (spec 6.4 buffer rules); path NULL with a length is not */
+    if (st == OTC_OK && (!updated || !valid_datestamp(current) || (!path && len)))
+        st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "current must be a datestamp; updated must be set; path NULL needs len 0");
     if (st == OTC_OK && c.offline) st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline: the latest pointer cannot be read");
     if (st == OTC_OK) st = ensure_root(&c);
     if (st == OTC_OK) st = latest_info(&c, &ri, NULL);
     if (st == OTC_OK && ds_cmp(ri->datestamp, current) > 0) {
         /* the path is known before the download: a buffer that cannot hold it downloads nothing */
         char *p = rel_file(&c, ri->datestamp, ".jsonl");
-        size_t need;
         if (!p) st = fail(&c, OTC_E_NOMEM, NULL, "out of memory");
-        else if (strlen(p) + 1 > len) st = copy_path(&c, p, path, len, &need);
+        else if (strlen(p) + 1 > len && path) st = copy_path(&c, p, path, len, &need);   /* as much as fits */
+        else if (strlen(p) + 1 > len)   /* a size query (path NULL, len 0) */
+            st = fail(&c, OTC_E_BUFFER_TOO_SMALL, p, "the path needs %lu bytes", (unsigned long)strlen(p) + 1);
+        if (p && needed) *needed = strlen(p) + 1;
         if (st == OTC_OK) {
             st = ensure_cached(&c, ri->datestamp, ri, &rel, &lf);
             otc_close(rel);

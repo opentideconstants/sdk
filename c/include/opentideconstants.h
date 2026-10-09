@@ -716,13 +716,15 @@ OTC_API otc_status otc_fetch_check_for_update(const otc_fetch_options *opts, con
 OTC_API otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *major);
 /* If a release newer than current exists, downloads it into the cache, sets
  * *updated and writes the path of its .jsonl; the app then opens it and
- * closes the old handle (C has no automatic update, spec 5.6). path and len
- * are checked before the download: a buffer too small for the path is
- * OTC_E_BUFFER_TOO_SMALL (the error message names the size) and downloads
- * nothing. *updated is true only when the new release is in the cache and
- * path names it. */
+ * closes the old handle (C has no automatic update, spec 5.6). needed (may be
+ * NULL) gets the path length with its NUL, as for every other string out, or
+ * 0 when there is no newer release (CR D27). path and len are checked before
+ * the download: a buffer too small for the path, or path NULL with len 0 (a
+ * size query), is OTC_E_BUFFER_TOO_SMALL (the error message names the size)
+ * and downloads nothing. *updated is true only when the new release is in the
+ * cache and path names it. */
 OTC_API otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
-                                    bool *updated);
+                                    size_t *needed, bool *updated);
 /* Writes a verified release into dir (spec 4.3.2). release NULL or "latest":
  * the latest; on a network error with on_network_error USE_CACHE, the newest
  * readable cached release. formats: OTC_FORMAT_* bits, 0 = OTC_FORMAT_JSONL.

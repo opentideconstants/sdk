@@ -1450,7 +1450,7 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
     *updated = 0;
     *nomove = 0;
     snprintf(to, to_len, "%s", from);
-    rc = otc_fetch_update(&fo, from, path, sizeof path, &up);
+    rc = otc_fetch_update(&fo, from, path, sizeof path, NULL, &up);
     if (rc != OTC_OK || !up) return rc;
     if (fault("update-path")) snprintf(path, sizeof path, "%s", "/no/such/file.bin");   /* fault: an odd path */
     {   /* the datestamp of the new file: OTC_{D}.jsonl */
