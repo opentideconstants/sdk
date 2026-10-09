@@ -216,15 +216,22 @@ test("DR3: two waiters on a crashed lock never hold it together", async (t) => {
     heldLock(root, "20991231", { startedAt: "2000-01-01T00:00:00Z" });
     let inside = 0;
     let overlap = false;
+    let firstIn;
+    const held = new Promise((r) => { firstIn = r; });
     const one = async () => {
         const unlock = await store.lock("releases/20991231");
+        firstIn();
         if (++inside > 1) overlap = true;
         // hold it for a while: the other waiter has waited past the stale time and must not take this young lock
         await new Promise((r) => setTimeout(r, 500));
         inside--;
         await unlock();
     };
-    await Promise.all([one(), one()]);
+    // the second waiter starts once the first holds the lock, so it meets a young lock (two waiters that read the
+    // crashed lock's age at the same instant can still both remove it; spec 5.4 accepts that)
+    const a = one();
+    await held;
+    await Promise.all([a, one()]);
     assert.equal(overlap, false, "two waiters held the lock at the same time");
 });
 

@@ -354,9 +354,12 @@ class LockAndPruneTest(unittest.TestCase):
                 else:
                     second_in.set()
                 self.assertTrue(held)
+        # the second waiter starts once the first holds the lock, so it meets a young lock (two waiters that read
+        # the crashed lock's age at the same instant can still both remove it; spec §5.4 accepts that)
         ts = [threading.Thread(target=waiter, args=(i,), daemon=True) for i in (1, 2)]
-        for t in ts:
-            t.start()
+        ts[0].start()
+        self.assertTrue(first_in.wait(10))
+        ts[1].start()
         for t in ts:
             t.join(10)
         self.assertEqual(overlap, [False], "two waiters held the lock at the same time")

@@ -190,7 +190,11 @@ class CacheLockTest < Minitest::Test
         overlap = []
         mutex = Mutex.new
         first = true
-        waiters = 2.times.map do
+        # the second waiter starts once the first holds the lock, so it meets a
+        # young lock (two waiters that read the crashed lock's age at the same
+        # instant can still both remove it; spec §5.4 accepts that)
+        waiters = 2.times.map do |i|
+            first_in.pop.tap { |x| first_in << x } if i == 1
             Thread.new do
                 cache.with_lock(dir) do
                     am_first = mutex.synchronize { f = first; first = false; f }

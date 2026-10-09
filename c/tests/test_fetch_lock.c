@@ -4,10 +4,12 @@
  *     removals, not an endless wait.
  *  2. A lock taken over by another process while this one downloads: this
  *     one's release leaves the other's lock alone (owner.json token).
- *  3. Two takers on a crashed lock (CR2 DR3, R2-010, R2-015): both wait
- *     past the stale time; the first removes the old lock and takes it, and
- *     the second must not remove that young lock (its age is read, and the
- *     wait restarts after a removal). One stale removal, both succeed.
+ *  3. Two takers on a crashed lock (CR2 DR3, R2-010, R2-015): the first
+ *     removes the old lock and takes it; the second starts once the first
+ *     holds it, waits past the stale time while the first downloads (2 s),
+ *     and must not remove that young lock. One stale removal, both succeed.
+ *     (Two takers that read the crashed lock's age at the same instant can
+ *     still both remove it; spec 5.4 accepts that: at worst two downloads.)
  * The lock's age stays 120 s in the test build: a lock is old because its
  * started_at is from 2000, so the outcome does not depend on timing. */
 #include "otc_test.h"
@@ -156,7 +158,27 @@ int main(void)
             tk[k].fo.error = &tk[k].err;
             tk[k].fo.log_fn = count_removals;
         }
-        for (k = 0; k < 2; k++) pthread_create(&th[k], NULL, take_thread, &tk[k]);
+        pthread_create(&th[0], NULL, take_thread, &tk[0]);
+        {   /* the second taker starts once the first holds the lock (owner.json is its own) */
+            char *own = test_join(lock, "owner.json");
+            int i;
+            for (i = 0; i < 2000; i++) {
+                FILE *o = fopen(own, "rb");
+                size_t n = 0;
+                if (o) {
+                    n = fread(buf, 1, sizeof buf - 1, o);
+                    fclose(o);
+                }
+                buf[n] = '\0';
+                if (n && !strstr(buf, "crashed")) break;
+                {
+                    struct timespec ts = {0, 5000000};
+                    nanosleep(&ts, NULL);
+                }
+            }
+            free(own);
+        }
+        pthread_create(&th[1], NULL, take_thread, &tk[1]);
         for (k = 0; k < 2; k++) pthread_join(th[k], NULL);
         CHECK_STATUS(tk[0].st, OTC_OK);
         CHECK_STATUS(tk[1].st, OTC_OK);
