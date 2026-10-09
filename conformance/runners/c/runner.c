@@ -84,6 +84,8 @@ static struct {
     int      auto_update;
     double   update_interval;
     double   last_check;
+    otc_status auto_update_status;   /* the failure of the last automatic update (C69), OTC_OK if none */
+    int      auto_update_nomove;     /* it said "updated" but named no newer release: last_error is uncaught */
 } g_client;
 
 static double now_s(void)
@@ -928,8 +930,15 @@ static void op_query(request *q, reply *r)
     if (!strcmp(op, "loaded_from")) {
         cJSON_AddItemToObject(o, "loaded_from", j_enum(otc_loaded_from_name(otc_release_loaded_from(R))));
     } else if (!strcmp(op, "last_error")) {
-        /* client.last_error is the error behind loaded_from cache_after_error. */
-        if (otc_release_loaded_from(R) == OTC_LOADED_FROM_CACHE_AFTER_ERROR)
+        /* client.last_error: the failure of the last automatic update (C69), else the error behind loaded_from
+         * cache_after_error. */
+        if (g_client.auto_update_nomove) {
+            set_error(r, "uncaught:UpdateNoMove", "the automatic update reported an update that names no newer release");
+            return;
+        }
+        if (g_client.auto_update_status != OTC_OK)
+            cJSON_AddStringToObject(o, "code", otc_status_code(g_client.auto_update_status));
+        else if (otc_release_loaded_from(R) == OTC_LOADED_FROM_CACHE_AFTER_ERROR)
             cJSON_AddStringToObject(o, "code", otc_status_code(otc_last_error_status(R)));
         else
             cJSON_AddNullToObject(o, "code");
@@ -1468,7 +1477,11 @@ static otc_status do_update(const char *from, int *updated, char *to, size_t to_
         return OTC_OK;
     }
     rc = swap_to(to, err);
-    if (rc == OTC_OK) *updated = 1;
+    if (rc == OTC_OK) {
+        *updated = 1;
+        g_client.auto_update_status = OTC_OK;   /* the current release is the new one: no failure to report */
+        g_client.auto_update_nomove = 0;
+    }
     return rc;
 }
 
@@ -1572,14 +1585,22 @@ static void maybe_auto_update(void)
     size_t need;
     int updated, nomove = 0;
     otc_error err;
+    otc_status rc;
     double now;
     if (!g_client.auto_update || g_client.pinned || !g_current) return;
     now = now_s();
     if (now - g_client.last_check < g_client.update_interval) return;
     g_client.last_check = now;
     if (otc_release_datestamp(g_current, ds, sizeof ds, &need) != OTC_OK) return;
-    if (do_update(ds, &updated, to, sizeof to, &err, &nomove) != OTC_OK || nomove)
+    rc = do_update(ds, &updated, to, sizeof to, &err, &nomove);
+    /* offline (the option or OPENTIDECONSTANTS_OFFLINE, which the library reads) the check does not run (spec 5.6) */
+    if (rc == OTC_E_OFFLINE_UNAVAILABLE) return;
+    if (rc != OTC_OK || nomove) {
+        /* keep the current release; the failure is the client's last_error, as in the other SDKs (C69) */
+        if (nomove) g_client.auto_update_nomove = 1;
+        else g_client.auto_update_status = rc;
         fprintf(stderr, "automatic update failed: %s\n", err.message);
+    }
 }
 
 static int is_fetch_op(const char *op)
