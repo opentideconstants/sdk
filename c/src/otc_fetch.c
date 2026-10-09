@@ -1577,17 +1577,40 @@ static char *rel_file(fctx *c, const char *ds, const char *suffix)
     return p;
 }
 
+/* A files row of .verified: an object whose sha256 and url are strings or null
+ * and whose size is a non-negative integer or null (CR2 R2-088). */
+static int verified_row_ok(const cJSON *row)
+{
+    const cJSON *sha, *url, *size;
+    if (!cJSON_IsObject(row)) return 0;
+    sha = otc__jget(row, "sha256");
+    url = otc__jget(row, "url");
+    size = otc__jget(row, "size");
+    if (sha && !cJSON_IsString(sha) && !cJSON_IsNull(sha)) return 0;
+    if (url && !cJSON_IsString(url) && !cJSON_IsNull(url)) return 0;
+    return !size || cJSON_IsNull(size) ||
+           (cJSON_IsNumber(size) && size->valuedouble >= 0 && size->valuedouble < 9007199254740992.0 &&
+            size->valuedouble == (double)(int64_t)size->valuedouble);
+}
+
 /* A release's .verified record: OTC_OK with *out NULL when it is missing or not a
- * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. */
+ * record (the release is then not verified), OTC_E_NOMEM, or OTC_E_IO. A record
+ * with a files row that is not a valid row is not a record. */
 static otc_status read_verified_st(fctx *c, const char *ds, cJSON **out)
 {
     char *d = rel_dir(c, ds), *p = d ? path2(d, ".verified") : NULL, *t = NULL;
     otc_status st = p ? slurp_st(p, &t) : OTC_E_NOMEM;
     cJSON *doc = t ? otc__json_parse(t, strlen(t)) : NULL;
+    const cJSON *row;
     free(d);
     free(p);
     free(t);
     if (doc && !cJSON_IsObject(otc__jget(doc, "files"))) { cJSON_Delete(doc); doc = NULL; }
+    if (doc) {
+        cJSON_ArrayForEach(row, otc__jget(doc, "files")) {
+            if (!verified_row_ok(row)) { cJSON_Delete(doc); doc = NULL; break; }
+        }
+    }
     *out = doc;
     return st;
 }
