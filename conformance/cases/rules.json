@@ -3918,7 +3918,7 @@
   },
   {
    "id": "rules/pk10/bad-ca-file-no-retry",
-   "title": "ca_file names a missing file: io or invalid_argument at once, and no request (D19)",
+   "title": "ca_file names a missing file, with a cached release and use_cache: io at once, no request, no fallback (D19)",
    "spec": "4.8, 5.7",
    "requires": [
     "fs"
@@ -3928,17 +3928,33 @@
      "op": "open",
      "args": {
       "base_url": "${server}/good/",
-      "cache_dir": "${cache}",
-      "ca_file": "${tmp}/no-such-ca.pem",
-      "on_network_error": "raise"
+      "cache_dir": "${cache}"
      },
      "expect": {
-      "error": {
-       "$any_of": [
-        "io",
-        "invalid_argument"
-       ]
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
       }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "ca_file": "${tmp}/no-such-ca.pem",
+      "on_network_error": "use_cache"
+     },
+     "expect": {
+      "error": "io"
      },
      "expect_if_missing": {
       "fetch": {

@@ -65,6 +65,10 @@ class OpenTideConstants
         %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
             raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
         end
+        # user_agent goes into a header: no control character (CR2 DR20, spec 4.2, 5.7)
+        if user_agent && (!user_agent.valid_encoding? || user_agent.match?(/[[:cntrl:]]/))
+            raise InvalidArgumentError, "user_agent must have no control characters: #{user_agent.inspect}"
+        end
         raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
         base_url ||= ENV["OPENTIDECONSTANTS_BASE_URL"]
         base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
@@ -228,13 +232,24 @@ class OpenTideConstants
     # Closes the client and every Release it loaded (stream mode holds a file
     # handle per release). After close every query and call is io "the
     # release is closed" (CR D21). A second close does nothing.
+    # Every release is closed even when one close fails; the first failure is
+    # raised after, as an SDK error (FileError, io, with the system error as
+    # its cause) (R2-104).
     def close
+        failure = nil
         @lock.synchronize do
             return nil if @closed
             @closed = true
-            ([@release] + @loaded.keys).compact.uniq.each { |r| r.send(:close) }
+            ([@release] + @loaded.keys).compact.uniq.each do |r|
+                r.send(:close)
+            rescue StandardError => e
+                failure ||= [e, r]
+            end
         end
-        nil
+        return nil unless failure
+        e, r = failure
+        raise e if e.is_a?(Error)
+        raise FileError.new("cannot close release #{r.datestamp}: #{e.message}"), cause: e
     end
 
     # ---- queries, forwarded to the current release (spec §4.4–§4.7)
@@ -478,7 +493,8 @@ class OpenTideConstants
     # check_for_update: a conditional GET of OTC_latest.json; a release there
     # with a major newer than every supported one sets newer_format_major,
     # else it is nil (spec §7.4). When the check fails (a network error, a
-    # malformed entry), the value from before stays (CR D10).
+    # malformed entry, an unreadable cached copy), the value from before
+    # stays (CR D10).
     def check_newer_major
         entry = fetch_pointer_doc("OTC_latest.json", missing: :nil)
         if entry.nil?
@@ -493,7 +509,9 @@ class OpenTideConstants
         else
             @newer_format_major = nil
         end
-    rescue NetworkError, InvalidReleaseError => e
+    rescue Error => e
+        # any failure (network, a malformed entry, a cached copy that cannot be read) keeps the value from
+        # before, and never replaces the error or the result of the check that called this (CR D10)
         log(:warn, "cannot check OTC_latest.json for a newer format: #{e.message}")
     end
 

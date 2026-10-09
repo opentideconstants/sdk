@@ -3055,6 +3055,397 @@
      "status": 304
     }
    ]
+  },
+  {
+   "id": "net/listed-file-404-sent-once",
+   "title": "a data file that OTC_{D}.sha256 lists answers 404: network with status 404, sent once (D32)",
+   "spec": "4.8, 5.2",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.2\\.jsonl$",
+       "action": "status",
+       "status": 404
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 404
+      },
+      "error_message": {
+       "$contains": "missing on the server"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "^/good/OTC_20991231\\.2\\.jsonl$",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "net/listed-file-404-download",
+   "title": "download of a release whose listed .jsonl answers 404: network with status 404, and nothing is written (D32)",
+   "spec": "4.3.2, 4.8",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.jsonl$",
+       "action": "status",
+       "status": 404
+      }
+     ]
+    },
+    {
+     "op": "download",
+     "args": {
+      "release": "20991231",
+      "to": "${tmp}/bundle"
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 404
+      },
+      "error_message": {
+       "$contains": "missing on the server"
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      },
+      "fs": {
+       "error": "unsupported"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "^/good/OTC_20991231\\.jsonl$",
+     "count": 1
+    },
+    {
+     "driver": "assert_tree",
+     "dir": "${tmp}/bundle",
+     "allow": [],
+     "may_be_missing": true
+    }
+   ]
+  },
+  {
+   "id": "net/ssl-cert-file-missing",
+   "title": "SSL_CERT_FILE names a missing file, with a cached release and use_cache: io at once, no request, no fallback (DR20)",
+   "spec": "4.2, 4.8, 5.7",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner",
+     "env": {
+      "SSL_CERT_FILE": "${tmp}/no-such-ca.pem"
+     }
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}"
+     },
+     "expect": {
+      "error": "io"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "net/user-agent-control-char",
+   "title": "user_agent with CR LF, LF, DEL or TAB: invalid_argument at construction, and no request (DR20)",
+   "spec": "4.2, 4.8, 5.7",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "user_agent": "app/1\r\nX-Injected: 1"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "user_agent": "app/1\n"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "user_agent": "app1"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "user_agent": "app\t1"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "net/redirect-no-host",
+   "title": "OTC_{D}.sha256 redirects to a Location with no host (http://): network, not followed",
+   "spec": "5.7",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "^/good/OTC_20991231\\.2\\.sha256$",
+       "action": "status",
+       "status": 302,
+       "headers": {
+        "Location": "http://"
+       }
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "^/good/OTC_20991231\\.2\\.sha256$",
+     "min": 1
+    }
+   ]
+  },
+  {
+   "id": "net/304-no-cache",
+   "title": "the pointer answers 304 with an empty cache (no If-None-Match sent): network with status 304",
+   "spec": "5.2, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "timeout_s": 90,
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "status",
+       "status": 304
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "network",
+      "error_fields": {
+       "status": 304
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "net/index-404-reader-too-old",
+   "title": "the pointer names a release too new for the SDK and OTC_index.json answers 404: reader_too_old, not release_not_found",
+   "spec": "5.2, 7.4",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/reader/OTC_index\\.json$",
+       "action": "status",
+       "status": 404
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/reader/",
+      "cache_dir": "${cache}",
+      "on_network_error": "raise"
+     },
+     "expect": {
+      "error": "reader_too_old",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "1.99"
+        },
+        {
+         "$regex": "(^|[^0-9.])1\\.(?!99([^0-9]|$))[0-9]+([^0-9]|$)"
+        }
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "OTC_20991231\\.4\\.",
+     "count": 0
+    }
+   ]
   }
  ]
 }

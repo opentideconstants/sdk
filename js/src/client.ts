@@ -85,21 +85,30 @@ interface FileSource {
     shaPath: string | null;
 }
 
-/** The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). */
-function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
+/**
+ * @internal The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). A failure
+ * with no SDK code (a bug, a module that failed to load, a DataCloneError) is io, never network: network is only for
+ * transport failures, and io adds no new code (spec 5.6, CR2 DR5). The worker's original error is the cause.
+ */
+export function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
     const m = r.message ?? "the automatic update check failed";
+    let cause: Error | undefined;
+    if (r.cause) {
+        cause = new Error(r.cause.message);
+        cause.name = r.cause.name;
+        if (r.cause.stack !== undefined) cause.stack = r.cause.stack;
+    }
     switch (r.code) {
-        case "release_not_found": return new ReleaseNotFoundError(m);
-        case "offline_unavailable": return new OfflineError(m);
-        case "unsupported_format": return new UnsupportedFormatError(m);
-        case "reader_too_old": return new ReaderTooOldError(m);
-        case "invalid_release": return new InvalidReleaseError(m);
-        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: null, actual: null });
-        case "cache": return new CacheError(m, { path: r.path ?? null });
-        case "io": return new FileError(m, { path: r.path ?? "" });
+        case "network": return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null, cause });
+        case "release_not_found": return new ReleaseNotFoundError(m, { cause });
+        case "offline_unavailable": return new OfflineError(m, { cause });
+        case "unsupported_format": return new UnsupportedFormatError(m, { cause });
+        case "reader_too_old": return new ReaderTooOldError(m, { cause });
+        case "invalid_release": return new InvalidReleaseError(m, { cause });
+        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: r.expected ?? null, actual: r.actual ?? null, cause });
+        case "cache": return new CacheError(m, { path: r.path ?? null, cause });
         case "invalid_argument": return new InvalidArgumentError(m);
-        // network, and a worker that did not finish or failed outside the SDK: the check could not reach the data
-        default: return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null });
+        default: return new FileError(m, { path: r.path ?? "", cause });
     }
 }
 
@@ -179,6 +188,11 @@ export class OpenTideConstants {
             throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
         }
         const suffix = optStr(options.userAgent, "userAgent");
+        // the suffix goes into a header: no control character (C0, DEL, C1), and latin-1 only, the characters Node
+        // can send in a header (a raw TypeError at the first request otherwise) (spec 4.2, 5.7, CR2 DR20)
+        if (suffix !== null && /[\u0000-\u001f\u007f-\u009f]|[^\u0000-\u00ff]/u.test(suffix)) {
+            throw new InvalidArgumentError(`userAgent has a control or non-latin-1 character: ${JSON.stringify(suffix)}`);
+        }
 
         // "#node" is node.ts under the "node" condition and no-node.ts elsewhere (package.json "imports"), so browser code
         // never imports node.ts (CR T64)
@@ -195,8 +209,20 @@ export class OpenTideConstants {
         if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
         const proxy = optStr(options.proxy, "proxy");
         if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+        if (proxy !== null) {
+            const u = new URL(proxy);
+            try {
+                decodeURIComponent(u.username);
+                decodeURIComponent(u.password);
+            } catch (e) {
+                throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+            }
+        }
         const caFile = optStr(options.caFile, "caFile");
         if (caFile !== null && node) node.checkReadable(caFile);
+        // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
+        const sslCertFile = caFile === null && node ? platform.env("SSL_CERT_FILE") : null;
+        if (sslCertFile) node?.checkReadable(sslCertFile);
         const cacheDir = optStr(options.cacheDir, "cacheDir");
         // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
         const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;

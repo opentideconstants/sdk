@@ -119,7 +119,13 @@ export function openLineReader(file: string): { read: (offset: number, length: n
             const buf = Buffer.alloc(length);
             let got = 0;
             while (got < length) {
-                const n = fs.readSync(fd, buf, got, length - got, offset + got);
+                let n: number;
+                try {
+                    n = fs.readSync(fd, buf, got, length - got, offset + got);
+                } catch (e) {
+                    // EIO, EBADF, ESTALE...: a local read failure is io, never a raw Node error (R2-097)
+                    throw new FileError(`cannot read ${file}`, { path: file, cause: e });
+                }
                 if (n === 0) break;
                 got += n;
             }
@@ -419,7 +425,13 @@ function defaultCaCerts(): readonly string[] {
 /** Proxy-Authorization from the user and password of a proxy URL (percent-decoded), or none (PK12 T7). */
 function proxyAuth(proxy: URL): Record<string, string> {
     if (!proxy.username && !proxy.password) return {};
-    const cred = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    let cred: string;
+    try {
+        cred = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    } catch (e) {
+        // a bad %-escape in the user or password: the proxy setting is wrong, never a raw URIError (R2-099)
+        throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+    }
     return { "Proxy-Authorization": `Basic ${Buffer.from(cred, "utf8").toString("base64")}` };
 }
 
@@ -699,7 +711,12 @@ const { workerData } = require("node:worker_threads");
 const { port, sab, url } = workerData;
 const flag = new Int32Array(sab);
 import(url).catch((e) => {
-    port.postMessage({ ok: false, message: "the update check failed to start: " + (e && e.message ? e.message : String(e)) });
+    // the module failed to load, or failed after it ran (for example a DataCloneError when it posted its result):
+    // say what failed, and send the error itself as the cause (CR2 DR5, R2-109)
+    const name = e && e.name ? e.name : "Error";
+    const message = e && e.message ? e.message : String(e);
+    port.postMessage({ ok: false, message: "the update check failed: " + name + ": " + message,
+                       cause: { name, message, stack: e && e.stack ? String(e.stack) : undefined } });
 }).finally(() => {
     Atomics.store(flag, 0, 1);
     Atomics.notify(flag, 0);

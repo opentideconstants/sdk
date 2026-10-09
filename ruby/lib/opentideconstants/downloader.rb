@@ -311,7 +311,12 @@ class OpenTideConstants
             yield src
         rescue ChecksumError => e
             @client.send(:log, :warn, "#{e.message}; deleting the cached #{File.basename(src)} and downloading it again")
-            cache.remove_file(src)
+            begin
+                cache.remove_file(src)
+            rescue CacheError => ce
+                # the download does not need the cached copy gone; it goes on (R2-103)
+                @client.send(:log, :warn, "#{ce.message}; downloading #{File.basename(src)} anyway")
+            end
             fetch.call
         end
 

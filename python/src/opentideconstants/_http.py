@@ -88,19 +88,23 @@ class Http:
         self.proxy = proxy
         self.log = logger or logging.getLogger("opentideconstants")
         self._ctx = None
+        # ca_file, else SSL_CERT_FILE: checked at construction, before any network access; io, never retried and
+        # never a reason to fall back to the cache (spec §4.2, §5.7, CR D19, CR2 DR20)
+        what = "ca_file"
+        if ca_file is None and os.environ.get("SSL_CERT_FILE"):
+            ca_file, what = os.environ["SSL_CERT_FILE"], "SSL_CERT_FILE"
         if ca_file is not None:
-            # checked at construction, before any network access; never retried (spec §4.2, CR D19)
             try:
                 with open(ca_file, "rb"):
                     pass
             except (OSError, TypeError) as e:
-                raise FileError(f"cannot read ca_file {ca_file}: {e}", path=str(ca_file),
+                raise FileError(f"cannot read {what} {ca_file}: {e}", path=str(ca_file),
                                 cause=e if isinstance(e, OSError) else None) from e
             try:
                 self._ctx = ssl.create_default_context(cafile=ca_file)
             except ssl.SSLError as e:
-                raise InvalidArgumentError(f"ca_file {ca_file} is not a PEM certificate file: {e}") from e
-        self.ca_file = ca_file or os.environ.get("SSL_CERT_FILE")
+                raise InvalidArgumentError(f"{what} {ca_file} is not a PEM certificate file: {e}") from e
+        self.ca_file = ca_file
 
     # ---- connection
 
@@ -289,24 +293,33 @@ class Http:
 
 
 class _Gunzip:
-    """Decode a gzip body of one or more members (RFC 1952 allows several, one after another)."""
+    """Decode a gzip body of one or more members (RFC 1952 allows several, one after another). Zero bytes after a
+    member are padding and are skipped, as gzip.decompress does (R2-110)."""
 
     def __init__(self):
         self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        self._between = False  # a member has ended: zero padding or the next member may follow
 
     def decompress(self, data: bytes) -> bytes:
         out = []
         while data:
+            if self._between:
+                data = data.lstrip(b"\0")
+                if not data:
+                    break
+                self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                self._between = False
             out.append(self._d.decompress(data))
             if not self._d.eof:
                 break
             data = self._d.unused_data
-            if data:
-                self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            self._between = True
         return b"".join(out)
 
     def finish(self):
         """The rest of the output, or None when the last member is cut short."""
+        if self._between:
+            return b""
         tail = self._d.flush()
         return tail if self._d.eof else None
 

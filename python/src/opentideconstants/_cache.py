@@ -176,8 +176,9 @@ class Cache:
             return None, None
         p = d / (name + ".etag")
         try:
-            return body, p.read_text(encoding="utf-8").strip()
-        except (FileNotFoundError, NotADirectoryError, UnicodeDecodeError):
+            # an ETag that is not UTF-8 is read with U+FFFD in it, so the client does not send it (pk11)
+            return body, p.read_bytes().decode("utf-8", "replace").strip()
+        except (FileNotFoundError, NotADirectoryError):
             return None, None
         except OSError as e:
             raise CacheError(f"cannot read {p}: {e}") from e

@@ -1152,3 +1152,77 @@ test("R2-117: an https proxy is verified against the default roots plus caFile, 
         servers.forEach((s) => { s.closeAllConnections(); s.close(); });
     }
 });
+
+// ---- CR2 PK-R2-11: every failure leaves the SDK as an SDK error with the spec 4.8 code
+
+/** A local server that answers 404 to everything and counts the requests. */
+async function counting404() {
+    const s = { requests: 0 };
+    s.srv = http.createServer((req, res) => { s.requests++; res.statusCode = 404; res.end(); });
+    await new Promise((r) => s.srv.listen(0, "127.0.0.1", r));
+    s.url = `http://127.0.0.1:${s.srv.address().port}/`;
+    return s;
+}
+
+test("DR20: a userAgent with a control or non-latin-1 character is invalid_argument at open, before any request", async () => {
+    const s = await counting404();
+    try {
+        for (const ua of ["app\r\nX: 1", "app\u00851", "app€1", "app\u{1F30A}"]) {
+            const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-ua-"));
+            await assert.rejects(otc.OpenTideConstants.open({ baseUrl: s.url, cacheDir, userAgent: ua }), isCode("invalid_argument"), JSON.stringify(ua));
+        }
+        assert.equal(s.requests, 0);
+    } finally {
+        s.srv.close();
+    }
+});
+
+test("R2-097: a read error in stream mode (EISDIR, EIO, EBADF) is io, not a raw Node error", async () => {
+    const { openLineReader } = await import("../dist/node.js");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-read-"));
+    const r = openLineReader(dir); // a directory opens for reading; every read fails with EISDIR
+    try {
+        assert.throws(() => r.read(0, 10), (e) => isCode("io")(e) && e.cause?.code === "EISDIR");
+    } finally {
+        r.close();
+    }
+});
+
+test("R2-099: proxy credentials that are not valid percent-encoding are invalid_argument, not a raw URIError", async () => {
+    const s = await counting404();
+    const proxy = `http://u:p%ZZ@127.0.0.1:${s.srv.address().port}/`;
+    try {
+        const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-px-"));
+        await assert.rejects(otc.OpenTideConstants.open({ baseUrl: s.url, cacheDir, proxy }), isCode("invalid_argument"));
+        const { nodePlatform } = await import("../dist/node.js");
+        await assert.rejects(nodePlatform().get("http://example.invalid/x", { headers: {}, timeout: 5, proxy, caFile: null }),
+            isCode("invalid_argument"));
+        assert.equal(s.requests, 0);
+    } finally {
+        s.srv.close();
+    }
+});
+
+test("R2-109 (DR5): a worker failure with no SDK code is io with its cause, never network; ChecksumError keeps expected and actual", async () => {
+    const { errorFromWorker } = await import("../dist/client.js");
+    assert.equal(typeof errorFromWorker, "function");
+    const raw = errorFromWorker({ ok: false, message: "x is not a function", cause: { name: "TypeError", message: "x is not a function", stack: "TypeError: x\n    at f" } });
+    assert.equal(raw.code, "io");
+    assert.equal(raw.cause?.name, "TypeError");
+    assert.match(String(raw.cause?.stack), /at f/);
+    const sum = errorFromWorker({ ok: false, code: "checksum_mismatch", message: "m", path: "OTC_x.jsonl", expected: "aa", actual: "bb" });
+    assert.deepEqual([sum.code, sum.file, sum.expected, sum.actual], ["checksum_mismatch", "OTC_x.jsonl", "aa", "bb"]);
+    const net = errorFromWorker({ ok: false, code: "network", message: "m", url: "http://x/", status: 503 });
+    assert.deepEqual([net.code, net.url, net.status], ["network", "http://x/", 503]);
+});
+
+test("R2-109: a worker that fails after it ran (a DataCloneError) is not labelled as failing to start, and keeps the cause", async () => {
+    const { runBlocking } = await import("../dist/node.js");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "otc-worker-"));
+    const mod = path.join(dir, "w.mjs");
+    fs.writeFileSync(mod, 'import { workerData } from "node:worker_threads";\nworkerData.port.postMessage({ ok: false, f() {} });\n');
+    const res = runBlocking(new URL(`file://${mod}`), {}, 30_000);
+    assert.equal(res.ok, false);
+    assert.doesNotMatch(String(res.message), /failed to start/);
+    assert.equal(res.cause?.name, "DataCloneError");
+});

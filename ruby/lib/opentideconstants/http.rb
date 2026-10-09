@@ -48,11 +48,22 @@ class OpenTideConstants
             @open_timeout = timeout || CONNECT_TIMEOUT
             @read_timeout = timeout || READ_TIMEOUT
             @proxy = proxy && HTTP.check_url!(proxy, "proxy")
-            # A ca_file that does not exist or cannot be read is io, at construction (CR D19).
-            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
-                raise FileError.new("ca_file #{ca_file} does not exist or cannot be read", path: ca_file)
+            # Net::HTTP speaks plain HTTP to every proxy: an https:// proxy would get plaintext. Refuse it here,
+            # not at the first request (R2-105). A CONNECT tunnel through an http:// proxy is still TLS end to end.
+            if @proxy&.scheme == "https"
+                raise InvalidArgumentError, "proxy: Net::HTTP cannot use TLS to a proxy; use an http:// proxy, not #{proxy.inspect}"
             end
-            @ca_file = ca_file || ENV["SSL_CERT_FILE"]
+            # A ca_file, else SSL_CERT_FILE, that does not exist or cannot be read is io, at construction:
+            # never retried, never a reason to fall back to the cache (CR D19, CR2 DR20).
+            what = "ca_file"
+            if ca_file.nil? && !ENV["SSL_CERT_FILE"].to_s.empty?
+                ca_file = ENV["SSL_CERT_FILE"]
+                what = "SSL_CERT_FILE"
+            end
+            if ca_file && !(File.file?(ca_file) && File.readable?(ca_file))
+                raise FileError.new("#{what} #{ca_file} does not exist or cannot be read", path: ca_file)
+            end
+            @ca_file = ca_file
             @user_agent = user_agent ? "#{USER_AGENT} #{user_agent}" : USER_AGENT
             @logger = logger
             @sleeper = sleeper || ->(s) { sleep(s) }
@@ -84,12 +95,18 @@ class OpenTideConstants
                         digest << chunk
                         size += chunk.bytesize
                     end
+                    # the close is a local file operation too: a failure there is not network (R2-102)
                     sink(path) do
                         f.flush
                         f.fsync
+                        f.close
                     end
                 ensure
-                    f.close unless f.closed?
+                    begin
+                        f.close unless f.closed?
+                    rescue SystemCallError, IOError
+                        nil # the read or write already failed; that error is the one to report
+                    end
                 end
                 Response.new(status: 200, etag: res["etag"], size: size, sha256: digest.hexdigest)
             end
@@ -161,8 +178,8 @@ class OpenTideConstants
         end
 
         # The URI a redirect goes to, or NetworkError: a 6th redirect, a
-        # missing or bad Location, a scheme other than http or https, or a
-        # redirect from https to http (spec §5.7, CR D1).
+        # missing or bad Location, a scheme other than http or https, no host,
+        # or a redirect from https to http (spec §5.7, CR D1).
         def follow(from, location, url, count)
             raise NetworkError.new("GET #{url}: more than #{MAX_REDIRECTS} redirects", url: url, status: nil) if count > MAX_REDIRECTS
             if location.nil? || location.strip.empty?
@@ -171,6 +188,10 @@ class OpenTideConstants
             to = from + location.strip
             unless %w[http https].include?(to.scheme)
                 raise NetworkError.new("GET #{from}: a redirect to #{to} is not http or https", url: url, status: nil)
+            end
+            # a Location such as "https:" or "//:8080/x" has no host: Net::HTTP would connect to localhost
+            if to.host.nil? || to.host.empty?
+                raise NetworkError.new("GET #{from}: a redirect to #{location.strip.inspect} has no host", url: url, status: nil)
             end
             if from.scheme == "https" && to.scheme == "http"
                 raise NetworkError.new("GET #{from}: a redirect from https to http (#{to}) is not followed", url: url, status: nil)

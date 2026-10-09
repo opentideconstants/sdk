@@ -23,6 +23,11 @@ export interface BlockingResult {
     url?: string | null;
     status?: number | null;
     path?: string | null;
+    /** A ChecksumError's expected and actual SHA-256. */
+    expected?: string | null;
+    actual?: string | null;
+    /** The original failure (name, message, stack), so the client keeps it as the cause (CR2 DR5). */
+    cause?: { name: string; message: string; stack?: string };
 }
 
 export interface NodeMod {

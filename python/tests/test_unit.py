@@ -889,6 +889,25 @@ class HttpTest(unittest.TestCase):
         finally:
             srv.close()
 
+    def test_gzip_with_zero_padding_is_decoded(self):
+        # R2-110: zero bytes after the last member are padding (gzip.decompress accepts them), not a network error
+        import gzip
+        from opentideconstants import _http
+        for body in [gzip.compress(b"first") + b"\0" * 8,
+                     gzip.compress(b"first") + b"\0" * 3 + gzip.compress(b" second") + b"\0"]:
+            self.assertEqual(gzip.decompress(body).startswith(b"first"), True)
+            srv = _Server(script={"/x": (200, {"Content-Encoding": "gzip"}, body)})
+            saved = _http.BACKOFF_S
+            _http.BACKOFF_S = (0.0, 0.0)
+            try:
+                with self.subTest(body=body):
+                    self.assertEqual(_http.Http(user_agent="t").get(srv.url + "x", accept_gzip=True).body,
+                                     gzip.decompress(body))
+                    self.assertEqual(len(srv.requests), 1)
+            finally:
+                _http.BACKOFF_S = saved
+                srv.close()
+
     def test_truncated_gzip_is_retried(self):
         import gzip
         from opentideconstants import _http
@@ -952,6 +971,66 @@ class CredentialsRedactedTest(unittest.TestCase):
     def test_any_error_message_is_redacted(self):
         e = otc.CacheError(f"cannot read https://u:{self.SECRET}@h.example/x and ftp://a@b/c")
         self.assertEqual(str(e), "cannot read https://***@h.example/x and ftp://***@b/c")
+
+
+class ErrorClassificationTest(unittest.TestCase):
+    """Failures leave the SDK as SDK errors with the spec 4.8 code (CR2 PK-R2-11)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name) / "cache"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_bad_user_agent_is_invalid_argument_at_construction(self):
+        # DR20: a string with no control characters, latin-1 only; checked before any request
+        srv = _Server()
+        try:
+            for ua in [5, b"app/1", "app/1\r\nX-Injected: 1", "app\u00851", "app/\u20ac1"]:
+                with self.subTest(ua=ua), self.assertRaises(otc.InvalidArgumentError):
+                    otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), user_agent=ua)
+            self.assertEqual(srv.requests, [])
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), user_agent="caf\u00e9/1") as c:
+                self.assertEqual(c.release.datestamp, "20991231.2")
+        finally:
+            srv.close()
+
+    def test_cached_etag_with_a_control_character_is_not_sent(self):
+        # a cached ETag that is not a valid header value is ignored, never a raw ValueError at the request
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            etag = self.cache / "v1" / "pointer" / "OTC_latest-f1.json.etag"
+            for bad in ['"a"\r\nX-Injected: 1'.encode(), '"caf\u20ac"'.encode(), b'"\xff\xfe"']:
+                etag.write_bytes(bad)
+                srv.requests.clear()
+                with self.subTest(etag=bad), otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as c:
+                    self.assertEqual(c.release.datestamp, "20991231.2")
+                self.assertNotIn("If-None-Match", srv.requests[0][1])
+        finally:
+            srv.close()
+
+
+    def test_304_on_a_broken_cached_pointer_that_cannot_be_removed_does_not_recurse(self):
+        # R2-094: a 304 for a stored pointer that is not JSON, in a directory where it cannot be deleted, used to
+        # recurse (one GET each time) until a raw RecursionError
+        srv = _Server(script={"/OTC_latest-f1.json": (304, {}, b"")})
+        d = self.cache / "v1" / "pointer"
+        d.mkdir(parents=True)
+        (d / "OTC_latest-f1.json").write_bytes(b"<html>portal</html>")
+        (d / "OTC_latest-f1.json.etag").write_text('"e1"')
+        d.chmod(0o555)
+        try:
+            with self.assertRaises(otc.NetworkError) as cm:
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), on_network_error="raise")
+            self.assertEqual(cm.exception.status, 304)
+            self.assertLessEqual(len(srv.requests), 2)
+            self.assertTrue(all("If-None-Match" not in h for _, h in srv.requests))
+        finally:
+            d.chmod(0o755)
+            srv.close()
 
 
 class LifecycleTest(unittest.TestCase):

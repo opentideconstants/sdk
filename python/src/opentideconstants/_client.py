@@ -129,6 +129,18 @@ def _rename_all_in(staged, log) -> Tuple[str, ...]:
     return tuple(str(d) for _, d in staged)
 
 
+def _check_user_agent(v) -> None:
+    """user_agent is a string with no control characters (C0, DEL, C1) and only latin-1 characters, the ones an HTTP
+    header can carry; otherwise invalid_argument at construction (spec §4.2, §5.7, CR2 DR20)."""
+    if v is None:
+        return
+    if not isinstance(v, str):
+        raise InvalidArgumentError(f"user_agent must be a string, not {type(v).__name__}")
+    bad = next((c for c in v if ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F or ord(c) > 0xFF), None)
+    if bad is not None:
+        raise InvalidArgumentError(f"user_agent has a control or non-latin-1 character (U+{ord(bad):04X}): {v!r}")
+
+
 def _flag(v) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
@@ -205,6 +217,7 @@ class OpenTideConstants:
         self._update_interval = float(update_interval if update_interval is not None else 86_400)
         self._verify_on_open = verify_on_open
         ua = f"opentideconstants-python/{__version__} (+https://opentideconstants.org)"
+        _check_user_agent(user_agent)
         if user_agent:
             ua += " " + user_agent
         self._http = Http(user_agent=ua, timeout=timeout, proxy=proxy, ca_file=ca_file, logger=self._log)
@@ -486,6 +499,21 @@ class OpenTideConstants:
         step 5, CR D8, CR2 DR13). A failure to write the cache is logged, not raised (CR D8)."""
         url = self._url(name)
         body, etag = self._cache.read_pointer(name)
+        if etag and not all(0x20 <= ord(c) < 0x7F for c in etag):
+            # a stored ETag that is not a valid header value is not sent (the server sends a 200 and a new one)
+            self._log.warning("the cached ETag of %s is not a valid header value; not sending it", name)
+            etag = None
+        cached_doc = None
+        if body is not None:
+            try:
+                cached_doc = json.loads(body.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                cached_doc = None
+            if not self._json_shape_ok(name, cached_doc):
+                # a broken stored copy is the same as none: no If-None-Match, so a 304 can never select it
+                self._log.warning("cached %s is not JSON of the right shape; reading it again", name)
+                self._cache.drop_pointer(name)
+                body = cached_doc = None
         headers = {"If-None-Match": etag} if body is not None and etag else {}
         r = self._http.get(url, headers=headers, accept_gzip=True)
         if r.status == 304 and not headers:
@@ -494,16 +522,7 @@ class OpenTideConstants:
             return None
         if r.status == 304:
             self._log.debug("pointer %s: 304", name)
-            try:
-                doc = json.loads(body.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                doc = None
-            if self._json_shape_ok(name, doc):
-                return doc, url
-            # the cached copy is broken: drop it and read the file again with no If-None-Match
-            self._log.warning("cached %s is not JSON of the right shape; reading it again", name)
-            self._cache.drop_pointer(name)
-            return self._get_json_conditional(name)
+            return cached_doc, url
         self._log.debug("pointer %s: 200", name)
         try:
             doc = json.loads(r.body.decode("utf-8"))
@@ -635,14 +654,16 @@ class OpenTideConstants:
                                     expected=sha, actual=f.sha256)
 
     def _fetch_file(self, url: str, dest_dir: Path, expected_sha: Optional[str], expected_size, final_name: str,
-                    gz: bool = False):
-        """Download url to a temporary file in dest_dir, check size and SHA-256, return the temporary path."""
+                    datestamp: str, gz: bool = False):
+        """Download url to a temporary file in dest_dir, check size and SHA-256, return the temporary path. The file
+        is one that OTC_{datestamp}.sha256 lists, so a 404 is a network error with status 404 (spec §4.8, CR D32)."""
         tmp = tmp_name(dest_dir)
         try:
             with open(tmp, "w+b") as f:
                 r = self._http.get(url, accept_gzip=not gz, sink=f)
                 if r.status == 404:
-                    raise ReleaseNotFoundError(f"{url}: 404")
+                    raise NetworkError(f"{url}: 404; file listed in OTC_{datestamp}.sha256 is missing on the server",
+                                       url=url, status=404)
                 f.flush()
                 os.fsync(f.fileno())
             if (expected_size is not None and r.size != expected_size) or r.sha256 != expected_sha:
@@ -679,7 +700,7 @@ class OpenTideConstants:
                     for n in (f"{base}.jsonl", f"{base}.meta.json"):
                         if n not in rows:
                             raise InvalidReleaseError(f"{n} is not in the .sha256 file")
-                        tmp = self._fetch_file(url_of(n), d, rows[n], size_of(n), n)
+                        tmp = self._fetch_file(url_of(n), d, rows[n], size_of(n), n, datestamp)
                         wanted.append((n, tmp))
                         written[n] = os.path.getsize(tmp)
                     data_name = f"{base}.jsonl"
@@ -688,7 +709,7 @@ class OpenTideConstants:
                     if jn not in rows:
                         # the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
                         raise ChecksumError(f"{jn} is not listed in {base}.sha256", file=jn, expected=None, actual=None)
-                    tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, gz=True)
+                    tmp_gz = self._fetch_file(url_of(gzn), d, rows[gzn], size_of(gzn), gzn, datestamp, gz=True)
                     wanted.append((gzn, tmp_gz))  # removed in the finally below if anything fails
                     try:
                         raw = gzip.decompress(Path(tmp_gz).read_bytes())
@@ -714,7 +735,7 @@ class OpenTideConstants:
                     data_name = jn
                 else:
                     jn = f"{base}.json"
-                    tmp = self._fetch_file(url_of(jn), d, rows[jn], size_of(jn), jn)
+                    tmp = self._fetch_file(url_of(jn), d, rows[jn], size_of(jn), jn, datestamp)
                     wanted.append((jn, tmp))
                     written[jn] = os.path.getsize(tmp)
                     data_name = jn
@@ -1082,7 +1103,7 @@ class OpenTideConstants:
                 else:
                     url = ptr[n].url if n in ptr and ptr[n].url else self._url(n)
                     try:
-                        tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest),
+                        tmp = self._fetch_file(url, to, sha, ptr[n].size if n in ptr else None, str(dest), ds,
                                                gz=n.endswith(".gz"))
                     except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
                         raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e

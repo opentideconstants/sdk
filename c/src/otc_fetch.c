@@ -623,7 +623,6 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
     c->o = o;
     if (o && otc__err_usable(o->error)) c->err = o->error;   /* else the detail stays in own: never written past */
     otc_error_init(c->err);
-    if (!g_curl_ok) return fail(c, OTC_E_NETWORK, NULL, "curl_global_init failed");
     if (o && o->cache_dir) root = otc__strdup(o->cache_dir);
     else if ((v = env_get("OPENTIDECONSTANTS_CACHE_DIR")) != NULL) root = otc__strdup(v);
     else if (!(root = default_root()) && !default_root_env()) {
@@ -650,6 +649,20 @@ static otc_status ctx_init(fctx *c, const otc_fetch_options *o)
         FILE *f = fs_kind(o->ca_file) == 2 ? fs_fopen(o->ca_file, "rb") : NULL;
         if (!f) return fail(c, OTC_E_IO, o->ca_file, "cannot read the ca_file %s", o->ca_file);
         fclose(f);
+    } else if ((v = env_get("SSL_CERT_FILE")) != NULL && v[0]) {
+        /* without ca_file, http_get gives libcurl SSL_CERT_FILE: checked the same way, here
+         * (spec 4.2, 5.7, CR2 DR20) */
+        FILE *f = fs_kind(v) == 2 ? fs_fopen(v, "rb") : NULL;
+        if (!f) return fail(c, OTC_E_IO, v, "cannot read SSL_CERT_FILE %s", v);
+        fclose(f);
+    }
+    if (o && o->user_agent) {
+        /* the suffix goes into a header: no control character, C0, DEL or a UTF-8 C1
+         * (U+0080-U+009F) (spec 4.2, 5.7, CR2 DR20) */
+        const unsigned char *u = (const unsigned char *)o->user_agent;
+        for (; *u; u++)
+            if (*u < 0x20 || *u == 0x7F || (u[0] == 0xC2 && u[1] >= 0x80 && u[1] <= 0x9F))
+                return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "user_agent has a control character (byte %u)", (unsigned)*u);
     }
     c->offline = (o && o->offline) || env_on(env_get("OPENTIDECONSTANTS_OFFLINE"));
     /* formats: OTC_FORMATS_DEFAULT is jsonl; 0 names no format (CR 4c) */
@@ -920,6 +933,11 @@ static otc_status http_get(fctx *c, const char *url, const char *if_none_match, 
     const char *proxy = (c->o && c->o->proxy) ? c->o->proxy : NULL;
     const char *ca = (c->o && c->o->ca_file) ? c->o->ca_file : env_get("SSL_CERT_FILE");
     *result = GET_OK;
+    /* only a request needs libcurl: offline and cache-only calls work without it (R2-108) */
+    if (!g_curl_ok) {
+        fail(c, OTC_E_NETWORK, url, "curl_global_init failed: no request can be sent (%s)", url);
+        return OTC_E_NETWORK;
+    }
     if (strncmp(url, "http://", 7) != 0 && !https) {
         fail(c, OTC_E_NETWORK, url, "not an http(s) URL: %s", url);
         return OTC_E_NETWORK;
@@ -1554,7 +1572,13 @@ static otc_status get_changing(fctx *c, const char *name, cJSON **doc, char **do
     st = http_get(c, url, etag, 1, NULL, &r, &res);
     if (st != OTC_OK) goto done;
     if (res == GET_NOT_FOUND) goto done;
-    if (res == GET_NOT_MODIFIED && body) {
+    if (res == GET_NOT_MODIFIED && !body) {
+        /* no stored copy, so no If-None-Match was sent: a 304 is a server fault, never a 200 (R2-107) */
+        st = fail(c, OTC_E_NETWORK, url, "HTTP 304 for %s with no If-None-Match", url);
+        if (c->err) c->err->http_status = 304;
+        goto done;
+    }
+    if (res == GET_NOT_MODIFIED) {
         logf_(c, 0, "pointer %s: 304", name);
         *doc = otc__json_parse(body, strlen(body));
         if (!*doc) { st = fail(c, OTC_E_INVALID_RELEASE, path, "%s: not JSON", path); goto done; }
@@ -2141,7 +2165,16 @@ static otc_status fetch_file(fctx *c, const char *url, const char *dir, const ch
     memset(&r, 0, sizeof r);
     if (!tmp) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     st = http_get(c, url, NULL, !otc__ends_with(name, ".gz"), tmp, &r, &res);
-    if (st == OTC_OK && res == GET_NOT_FOUND) st = fail(c, OTC_E_RELEASE_NOT_FOUND, url, "%s: 404", url);
+    if (st == OTC_OK && res == GET_NOT_FOUND) {
+        /* the release exists (its .sha256 lists the file): a server inconsistency, network
+         * with status 404 (spec 4.8, CR D32) */
+        size_t dl = strlen(name);
+        const char *dot = strchr(name + (dl > 4 ? 4 : dl), '.');
+        if (dot && dot[1] >= '0' && dot[1] <= '9') dot = strchr(dot + 1, '.');   /* skip the counter of D.N */
+        st = fail(c, OTC_E_NETWORK, url, "%s: 404; file listed in OTC_%.*s.sha256 is missing on the server", url,
+                  dot && !strncmp(name, "OTC_", 4) ? (int)(dot - name - 4) : 3, dot && !strncmp(name, "OTC_", 4) ? name + 4 : "{D}");
+        if (c->err) c->err->http_status = 404;
+    }
     if (st == OTC_OK && ((expected_size >= 0 && (int64_t)r.size != expected_size) || !expected_sha
                          || strcmp(r.hex, expected_sha) != 0))
         st = fail_checksum(c, name, expected_sha, r.hex, "the SHA-256 or size does not match");
