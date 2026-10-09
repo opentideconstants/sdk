@@ -428,10 +428,10 @@ def build_station(d, conventions, licences, kind):
                 E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
                 tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
                 tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
-                TimeBase._parse(cs.get("time_base")), set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
+                TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
                 freeze(cs)))
-        rec = [s for s in sets if s.set_id == rid]
+        rec = [s for s in sets if rid is not None and s.set_id == rid]
         if rid is not None and not rec:
             raise InvalidReleaseError(f"{sid}: recommended_set_id {rid!r} does not resolve")
         ordered = tuple(rec + sorted((s for s in sets if s.set_id != rid), key=lambda s: s.set_id))

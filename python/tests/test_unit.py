@@ -396,6 +396,46 @@ class StreamIndexTest(unittest.TestCase):
                 otc.OpenTideConstants(file=str(d / "OTC_20991231.2.jsonl"), mode=mode).close()
 
 
+class RepeatedIdsTest(unittest.TestCase):
+    """Repeated ids and malformed ids are invalid_release in every load path (spec §6.1, CR D5; review PK06)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, edit_line0=None, edit_meta=None):
+        lines = [json.loads(x) for x in (FIXTURES / "good" / "OTC_20991231.2.jsonl").read_text(encoding="utf-8").splitlines()]
+        meta = json.loads((FIXTURES / "good" / "OTC_20991231.2.meta.json").read_text(encoding="utf-8"))
+        if edit_line0:
+            edit_line0(lines[0])
+        if edit_meta:
+            edit_meta(meta)
+        (self.dir / "OTC_20991231.2.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines), encoding="utf-8")
+        (self.dir / "OTC_20991231.2.meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        return str(self.dir / "OTC_20991231.2.jsonl")
+
+    def assert_invalid(self, path):
+        for mode in ("eager", "stream"):
+            with self.assertRaises(otc.InvalidReleaseError, msg=mode):
+                otc.OpenTideConstants(file=path, mode=mode).close()
+
+    def test_non_string_alias_id(self):
+        self.assert_invalid(self.write(lambda d: d["aliases"].__setitem__("noaa", ["9900001", 5])))
+
+    def test_null_set_id(self):
+        def edit(d):
+            d["recommended_set_id"] = None
+            d["constant_sets"][0]["set_id"] = None
+        self.assert_invalid(self.write(edit))
+
+    def test_repeated_licence_id(self):
+        self.assert_invalid(self.write(edit_meta=lambda m: m["licences"].append(dict(m["licences"][0]))))
+
+
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
 

@@ -166,7 +166,14 @@ def _entry(d, offset=None, length=None):
     off = off if isinstance(off, dict) else {}
     rec_id = _s(d, "recommended_set_id")
     sets, kind = [], None
+    aliases = d.get("aliases") or {}
+    if not isinstance(aliases, dict) or not all(
+            isinstance(v, str) or (isinstance(v, list) and all(isinstance(x, str) for x in v)) for v in aliases.values()):
+        raise InvalidReleaseError(f"station {d.get('station_id')!r}: aliases must map a system to a string id or "
+                                  f"a list of string ids")
     for cs in d.get("constant_sets") or ():
+        if d.get("status") == "active" and not isinstance(cs.get("set_id"), str):
+            raise InvalidReleaseError(f"station {d.get('station_id')!r}: a constant set has no set_id")
         sets.append({**{k: _s(cs, k) for k in _SET_KEYS},
                      "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)]})
         if rec_id is not None and cs.get("set_id") == rec_id:
@@ -176,8 +183,7 @@ def _entry(d, offset=None, length=None):
         "offset": offset, "length": length, "station_id": d["station_id"], "status": d.get("status"),
         "name": name, "name_folded": fold(name) if name is not None else None,
         "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"), "kind": kind,
-        "aliases": {k: ([v] if isinstance(v, str) else [x for x in v if isinstance(x, str)])
-                    for k, v in (d.get("aliases") or {}).items()},
+        "aliases": {k: ([v] if isinstance(v, str) else list(v)) for k, v in aliases.items()},
         "reference_station_id": _s(off, "reference_station_id"), "offsets_licence_id": _s(off, "licence_id"),
         "recommended_set_id": rec_id, "sets": sets,
     }
@@ -229,6 +235,29 @@ def _usable_index(idx, name, sha256, size, conv, lic):
     return out
 
 
+def _check_ids(entries, conventions, licences):
+    """Repeated ids and references that do not resolve are invalid_release (spec §6.1, CR D5), the same in eager
+    and stream mode: a station_id across active stations and tombstones together, a (system, alias id) pair, a
+    set_id, a convention_id, a licence_id; and a reference_station_id that names no active station."""
+    def once(values, what):
+        seen = set()
+        for v in values:
+            if v in seen:
+                raise InvalidReleaseError(f"{what} {v!r} appears twice")
+            seen.add(v)
+    once((e["station_id"] for e in entries), "station_id")
+    active = [e for e in entries if e.get("status") == "active"]
+    once(((sys_, i) for e in active for sys_, ids in (e.get("aliases") or {}).items() for i in ids), "alias")
+    once((cs.get("set_id") for e in active for cs in e.get("sets") or ()), "set_id")
+    once((c.convention_id for c in conventions), "convention_id")
+    once((x.licence_id for x in licences), "licence_id")
+    ids = {e["station_id"] for e in active}
+    for e in active:
+        ref = e.get("reference_station_id")
+        if ref is not None and ref not in ids:
+            raise InvalidReleaseError(f"station {e['station_id']}: reference_station_id {ref!r} does not resolve")
+
+
 def _resolve_kinds(entries):
     by_id = {e["station_id"]: e for e in entries if e.get("status") == "active"}
 
@@ -272,6 +301,7 @@ class Release:
         self._conv_by_id = {c.convention_id: c for c in self._conventions}
         self._lic_by_id = {x.licence_id: x for x in self._licences}
         parse_time(rel.get("created"), "release.created")
+        _check_ids(entries, self._conventions, self._licences)
         _resolve_kinds(entries)
         active = sorted((e for e in entries if e.get("status") == "active"), key=lambda e: e["station_id"])
         self._entries = active
