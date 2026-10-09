@@ -105,14 +105,26 @@ class OpenTideConstants
             nil
         end
 
+        # Writes a pointer or index file and its ETag as a pair, under
+        # pointer/.lock (spec §5.4). The old ETag goes first, so a reader
+        # between the steps sees a body with no ETag (and asks without one),
+        # never a body with another body's ETag.
         def write_pointer(name, body, etag)
             path = File.join(pointer_dir, name)
-            write_atomic(path, body)
-            if etag
-                write_atomic("#{path}.etag", etag)
-            else
-                FileUtils.rm_f("#{path}.etag")
+            with_lock(pointer_dir) do
+                remove_file("#{path}.etag")
+                write_atomic(path, body)
+                write_atomic("#{path}.etag", etag) if etag
             end
+        end
+
+        # Deletes a file if it is there; CacheError if it cannot.
+        def remove_file(path)
+            File.delete(path)
+        rescue Errno::ENOENT
+            nil
+        rescue SystemCallError => e
+            raise CacheError, "cannot remove #{path}: #{e.message}"
         end
 
         # ---- releases

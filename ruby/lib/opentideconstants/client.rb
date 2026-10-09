@@ -81,9 +81,7 @@ class OpenTideConstants
 
     # Every release, newest first, from OTC_index.json.
     def releases
-        body = fetch_pointer_file("OTC_index.json", missing: :offline)
-        doc = parse_pointer(body)
-        list = index_entries(doc)
+        list = index_entries(fetch_pointer_doc("OTC_index.json", missing: :offline))
         list.each { |e| note_version_doi(e) }
         list.map { |e| release_info(e, @base_url + "OTC_index.json") }
             .sort_by { |i| Cache.datestamp_key(i.datestamp) }.reverse.freeze
@@ -193,9 +191,9 @@ class OpenTideConstants
     def fetch_latest_pointer
         names = SUPPORTED_FORMAT_MAJORS.sort.reverse.map { |m| "OTC_latest-f#{m}.json" } + ["OTC_latest.json"]
         names.each do |name|
-            body = fetch_pointer_file(name, missing: :nil)
-            next if body.nil?
-            return [check_entry!(parse_pointer(body), name), @base_url + name]
+            doc = fetch_pointer_doc(name, missing: :nil)
+            next if doc.nil?
+            return [check_entry!(doc, name), @base_url + name]
         end
         raise ReleaseNotFoundError, "no latest pointer at #{@base_url}"
     end
@@ -208,8 +206,8 @@ class OpenTideConstants
         entry, url = fetch_latest_pointer
         return [entry, url] if readable_entry?(entry)
         index_url = @base_url + "OTC_index.json"
-        body = fetch_pointer_file("OTC_index.json", missing: :nil)
-        list = body ? index_entries(parse_pointer(body)) : []
+        doc = fetch_pointer_doc("OTC_index.json", missing: :nil)
+        list = doc ? index_entries(doc) : []
         pick = list.select { |e| readable_entry?(e) }.max_by { |e| Cache.datestamp_key(e["datestamp"]) }
         return [pick, index_url] if pick
         too_new = ([entry] + list).find { |e| Release.supported_major?(e["format_version"]) }
@@ -323,10 +321,10 @@ class OpenTideConstants
 
     # The entries of the cached OTC_index.json by datestamp ({} if none).
     def cached_index
-        cached = cache.read_pointer("OTC_index.json")
+        cached = cached_pointer("OTC_index.json")
         return {} unless cached
-        index_entries(JSON.parse(cached[0])).to_h { |e| [e["datestamp"], e] }
-    rescue JSON::ParserError, InvalidReleaseError
+        index_entries(cached[0]).to_h { |e| [e["datestamp"], e] }
+    rescue InvalidReleaseError
         {}
     end
 
@@ -356,9 +354,8 @@ class OpenTideConstants
     # with a major newer than every supported one sets newer_format_major (spec §7.4).
     def check_newer_major
         @newer_format_major = nil
-        body = fetch_pointer_file("OTC_latest.json", missing: :nil)
-        return if body.nil?
-        entry = parse_pointer(body)
+        entry = fetch_pointer_doc("OTC_latest.json", missing: :nil)
+        return if entry.nil?
         key = entry.is_a?(Hash) ? Release.version_key(entry["format_version"]) : nil
         return unless key && key[0] > SUPPORTED_FORMAT_MAJORS.max
         @newer_format_major = key[0]
@@ -378,42 +375,69 @@ class OpenTideConstants
         (Cache.datestamp_key(a) <=> Cache.datestamp_key(b)) == 1
     end
 
-    def parse_pointer(body)
-        JSON.parse(body)
-    rescue JSON::ParserError => e
-        raise InvalidReleaseError, "bad pointer file: #{e.message[0, 200]}"
-    end
-
-    # GETs a pointer or index file with If-None-Match and stores it. Offline,
-    # or after a network error with on_network_error :use_cache, it uses the
-    # cached copy. missing: :nil returns nil on a 404; :offline raises
-    # OfflineError when offline with no cached copy.
-    def fetch_pointer_file(name, missing:)
-        cached = cache.read_pointer(name)
+    # GETs a pointer or index file with If-None-Match and returns it parsed
+    # (spec §5.2 step 2). A 200 is parsed before it is cached: a body that is
+    # not JSON (a captive portal or a proxy error page) is a network error
+    # (CR D8) and leaves the cached copy alone. A failure to cache it is
+    # logged, not raised. A 304 with no usable cached copy is asked again
+    # without the ETag. Offline, or after a network error with
+    # on_network_error :use_cache, it uses the cached copy. missing: :nil
+    # returns nil on a 404; :offline raises OfflineError when offline with no
+    # cached copy.
+    def fetch_pointer_doc(name, missing:)
+        url = @base_url + name
+        cached = cached_pointer(name)
         if @offline
             return cached[0] if cached
             raise OfflineError, "offline and #{name} is not cached"
         end
-        res = @http.get(@base_url + name, etag: cached && cached[1])
+        res = @http.get(url, etag: cached && cached[1])
+        res = @http.get(url) if res.status == 304 && cached.nil?
         case res.status
         when 304
-            return cached[0] if cached
-            res = @http.get(@base_url + name)
+            raise NetworkError.new("#{url}: HTTP 304 to a request without If-None-Match", url: url, status: 304) unless cached
+            log(:debug, "#{name}: 304, the cached copy is current")
+            cached[0]
+        when 200
+            doc = parse_pointer_body(url, res.body)
+            store_pointer(name, res.body, res.etag)
+            log(:debug, "#{name}: 200")
+            doc
         when 404
             return nil if missing == :nil
-            raise ReleaseNotFoundError, "#{@base_url}#{name}: HTTP 404"
+            raise ReleaseNotFoundError, "#{url}: HTTP 404"
+        else
+            raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status)
         end
-        if res.status == 200
-            cache.ensure_dir(cache.pointer_dir)
-            cache.write_pointer(name, res.body, res.etag)
-            return res.body
-        end
-        raise NetworkError.new("#{@base_url}#{name}: HTTP #{res.status}", url: @base_url + name, status: res.status)
     rescue NetworkError => e
         raise unless missing == :offline && @on_network_error == :use_cache && cached
-        @last_error = e
         log(:warn, "#{e.message}; using the cached #{name}")
         cached[0]
+    end
+
+    # The cached copy of a pointer or index file as [doc, etag], or nil. A
+    # copy that is not JSON counts as none, so its ETag is not sent.
+    def cached_pointer(name)
+        cached = cache.read_pointer(name)
+        cached && [JSON.parse(cached[0]), cached[1]]
+    rescue JSON::ParserError, EncodingError
+        log(:warn, "the cached #{name} is not JSON; ignoring it")
+        nil
+    end
+
+    # A 200 pointer or index body that is not JSON is a network error (CR D8).
+    def parse_pointer_body(url, body)
+        JSON.parse(body.dup.force_encoding(Encoding::UTF_8))
+    rescue JSON::ParserError, EncodingError => e
+        raise NetworkError.new("#{url}: HTTP 200 with a body that is not JSON (#{e.message[0, 100]})", url: url, status: 200)
+    end
+
+    # Stores a pointer or index file and its ETag. The cached copy only saves
+    # work, so a failure is logged, not raised (spec §5.2, CR D8).
+    def store_pointer(name, body, etag)
+        cache.write_pointer(name, body, etag)
+    rescue CacheError => e
+        log(:warn, "cannot cache #{name}: #{e.message}")
     end
 
     # spec §5.2

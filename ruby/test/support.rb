@@ -67,17 +67,26 @@ module TestSupport
         end
     end
 
-    # Serves files from a fixture root (or any directory); overrides maps a
-    # path suffix to [status, headers, body].
+    # Serves files from a fixture root (or any directory), with an ETag (the
+    # quoted SHA-256 of the body) and a 304 for a matching If-None-Match.
+    # overrides maps a path suffix to [status, headers, body], or to a lambda
+    # that returns one.
     def self.file_server(dir, overrides = {})
-        Server.new do |path, _headers|
+        Server.new do |path, headers|
             hit = overrides.find { |suffix, _| path.end_with?(suffix) }
             if hit
                 v = hit[1]
-                v.respond_to?(:call) ? v.call(path) : v
+                next v unless v.respond_to?(:call)
+                v.arity == 2 ? v.call(path, headers) : v.call(path)
             else
                 f = File.join(dir, File.basename(path.split("?").first))
-                File.file?(f) ? [200, {}, File.binread(f)] : [404, {}, "not found"]
+                if File.file?(f)
+                    body = File.binread(f)
+                    etag = "\"#{Digest::SHA256.hexdigest(body)}\""
+                    headers["if-none-match"] == etag ? [304, { "ETag" => etag }, ""] : [200, { "ETag" => etag }, body]
+                else
+                    [404, {}, "not found"]
+                end
             end
         end
     end

@@ -286,7 +286,6 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
     "typescript"
    ],
    "package": "PK02",
