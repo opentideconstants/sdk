@@ -220,7 +220,6 @@
   {
    "case": "rules/pk01/counter-too-long",
    "runners": [
-    "c-fetch",
     "python",
     "ruby",
     "typescript"

@@ -467,13 +467,17 @@ static void ctx_free(fctx *c)
 
 /* ------------------------------------------------------------------ datestamps */
 
-/* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]+)?$ */
+/* ^[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?$ (spec 4.2, CR D18): the counter has at
+ * most 9 digits, so a datestamp has at most DS_MAX characters, every cache
+ * file name fits NAME_CAP, and ds_cmp's strtoul never saturates. */
+#define DS_MAX 18
+#define NAME_CAP (4 + DS_MAX + sizeof ".meta.json")   /* "OTC_" + D + the longest suffix */
 static int valid_datestamp(const char *s)
 {
     size_t i, n;
     if (!s) return 0;
     n = strlen(s);
-    if (n < 8) return 0;
+    if (n < 8 || n > DS_MAX) return 0;
     for (i = 0; i < 8; i++)
         if (s[i] < '0' || s[i] > '9') return 0;
     if (n == 8) return 1;
@@ -1237,7 +1241,7 @@ static char *rel_dir(fctx *c, const char *ds)
 
 static char *rel_file(fctx *c, const char *ds, const char *suffix)
 {
-    char name[64], *d = rel_dir(c, ds), *p;
+    char name[NAME_CAP], *d = rel_dir(c, ds), *p;
     if (!d) return NULL;
     snprintf(name, sizeof name, "OTC_%s%s", ds, suffix);
     p = path2(d, name);
@@ -1421,7 +1425,7 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
     size_t i;
     otc_status st = OTC_OK;
     for (i = 0; suffixes[i] && st == OTC_OK; i++) {
-        char name[64], *p = rel_file(c, ds, suffixes[i]);
+        char name[NAME_CAP], *p = rel_file(c, ds, suffixes[i]);
         const cJSON *rec, *size;
         snprintf(name, sizeof name, "OTC_%s%s", ds, suffixes[i]);
         rec = otc__jget(files, name);
@@ -1445,7 +1449,7 @@ static cJSON *str_or_null(const char *s) { return s ? cJSON_CreateString(s) : cJ
  */
 static void write_stream_index(fctx *c, const char *ds, const otc_release *rel)
 {
-    char *d, *p, *txt = NULL, jn[80];
+    char *d, *p, *txt = NULL, jn[NAME_CAP];
     const char *sha = NULL;
     cJSON *doc;
     size_t i;
@@ -1555,7 +1559,7 @@ static void utc_now(char out[32])
 static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_info *info, otc_release **rel_out)
 {
     char *dir = rel_dir(c, ds), *sha_tmp = NULL, *sha_url = NULL, *jsonl_path = NULL;
-    char **names = NULL, **digests = NULL, sha_name[64];
+    char **names = NULL, **digests = NULL, sha_name[NAME_CAP];
     size_t n_rows = 0, n_pend = 0, i;
     pending pend[4];
     cJSON *old = NULL, *ver = NULL, *files;
@@ -1591,7 +1595,7 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
     /* 2. the data files (a file already there and recorded with the same SHA-256 is kept) */
     old = read_verified(c, ds);
     for (i = 0; want_all[i]; i++) {
-        char name[64], *url, *dest;
+        char name[NAME_CAP], *url, *dest;
         const char *row;
         const otc_file_info *pf;
         const cJSON *orec;
@@ -2161,7 +2165,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
     fctx c;
     otc_release_info *info = NULL;
     char *ds = NULL, *cdir = NULL, *sha_body = NULL, **names = NULL, **digests = NULL, *todo_name[8];
-    char sha_digest[65], targets[8][64];
+    char sha_digest[65], targets[8][NAME_CAP];
     const char *target_sha[8];
     size_t n_rows = 0, n_t = 0, n_todo = 0, i, written = 0, sha_len = 0;
     int cached = 0;
@@ -2206,7 +2210,7 @@ otc_status otc_fetch_to_dir(const otc_fetch_options *opts, const char *release, 
         free(sp);
     }
     if (!cached) {
-        char name[64], *url;
+        char name[NAME_CAP], *url;
         http_resp r;
         int res;
         if (c.offline) { st = fail(&c, OTC_E_OFFLINE_UNAVAILABLE, NULL, "offline, and release %s is not in the cache", ds); goto out; }

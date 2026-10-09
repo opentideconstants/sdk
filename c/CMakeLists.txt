@@ -71,6 +71,38 @@ if(OTC_BUILD_RUNNER)
     endif()
 endif()
 
+# The library's own tests (c/tests): small programs against the real library.
+# A test whose name starts with test_fetch_ runs under the conformance fixture
+# server (c/tests/run_with_server.sh needs python3). Run them with ctest.
+option(OTC_BUILD_TESTS "Build the C library's own tests (c/tests)" OFF)
+if(OTC_BUILD_TESTS)
+    enable_testing()
+    file(GLOB OTC_TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.c)
+    foreach(src ${OTC_TEST_SOURCES})
+        get_filename_component(name ${src} NAME_WE)
+        if(name MATCHES "^test_fetch_" AND NOT OTC_WITH_FETCH)
+            continue()
+        endif()
+        add_executable(${name} ${src})
+        target_include_directories(${name} PRIVATE tests src vendor/cjson)
+        target_link_libraries(${name} PRIVATE opentideconstants Threads::Threads)
+        if(NOT WIN32)
+            target_link_libraries(${name} PRIVATE m)
+        endif()
+        if(name MATCHES "^test_fetch_")
+            set(rules "")
+            string(REGEX REPLACE "^test_fetch_" "" stem ${name})
+            if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/rules_${stem}.json)
+                set(rules ${CMAKE_CURRENT_SOURCE_DIR}/tests/rules_${stem}.json)
+            endif()
+            add_test(NAME ${name} COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_with_server.sh
+                $<TARGET_FILE:${name}> ${rules})
+        else()
+            add_test(NAME ${name} COMMAND ${name})
+        endif()
+    endforeach()
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS opentideconstants
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
