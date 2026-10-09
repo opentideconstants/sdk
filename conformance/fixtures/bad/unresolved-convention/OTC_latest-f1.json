@@ -1,0 +1,41 @@
+{
+ "concept_doi": null,
+ "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
+ "created": "2099-12-31T00:00:00Z",
+ "datestamp": "20991231",
+ "files": [
+  {
+   "name": "OTC_20991231.json",
+   "sha256": "9fc5eae5aa2b32ebab19a918a805776ed8d6d69eb7526337bb3b799bc0c6e57f",
+   "size": 28612,
+   "url": "OTC_20991231.json"
+  },
+  {
+   "name": "OTC_20991231.json.gz",
+   "sha256": "c72fa09634e7c6aab8e33d1c2c433df5fa7cc07f3173f9c837878e0000e69f30",
+   "size": 4205,
+   "url": "OTC_20991231.json.gz"
+  },
+  {
+   "name": "OTC_20991231.jsonl",
+   "sha256": "d535bca8961d8aafca6663e0e32b6eae224968d00cd94440e594a4976e1cd489",
+   "size": 25677,
+   "url": "OTC_20991231.jsonl"
+  },
+  {
+   "name": "OTC_20991231.meta.json",
+   "sha256": "ed7a3d06a046f3636594903833cb1e64715025eee915ded6f4dcf194b8725446",
+   "size": 2922,
+   "url": "OTC_20991231.meta.json"
+  },
+  {
+   "name": "OTC_20991231.sha256",
+   "sha256": "505b3d3b0a4f4afaf304300a0ec35f9152d8f8555353017bc947bb7e13b6057f",
+   "size": 345,
+   "url": "OTC_20991231.sha256"
+  }
+ ],
+ "format_version": "1.0",
+ "min_reader_version": "1.0",
+ "zenodo_version_doi": null
+}

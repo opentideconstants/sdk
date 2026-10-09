@@ -2,42 +2,44 @@
  "releases": [
   {
    "concept_doi": null,
+   "content_sha256": "a34d55555c5d645047f3e0e703aefb3cd7b45f8767e8183582bb43ff2fe92531",
    "created": "2099-12-31T00:00:00Z",
    "datestamp": "20991231",
-   "doi": null,
    "files": [
     {
      "name": "OTC_20991231.json",
-     "sha256": "cf4d6513245ee302043e6d7078fd8c0acee0b3743005b5c39c99902d74e8bda7",
-     "size": 22007,
+     "sha256": "2cb9d1cb9cd62434e1c1d79d7f256213b2bb74e7d4d8f33aeca686cd67b22e90",
+     "size": 28898,
      "url": "OTC_20991231.json"
     },
     {
      "name": "OTC_20991231.json.gz",
-     "sha256": "7433eb166bba59c0a5b3184213b7dd51a57234968f6703ec77d2b04b9a699c06",
-     "size": 3548,
+     "sha256": "a6680aa8a79dacc44955ee7a1327e4775a340d8bd5b21f70d921f4369cc50f04",
+     "size": 4309,
      "url": "OTC_20991231.json.gz"
     },
     {
      "name": "OTC_20991231.jsonl",
-     "sha256": "3e499d7ed53cd10c9106422d76d3de8730e566bc20eeed650d84c9aac4763330",
-     "size": 18957,
+     "sha256": "1a0d536cbdcf4094d22a6d6cbd8ae6921169e886cfd9f9283f0a171a047a14f1",
+     "size": 25807,
      "url": "OTC_20991231.jsonl"
     },
     {
      "name": "OTC_20991231.meta.json",
-     "sha256": "5b94d350c0220a2465779dd77e7137460f5db339b92d111a90a3ae4d7bfe022a",
-     "size": 3037,
+     "sha256": "7d2135e2fcfb56086cd9c4484815687a8f85469cc48c96029c0a8806e8ce24a7",
+     "size": 3078,
      "url": "OTC_20991231.meta.json"
     },
     {
      "name": "OTC_20991231.sha256",
-     "sha256": "40dd7eaec9115b47d3e6207a7d96b9e85da26a54069419ba85a16af759810a16",
+     "sha256": "a17d88630adb0162c87cf1e0c43c82677efabe7708837e047e84f4849d69846d",
      "size": 345,
      "url": "OTC_20991231.sha256"
     }
    ],
-   "format_version": "0.3"
+   "format_version": "1.1",
+   "min_reader_version": "1.0",
+   "zenodo_version_doi": null
   }
  ]
 }

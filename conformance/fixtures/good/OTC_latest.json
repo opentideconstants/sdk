@@ -1,39 +1,41 @@
 {
  "concept_doi": "10.5072/zenodo.1",
+ "content_sha256": "ab0b7c16cab4ba7143d38f17dd6d97be9ed97df8ceee407945a84d744a59f8ae",
  "created": "2099-12-31T12:00:00Z",
  "datestamp": "20991231.2",
- "doi": "10.5072/zenodo.2",
  "files": [
   {
    "name": "OTC_20991231.2.json",
-   "sha256": "b1fede2fc916dbae6131a3644e84785dcc1123f334b3eef202275ad3bee78ff2",
-   "size": 21765,
+   "sha256": "147e95182c5ca5a9e18f79469911a24fd13e92e9a96126057115900fc36a15e0",
+   "size": 28697,
    "url": "OTC_20991231.2.json"
   },
   {
    "name": "OTC_20991231.2.json.gz",
-   "sha256": "9b7387ad8270629e83a0e8be2f0400f1ebb7be60eb9ab16a78d4fd6749acb78d",
-   "size": 3444,
+   "sha256": "da56aa9d06be994131481d15b5338606fe5cdc99078ca4a2cc885b13cd40bfdc",
+   "size": 4219,
    "url": "OTC_20991231.2.json.gz"
   },
   {
    "name": "OTC_20991231.2.jsonl",
-   "sha256": "b55ca160841e9f0478a0fd5be722273c257225caf617dd174157e33a5665f7f4",
-   "size": 18967,
+   "sha256": "6d0b8fde7ed7fc49a781678ef91af0486a686a75ebe9627c85a8e3667afd40b4",
+   "size": 25872,
    "url": "OTC_20991231.2.jsonl"
   },
   {
    "name": "OTC_20991231.2.meta.json",
-   "sha256": "c5ea68f3c3eb7e604820e83614a35995eed60c7e58f05b9969f2b26cf293ab26",
-   "size": 2785,
+   "sha256": "f1fdafe1d67fe0a896fec6c26751584f72c434cabf4eb11c90fd2415efb5ac7d",
+   "size": 2812,
    "url": "OTC_20991231.2.meta.json"
   },
   {
    "name": "OTC_20991231.2.sha256",
-   "sha256": "d0bc9a7b53b5e31645121256873bc9c06f3389feb988f5e22a0cfcfa37f60028",
+   "sha256": "28c1eca17662fc3b5a996141086af27e11ddbe941de4e8752befe687927d7887",
    "size": 353,
    "url": "OTC_20991231.2.sha256"
   }
  ],
- "format_version": "0.2"
+ "format_version": "1.0",
+ "min_reader_version": "1.0",
+ "zenodo_version_doi": "10.5072/zenodo.2"
 }

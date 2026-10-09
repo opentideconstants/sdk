@@ -24,23 +24,12 @@
   {
    "defect": null,
    "expect": "load",
-   "latest": "20991231",
-   "note": "format 0.5 (backward compatibility); validated against otc-0.5",
-   "releases": [
-    "20991231"
-   ],
-   "root": "v05"
-  },
-  {
-   "defect": null,
-   "expect": "load",
    "latest": "20991231.3",
-   "note": "format 0.6: qc_status ok, flagged, no_constants, carried-over sets, time_base annotations, provenance.build; 20991231.3 has a version DOI in the index, 20991230 is a release candidate with concept_doi null",
+   "note": "the format 1.0 annotations: ok, flagged and no_constants sets, a station with only no_constants sets, a carried-over set, each time_base code, provenance.build, a merged tombstone",
    "releases": [
-    "20991231.3",
-    "20991230"
+    "20991231.3"
    ],
-   "root": "v06"
+   "root": "v1"
   },
   {
    "defect": null,
@@ -52,13 +41,30 @@
    },
    "latest": "20991231.4",
    "latest_readable": "20991231.3",
-   "note": "the pointers name 20991231.4 (min_reader_version 0.99); a 0.6 reader takes 20991231.3 from OTC_index.json (spec 5.2 step 2a)",
+   "note": "the pointers name 20991231.4 (min_reader_version 1.99); a 1.0 reader takes 20991231.3 from OTC_index.json (spec 5.2 step 2a)",
    "releases": [
     "20991231.4",
     "20991231.3",
     "20991231.2"
    ],
    "root": "reader"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "expect_by_release": {
+    "20991231.3": {
+     "error": "unsupported_format"
+    }
+   },
+   "latest": "20991231.3",
+   "latest_readable": "20991231.2",
+   "note": "OTC_latest.json names 20991231.3 (format 2.0); OTC_latest-f1.json names 20991231.2: check_for_update reports newer_format_major 2 (spec 7.4)",
+   "releases": [
+    "20991231.3",
+    "20991231.2"
+   ],
+   "root": "major"
   },
   {
    "defect": "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
@@ -94,7 +100,7 @@
    "root": "bad/pointer-mismatch"
   },
   {
-   "defect": "format_version 1.0, one major above the supported major 0",
+   "defect": "format_version 2.0, one major above the supported major 1",
    "expect": {
     "error": "unsupported_format"
    },
@@ -105,7 +111,7 @@
    "root": "bad/format-major"
   },
   {
-   "defect": "format_version 0.3 with unknown fields (top level, release, convention, licence, station, alias system, set, constituent); it must load and keep them in raw",
+   "defect": "format_version 1.1 with unknown fields (top level, release, convention, licence, station, alias system, set, constituent); it must load and keep them in raw",
    "expect": "load",
    "latest": "20991231",
    "releases": [
@@ -125,7 +131,7 @@
    "root": "bad/unresolved-convention"
   },
   {
-   "defect": "the only release has min_reader_version 0.99, newer than any reader",
+   "defect": "the only release has min_reader_version 1.99, newer than any reader",
    "expect": {
     "error": "reader_too_old"
    },
@@ -136,30 +142,18 @@
    "root": "bad/min-reader"
   }
  ],
- "reader_format_version": "0.6",
- "schema": {
-  "sha256": "5645522d5cbc34d21918f274f1b22daae3e3622459fe74ec90c2b7b30f4d6894",
-  "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/88b6418edeeda065ba3e96ee26368faefcbd7f12/src/schema/otc-0.2.schema.json"
- },
+ "reader_format_version": "1.0",
  "schemas": {
-  "0.2": {
-   "sha256": "5645522d5cbc34d21918f274f1b22daae3e3622459fe74ec90c2b7b30f4d6894",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/88b6418edeeda065ba3e96ee26368faefcbd7f12/src/schema/otc-0.2.schema.json"
+  "1.0": {
+   "sha256": "8771007c86895a29a263885500907a2e489d3145fc15e7d5e4ec60ff3b8d5fc0",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/c5b0cb6387c2f78fe4a5acf9975f4dcc5a8e8a4e/src/schema/otc-1.0.schema.json"
   },
-  "0.5": {
-   "sha256": "efc42311ee8f3484bb0c66b1985fdf1d55411cc2df7517f28de89488176009e9",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-0.5.schema.json"
-  },
-  "0.6": {
-   "sha256": "97986948802aac69d0273cf26fcd9f0808d11a42e97de4fc1ccd3c4f51340557",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-0.6.schema.json"
-  },
-  "index-0.6": {
-   "sha256": "08fac762f2e620cfa4cdacabcfccceb329100c4c5459fc6d54deae23d1595449",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/66783a05ec603049bc778d7905388c242934744e/src/schema/otc-index-0.6.schema.json"
+  "index-1.0": {
+   "sha256": "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/c5b0cb6387c2f78fe4a5acf9975f4dcc5a8e8a4e/src/schema/otc-index-1.0.schema.json"
   }
  },
  "supported_format_majors": [
-  0
+  1
  ]
 }
