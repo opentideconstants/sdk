@@ -738,6 +738,181 @@ otc_status otc_verify_file(const char *path, const char *sha256_path, otc_error 
     return st;
 }
 
+/* ------------------------------------------- strings with a NUL inside */
+
+/* cJSON ends a decoded string at its first NUL, so a JSON string with \u0000 in
+ * it (valid JSON, and schema-valid for a station name) loses its tail. These
+ * helpers read such a string from the JSON text itself, with its length. */
+
+static const char *js_ws(const char *p, const char *end)
+{
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
+    return p;
+}
+
+/* p at an opening quote: the position after the closing quote, or NULL. */
+static const char *js_skip_string(const char *p, const char *end)
+{
+    for (p++; p < end; p++) {
+        if (*p == '\\') { p++; continue; }
+        if (*p == '"') return p + 1;
+    }
+    return NULL;
+}
+
+/* p at a value: the position after it, or NULL. */
+static const char *js_skip_value(const char *p, const char *end)
+{
+    int depth = 0;
+    p = js_ws(p, end);
+    if (p >= end) return NULL;
+    if (*p == '"') return js_skip_string(p, end);
+    if (*p != '{' && *p != '[') {
+        while (p < end && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') p++;
+        return p;
+    }
+    while (p < end) {
+        if (*p == '"') {
+            if (!(p = js_skip_string(p, end))) return NULL;
+            continue;
+        }
+        if (*p == '{' || *p == '[') depth++;
+        else if ((*p == '}' || *p == ']') && --depth == 0) return p + 1;
+        p++;
+    }
+    return NULL;
+}
+
+static int js_hex4(const char *p, const char *end, uint32_t *v)
+{
+    int i;
+    *v = 0;
+    if (end - p < 4) return 0;
+    for (i = 0; i < 4; i++) {
+        char c = p[i];
+        *v <<= 4;
+        if (c >= '0' && c <= '9') *v |= (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f') *v |= (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') *v |= (uint32_t)(c - 'A' + 10);
+        else return 0;
+    }
+    return 1;
+}
+
+/* Decodes the JSON string at p (an opening quote) into out (at least the token's length). */
+static int js_decode(const char *p, const char *end, char *out, size_t *n)
+{
+    size_t o = 0;
+    for (p++; p < end && *p != '"'; p++) {
+        uint32_t cp;
+        if (*p != '\\') { out[o++] = *p; continue; }
+        if (++p >= end) return 0;
+        switch (*p) {
+        case '"': case '\\': case '/': out[o++] = *p; continue;
+        case 'b': out[o++] = '\b'; continue;
+        case 'f': out[o++] = '\f'; continue;
+        case 'n': out[o++] = '\n'; continue;
+        case 'r': out[o++] = '\r'; continue;
+        case 't': out[o++] = '\t'; continue;
+        case 'u': break;
+        default: return 0;
+        }
+        if (!js_hex4(p + 1, end, &cp)) return 0;
+        p += 4;
+        if (cp >= 0xD800 && cp <= 0xDBFF) {   /* a pair; an unpaired surrogate is not valid (cJSON refuses it too) */
+            uint32_t lo;
+            if (end - p < 7 || p[1] != '\\' || p[2] != 'u' || !js_hex4(p + 3, end, &lo) || lo < 0xDC00 || lo > 0xDFFF) return 0;
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+            p += 6;
+        } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+            return 0;
+        }
+        if (cp < 0x80) out[o++] = (char)cp;
+        else if (cp < 0x800) { out[o++] = (char)(0xC0 | (cp >> 6)); out[o++] = (char)(0x80 | (cp & 0x3F)); }
+        else if (cp < 0x10000) {
+            out[o++] = (char)(0xE0 | (cp >> 12));
+            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[o++] = (char)(0x80 | (cp & 0x3F));
+        } else {
+            out[o++] = (char)(0xF0 | (cp >> 18));
+            out[o++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+            out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[o++] = (char)(0x80 | (cp & 0x3F));
+        }
+    }
+    if (p >= end) return 0;
+    *n = o;
+    return 1;
+}
+
+int otc__json_has_nul(const char *text, size_t len)
+{
+    size_t i;
+    for (i = 0; i + 6 <= len; i++) {
+        if (text[i] == '\\') {
+            if (!memcmp(text + i + 1, "u0000", 5)) return 1;
+            i++;   /* the escaped character */
+        }
+    }
+    return 0;
+}
+
+int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len)
+{
+    const char *p = text, *end = text + len;
+    size_t kl = strlen(key);
+    *out = NULL;
+    *out_len = 0;
+    p = js_ws(p, end);
+    if (p >= end || *p != '{') return 0;
+    p++;
+    for (;;) {
+        const char *k, *kend, *v;
+        p = js_ws(p, end);
+        if (p >= end || *p != '"') return 0;
+        k = p;
+        if (!(p = js_skip_string(p, end))) return 0;
+        kend = p;
+        p = js_ws(p, end);
+        if (p >= end || *p != ':') return 0;
+        v = js_ws(p + 1, end);
+        if (!(p = js_skip_value(v, end))) return 0;
+        if ((size_t)(kend - k) == kl + 2 && !memcmp(k + 1, key, kl) && v < end && *v == '"') {
+            char *buf = (char *)malloc((size_t)(p - v) + 1);
+            size_t n;
+            if (!buf) return -1;
+            if (!js_decode(v, p, buf, &n)) { free(buf); return 0; }
+            buf[n] = '\0';
+            *out = buf;
+            *out_len = n;
+            return 1;
+        }
+        p = js_ws(p, end);
+        if (p < end && *p == ',') { p++; continue; }
+        return 0;
+    }
+}
+
+char *otc__json_escape_n(const char *s, size_t n)
+{
+    static const char hex[] = "0123456789abcdef";
+    size_t i, o = 0;
+    char *out = (char *)malloc(n * 6 + 3);
+    if (!out) return NULL;
+    out[o++] = '"';
+    for (i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '"' || c == '\\') { out[o++] = '\\'; out[o++] = (char)c; }
+        else if (c < 0x20) {
+            out[o++] = '\\'; out[o++] = 'u'; out[o++] = '0'; out[o++] = '0';
+            out[o++] = hex[c >> 4]; out[o++] = hex[c & 15];
+        } else out[o++] = (char)c;
+    }
+    out[o++] = '"';
+    out[o] = '\0';
+    return out;
+}
+
 /* -------------------------------------------------------------------- fold */
 
 /* Decodes one UTF-8 sequence; returns its length (1 for an invalid byte, cp = the byte | 0x80000000). */
@@ -778,15 +953,22 @@ static int is_ws(char c)
 
 char *otc__fold(const char *s)
 {
-    const unsigned char *p = (const unsigned char *)s;
-    size_t cap = strlen(s) * 4 + 1, n = 0, i, o;
+    return otc__fold_n(s, strlen(s), NULL);
+}
+
+char *otc__fold_n(const char *s, size_t sn, size_t *out_len)
+{
+    const unsigned char *p = (const unsigned char *)s, *pend = p + sn;
+    size_t cap = sn * 4 + 1, n = 0, i, o;
     char *tmp = (char *)malloc(cap), *out;
     int in_ws;
     if (!tmp) return NULL;
-    while (*p) {
-        uint32_t cp;
-        size_t len = utf8_next(p, &cp);
-        const char *f = (cp & 0x80000000u) ? NULL : fold_lookup(cp);
+    while (p < pend) {
+        uint32_t cp = 0;
+        size_t len = *p ? utf8_next(p, &cp) : 1;   /* a NUL is a character like any other (spec 4.4.1, D12 e) */
+        const char *f;
+        if (len > (size_t)(pend - p)) len = (size_t)(pend - p);
+        f = (!cp || (cp & 0x80000000u)) ? NULL : fold_lookup(cp);
         if (f) {
             size_t fl = strlen(f);
             memcpy(tmp + n, f, fl);
@@ -816,7 +998,8 @@ char *otc__fold(const char *s)
     while (o > 0 && out[o - 1] == ' ') o--;
     out[o] = '\0';
     i = 0;
-    while (out[i] == ' ') i++;
+    while (i < o && out[i] == ' ') i++;
     if (i) memmove(out, out + i, o - i + 1);
+    if (out_len) *out_len = o - i;
     return out;
 }

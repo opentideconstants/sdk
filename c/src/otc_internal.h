@@ -39,6 +39,18 @@ extern const size_t otc__fold_table_size;
 
 /* Folds and normalises a name (spec 4.4.1). Returns a malloc'd string or NULL (no memory). */
 char *otc__fold(const char *s);
+/* The same for n bytes that may hold a NUL; *out_len (may be NULL) gets the length. */
+char *otc__fold_n(const char *s, size_t n, size_t *out_len);
+
+/* JSON strings with a NUL inside (cJSON's decoded strings end at the first NUL). */
+/* 1 when the JSON text has a \u0000 escape. */
+int otc__json_has_nul(const char *text, size_t len);
+/* The string member key of the top-level object in text, decoded with its full
+ * length: 1 found (*out malloc'd, NUL-terminated after *out_len bytes), 0 absent
+ * or not a string, -1 out of memory. */
+int otc__json_member_string(const char *text, size_t len, const char *key, char **out, size_t *out_len);
+/* n bytes as a JSON string literal (quotes included; control characters as \u00XX). */
+char *otc__json_escape_n(const char *s, size_t n);
 
 /* ---------------------------------------------------------------- platform */
 
@@ -173,6 +185,8 @@ typedef struct otc__entry {
     char              *id;
     char              *name;
     char              *folded;
+    size_t             name_len;        /* a schema-valid name may hold a NUL (spec 4.4.1) */
+    size_t             folded_len;
     char              *country;
     char              *type_s;          /* the type as the file gives it */
     otc_station_type_t type;

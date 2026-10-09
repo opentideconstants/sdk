@@ -324,8 +324,10 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
     return OTC_OK;
 }
 
-/* Indexes one parsed station line (root is not freed here). */
-static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64_t offset)
+/* Indexes one parsed station line (root is not freed here). raw / raw_len: the
+ * line's JSON text when it may hold a name with a NUL (else NULL). */
+static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64_t offset, const char *raw,
+                               size_t raw_len)
 {
     otc_release *r = b->rel;
     const char *id, *status;
@@ -366,8 +368,15 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         e->type_s = otc__strdup(otc__jstr(root, "type"));
         e->type = otc__parse_station_type(e->type_s);
         e->id = otc__strdup(id);
-        e->name = otc__strdup(name);
-        e->folded = otc__fold(name);
+        e->name_len = strlen(name);
+        if (raw && otc__json_has_nul(raw, raw_len)) {
+            /* cJSON ends the name at a NUL; the full name comes from the text */
+            int got = otc__json_member_string(raw, raw_len, "name", &e->name, &e->name_len);
+            if (got < 0) return OTC_E_NOMEM;
+            if (got == 0) e->name_len = strlen(name);
+        }
+        if (!e->name) e->name = otc__strdup(name);
+        e->folded = e->name ? otc__fold_n(e->name, e->name_len, &e->folded_len) : NULL;
         e->country = otc__strdup(otc__jstr(root, "country"));
         if (!e->id || !e->name || !e->folded || !e->type_s || (otc__jstr(root, "country") && !e->country))
             return OTC_E_NOMEM;
@@ -409,7 +418,7 @@ static otc_status index_line(builder *b, const char *line, size_t len, uint64_t 
         cJSON_Delete(root);
         return bad_line(b, "not a station object with station_id and status");
     }
-    st = index_parsed(b, root, len, offset);
+    st = index_parsed(b, root, len, offset, line, len);
     cJSON_Delete(root);
     return st;
 }
@@ -573,6 +582,8 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     memcpy(ds, jsonl_name + 4, nl - 10);
     ds[nl - 10] = '\0';
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
+    /* a name with a NUL does not survive cJSON: such an index is read from the .jsonl instead */
+    if (otc__json_has_nul(text, len)) goto done;
     doc = otc__json_parse(text, len);
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
@@ -594,7 +605,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
         if (!line) { st = OTC_E_NOMEM; break; }
         b->line_no++;
         st = index_parsed(b, line, (size_t)otc__jget(e, "length")->valuedouble,
-                          (uint64_t)otc__jget(e, "offset")->valuedouble);
+                          (uint64_t)otc__jget(e, "offset")->valuedouble, NULL, 0);
         cJSON_Delete(line);
         if (st != OTC_OK) break;
     }
@@ -633,14 +644,33 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     if (!cJSON_IsObject(offs)) offs = NULL;
     rec = otc__jstr(d, "recommended_set_id");
     name = otc__jstr(d, "name");
-    folded = name ? otc__fold(name) : NULL;
     cJSON_AddNumberToObject(o, "offset", (double)offset);
     cJSON_AddNumberToObject(o, "length", (double)len);
     cJSON_AddItemToObject(o, "station_id", jstr_or_null(d, "station_id"));
     cJSON_AddItemToObject(o, "status", jstr_or_null(d, "status"));
-    cJSON_AddItemToObject(o, "name", jstr_or_null(d, "name"));
-    cJSON_AddItemToObject(o, "name_folded", folded ? cJSON_CreateString(folded) : cJSON_CreateNull());
-    free(folded);
+    if (name && otc__json_has_nul(text, len)) {
+        /* a name with a NUL (schema-valid): written from the text, in full, as raw JSON */
+        char *full = NULL, *fold = NULL, *jn = NULL, *jf = NULL;
+        size_t fl = 0, ffl = 0;
+        int r = otc__json_member_string(text, len, "name", &full, &fl);
+        if (r > 0) fold = otc__fold_n(full, fl, &ffl);
+        if (r > 0 && fold) {
+            jn = otc__json_escape_n(full, fl);
+            jf = otc__json_escape_n(fold, ffl);
+        }
+        cJSON_AddItemToObject(o, "name", jn ? cJSON_CreateRaw(jn) : jstr_or_null(d, "name"));
+        cJSON_AddItemToObject(o, "name_folded", jf ? cJSON_CreateRaw(jf) : cJSON_CreateNull());
+        if (r < 0 || (r > 0 && (!fold || !jn || !jf))) x->st = OTC_E_NOMEM;
+        free(full);
+        free(fold);
+        free(jn);
+        free(jf);
+    } else {
+        folded = name ? otc__fold(name) : NULL;
+        cJSON_AddItemToObject(o, "name", jstr_or_null(d, "name"));
+        cJSON_AddItemToObject(o, "name_folded", folded ? cJSON_CreateString(folded) : cJSON_CreateNull());
+        free(folded);
+    }
     cJSON_AddItemToObject(o, "country", jstr_or_null(d, "country"));
     cJSON_AddItemToObject(o, "type", jstr_or_null(d, "type"));
     v = otc__jget(d, "lat");

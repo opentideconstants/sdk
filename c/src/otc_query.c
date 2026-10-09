@@ -199,26 +199,43 @@ typedef struct ranked {
     const otc__entry *e;
 } ranked;
 
+/* Folded names are compared as byte strings with a length: a name may hold a NUL (spec 4.4.1). */
+static int bytes_cmp(const char *a, size_t an, const char *b, size_t bn)
+{
+    int c = memcmp(a, b, an < bn ? an : bn);
+    return c ? c : (an < bn ? -1 : an > bn);
+}
+
 static int ranked_cmp(const void *a, const void *b)
 {
     const ranked *x = (const ranked *)a, *y = (const ranked *)b;
     int c;
     if (x->rank != y->rank) return x->rank < y->rank ? -1 : 1;
-    c = strcmp(x->e->folded, y->e->folded);
+    c = bytes_cmp(x->e->folded, x->e->folded_len, y->e->folded, y->e->folded_len);
     return c ? c : strcmp(x->e->id, y->e->id);
 }
 
-static int name_rank(const char *n, const char *q, int exact)
+/* The first q in n at or after from, or NULL. */
+static const char *find_in(const char *n, size_t nl, size_t from, const char *q, size_t ql)
+{
+    size_t i;
+    for (i = from; i + ql <= nl; i++)
+        if (!memcmp(n + i, q, ql)) return n + i;
+    return NULL;
+}
+
+/* 0 exact, 1 prefix, 2 the start of a later word, 3 anywhere; -1 no match */
+static int name_rank(const char *n, size_t nl, const char *q, int exact)
 {
     size_t ql = strlen(q);
     const char *p;
-    if (!strcmp(n, q)) return 0;
+    if (nl == ql && !memcmp(n, q, ql)) return 0;
     if (exact) return -1;
-    if (!strncmp(n, q, ql)) return 1;
-    if (!n[0]) return -1;
-    for (p = strstr(n + 1, q); p; p = strstr(p + 1, q))
+    if (nl >= ql && !memcmp(n, q, ql)) return 1;
+    if (!nl) return -1;
+    for (p = find_in(n, nl, 1, q, ql); p; p = find_in(n, nl, (size_t)(p - n) + 1, q, ql))
         if (p[-1] == ' ') return 2;
-    return strstr(n, q) ? 3 : -1;
+    return find_in(n, nl, 0, q, ql) ? 3 : -1;
 }
 
 otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
@@ -240,7 +257,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     for (i = 0; i < rel->n_st; i++) {
         int k;
         if (!otc__filter_match(filter, &rel->st[i])) continue;
-        k = name_rank(rel->st[i].folded, q, filter && filter->match_exact);
+        k = name_rank(rel->st[i].folded, rel->st[i].folded_len, q, filter && filter->match_exact);
         if (k < 0) continue;
         r[n].rank = k;
         r[n].e = &rel->st[i];
