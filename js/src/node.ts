@@ -12,7 +12,7 @@ import type { Duplex } from "node:stream";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { CACHE_LAYOUT_VERSION, SDK_ID } from "./constants.js";
 import { CacheError, FileError, NetworkError } from "./errors.js";
-import type { CacheStore, HttpOptions, HttpResponse, Platform } from "./platform.js";
+import type { CacheStore, HttpOptions, HttpResponse, LockOptions, Platform, Unlock } from "./platform.js";
 
 export function sha256Sync(bytes: Uint8Array): string {
     return createHash("sha256").update(bytes).digest("hex");
@@ -121,6 +121,9 @@ export function openLineReader(file: string): { read: (offset: number, length: n
     };
 }
 
+/** How long a waiter waits before it treats a lock as stale (spec 5.4). */
+const STALE_LOCK_MS = 120_000;
+
 class NodeCache implements CacheStore {
     readonly base: string;
 
@@ -176,27 +179,60 @@ class NodeCache implements CacheStore {
         }
     }
 
-    async lock(rel: string): Promise<() => Promise<void>> {
+    async lock(rel: string, options: LockOptions = {}): Promise<Unlock | null> {
         const dir = this.describe(rel);
         const lockDir = path.join(dir, ".lock");
+        const ownerFile = path.join(lockDir, "owner.json");
         await this.mkdirs(rel);
-        const started = Date.now();
+        let started = Date.now();
+        let failedSteals = 0;
         for (;;) {
+            let made = false;
             try {
                 await fsp.mkdir(lockDir);
-                const owner = JSON.stringify({ pid: process.pid, host: os.hostname(), sdk: SDK_ID, started_at: new Date().toISOString() });
-                await fsp.writeFile(path.join(lockDir, "owner.json"), owner).catch(() => undefined);
-                return async () => {
-                    await fsp.rm(path.join(lockDir, "owner.json"), { force: true }).catch(() => undefined);
-                    await fsp.rmdir(lockDir).catch(() => undefined);
-                };
+                made = true;
             } catch (e) {
                 if (!isErrno(e, "EEXIST")) throw new CacheError(`cannot take the lock ${lockDir}`, { path: lockDir, cause: e });
             }
-            if (fs.existsSync(path.join(dir, ".verified"))) return async () => undefined;
-            if (Date.now() - started > 120_000) {
-                await fsp.rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
-                continue;
+            if (made) {
+                // the token proves ownership at release (spec 5.4, CR D3)
+                const token = randomBytes(16).toString("hex");
+                const owner = JSON.stringify({ pid: process.pid, host: os.hostname(), sdk: SDK_ID, started_at: new Date().toISOString(), token });
+                try {
+                    writeAtomicSync(ownerFile, new TextEncoder().encode(owner));
+                } catch (e) {
+                    await fsp.rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
+                    throw new CacheError(`cannot write ${ownerFile}`, { path: ownerFile, cause: e });
+                }
+                return async () => {
+                    let current: unknown = null;
+                    try {
+                        current = JSON.parse(await fsp.readFile(ownerFile, "utf8"));
+                    } catch {
+                        return; // gone or unreadable: another process took the lock as stale; leave it alone
+                    }
+                    if (typeof current !== "object" || current === null || (current as { token?: unknown }).token !== token) return;
+                    try {
+                        await fsp.rm(ownerFile, { force: true });
+                        await fsp.rmdir(lockDir);
+                    } catch (e) {
+                        throw new CacheError(`cannot release the lock ${lockDir}`, { path: lockDir, cause: e });
+                    }
+                };
+            }
+            if (options.wait === false) return null;
+            if (options.done && await options.done()) return async () => undefined;
+            if (Date.now() - started > STALE_LOCK_MS) {
+                // stale: remove it and take it; 3 failed removals raise cache (CR D3)
+                try {
+                    await fsp.rm(lockDir, { recursive: true, force: true });
+                } catch { /* checked below */ }
+                if (fs.existsSync(lockDir)) {
+                    if (++failedSteals >= 3) throw new CacheError(`cannot remove the stale lock ${lockDir}`, { path: lockDir });
+                } else {
+                    started = Date.now();
+                    continue;
+                }
             }
             await new Promise((r) => setTimeout(r, 500));
         }
@@ -345,8 +381,10 @@ export function listDir(dir: string): string[] {
     }
 }
 
+/** Remove a directory tree; throws when any of it is left (rmSync can report success on a read-only tree). */
 export function removeDirSync(dir: string): void {
     fs.rmSync(dir, { recursive: true, force: true });
+    if (fs.existsSync(dir)) throw new Error(`${dir} is still there after the removal`);
 }
 
 /** Write into a caller's folder: temporary file, fsync, rename (spec 4.3.2). */

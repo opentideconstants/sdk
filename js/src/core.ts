@@ -8,7 +8,7 @@ import {
     checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl,
     type LineReader, type StreamIndex,
 } from "./loader.js";
-import type { CacheStore, HttpResponse, Platform } from "./platform.js";
+import type { CacheStore, HttpResponse, Platform, Unlock } from "./platform.js";
 import { storedIndex, usableIndex, type Release } from "./release.js";
 import type { FileInfo, Logger, Mode, OnNetworkError } from "./types.js";
 
@@ -201,7 +201,7 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
                 const tag = res.header("etag");
                 if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
             } finally {
-                await unlock();
+                await releaseLock(ctx, unlock);
             }
         } catch (e) {
             log(ctx, "warn", `cannot store ${name} in the cache: ${e instanceof Error ? e.message : String(e)}`);
@@ -402,12 +402,15 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     }
     if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
     await store.mkdirs(dir);
-    const unlock = await store.lock(dir);
+    // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
+    const unlock = await store.lock(dir, {
+        done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
+    });
     try {
         const now = new Set(await store.list(dir));
         verified = await readVerified(store, d);
         if (verified && usable(ctx.mode, d, now)) {
-            await syncZenodo(ctx, verified, entry);
+            await syncZenodo(ctx, verified, entry, true);
             return "cache";
         }
         const n = names(d);
@@ -455,7 +458,16 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         await store.write(`${dir}/.verified`, enc.encode(JSON.stringify(v)));
         return "download";
     } finally {
-        await unlock();
+        await releaseLock(ctx, unlock);
+    }
+}
+
+/** Release a lock; a failure leaves a stale lock that a later waiter removes, so it is logged, not raised. */
+async function releaseLock(ctx: Ctx, unlock: Unlock | null): Promise<void> {
+    try {
+        await unlock?.();
+    } catch (e) {
+        log(ctx, "warn", e instanceof Error ? e.message : String(e));
     }
 }
 
@@ -477,16 +489,31 @@ function formatOf(writes: [string, Uint8Array][], n: ReturnType<typeof names>): 
 
 /**
  * Store the version DOI of an entry the SDK read for a cached release in its `.verified`, when it changed
- * (spec 4.3: the newest pointer or index entry for that datestamp). A failed write is logged, not raised.
+ * (spec 4.3: the newest pointer or index entry for that datestamp). The write is a read-modify-write of `.verified`,
+ * so it runs under the release lock and re-reads `.verified` there; `held` says the caller holds the lock already.
+ * When another process holds the lock, or a write fails, it is skipped and logged: the next read syncs it.
  */
-export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null): Promise<void> {
+export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEntry | null, held = false): Promise<void> {
     const store = ctx.store;
-    if (!store || !entry || entry.datestamp !== verified.datestamp) return;
-    if ((verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+    if (!store || !entry) return;
+    const d = entry.datestamp;
+    if ((verified.datestamp ?? d) !== d || (verified.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+    let unlock: Unlock | null = null;
     try {
-        await store.write(`${relDir(entry.datestamp)}/.verified`, enc.encode(JSON.stringify({ ...verified, zenodo_version_doi: entry.zenodo_version_doi })));
+        if (!held) {
+            unlock = await store.lock(relDir(d), { wait: false });
+            if (!unlock) {
+                log(ctx, "debug", `the .verified of ${d} is locked; its version DOI is updated next time`);
+                return;
+            }
+        }
+        const now = await readVerified(store, d);
+        if (!now || (now.zenodo_version_doi ?? null) === entry.zenodo_version_doi) return;
+        await store.write(`${relDir(d)}/.verified`, enc.encode(JSON.stringify({ ...now, zenodo_version_doi: entry.zenodo_version_doi })));
     } catch (e) {
-        log(ctx, "warn", `cannot update the .verified of ${entry.datestamp}: ${e instanceof Error ? e.message : String(e)}`);
+        log(ctx, "warn", `cannot update the .verified of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+        await releaseLock(ctx, unlock);
     }
 }
 

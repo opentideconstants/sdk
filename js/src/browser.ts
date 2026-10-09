@@ -1,6 +1,6 @@
 /** @internal The browser runtime: fetch, WebCrypto, DecompressionStream and Cache Storage (spec 5.4, 8.4). */
 import { NetworkError } from "./errors.js";
-import type { CacheStore, HttpOptions, HttpResponse, Platform } from "./platform.js";
+import type { CacheStore, HttpOptions, HttpResponse, Platform, Unlock } from "./platform.js";
 
 const CACHE_NAME = "opentideconstants-v1";
 const KEY_BASE = "https://opentideconstants-cache.invalid/v1/";
@@ -67,7 +67,8 @@ class BrowserCache implements CacheStore {
         return [...names];
     }
 
-    async lock(): Promise<() => Promise<void>> {
+    // Cache Storage has no lock directory; every put is atomic, and duplicate work is the worst case (spec 5.4).
+    async lock(): Promise<Unlock | null> {
         return async () => undefined;
     }
 }

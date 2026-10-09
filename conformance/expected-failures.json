@@ -378,8 +378,7 @@
    "runners": [
     "c-fetch",
     "python",
-    "ruby",
-    "typescript"
+    "ruby"
    ],
    "package": "PK04",
    "reason": "step 3 prune: expected error 'cache', got a result {\"removed\": [\"20991231\"]}"

@@ -122,3 +122,69 @@ test("T45/D9: a malformed version string is invalid_release, in a release and in
     assert.throws(() => parseIndex(enc({ releases: [{ ...e, min_reader_version: "2" }] }), url), isCode("invalid_release"));
     assert.throws(() => parseIndex(enc({ releases: [{ ...e, format_version: "1." }] }), url), isCode("invalid_release"));
 });
+
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+const tmpdir = () => fs.mkdtempSync(path.join(os.tmpdir(), "otc-unit-"));
+
+test("T6: a held release lock with a .verified that is not usable in this mode is waited for, not skipped", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    const dir = path.join(root, "v1", "releases", "20991231");
+    fs.mkdirSync(path.join(dir, ".lock"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".verified"), "{\"files\":{}}");
+    let settled = false;
+    const p = store.lock("releases/20991231", { done: async () => false }).then((u) => { settled = true; return u; });
+    await new Promise((r) => setTimeout(r, 1200));
+    assert.equal(settled, false, "lock() returned while another process held .lock");
+    fs.rmSync(path.join(dir, ".lock"), { recursive: true });
+    const unlock = await p;
+    assert.ok(fs.existsSync(path.join(dir, ".lock", "owner.json")));
+    await unlock();
+    assert.equal(fs.existsSync(path.join(dir, ".lock")), false);
+});
+
+test("T5/D3: owner.json carries a token, and a release whose lock was taken over leaves the new lock alone", async () => {
+    const { nodePlatform } = await import("../dist/node.js");
+    const root = tmpdir();
+    const store = await nodePlatform().cache(root);
+    const unlock = await store.lock("pointer");
+    const owner = path.join(root, "v1", "pointer", ".lock", "owner.json");
+    const o = JSON.parse(fs.readFileSync(owner, "utf8"));
+    assert.match(String(o.token), /^[0-9a-f]{32,}$/);
+    fs.writeFileSync(owner, JSON.stringify({ ...o, token: "another-process" }));
+    await unlock();
+    assert.ok(fs.existsSync(owner), "the lock of another owner was removed");
+});
+
+test("T104: syncZenodo does not rewrite .verified while another process holds the release lock", async () => {
+    const { syncZenodo } = await import("../dist/core.js");
+    const v = { files: {}, verified_at: "x", by: "x", datestamp: "20991231", format_version: "1.0", zenodo_version_doi: "10.1/old" };
+    const store = fakeStore(new Map([["releases/20991231/.verified", enc(v)]]));
+    store.lock = async (rel, o) => { store.calls.push(["lock", rel, o?.wait]); return null; };
+    const { ctx } = fakeCtx(store, []);
+    await syncZenodo(ctx, v, { datestamp: "20991231", format_version: "1.0", zenodo_version_doi: "10.1/new", files: [] });
+    assert.equal(store.calls.some((c) => c[0] === "write"), false);
+});
+
+test("T15: prune(null) is not a raw TypeError, and prune on a read-only release is a cache error", async () => {
+    const root = tmpdir();
+    const fixtures = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+    const c = await otc.OpenTideConstants.open({ file: path.join(fixtures, "OTC_20991231.2.jsonl"), cacheDir: root });
+    try {
+        assert.deepEqual([...c.prune(null)], []);
+        for (const d of ["20991231", "20991231.2"]) {
+            const dir = path.join(root, "v1", "releases", d);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, ".verified"), "{\"files\":{}}");
+        }
+        fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o555);
+        assert.throws(() => c.prune({ keep: 1 }), isCode("cache"));
+        fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o755);
+    } finally {
+        c.close();
+    }
+});

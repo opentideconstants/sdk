@@ -7,7 +7,7 @@ import {
     checkBytes, type Ctx, type PointerEntry, type SyncDir, type Verified,
 } from "./core.js";
 import {
-    ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
+    CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
     OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
 import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
@@ -490,7 +490,10 @@ export class OpenTideConstants {
         return verifyCached(this.#ctx, this.#release.datestamp);
     }
 
-    /** The cached, verified datestamps, newest first (Node only). */
+    /**
+     * The cached, verified datestamps, newest first (Node only). A cache operation: on a client opened with `file`
+     * it lists the configured cache (`cacheDir` or the default), never the file's folder (spec 4.3, CR D33).
+     */
     cachedReleases(): readonly string[] {
         const node = this.#node;
         const store = this.#ctx.store;
@@ -501,9 +504,16 @@ export class OpenTideConstants {
             .sort((a, b) => compareDatestamps(b, a)));
     }
 
-    /** Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. */
+    /**
+     * Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. A release
+     * directory that cannot be removed fails with `cache`. Like cachedReleases, it works on the configured cache
+     * also on a client opened with `file` (CR D33).
+     */
     prune(options: PruneOptions = {}): readonly string[] {
-        const keep = options.keep ?? 3;
+        // a JavaScript caller can pass null or a non-object; neither is a raw TypeError
+        const o: unknown = options;
+        if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
+        const keep = (o === null || o === undefined ? undefined : options.keep) ?? 3;
         if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 0) throw new InvalidArgumentError("keep must be a non-negative integer");
         const node = this.#node;
         const store = this.#ctx.store;
@@ -511,8 +521,18 @@ export class OpenTideConstants {
         const all = this.cachedReleases();
         const loaded = this.#file ? null : this.#release.datestamp;
         const removed = all.slice(keep).filter((d) => d !== loaded);
-        for (const d of removed) node.removeDirSync(store.describe(relDir(d)));
-        return Object.freeze(removed);
+        // a directory that cannot be removed is a cache error; the result lists only what was removed (spec 4.3)
+        const done: string[] = [];
+        for (const d of removed) {
+            const p = store.describe(relDir(d));
+            try {
+                node.removeDirSync(p);
+            } catch (e) {
+                throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, cause: e });
+            }
+            done.push(d);
+        }
+        return Object.freeze(done);
     }
 
     /** Close the client and every release it loaded (stream mode holds a file handle). */
