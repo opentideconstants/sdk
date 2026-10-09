@@ -46,7 +46,7 @@ def test_case_runner_is_closed_when_hello_fails(tmp_path):
     srv, proxy = FixtureServer().start(), RecordingProxy().start()
     try:
         stats = {"steps_compared": 0, "steps_failed": 0, "harness_errors": 0}
-        failures, _ = driver.run_case({"id": "x", "steps": [OK_STEP]}, [sys.executable, str(script)], set(),
+        failures, _ = driver.run_case({"id": "x", "steps": [OK_STEP]}, {"main": ([sys.executable, str(script)], set())},
                                       srv, proxy, False, False, stats)
     finally:
         srv.shutdown()
