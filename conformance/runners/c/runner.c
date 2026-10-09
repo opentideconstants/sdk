@@ -276,10 +276,8 @@ DEF_STR(s_set_record_id, otc_set_source_record_id, otc_set)
 DEF_STR(s_set_version, otc_set_source_version, otc_set)
 DEF_STR(s_set_raw, otc_set_raw_json, otc_set)
 DEF_STR(s_set_prov_json, otc_set_provenance_json, otc_set)
-DEF_STR(s_prov_build_commit, otc_set_provenance_build_commit, otc_set)
 DEF_STR(s_prov_adapter_version, otc_set_provenance_adapter_version, otc_set)
 DEF_STR(s_prov_input_sha256, otc_set_provenance_input_sha256_json, otc_set)
-DEF_STR(s_prov_time_base, otc_set_provenance_time_base_json, otc_set)
 DEF_STR(s_prov_selection_reason, otc_set_provenance_selection_reason, otc_set)
 DEF_STR(s_prov_decision, otc_set_provenance_decision_json, otc_set)
 DEF_STR(s_span_start, otc_record_span_start, otc_record_span)
@@ -383,6 +381,8 @@ static cJSON *enc_tombstone(const otc_tombstone_t *t, int *bad)
 
 static cJSON *enc_set(const otc_set *set, int *bad)
 {
+    /* time_base (TimeBase, spec 4.5) has no C accessor here yet: the key is left out, so the constant_set steps
+     * fail until the C library reads format 1.0 and this runner maps otc_set_time_base. */
     cJSON *o = cJSON_CreateObject(), *flags = cJSON_CreateArray(), *drops = cJSON_CreateArray();
     const otc_record_span *rs = NULL;
     const otc_datum *dt = NULL;
@@ -1062,10 +1062,10 @@ static void op_query(request *q, reply *r)
             else
                 cJSON_AddNullToObject(o, "set_id");
         } else if (!strcmp(op, "constant_sets")) {
-            bool inc = arg_bool(&q->a, "include_excluded", false);
+            bool inc = arg_bool(&q->a, "include_no_constants", false);
             cJSON *arr = cJSON_CreateArray();
             size_t i, n = st ? otc_station_set_count(st, inc) : 0;
-            if (q->a.bad) { cJSON_Delete(arr); otc_station_free(st); set_error(r, "invalid_argument", "include_excluded"); return; }
+            if (q->a.bad) { cJSON_Delete(arr); otc_station_free(st); set_error(r, "invalid_argument", "include_no_constants"); return; }
             for (i = 0; i < n; i++) {
                 const otc_set *set = NULL;
                 if (otc_station_set_at(st, inc, i, &set) != OTC_OK) { bad = 1; break; }
@@ -1098,10 +1098,10 @@ static void op_query(request *q, reply *r)
             const otc_set *set = find_set(q, st);
             if (set) {
                 cJSON *p = cJSON_CreateObject();
-                cJSON_AddItemToObject(p, "build_commit", j_take(s_prov_build_commit(set, &bad)));
+                /* build (ProvenanceBuild) and carried_from_release (spec 4.6, 7.4) have no C accessors yet: left
+                 * out, so the provenance steps fail until the C library reads format 1.0 and this runner maps them. */
                 cJSON_AddItemToObject(p, "adapter_version", j_take(s_prov_adapter_version(set, &bad)));
                 cJSON_AddItemToObject(p, "input_sha256", j_parse_or_null(s_prov_input_sha256(set, &bad)));
-                cJSON_AddItemToObject(p, "time_base", j_parse_or_null(s_prov_time_base(set, &bad)));
                 cJSON_AddItemToObject(p, "selection_reason", j_take(s_prov_selection_reason(set, &bad)));
                 cJSON_AddItemToObject(p, "decision", j_parse_or_null(s_prov_decision(set, &bad)));
                 cJSON_AddItemToObject(o, "provenance", p);
@@ -1165,12 +1165,6 @@ static void op_query(request *q, reply *r)
                 if (id && otc_release_licence(R, id, &l) == OTC_OK) raw = j_parse_or_null(s_lic_raw(l, &bad));
             }
             cJSON_AddItemToObject(o, "raw", raw ? raw : cJSON_CreateNull());
-        } else if (!strcmp(op, "provenance_build") || !strcmp(op, "carried_from_release") || !strcmp(op, "time_base")) {
-            /* Format 0.6 (spec 4.6, 7.4): provenance.build, provenance.carried_from_release and the set's time_base
-             * annotation. The C API for them is not defined yet; the C 0.6 work adds it and maps it here. */
-            otc_station_free(st);
-            set_error(r, "uncaught:Unimplemented", op);
-            return;
         } else {
             otc_station_free(st);
             set_error(r, "uncaught:UnknownOp", op);
@@ -1276,6 +1270,11 @@ static void op_fetch(request *q, reply *r)
     fetch_options(&fo, &err);
     if (otc_release_datestamp(q->rel, ds, sizeof ds, &need) != OTC_OK) ds[0] = '\0';
     r->result = cJSON_CreateObject();
+    if (!strcmp(q->op, "newer_format_major")) {
+        /* spec 7.4: otc_fetch_newer_format_major is not in the C library yet; the C 1.0 work maps it here. */
+        set_error(r, "uncaught:Unimplemented", q->op);
+        return;
+    }
     if (!strcmp(q->op, "releases")) {
         otc_release_info *v[256];
         cJSON *arr = cJSON_CreateArray();
@@ -1362,7 +1361,7 @@ static void maybe_auto_update(void)
 
 static int is_fetch_op(const char *op)
 {
-    static const char *const ops[] = {"releases", "latest", "check_for_update", "update", "download",
+    static const char *const ops[] = {"releases", "latest", "check_for_update", "newer_format_major", "update", "download",
                                       "cached_releases", "prune", NULL};
     size_t i;
     for (i = 0; ops[i]; i++)

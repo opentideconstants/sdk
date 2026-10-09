@@ -23,6 +23,12 @@ function basename(p) {
     return parts[parts.length - 1];
 }
 
+// A field the op needs: undefined means the SDK does not have it, which fails the step.
+function need(obj, field) {
+    if (obj[field] === undefined) throw new Error(`the SDK has no ${field}`);
+    return obj[field];
+}
+
 const pick = (obj, fields) => {
     const out = {};
     for (const f of fields) out[f] = obj == null || obj[f] === undefined ? null : obj[f];
@@ -34,7 +40,7 @@ const CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "am
 const CONVENTION = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
     "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"];
 const LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url"];
-const PROVENANCE = ["build_commit", "adapter_version", "input_sha256", "time_base", "selection_reason", "decision"];
+const PROVENANCE = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"];
 const VALIDATION = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
     "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
 const PREVIOUS = ["time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
@@ -70,6 +76,7 @@ function encSet(cs) {
         qc_status: cs.qc_status,
         qc_flags: cs.qc_flags.map((f) => ({ flag: f.flag, verdict: f.verdict, values: f.values })),
         dropped_constituents: cs.dropped_constituents.map((d) => ({ name: d.name, dropped_reason: d.dropped_reason, detail: d.detail })),
+        time_base: encTimeBase(need(cs, "time_base")),
         is_recommended: cs.isRecommended,
         convention_id: cs.convention.convention_id, licence_id: cs.licence.licence_id,
         constituent_count: cs.constituents.length,
@@ -87,28 +94,15 @@ function encFiles(files) {
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-// The fields the SDK has. A field it does not have yet (undefined) is left out of the result, so a case that
-// checks it fails with "missing" and a case that does not check it is not affected.
-function present(obj, fields) {
-    const out = {};
-    for (const f of fields) if (obj[f] !== undefined) out[f] = obj[f];
-    return out;
-}
-
 function encInfo(i) {
     if (i == null) return null;
     return {
-        datestamp: i.datestamp, format_version: i.format_version,
-        ...present(i, ["concept_doi", "zenodo_version_doi", "content_sha256"]),
+        datestamp: i.datestamp, format_version: i.format_version, concept_doi: need(i, "concept_doi"),
+        zenodo_version_doi: need(i, "zenodo_version_doi"), content_sha256: need(i, "content_sha256"),
         files: encFiles(i.files),
     };
 }
 
-// A field the op needs: undefined means the SDK does not have it, which fails the step.
-function need(obj, field) {
-    if (obj[field] === undefined) throw new Error(`the SDK has no ${field}`);
-    return obj[field];
-}
 
 function encBuild(b) {
     if (b == null) return null;
@@ -183,13 +177,14 @@ export function makeRunner(sdk) {
             return {
                 datestamp: r.datestamp, created: iso(r.created), format_version: r.format_version,
                 concept_doi: r.concept_doi, source_versions: r.source_versions, build_commit: r.build_commit,
-                changelog_url: r.changelog_url, ...present(r, ["zenodo_version_doi"]),
+                changelog_url: r.changelog_url, zenodo_version_doi: need(r, "zenodo_version_doi"),
             };
         },
         release_files: (a, msg) => ({ files: encFiles(release(msg).files) }),
         releases: async () => ({ releases: (await client().releases()).map(encInfo) }),
         latest: async () => ({ release: encInfo(await client().latest()) }),
         check_for_update: async () => ({ release: encInfo(await client().checkForUpdate()) }),
+        newer_format_major: () => ({ newer_format_major: need(client(), "newerFormatMajor") }),
         async update() {
             const u = await client().update();
             return { updated: u.updated, from: u.from, to: u.to };
@@ -268,7 +263,7 @@ export function makeRunner(sdk) {
         },
         constant_sets(a, msg) {
             const st = lookStation(msg, a);
-            return { set_ids: st ? st.constantSets(opts(a, ["include_excluded"])).map((c) => c.set_id) : [] };
+            return { set_ids: st ? st.constantSets(opts(a, ["include_no_constants"])).map((c) => c.set_id) : [] };
         },
         constant_set: (a, msg) => ({ set: encSet(lookSet(msg, a)) }),
         constituents(a, msg) {
@@ -283,19 +278,8 @@ export function makeRunner(sdk) {
         provenance(a, msg) {
             const cs = lookSet(msg, a);
             const p = cs ? cs.provenance : null;
-            return p ? { provenance: pick(p, PROVENANCE), raw: p.raw } : { provenance: null, raw: null };
-        },
-        provenance_build(a, msg) {
-            const cs = lookSet(msg, a);
-            return { build: cs ? encBuild(need(cs.provenance, "build")) : null };
-        },
-        carried_from_release(a, msg) {
-            const cs = lookSet(msg, a);
-            return { carried_from_release: cs ? need(cs.provenance, "carried_from_release") : null };
-        },
-        time_base(a, msg) {
-            const cs = lookSet(msg, a);
-            return { time_base: cs ? encTimeBase(need(cs, "time_base")) : null };
+            return p ? { provenance: { ...pick(p, PROVENANCE), build: encBuild(need(p, "build")) }, raw: p.raw }
+                : { provenance: null, raw: null };
         },
         set_validation(a, msg) {
             const cs = lookSet(msg, a);

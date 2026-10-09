@@ -103,8 +103,9 @@ class Runner
         when "release_metadata"
             r = rel(target)
             { "datestamp" => r.datestamp, "created" => time(r.created), "format_version" => r.format_version,
-              "concept_doi" => r.concept_doi, "source_versions" => r.source_versions,
-              "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }.merge(present(r, %w[zenodo_version_doi]))
+              "concept_doi" => r.concept_doi, "zenodo_version_doi" => r.zenodo_version_doi,
+              "source_versions" => r.source_versions,
+              "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }
         when "release_files"
             { "files" => rel(target).files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
         when "releases" then { "releases" => @client.releases.map { |i| release_info(i) } }
@@ -112,6 +113,7 @@ class Runner
         when "check_for_update"
             i = @client.check_for_update
             { "release" => i && release_info(i) }
+        when "newer_format_major" then { "newer_format_major" => @client.newer_format_major }
         when "update"
             u = @client.update!
             { "updated" => u.updated, "from" => u.from, "to" => u.to }
@@ -186,7 +188,7 @@ class Runner
             { "set_id" => set && set.set_id }
         when "constant_sets"
             st = find_station(args, target)
-            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_excluded])).map(&:set_id) : [] }
+            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : [] }
         when "constant_set"
             set = find_set(args, target)
             { "set" => set && constant_set(set) }
@@ -201,16 +203,6 @@ class Runner
             set = find_set(args, target)
             p = set && set.provenance
             { "provenance" => p && provenance(p), "raw" => p && p.raw }
-        when "provenance_build"
-            set = find_set(args, target)
-            b = set && set.provenance.build
-            { "build" => b && build(b) }
-        when "carried_from_release"
-            set = find_set(args, target)
-            { "carried_from_release" => set && set.provenance.carried_from_release }
-        when "time_base"
-            set = find_set(args, target)
-            { "time_base" => set && time_base(set.time_base) }
         when "set_validation"
             set = find_set(args, target)
             { "validation" => set ? set.validation.map { |v| validation(v) } : [] }
@@ -257,16 +249,10 @@ class Runner
         { "name" => f.name, "url" => f.url, "size" => f.size, "sha256" => f.sha256 }
     end
 
-    # The fields the SDK has. A field it does not have yet is left out of the result, so a case that checks it
-    # fails with "missing" and a case that does not check it is not affected.
-    def present(obj, names)
-        names.select { |n| obj.respond_to?(n) }.to_h { |n| [n, obj.public_send(n)] }
-    end
-
     def release_info(i)
-        { "datestamp" => i.datestamp, "format_version" => i.format_version }
-            .merge(present(i, %w[concept_doi zenodo_version_doi content_sha256]))
-            .merge("files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] })
+        { "datestamp" => i.datestamp, "format_version" => i.format_version, "concept_doi" => i.concept_doi,
+          "zenodo_version_doi" => i.zenodo_version_doi, "content_sha256" => i.content_sha256,
+          "files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
     end
 
     def build(b)
@@ -320,6 +306,7 @@ class Runner
           "qc_status" => s(set.qc_status),
           "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "verdict" => f.verdict, "values" => f.values } },
           "dropped_constituents" => set.dropped_constituents.map { |d| { "name" => d.name, "dropped_reason" => s(d.dropped_reason), "detail" => d.detail } },
+          "time_base" => time_base(set.time_base),
           "is_recommended" => set.recommended?, "convention_id" => set.convention.convention_id,
           "licence_id" => set.licence.licence_id, "constituent_count" => set.constituents.size }
     end
@@ -344,8 +331,9 @@ class Runner
     end
 
     def provenance(p)
-        { "build_commit" => p.build_commit, "adapter_version" => p.adapter_version, "input_sha256" => p.input_sha256,
-          "time_base" => p.time_base, "selection_reason" => p.selection_reason, "decision" => p.decision }
+        { "build" => p.build && build(p.build), "adapter_version" => p.adapter_version, "input_sha256" => p.input_sha256,
+          "selection_reason" => p.selection_reason, "decision" => p.decision,
+          "carried_from_release" => p.carried_from_release }
     end
 
     VALIDATION_NUMS = %w[time_mae_min time_p95_min time_bias_min height_mae_m range_error_m missed_events extra_events].freeze
