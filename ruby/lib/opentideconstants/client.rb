@@ -101,12 +101,13 @@ class OpenTideConstants
             .sort_by { |i| Cache.datestamp_key(i.datestamp) }.reverse.freeze
     end
 
-    # The latest release (one conditional GET of the pointer). It does not
-    # switch to it.
+    # The newest release this gem reads: the latest pointer (a conditional
+    # GET), and OTC_index.json too when the pointer's release is not readable
+    # (spec §4.3, §5.2 step 2a, CR D23). It does not switch to it.
     def latest
         check_open!
         raise OfflineError, "offline: the latest pointer is not available" if @offline
-        entry, url = fetch_latest_pointer
+        entry, url = resolve_latest
         release_info(entry, url)
     end
 
@@ -155,8 +156,11 @@ class OpenTideConstants
         end
     end
 
-    # Writes a release into a folder the caller chooses (spec §4.3.2). Returns
-    # the paths written.
+    # Writes a release into a folder the caller chooses (spec §4.3.2): the
+    # data files of formats, with OTC_{D}.meta.json for jsonl, and always
+    # OTC_{D}.sha256; all of them or none. Returns the paths written, in that
+    # order with the .sha256 last; a file already there with the same content
+    # is left alone and is not in the list.
     def download(release = :latest, to:, formats: [:jsonl], overwrite: false)
         check_open!
         want = check_release_arg(release)
@@ -472,10 +476,12 @@ class OpenTideConstants
     # not JSON (a captive portal or a proxy error page) is a network error
     # (CR D8) and leaves the cached copy alone. A failure to cache it is
     # logged, not raised. A 304 with no usable cached copy is asked again
-    # without the ETag. Offline, or after a network error with
-    # on_network_error :use_cache, it uses the cached copy. missing: :nil
-    # returns nil on a 404; :offline raises OfflineError when offline with no
-    # cached copy.
+    # without the ETag. Offline it uses the cached copy, or raises
+    # OfflineError. missing: :nil returns nil on a 404 (the latest pointers
+    # and the index lookup of §5.2 step 2a; a network error is raised, and the
+    # caller's open falls back to a cached release). missing: :offline is for
+    # releases: a 404 is release_not_found, and after a network error with
+    # on_network_error :use_cache it uses the cached copy.
     def fetch_pointer_doc(name, missing:)
         url = @base_url + name
         cached = cached_pointer(name)
