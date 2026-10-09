@@ -71,3 +71,15 @@ def test_driver_action_oserror_is_a_harness_error(tmp_path, step):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
     assert "FAIL  a  [step 1" in r.stdout and "harness error" in r.stdout and "PASS  b" in r.stdout, r.stdout[-800:]
     assert r.returncode == 2 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-500:])
+
+
+# --- K62: a bad case env or timeout_s is a harness error for that case; the run goes on; the lint finds it
+
+@pytest.mark.parametrize("extra", [{"env": {"X": "${no_such_placeholder}"}}, {"timeout_s": "soon"}])
+def test_bad_env_or_timeout_is_a_case_error(tmp_path, extra):
+    cases = write_cases(tmp_path, [{"id": "a", "steps": [OK_STEP], **extra}, {"id": "b", "steps": [OK_STEP]}])
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), env={"FAKE_REPLY": OK_REPLY})
+    assert "Traceback" not in r.stderr, r.stderr[-800:]
+    assert "FAIL  a" in r.stdout and "PASS  b" in r.stdout and r.returncode == 2, (r.returncode, r.stdout[-500:])
+    r = run_driver("--check-cases", "--cases", str(cases))
+    assert r.returncode == 2 and "PROBLEM" in r.stdout and "Traceback" not in r.stderr, r.stdout[-500:]

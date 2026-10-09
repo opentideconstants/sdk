@@ -287,6 +287,14 @@ def subst(value, ctx):
     return value
 
 
+def case_timeout(case):
+    """The case's timeout_s: a positive number of seconds (default 60)."""
+    t = case.get("timeout_s", 60)
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not t > 0:
+        raise CaseError(f"timeout_s must be a positive number, got {t!r}")
+    return float(t)
+
+
 def check_cases(cases):
     """Lint the case files. Returns a list of problems."""
     problems = []
@@ -297,6 +305,16 @@ def check_cases(cases):
             problems.append(f"{c.get('_file')}: missing or duplicate id {cid!r}")
         ids.add(cid)
         compared = 0
+        try:
+            case_timeout(c)
+        except CaseError as e:
+            problems.append(f"{cid}: {e}")
+        env = c.get("env", {})
+        if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+            problems.append(f"{cid}: env must be an object of strings")
+        for s in re.findall(r"\$\{([a-z_]+)\}", json.dumps(env)):
+            if s not in PLACEHOLDERS:
+                problems.append(f"{cid}: env: unknown placeholder ${{{s}}}")
         roles = c.get("roles")
         if roles is not None and (not isinstance(roles, dict) or len(roles) < 2
                                   or any(f not in FEATURES for fs in roles.values() for f in fs)):
@@ -626,7 +644,6 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     tmp = Path(tempfile.mkdtemp(prefix="otc-conf-"))
     ctx = {"fixtures": str(FIXTURES), "server": srv.url, "server_alias": f"http://{SERVER_ALIAS}:{srv.port}", "proxy": proxy.url, "tmp": str(tmp), "cache": str(tmp / "cache")}
     env_extra = isolated_env(tmp)
-    env_extra.update(subst(case.get("env", {}), ctx))
     srv.set_rules([])
     srv.log.clear()
     srv.errors.clear()
@@ -634,7 +651,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     proxy.log.clear()
     failures = []
     live = {}
-    step_timeout = float(case.get("timeout_s", 60))
+    step_timeout = 60.0
 
     def stderr_path(role):
         return tmp / ("runner.stderr" if role == "main" else f"runner-{role}.stderr")
@@ -667,6 +684,9 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
 
     cur = {"step": None}
     try:
+        # case fields: a bad env or timeout_s is a harness error of this case (inside the try, so tmp is removed)
+        env_extra.update(subst(case.get("env", {}), ctx))
+        step_timeout = case_timeout(case)
         for role in runners:
             live[role] = start(role)
         for i, st in enumerate(case["steps"]):
