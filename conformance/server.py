@@ -67,6 +67,7 @@ import urllib.parse
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_slow_sleep = time.sleep   # the wait of a slow rule; a test replaces this hook, never the process-wide time.sleep
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -371,7 +372,7 @@ class _FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self._started = True
             self.wfile.flush()
-            time.sleep(float(rule.get("delay_s", 5)))
+            _slow_sleep(float(rule.get("delay_s", 5)))
             if not head:
                 self.wfile.write(body)
             return

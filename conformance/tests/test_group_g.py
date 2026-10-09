@@ -173,15 +173,18 @@ def test_running_is_set_before_the_thread_starts(monkeypatch):
 
     class Probe(real):
         def start(self):
-            seen.append(srv.running)
+            seen.append((getattr(self, "_target", None), srv.running))
             super().start()
 
-    monkeypatch.setattr(server.threading, "Thread", Probe)
-    srv.start()
+    monkeypatch.setattr(server.threading, "Thread", Probe)   # server.threading is the module; undone at once below
     try:
-        assert seen and seen[0] is True, seen
+        srv.start()
     finally:
         monkeypatch.undo()
+    try:
+        serving = [running for target, running in seen if target == srv._httpd.serve_forever]
+        assert len(serving) == 1 and all(running for _, running in seen), seen   # every thread start, not only the first
+    finally:
         srv.shutdown()
 
 
@@ -193,7 +196,7 @@ def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
 
     def boom(_):
         raise RuntimeError("broken after the headers")
-    monkeypatch.setattr(server.time, "sleep", boom)
+    monkeypatch.setattr(server, "_slow_sleep", boom)   # the slow rule's own hook, not the process-wide time.sleep
     conn = http.client.HTTPConnection(srv.host, srv.port, timeout=5)
     conn.request("GET", JSONL)
     r = conn.getresponse()
@@ -204,7 +207,8 @@ def test_error_after_headers_writes_no_second_response(pair, monkeypatch):
     monkeypatch.undo()
     statuses = [e["status"] for e in srv.log.entries()]
     assert statuses == [200], statuses
-    assert srv.errors, "the error after the headers was not reported to the driver"
+    assert len(srv.errors) == 1 and srv.errors[0].startswith(f"error while sending {JSONL} ") \
+        and "broken after the headers" in srv.errors[0], srv.errors
 
 
 # --- harness support for the review round 1 cases
