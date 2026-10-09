@@ -674,6 +674,8 @@ static size_t arg_limit(args *a, const char *name, int *zero)
 #ifndef OTC_NO_LIMIT
     if (d == 0) { *zero = 1; return none; }
 #endif
+    /* a limit larger than any size_t (1e30, say) asks for every hit; the cast would be undefined behaviour */
+    if (d >= (double)SIZE_MAX) return SIZE_MAX;
     return (size_t)d;
 }
 
