@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import secrets
 import threading
 import time
 import weakref
@@ -55,6 +56,57 @@ def _split_file_name(name: str):
         if name.startswith("OTC_") and name.endswith(ext) and DATESTAMP_RE.match(name[4:-len(ext)]):
             return name[4:-len(ext)], ext
     return None, None
+
+
+def _rename_all_in(staged, log) -> Tuple[str, ...]:
+    """Rename every checked temporary file into place, all or nothing (spec §4.3.2, CR2 DR17). ``staged`` is a list
+    of (temporary file, destination). Each original that a new file replaces is first renamed aside to a
+    ``.tmp-bak-`` name in the same folder. If any rename fails, every original is restored and the new files that
+    were renamed in are removed, so the folder is as it was; FileError. If a restore fails too, the error lists the
+    paths that changed. Returns the destinations."""
+    aside = {}  # destination -> its original, renamed aside
+    placed = []  # destinations a new file was renamed into
+    dest = None
+    try:
+        for _tmp, dest in staged:
+            if os.path.lexists(dest) and not (dest.is_dir() and not dest.is_symlink()):
+                bak = dest.parent / f".tmp-bak-{os.getpid()}-{secrets.token_hex(6)}"
+                os.replace(dest, bak)
+                aside[dest] = bak
+        for tmp, dest in staged:
+            os.replace(tmp, dest)
+            placed.append(dest)
+    except OSError as e:
+        changed = []
+        for p in reversed(placed):
+            try:
+                if p in aside:
+                    os.replace(aside[p], p)
+                    del aside[p]
+                else:
+                    os.unlink(p)
+            except OSError as x:
+                log.warning("download: cannot restore %s: %s", p, x)
+                changed.append(str(p))
+        for p, bak in list(aside.items()):
+            if str(p) in changed:
+                continue
+            try:
+                os.replace(bak, p)
+            except OSError as x:
+                log.warning("download: cannot restore %s from %s: %s", p, bak, x)
+                changed.append(str(p))
+        msg = f"cannot write {dest}: {e}"
+        if changed:
+            msg += (f"; these paths changed and could not be restored: {', '.join(changed)} (an original that is "
+                    f"not back is in a .tmp-bak- file next to it)")
+        raise FileError(msg, path=str(dest), cause=e) from e
+    for p, bak in aside.items():
+        try:
+            bak.unlink()
+        except OSError as x:  # the new file is in place; only the old copy is left over
+            log.warning("download: cannot remove %s (the replaced %s): %s", bak, p, x)
+    return tuple(str(d) for _, d in staged)
 
 
 def _flag(v) -> bool:
@@ -786,7 +838,8 @@ class OpenTideConstants:
         return tuple(self._cache.cached())
 
     def prune(self, *, keep: int = 3) -> Tuple[str, ...]:
-        """Remove cached releases beyond the newest ``keep``. Never removes the loaded release."""
+        """Remove cached releases beyond the newest ``keep``. Never removes the loaded release. Stops at the first
+        release it cannot remove with CacheError, whose ``removed`` lists the releases removed before it."""
         self._check_open()
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
             raise InvalidArgumentError("keep must be a non-negative integer")
@@ -798,7 +851,12 @@ class OpenTideConstants:
         for ds in self._cache.cached()[keep:]:
             if ds in keep_ds:
                 continue
-            if self._cache.remove_release(ds):
+            try:
+                gone = self._cache.remove_release(ds)
+            except CacheError as e:
+                # stop at the first failure and report the releases removed before it (spec §4.3, CR2 DR18)
+                raise CacheError(str(e), removed=removed) from e
+            if gone:
                 removed.append(ds)
             else:
                 self._log.info("prune: %s is locked by another process; it is kept", ds)
@@ -829,8 +887,17 @@ class OpenTideConstants:
                 if ds is None:
                     raise OfflineError("offline, and no release is in the cache")
             else:
-                info = self._latest_info()
-                ds = info.datestamp
+                try:
+                    info = self._latest_info()
+                    ds = info.datestamp
+                except NetworkError as e:
+                    # on_network_error as when a client opens latest (spec §4.3.2, CR D22): use_cache writes the
+                    # newest cached readable release; raise, or no usable cached release, raises the network error
+                    ds = (self._newest_cached("eager") or self._newest_cached("stream")
+                          if self._on_network_error == "use_cache" else None)
+                    if ds is None:
+                        raise
+                    self._log.warning("network error (%s); writing the cached release %s", e, ds)
         else:
             ds = release
         base = f"OTC_{ds}"
@@ -877,7 +944,8 @@ class OpenTideConstants:
             if missing:
                 raise OfflineError(f"offline, and {', '.join(missing)} is not in the cache")
         # check, then rename (spec §4.3.2): every file goes to a checked temporary file in `to` first; only when
-        # all of them are there are they renamed into place, so a failure leaves nothing new in `to`
+        # all of them are there are they renamed into place, all or nothing (CR2 DR17), so a failure leaves `to` as
+        # it was
         staged = []  # (tmp, dest)
         try:
             for n, sha in todo:
@@ -920,15 +988,9 @@ class OpenTideConstants:
                     except OSError as e:  # a write into `to` failed: local io, not network (spec §4.8)
                         raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
                     staged.append((tmp, dest))
-            written = []
-            for tmp, dest in staged:
-                try:
-                    os.replace(tmp, dest)
-                except OSError as e:
-                    raise FileError(f"cannot write {dest}: {e}", path=str(dest), cause=e) from e
-                written.append(str(dest))
+            written = _rename_all_in(staged, self._log)  # on a failure, the finally below removes what is left
             staged = []
-            return tuple(written)
+            return written
         finally:
             for tmp, _ in staged:
                 try:
