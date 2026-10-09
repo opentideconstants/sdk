@@ -71,9 +71,11 @@ jobs:
       - name: Unit tests
         working-directory: js
         run: npm run test:unit
+      # --profile: a runner that says hello under another name, or loses a
+      # feature, fails the run instead of skipping those cases (R2-247)
       - name: Conformance suite (Node)
         shell: bash
-        run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --report ts-node-report.json
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/runner.mjs" --profile typescript --report ts-node-report.json
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,7 +104,7 @@ jobs:
           npx playwright install --with-deps chromium
           npm run build
       - name: Conformance suite (profile typescript-browser)
-        run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --report ts-browser-report.json
+        run: uv run conformance/driver.py --runner "node conformance/runners/node/browser-runner.mjs" --profile typescript-browser --report ts-browser-report.json
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -134,7 +136,12 @@ jobs:
           npm ci
           mkdir -p "$RUNNER_TEMP/pkg"
           npm pack --pack-destination "$RUNNER_TEMP/pkg"
+          # spec 7.4: the tarball ships supported-formats.json, the same bytes (R2-246)
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf "$RUNNER_TEMP"/pkg/opentideconstants-*.tgz -C "$RUNNER_TEMP/unpacked" package/supported-formats.json
+          cmp supported-formats.json "$RUNNER_TEMP/unpacked/package/supported-formats.json"
           cp examples/quickstart.mjs "$RUNNER_TEMP/pkg/"
+          node -p 'require("./package.json").devDependencies.typescript' > "$RUNNER_TEMP/pkg/typescript-version"
       - name: Install the tarball in a clean container and run the quickstart against the fixture server
         run: |
           uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 >"$RUNNER_TEMP/server.log" 2>&1 &
@@ -159,4 +166,13 @@ jobs:
           OPENTIDECONSTANTS_OFFLINE=1 node quickstart.mjs 9900001 | tee offline.txt
           grep -q "(cache)" offline.txt
           node -e 'const { OpenTideConstants } = require("opentideconstants"); if (typeof OpenTideConstants.open !== "function") process.exit(1)'
+          # The published types in a project with neither ESNext.Disposable nor
+          # @types/node, and skipLibCheck off (R2-248)
+          mkdir /types && cd /types && npm init -y >/dev/null && npm pkg set type=module
+          npm install --no-audit --no-fund /pkg/opentideconstants-*.tgz "typescript@$(cat /pkg/typescript-version)" >/dev/null
+          printf '%s\n' 'import { OpenTideConstants } from "opentideconstants";' \
+            'export const open: typeof OpenTideConstants.open = OpenTideConstants.open;' > consumer.ts
+          printf '%s\n' '{"compilerOptions": {"noEmit": true, "strict": true, "skipLibCheck": false, "target": "ES2022",' \
+            '"lib": ["ES2022", "DOM"], "module": "nodenext", "moduleResolution": "nodenext", "types": []}, "files": ["consumer.ts"]}' > tsconfig.json
+          npx tsc -p tsconfig.json
           SCRIPT

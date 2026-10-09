@@ -44,21 +44,47 @@ concurrency:
 
 jobs:
   # The suite's own checks: the fold table generator, the fold rules, and the
-  # driver and server self-tests (conformance/tests).
+  # driver and server self-tests (conformance/tests). The self-tests of the C
+  # runners (c/build, c/build-fetch), the Node runner (js/dist) and the browser
+  # runner (Playwright) skip when those are not built, so they are built first,
+  # and a skip for that reason fails the job (R2-360).
   suite:
     name: suite self-tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
       - name: The fold table is a fresh generation (Unicode 16.0.0)
         run: uv run conformance/tools/gen_fold_table.py --check
       - name: The fold table gives the expected folded names
         run: uv run conformance/tools/test_name_fold.py
+      - name: Build the TypeScript SDK and the browser for its runner
+        working-directory: js
+        run: |
+          npm ci
+          npm run build
+          npx playwright install --with-deps chromium
+      - name: Build the C runners, without and with otc_fetch
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+          cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=OFF
+          cmake --build c/build --parallel
+          cmake -S c -B c/build-fetch -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=ON
+          cmake --build c/build-fetch --parallel
       - name: Driver and server self-tests
-        run: uv run --python 3.12 --with "pytest>=8,<9" --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 --with rfc3986-validator==0.1.1 python -m pytest conformance/tests -v -p no:cacheprovider
+        run: |
+          uv run --python 3.12 --with "pytest>=8,<9" --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 --with rfc3986-validator==0.1.1 python -m pytest conformance/tests -v -rs -p no:cacheprovider | tee pytest.log
+          if grep -E "^SKIPPED .*(build the C runner|js/dist is not built|no Playwright|no ruby|no node)" pytest.log; then
+            echo "a self-test skipped because a runner was not built"
+            exit 1
+          fi
 
   cross:
     name: ${{ matrix.os }}

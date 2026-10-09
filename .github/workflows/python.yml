@@ -69,13 +69,24 @@ jobs:
           python -m build python --outdir dist
           ls dist
           test -f dist/opentideconstants-*-py3-none-any.whl
-      - name: The wheel carries supported-formats.json (spec 7.4)
+      # The same bytes as python/supported-formats.json, not only the name (R2-245)
+      - name: The wheel and the sdist carry supported-formats.json (spec 7.4)
         run: |
-          python -m zipfile -l dist/opentideconstants-*-py3-none-any.whl > wheel-files.txt
-          grep "opentideconstants/supported-formats.json" wheel-files.txt
+          mkdir -p dist-check/wheel dist-check/sdist
+          python -m zipfile -e dist/opentideconstants-*-py3-none-any.whl dist-check/wheel
+          cmp python/supported-formats.json dist-check/wheel/opentideconstants/supported-formats.json
+          tar -xzf dist/opentideconstants-*.tar.gz -C dist-check/sdist
+          cmp python/supported-formats.json dist-check/sdist/opentideconstants-*/supported-formats.json
+      # As the runner's own user, not root: as root the chmod-based unit tests and
+      # the read-only cache cases cannot see a permission error, so they fail (R2-359).
       - name: Install the wheel in a clean python:3.10-slim container, run the unit tests on it, and run the quickstart against the fixture server
         run: |
-          docker run --rm -i -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim bash -eo pipefail -s <<'SCRIPT'
+          docker run --rm -i --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD/dist:/dist:ro" -v "$PWD:/repo:ro" python:3.10-slim bash -eo pipefail -s <<'SCRIPT'
+          test "$(id -u)" -ne 0
+          mkdir -p "$HOME"
+          # a venv, not pip --user: the driver gives each runner its own HOME
+          python -m venv /tmp/venv
+          export PATH=/tmp/venv/bin:$PATH
           pip install --no-index --quiet /dist/opentideconstants-*-py3-none-any.whl
           cd /tmp
           OTC_TEST_INSTALLED=1 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s /repo/python/tests -v

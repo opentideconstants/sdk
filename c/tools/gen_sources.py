@@ -92,6 +92,15 @@ def fold_table():
     return "\n".join(lines)
 
 
+# The library defines about 215 public otc_ functions and 154 renamed otc__
+# vendor symbols. Far fewer means nm read the wrong file or printed nothing
+# usable, and an empty list must not pass (R2-240).
+MIN_OTC_SYMBOLS = 100
+# A sanitizer build adds the compiler's own globals (___asan_globals_registered,
+# __odr_asan_gen_<name>); they are instrumentation, not a name of this library.
+SANITIZER_SYMBOL = re.compile(r"_{2,3}(odr_asan|asan|ubsan|tsan|msan|sancov|sanitizer)_")
+
+
 def check_symbols(lib):
     """The nm backstop (C80): every global symbol a built library defines starts with otc_."""
     import subprocess
@@ -100,6 +109,7 @@ def check_symbols(lib):
         print(f"nm {lib} failed: {out.stderr.strip()}")
         return 1
     bad = []
+    good = 0
     for line in out.stdout.splitlines():
         parts = line.split()
         if len(parts) < 3 or parts[-2] in ("U", "w", "v"):
@@ -107,10 +117,18 @@ def check_symbols(lib):
         name = parts[-1]
         if sys.platform == "darwin" and name.startswith("_"):
             name = name[1:]
-        if not name.startswith("otc_"):
+        if name.startswith("otc_"):
+            good += 1
+        elif not SANITIZER_SYMBOL.match(name):
             bad.append(name)
     for name in sorted(set(bad)):
         print(f"{lib}: global symbol without the otc_ prefix: {name}")
+    if good < MIN_OTC_SYMBOLS:
+        print(f"{lib}: nm shows {good} defined otc_ symbols (at least {MIN_OTC_SYMBOLS} expected); "
+              "not the library, or nm printed nothing usable")
+        return 1
+    if not bad:
+        print(f"{lib}: {good} global symbols, all with the otc_ prefix")
     return 1 if bad else 0
 
 
