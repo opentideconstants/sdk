@@ -310,15 +310,15 @@ test("T41/T18/T95/D4: usableIndex rejects out-of-bounds, unordered, wrongly fold
 
 test("T46: a convention or licence that is not an object, and a repeated licence_id, are invalid_release", async () => {
     const { parseHeader } = await import("../dist/release.js");
-    const h = (o) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }], licences: [{ licence_id: "l", attribution: "L" }], ...o });
+    const h = (o) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }], licences: [{ licence_id: "l", attribution: "L", commercial_use: true }], ...o });
     assert.ok(parseHeader(h({})));
     assert.throws(() => parseHeader(h({ conventions: [{ convention_id: "c" }, 5] })), isCode("invalid_release"));
-    assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l", attribution: "L" }, { licence_id: "l", attribution: "L" }] })), isCode("invalid_release"));
+    assert.throws(() => parseHeader(h({ licences: [{ licence_id: "l", attribution: "L", commercial_use: true }, { licence_id: "l", attribution: "L", commercial_use: true }] })), isCode("invalid_release"));
 });
 
 test("CR2 DR2: a licence attribution that is not a string, or a provider that is neither a string nor null, is invalid_release", async () => {
     const { parseHeader } = await import("../dist/release.js");
-    const h = (l) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [], licences: [{ licence_id: "l", ...l }] });
+    const h = (l) => ({ format_version: "1.0", release: { datestamp: "20991231" }, conventions: [], licences: [{ licence_id: "l", commercial_use: true, ...l }] });
     assert.ok(parseHeader(h({ provider: "P", attribution: "A" })));
     assert.ok(parseHeader(h({ provider: null, attribution: "A" })), "a null provider is allowed (CR D2 b)");
     for (const l of [{ provider: "P", attribution: null }, { provider: "P" }, { provider: "P", attribution: 5 }, { provider: 7, attribution: "A" }]) {
@@ -330,7 +330,7 @@ test("R2-008: attribution never drops a licence it cannot find: invalid_release,
     const { parseHeader, indexStations, Release } = await import("../dist/release.js");
     const doc = {
         format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }],
-        licences: [{ licence_id: "a", provider: "A", attribution: "A text" }, { licence_id: "o", provider: "O", attribution: "O text" }],
+        licences: [{ licence_id: "a", provider: "A", attribution: "A text", commercial_use: true }, { licence_id: "o", provider: "O", attribution: "O text", commercial_use: true }],
         stations: [
             { station_id: "R", status: "active", type: "reference", lat: 0, lon: 0, recommended_set_id: "R/s",
                 constant_sets: [{ set_id: "R/s", source: "x", quantity: "water_level", qc_status: "ok", convention_id: "c", licence_id: "a", constituents: [] }] },
@@ -485,8 +485,8 @@ test("T23/D2: attribution prints a provider-less licence alone, counts a subordi
     const set = (sid, lic) => ({ set_id: sid, source: "x", quantity: "water_level", qc_status: "ok", convention_id: "c", licence_id: lic, constituents: [] });
     const doc = {
         format_version: "1.0", release: { datestamp: "20991231" }, conventions: [{ convention_id: "c" }],
-        licences: [{ licence_id: "a", provider: null, attribution: "A text" }, { licence_id: "b", provider: null, attribution: "B text" },
-            { licence_id: "o", provider: "Offsets Co", attribution: "O text" }],
+        licences: [{ licence_id: "a", provider: null, attribution: "A text", commercial_use: true }, { licence_id: "b", provider: null, attribution: "B text", commercial_use: true },
+            { licence_id: "o", provider: "Offsets Co", attribution: "O text", commercial_use: true }],
         stations: [
             { station_id: "R", status: "active", type: "reference", lat: 0, lon: 0, recommended_set_id: "R/s", constant_sets: [set("R/s", "a")] },
             { station_id: "S", status: "active", type: "subordinate", lat: 0, lon: 0, recommended_set_id: null,
@@ -1225,4 +1225,16 @@ test("R2-109: a worker that fails after it ran (a DataCloneError) is not labelle
     assert.equal(res.ok, false);
     assert.doesNotMatch(String(res.message), /failed to start/);
     assert.equal(res.cause?.name, "DataCloneError");
+});
+
+test("K-NC DR106: commercialOnly is a boolean; undefined is false; anything else, null included, is invalid_argument", async () => {
+    const file = path.join(new URL("../../conformance/fixtures/knc/", import.meta.url).pathname, "OTC_20991231.2.jsonl");
+    for (const v of [1, 0, "true", null, [true]]) {
+        await assert.rejects(otc.OpenTideConstants.open({ file, commercialOnly: v }), isCode("invalid_argument"), JSON.stringify(v));
+    }
+    for (const [v, want] of [[true, "OTC-T-0181/w-ok"], [false, "OTC-T-0181/x-nc"], [undefined, "OTC-T-0181/x-nc"]]) {
+        const c = await otc.OpenTideConstants.open({ file, commercialOnly: v });
+        assert.equal(c.station("OTC-T-0181").recommendedSet.set_id, want);
+        await c.close();
+    }
 });

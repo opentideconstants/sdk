@@ -117,6 +117,12 @@ export interface Licence {
     readonly citation: string | null;
     readonly attribution: string | null;
     readonly url: string | null;
+    /** true: the licence allows commercial use, on its own terms; false: non-commercial use only (spec 4.6). */
+    readonly commercial_use: boolean;
+    /** What use is not allowed and why; always set when commercial_use is false. */
+    readonly restriction: string | null;
+    /** The upstream terms; always set when commercial_use is false. */
+    readonly terms_url: string | null;
     readonly raw: JsonObject;
 }
 
@@ -313,6 +319,11 @@ export interface OpenOptions {
     updateInterval?: number | null;
     logger?: Logger | null;
     verifyOnOpen?: boolean | null;
+    /**
+     * Select only constant sets whose licence allows commercial use (spec 4.2): the effective recommended set, the
+     * sourceType filter and the attribution's tide source. A boolean; left out (or undefined) is false.
+     */
+    commercialOnly?: boolean;
 }
 
 /** Options of `download` (spec 4.3.2). */

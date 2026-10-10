@@ -93,6 +93,24 @@ export interface StationSource {
     close(): void;
 }
 
+/**
+ * The load rules of the licence fields (spec 4.6, K-NC DR104): commercial_use is a JSON boolean (absent or null is
+ * invalid); restriction and terms_url, when present, are strings (a JSON null is not one, CR3 DR71); a
+ * non-commercial licence has both, and an spdx, which the non-commercial notice prints.
+ */
+function checkLicence(l: JsonObject): void {
+    const id = String(l["licence_id"]);
+    const cu = l["commercial_use"];
+    if (typeof cu !== "boolean") throw new InvalidReleaseError(`licence ${id}: commercial_use must be true or false`);
+    for (const k of ["restriction", "terms_url"]) {
+        if (Object.hasOwn(l, k) && typeof l[k] !== "string") throw new InvalidReleaseError(`licence ${id}: ${k} must be a string`);
+    }
+    if (cu) return;
+    for (const k of ["restriction", "terms_url", "spdx"]) {
+        if (typeof l[k] !== "string") throw new InvalidReleaseError(`licence ${id}: a licence with commercial_use false needs ${k}`);
+    }
+}
+
 /** @internal Check the release header; throws invalid_release. */
 export function parseHeader(doc: unknown): ReleaseHeader {
     if (!isObject(doc)) throw new InvalidReleaseError("the release document is not a JSON object");
@@ -122,6 +140,7 @@ export function parseHeader(doc: unknown): ReleaseHeader {
         if (typeof l["attribution"] !== "string" || !(provider === undefined || provider === null || typeof provider === "string")) {
             throw new InvalidReleaseError(`licence ${String(l["licence_id"])}: attribution must be a string and provider a string or null`);
         }
+        checkLicence(l);
     }
     for (const [list, key] of [[cs, "convention_id"], [ls, "licence_id"]] as const) {
         const seen = new Set<string>();
@@ -682,7 +701,8 @@ export class Station {
         this.aliases = Object.freeze(Object.fromEntries(Object.entries(entry.aliases).map(([k, v]) => [k, Object.freeze([...v])])));
         this.status = en(entry.status, ["active", "removed"] as const) ?? "other";   // "active" for a line with no status (CR2 DR28)
         this.#validation = Object.freeze(arr(raw, "validation").filter(isObject).map(validationOf));
-        const recId = entry.recommended_set_id;
+        // the effective recommended set under commercial_only (spec 4.2, K-NC DR106), else the release's
+        const recId = release._recommendedId(entry);
         this.#sets = Object.freeze(arr(raw, "constant_sets").filter(isObject).map((cs) => {
             const setId = str(cs, "set_id");
             const rows = this.#validation.filter((v) => v.set_id === setId)
@@ -824,15 +844,17 @@ function checkFilters(f: StationFilters | undefined | null): CheckedFilters {
 const STATION_TYPE_VALUES = ["reference", "subordinate"] as const;
 const KINDS = ["tide", "current"] as const;
 const SOURCE_TYPES = ["official", "gauge", "model"] as const;
+const QUANTITIES = ["water_level", "current"] as const;
 
 /** An enum filter compares the typed value: an unknown value in the data is "other", so "other" matches it and its
  * raw string matches nothing (spec 4.4, CR2 DR7). */
-function matches(e: IndexEntry, f: CheckedFilters): boolean {
+function matches(e: IndexEntry, f: CheckedFilters, recSourceType: (e: IndexEntry) => string | null): boolean {
     if (f.country !== null && e.country !== f.country) return false;
     if (f.type !== null && en(e.type, STATION_TYPE_VALUES) !== f.type) return false;
     if (f.kind !== null && en(e.kind, KINDS) !== f.kind) return false;
     if (f.source !== null && !e.usable_sources.includes(f.source)) return false;
-    if (f.sourceType !== null && en(e.recommended_source_type, SOURCE_TYPES) !== f.sourceType) return false;
+    // with commercial_only, the effective recommended set's (spec 4.4, K-NC DR106)
+    if (f.sourceType !== null && en(recSourceType(e), SOURCE_TYPES) !== f.sourceType) return false;
     return true;
 }
 
@@ -852,6 +874,9 @@ function countBy(values: Iterable<string | null>): Record<string, number> {
     for (const v of values) if (v !== null) out.set(v, (out.get(v) ?? 0) + 1);
     return Object.freeze(Object.fromEntries([...out].sort((a, b) => cmp(a[0], b[0]))));
 }
+
+/** The source of every subordinate_offsets in format 1.0 (spec 4.2, K-NC DR106). */
+const OFFSETS_SOURCE = "noaa";
 
 const LRU_SIZE = 256;
 // The reference links a walk follows (spec 6.2 kind, 4.6 attribution).
@@ -883,13 +908,15 @@ export class Release {
     readonly #subs: Map<string, IndexEntry[]>;
     readonly #conventions: readonly Convention[];
     readonly #licences: readonly Licence[];
+    /** commercial_only (spec 4.2, K-NC DR106): station_id -> its effective recommended set (or null); null without it. */
+    readonly #effective: Map<string, StoredSet | null> | null;
     readonly #cache = new Map<string, Station | Tombstone>();
     readonly #lru: number;
     #closed = false;
 
     /** @internal */
     constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
-        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined) {
+        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined, commercialOnly = false) {
         this.#source = source;
         this.#lru = eager ? Infinity : LRU_SIZE;
         const r = header.release;
@@ -940,9 +967,64 @@ export class Release {
         })));
         this.#licences = Object.freeze(header.licences.map((l) => Object.freeze({
             licence_id: str(l, "licence_id") ?? "", spdx: str(l, "spdx"), provider: str(l, "provider"),
-            citation: str(l, "citation"), attribution: str(l, "attribution"), url: str(l, "url"), raw: l,
+            citation: str(l, "citation"), attribution: str(l, "attribution"), url: str(l, "url"),
+            commercial_use: l["commercial_use"] === true, restriction: str(l, "restriction"), terms_url: str(l, "terms_url"), raw: l,
         })));
+        this.#effective = commercialOnly ? new Map(this.#active.map((e) => [e.station_id, this.#effectiveSet(e)])) : null;
         Object.freeze(this);
+    }
+
+    #commercial(licenceId: string | null): boolean {
+        return licenceId !== null && this.#licences.find((l) => l.licence_id === licenceId)?.commercial_use === true;
+    }
+
+    /**
+     * The effective recommended set under commercial_only (spec 4.2, K-NC DR106), from the entry's sets in file order:
+     * the release's recommended set when its licence allows commercial use; otherwise the first set of the same typed
+     * quantity, qc_status ok, with a commercial licence; then the same with flagged; otherwise null. A set with no
+     * quantity never matches.
+     */
+    #effectiveSet(e: IndexEntry): StoredSet | null {
+        const sets = e.stored.sets;
+        const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
+        if (!rec) return null;
+        if (this.#commercial(rec.licence_id)) return rec;
+        const q = en(rec.quantity, QUANTITIES);
+        if (q === null) return null;
+        for (const status of ["ok", "flagged"]) {
+            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id));
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    /** @internal The set_id a Station of this entry gives as recommended (the effective one under commercial_only). */
+    _recommendedId(e: IndexEntry): string | null {
+        if (this.#effective === null) return e.recommended_set_id;
+        return this.#effective.get(e.station_id)?.set_id ?? null;
+    }
+
+    #recSourceType = (e: IndexEntry): string | null =>
+        this.#effective === null ? e.recommended_source_type : this.#effective.get(e.station_id)?.source_type ?? null;
+
+    /**
+     * The licences of a station's tide source under commercial_only (spec 4.2, K-NC DR106): its effective recommended
+     * set; else the one-link offsets path (the reference station's first set in file order from the offsets' source,
+     * water_level, ok or flagged), usable only when the offsets' licence and that set's licence allow commercial use;
+     * else none (no usable tides).
+     */
+    #tideSourceLicences(e: IndexEntry): string[] {
+        const eff = this.#effective?.get(e.station_id) ?? null;
+        if (eff !== null) return eff.licence_id === null ? [] : [eff.licence_id];
+        const refId = e.stored.reference_station_id;
+        if (refId === null && e.offsets_licence_id === null) return [];
+        const ref = refId === null ? undefined : this.#byId.get(refId);
+        if (!ref) return [];
+        const refSet = ref.stored.sets.find((cs) => cs.source === OFFSETS_SOURCE && en(cs.quantity, QUANTITIES) === "water_level"
+            && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
+        if (!refSet || refSet.licence_id === null) return [];
+        const out = [refSet.licence_id, ...(e.offsets_licence_id ? [e.offsets_licence_id] : [])];
+        return out.every((id) => this.#commercial(id)) ? out : [];
     }
 
     /** @internal Release the file handle (stream mode). After it every query fails with io (spec 4.2, CR D21). */
@@ -1118,10 +1200,11 @@ export class Release {
         const active = this.#active;
         const open = () => this.#open();
         const station = (e: IndexEntry) => this.#station(e);
+        const recSourceType = this.#recSourceType;
         return (function* () {
             for (const e of active) {
                 open();
-                if (matches(e, f)) yield station(e);
+                if (matches(e, f, recSourceType)) yield station(e);
             }
             open();
         })();
@@ -1140,7 +1223,7 @@ export class Release {
         if (q === "") throw new InvalidArgumentError("the query is empty");
         const ranked: [number, string, IndexEntry][] = [];
         for (const e of this.#active) {
-            if (!matches(e, f)) continue;
+            if (!matches(e, f, this.#recSourceType)) continue;
             const n = e.name_folded;
             let r: number;
             if (n === q) r = 0;
@@ -1160,7 +1243,7 @@ export class Release {
         const band = maxKm === null ? Infinity : maxKm / (EARTH_R_KM * DEG) + 1e-9;
         const hits: [number, IndexEntry][] = [];
         for (const e of this.#active) {
-            if (e.lat === null || e.lon === null || Math.abs(e.lat - lat) > band || !matches(e, f)) continue;
+            if (e.lat === null || e.lon === null || Math.abs(e.lat - lat) > band || !matches(e, f, this.#recSourceType)) continue;
             const d = haversine(lat, lon, e.lat, e.lon);
             if (maxKm === null || d <= maxKm) hits.push([d, e]);
         }
@@ -1254,8 +1337,10 @@ export class Release {
     attribution(stations?: readonly (Station | null)[] | null): string {
         this.#open();
         let ids: Set<string>;
+        const co = this.#effective !== null;
         if (stations === undefined || stations === null || (Array.isArray(stations) && stations.length === 0)) {
-            ids = new Set(this.#licences.map((l) => l.licence_id));
+            // with commercial_only, only the commercial licences (K-NC DR106)
+            ids = new Set(this.#licences.filter((l) => !co || l.commercial_use).map((l) => l.licence_id));
         } else {
             if (!Array.isArray(stations)) throw new InvalidArgumentError("stations must be a list of Station objects");
             ids = new Set();
@@ -1265,6 +1350,11 @@ export class Release {
                 }
                 const e = this.#byId.get(s.station_id);
                 if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
+                if (co) {
+                    // the licences of the station's tide source (spec 4.2, 4.6, K-NC DR106)
+                    for (const id of this.#tideSourceLicences(e)) ids.add(id);
+                    continue;
+                }
                 if (e.recommended_licence_id) ids.add(e.recommended_licence_id);
                 for (const id of this.#chainLicences(e)) ids.add(id);
             }
@@ -1285,7 +1375,17 @@ export class Release {
             parts.push(`${l.provider}: ${l.attribution ?? ""}`);
         }
         const ident = this.concept_doi ? `doi:${this.concept_doi}` : `https://data.opentideconstants.org/OTC_${this.datestamp}.json`;
-        return `Tidal constants: OpenTideConstants ${this.datestamp}, ${ident}, CC BY 4.0. Sources: ${parts.join("; ")}`;
+        const head = `Tidal constants: OpenTideConstants ${this.datestamp}, ${ident}, CC BY 4.0.`;
+        // an empty scope: the dataset header alone (spec 4.6, K-NC DR106)
+        if (ids.size === 0) return head;
+        let text = `${head} Sources: ${parts.join("; ")}`;
+        // the non-commercial notice (spec 4.6, K-NC DR105): once, then one entry per non-commercial licence in scope,
+        // by licence_id; a null provider gives the licence_id
+        const nc = [...ids].sort(cmp).map((id) => this.licence(id)).filter((l): l is Licence => l !== null && !l.commercial_use);
+        if (nc.length > 0) {
+            text += `. Non-commercial use only: ${nc.map((l) => `${l.provider ?? l.licence_id} (${l.spdx ?? ""}, ${l.terms_url ?? ""})`).join("; ")}`;
+        }
+        return text;
     }
 }
 

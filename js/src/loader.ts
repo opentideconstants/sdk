@@ -89,7 +89,7 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
 
 /** @internal A release from the full `.json` document (eager). */
 export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
-    warn: (message: string) => void = () => undefined): Release {
+    warn: (message: string) => void = () => undefined, commercialOnly = false): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -98,7 +98,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -165,6 +165,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     dropIndex?: () => void;
     /** Where a station with an unknown status is reported, once at load (CR2 DR8). */
     warn?: (message: string) => void;
+    /** The open option of spec 4.2 (K-NC DR106). */
+    commercialOnly?: boolean;
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -217,7 +219,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false);
 }
 
 /**

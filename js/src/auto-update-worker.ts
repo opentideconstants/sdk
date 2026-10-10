@@ -25,6 +25,7 @@ try {
         platform, store: await platform.cache(data.cacheRoot), baseUrl: data.baseUrl, offline: data.offline,
         timeout: data.timeout, proxy: data.proxy, caFile: data.caFile, userAgent: data.userAgent,
         onNetworkError: "raise", logger: null, mode: data.mode,
+        commercialOnly: false,   // the check downloads only; the client loads the release with its own option
     };
     if (ctx.offline) throw new Error("offline: the automatic update check does not run");
     const entry = await getPointer(ctx);

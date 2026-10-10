@@ -185,6 +185,11 @@ export class OpenTideConstants {
         const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
         const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
+        // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
+        const commercialOnly: unknown = options.commercialOnly;
+        if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
+            throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
+        }
         const file = optStr(options.file, "file");
         // A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
         // spec 4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
@@ -234,12 +239,12 @@ export class OpenTideConstants {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
             proxy, caFile,
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
-            onNetworkError, logger: options.logger ?? null, mode,
+            onNetworkError, logger: options.logger ?? null, mode, commercialOnly: commercialOnly === true,
         };
         const extra = { lastError: null as OpenTideConstantsError | null, pinned: release !== "latest", file: null as FileSource | null, cacheRoot, autoUpdate, interval };
 
         if (file !== null && node) {
-            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m));
+            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly);
             return new OpenTideConstants(ctx, node, rel, from, { ...extra, pinned: true, file: src });
         }
         const store = ctx.store;
@@ -370,11 +375,12 @@ export class OpenTideConstants {
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
         const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
-        return loadCached(dir, v, d, ctx.mode, warn);
+        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
-    static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void): { rel: Release; from: LoadedFrom; src: FileSource } {
+    static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void,
+        commercialOnly: boolean): { rel: Release; from: LoadedFrom; src: FileSource } {
         const path = node.nodePath;
         const full = path.resolve(file);
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
@@ -411,13 +417,13 @@ export class OpenTideConstants {
             if (mode === "stream") {
                 const lr = node.openLineReader(full);
                 try {
-                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn });
+                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn, commercialOnly });
                 } catch (e) {
                     lr.close();
                     throw e;
                 }
             } else {
-                rel = releaseFromJsonl(meta, data, { eager: true, files, warn });
+                rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly });
             }
         } else {
             let json = data;
@@ -428,7 +434,7 @@ export class OpenTideConstants {
                     throw new InvalidReleaseError(`${name} does not decompress`, { cause: e });
                 }
             }
-            rel = releaseFromJson(json, files, null, warn);
+            rel = releaseFromJson(json, files, null, warn, commercialOnly);
         }
         return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
     }
@@ -476,7 +482,8 @@ export class OpenTideConstants {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
             const v = vb ? parseVerified(vb, res.datestamp) : null;
             if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
-            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m));
+            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
+                ctx.commercialOnly);
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {

@@ -41,7 +41,7 @@ const CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "am
     "amp_uncertainty_m", "phase_uncertainty_deg", "kept_reason"];
 const CONVENTION = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
     "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"];
-const LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url"];
+const LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url", "commercial_use", "restriction", "terms_url"];
 const PROVENANCE = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"];
 const VALIDATION = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
     "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"];
@@ -206,7 +206,7 @@ export function makeRunner(sdk) {
                 state.client = null;
             }
             const o = opts(a, ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file",
-                "user_agent", "on_network_error", "auto_update", "update_interval", "verify_on_open"]);
+                "user_agent", "on_network_error", "auto_update", "update_interval", "verify_on_open", "commercial_only"]);
             state.client = await sdk.OpenTideConstants.open(o);
             const r = state.client.release;
             return { loaded_from: state.client.loadedFrom, datestamp: r.datestamp, format_version: r.format_version };
