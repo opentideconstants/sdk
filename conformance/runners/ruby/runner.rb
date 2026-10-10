@@ -375,7 +375,8 @@ class Runner
 
     def licence(l)
         { "licence_id" => l.licence_id, "spdx" => l.spdx, "provider" => l.provider, "citation" => l.citation,
-          "attribution" => l.attribution, "url" => l.url }
+          "attribution" => l.attribution, "url" => l.url, "commercial_use" => l.commercial_use,
+          "restriction" => l.restriction, "terms_url" => l.terms_url }
     end
 
     def provenance(p)

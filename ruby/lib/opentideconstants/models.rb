@@ -117,7 +117,8 @@ class OpenTideConstants
     end
 
     class Licence
-        attr_reader :licence_id, :spdx, :provider, :citation, :attribution, :url, :raw
+        attr_reader :licence_id, :spdx, :provider, :citation, :attribution, :url, :commercial_use, :restriction,
+                    :terms_url, :raw
 
         def initialize(raw)
             @raw = Util.deep_freeze(raw)
@@ -127,7 +128,28 @@ class OpenTideConstants
             @citation = raw["citation"]
             @attribution = raw["attribution"]
             @url = raw["url"]
+            @commercial_use = raw["commercial_use"]
+            @restriction = raw["restriction"]
+            @terms_url = raw["terms_url"]
             freeze
+        end
+
+        # The load rules of the licence fields (spec §4.6, K-NC DR104):
+        # commercial_use is true or false (absent or null is invalid);
+        # restriction and terms_url, when present, are Strings (a JSON null is
+        # not one, CR3 DR71); a non-commercial licence has both, and an spdx,
+        # which the non-commercial notice prints.
+        def self.check!(raw)
+            lid = raw["licence_id"]
+            cu = raw["commercial_use"]
+            raise InvalidReleaseError, "licence #{lid}: commercial_use must be true or false" unless cu == true || cu == false
+            %w[restriction terms_url].each do |k|
+                raise InvalidReleaseError, "licence #{lid}: #{k} must be a String" if raw.key?(k) && !raw[k].is_a?(String)
+            end
+            return if cu
+            %w[restriction terms_url spdx].each do |k|
+                raise InvalidReleaseError, "licence #{lid}: a licence with commercial_use false needs #{k}" unless raw[k].is_a?(String)
+            end
         end
     end
 

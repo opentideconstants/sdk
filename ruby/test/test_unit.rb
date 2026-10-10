@@ -245,3 +245,23 @@ class CredentialsRedactedTest < Minitest::Test
         assert_equal "cannot read https://***@h.example/x and ftp://***@b/c", e.message
     end
 end
+
+# K-NC DR106 (spec §4.2): commercial_only must be true or false; any other
+# value, nil included, is invalid_argument.
+class CommercialOnlyTest < Minitest::Test
+    KNC = File.join(FIXTURES, "knc", "OTC_20991231.2.jsonl")
+
+    def test_commercial_only_must_be_true_or_false
+        [1, 0, "true", nil, :true, [true]].each do |v|
+            assert_raises(OpenTideConstants::InvalidArgumentError, v.inspect) do
+                OpenTideConstants.new(file: KNC, commercial_only: v)
+            end
+        end
+        c = OpenTideConstants.new(file: KNC, commercial_only: true)
+        assert_equal "OTC-T-0181/w-ok", c.station("OTC-T-0181").recommended_set.set_id
+        c.close
+        c = OpenTideConstants.new(file: KNC, commercial_only: false)
+        assert_equal "OTC-T-0181/x-nc", c.station("OTC-T-0181").recommended_set.set_id
+        c.close
+    end
+end

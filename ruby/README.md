@@ -26,7 +26,7 @@ Other ways to open:
 | `file: "OTC_20261008.jsonl"` | a local `.json`, `.json.gz` or `.jsonl` (+ `.meta.json`). With `OTC_{D}.sha256` next to it, the files are checked against it and `loaded_from` is `:file`; without it nothing is checked and `loaded_from` is `:file_unverified` (then `verify` fails with `checksum_mismatch`) |
 | `offline: true` | never open a socket. Opening the latest release (the default) loads the newest cached release; `latest`, `check_for_update` and `update!` fail with `offline_unavailable` |
 | `mode: :stream` | low memory: stations are read from the `.jsonl` file when a query needs them |
-| `cache_dir:`, `base_url:`, `timeout:`, `proxy:`, `ca_file:`, `user_agent:`, `on_network_error:`, `auto_update:`, `update_interval:`, `logger:`, `verify_on_open:` | see the SDK spec §4.2 |
+| `cache_dir:`, `base_url:`, `timeout:`, `proxy:`, `ca_file:`, `user_agent:`, `on_network_error:`, `auto_update:`, `update_interval:`, `logger:`, `verify_on_open:`, `commercial_only:` | see the SDK spec §4.2 |
 
 Queries: `station`, `require_station`, `tombstone`, `station_by_alias`, `stations(**filters)`, `each_station`, `search(name:)`, `near(lat:, lon:, radius_km:)`, `nearest(lat:, lon:)`, `reference_station`, `subordinates_of`, `attribution`. Release management: `release`, `loaded_from`, `releases`, `latest`, `check_for_update`, `update!`, `download(to:)`, `verify`, `cached_releases`, `prune(keep:)`.
 

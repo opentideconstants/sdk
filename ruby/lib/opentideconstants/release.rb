@@ -19,9 +19,17 @@ class OpenTideConstants
         MAX_LINKS = 16
 
         # A small per-station summary, used by the filters and the indexes.
+        # eff_*: the recommended set the Stations give (the effective one under
+        # commercial_only, spec §4.2, K-NC DR106); offsets_ref_licence_id: the
+        # licence of the station's first set in file order from the offsets'
+        # source (noaa), water_level, ok or flagged (the reference set of the
+        # one-link offsets path), or nil.
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
+                           :eff_id, :eff_source_type, :eff_licence_id, :offsets_ref_licence_id,
                            :aliases, :pos, :len, :station, :view, keyword_init: true)
+        # The source of every subordinate_offsets in format 1.0 (spec §4.2, K-NC DR106).
+        OFFSETS_SOURCE = "noaa"
 
         # The metadata: readable after close too (CR2 DR32). Every other
         # method is a query, and after close it is io "the release is
@@ -39,9 +47,11 @@ class OpenTideConstants
         # stream index is not the station its entry names (spec §6.2, CR D4).
         # logger: where a station with an unknown status is reported, once at
         # load (CR2 DR8).
+        # commercial_only: the open option of spec §4.2 (K-NC DR106).
         def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
-                       logger: nil)
+                       logger: nil, commercial_only: false)
             @mode = mode
+            @commercial_only = commercial_only
             @logger = logger
             @io = io
             @on_bad_index = on_bad_index
@@ -70,6 +80,7 @@ class OpenTideConstants
             # The attribution text prints both (spec §4.6, CR2 DR2); a null
             # provider is allowed (CR D2 b).
             Array(meta["licences"]).each do |l|
+                Licence.check!(l)
                 next if l["attribution"].is_a?(String) && (l["provider"].nil? || l["provider"].is_a?(String))
                 raise InvalidReleaseError,
                       "licence #{l['licence_id']}: attribution must be a string and provider a string or null"
@@ -196,8 +207,10 @@ class OpenTideConstants
         def attribution(stations = nil)
             check_open!
             raise InvalidArgumentError, "stations must be an Array of Station" unless stations.nil? || stations.is_a?(Array)
+            co = @commercial_only
             ids = if stations.nil? || stations.empty?
-                      @licences.map(&:licence_id)
+                      # with commercial_only, only the commercial licences (K-NC DR106)
+                      @licences.select { |l| !co || l.commercial_use == true }.map(&:licence_id)
                   else
                       out = Set.new
                       stations.each do |st|
@@ -205,6 +218,10 @@ class OpenTideConstants
                           e = @by_id[st.station_id]
                           unless e && st.instance_variable_get(:@origin).equal?(self)
                               raise InvalidArgumentError, "station #{st.station_id} is not a station of release #{@datestamp}"
+                          end
+                          if co # the licences of the station's tide source (spec §4.2, §4.6, K-NC DR106)
+                              out.merge(tide_source_licences(e))
+                              next
                           end
                           out << e.rec_licence_id if e.rec_licence_id
                           out.merge(chain_licences(e))
@@ -225,8 +242,36 @@ class OpenTideConstants
                 parts << "#{lic.provider}: #{lic.attribution}"
             end
             ident = @concept_doi ? "doi:#{@concept_doi}" : default_url
-            "Tidal constants: OpenTideConstants #{@datestamp}, #{ident}, CC BY 4.0. Sources: " + parts.join("; ")
+            head = "Tidal constants: OpenTideConstants #{@datestamp}, #{ident}, CC BY 4.0."
+            # An empty scope: the dataset header alone (spec §4.6, K-NC DR106).
+            return head if ids.empty?
+            text = "#{head} Sources: " + parts.join("; ")
+            # The non-commercial notice (spec §4.6, K-NC DR105): once, then one
+            # entry per non-commercial licence in scope, by licence_id; a nil
+            # provider gives the licence_id.
+            nc = ids.uniq.sort.map { |lid| @licence_by_id[lid] }.reject { |l| l.nil? || l.commercial_use == true }
+            unless nc.empty?
+                text += ". Non-commercial use only: " +
+                        nc.map { |l| "#{l.provider.nil? ? l.licence_id : l.provider} (#{l.spdx}, #{l.terms_url})" }.join("; ")
+            end
+            text
         end
+
+        # The licences of a station's tide source under commercial_only (spec
+        # §4.2, K-NC DR106): its effective recommended set; else the one-link
+        # offsets path (the reference station's first set from the offsets'
+        # source), usable only when the offsets' licence and that set's licence
+        # allow commercial use; else none (no usable tides).
+        def tide_source_licences(e)
+            return [e.eff_licence_id] if e.eff_id
+            return [] if e.reference_id.nil? && e.offsets_licence_id.nil?
+            ref = @by_id[e.reference_id]
+            return [] if ref.nil? || ref.offsets_ref_licence_id.nil?
+            out = [ref.offsets_ref_licence_id]
+            out << e.offsets_licence_id if e.offsets_licence_id
+            out.all? { |lid| @licence_by_id[lid].commercial_use == true } ? out : []
+        end
+        private :tide_source_licences
 
         # ---- station queries (spec §4.4)
 
@@ -485,7 +530,7 @@ class OpenTideConstants
                     (!f.key?(:type) || same.call(e.type, f[:type])) &&
                     (!f.key?(:kind) || same.call(e.kind, f[:kind])) &&
                     (!f.key?(:source) || e.sources.include?(f[:source])) &&
-                    (!f.key?(:source_type) || same.call(e.rec_source_type, f[:source_type]))
+                    (!f.key?(:source_type) || same.call(e.eff_source_type, f[:source_type]))
             end
         end
 
@@ -501,7 +546,7 @@ class OpenTideConstants
                 bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : "is not a station line")
             end
             check_line!(raw, e) if e.view
-            build_station(raw, e.kind)
+            build_station(raw, e.kind, e.eff_id)
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
         end
@@ -541,8 +586,9 @@ class OpenTideConstants
             nil
         end
 
-        def build_station(raw, kind)
-            rec_id = raw["recommended_set_id"]
+        # rec_id: the set the Station gives as recommended (the effective one
+        # under commercial_only, K-NC DR106).
+        def build_station(raw, kind, rec_id)
             all_validation = Array(raw["validation"]).map { |v| Validation.new(v) }
             sets = Array(raw["constant_sets"]).map do |cs|
                 set_validation = all_validation.each_with_index.select { |v, _| v.set_id == cs["set_id"] }
@@ -605,7 +651,7 @@ class OpenTideConstants
             @set_ids = nil
             entries.each { |e| e.kind = kind_of(e, []) }
             if @mode == :eager
-                entries.each { |e| e.station = build_station(raws[e.station_id], e.kind) }
+                entries.each { |e| e.station = build_station(raws[e.station_id], e.kind, e.eff_id) }
             end
             entries.each(&:freeze)
             @entries = entries.freeze
@@ -658,14 +704,45 @@ class OpenTideConstants
                 raise InvalidReleaseError, "station #{sid}: offsets licence #{off['licence_id'].inspect} does not resolve"
             end
             index_aliases(sid, raw["aliases"])
+            eff = @commercial_only ? effective_set(rec, sets) : rec
             Entry.new(station_id: sid, name: raw["name"], folded: Fold.fold(raw["name"].to_s), lat: raw["lat"],
                       lon: raw["lon"], type: Util.enum(raw["type"], ENUMS[:station_type]), country: raw["country"],
                       kind: rec && quantity_kind(rec["quantity"]), sources: sources.freeze,
                       rec_source_type: rec && Util.enum(rec["source_type"], ENUMS[:source_type]),
                       rec_licence_id: rec && rec["licence_id"], offsets_licence_id: off && off["licence_id"],
                       reference_id: off && off["reference_station_id"],
+                      eff_id: eff && eff["set_id"], eff_licence_id: eff && eff["licence_id"],
+                      eff_source_type: eff && Util.enum(eff["source_type"], ENUMS[:source_type]),
+                      offsets_ref_licence_id: sets.find { |cs| offsets_reference_set?(cs) }&.fetch("licence_id"),
                       aliases: (raw["aliases"].is_a?(Hash) ? raw["aliases"].transform_values { |v| Array(v) } : {}),
                       pos: pos, len: len, station: nil)
+        end
+
+        # The effective recommended set under commercial_only (spec §4.2, K-NC
+        # DR106): the release's recommended set when its licence allows
+        # commercial use; otherwise the first set in file order of the same
+        # typed quantity, qc_status ok, with a commercial licence; then the same
+        # with flagged; otherwise nil. A set with no quantity never matches.
+        def effective_set(rec, sets)
+            return rec if rec.nil? || @licence_by_id[rec["licence_id"]].commercial_use == true
+            q = Util.enum(rec["quantity"], ENUMS[:quantity])
+            return nil if q.nil?
+            %i[ok flagged].each do |status|
+                found = sets.find do |cs|
+                    Util.enum(cs["qc_status"], ENUMS[:qc_status]) == status && Util.enum(cs["quantity"], ENUMS[:quantity]) == q &&
+                        @licence_by_id[cs["licence_id"]].commercial_use == true
+                end
+                return found if found
+            end
+            nil
+        end
+
+        # A set that the one-link offsets path takes as its reference set
+        # (spec §4.2, K-NC DR106): from the offsets' source, water_level, ok or
+        # flagged.
+        def offsets_reference_set?(cs)
+            cs["source"] == OFFSETS_SOURCE && Util.enum(cs["quantity"], ENUMS[:quantity]) == :water_level &&
+                USABLE_QC.include?(Util.enum(cs["qc_status"], ENUMS[:qc_status]))
         end
 
         # The JSON type of each known field that the SDK reads (spec §7.3:

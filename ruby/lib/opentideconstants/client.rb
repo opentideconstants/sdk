@@ -40,7 +40,8 @@ class OpenTideConstants
     # See spec §4.2 for the options.
     def initialize(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil,
                    timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache,
-                   auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false)
+                   auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false,
+                   commercial_only: false)
         # A file client reads no pointer and opens no socket, so these options
         # would be silently ignored (CR D31, spec §4.2). The variable
         # OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
@@ -54,6 +55,9 @@ class OpenTideConstants
         @offline = check_bool(offline, "offline") || %w[1 true yes on].include?(ENV["OPENTIDECONSTANTS_OFFLINE"].to_s.strip.downcase)
         @auto_update = check_bool(auto_update, "auto_update")
         @verify_on_open = check_bool(verify_on_open, "verify_on_open")
+        # Select only sets whose licence allows commercial use, in every
+        # release this client loads (spec §4.2, K-NC DR106).
+        @commercial_only = check_bool(commercial_only, "commercial_only")
         unless update_interval.is_a?(Numeric) && update_interval.positive?
             raise InvalidArgumentError, "update_interval must be a number of seconds > 0"
         end
@@ -85,7 +89,7 @@ class OpenTideConstants
         @file = file
         @loaded = ObjectSpace::WeakMap.new # every Release this client loaded, while a caller holds it
         if file
-            @release, @loaded_from = Reader.open_file(file, mode: @mode, logger: @logger)
+            @release, @loaded_from = Reader.open_file(file, mode: @mode, logger: @logger, commercial_only: @commercial_only)
         elsif @requested == :latest
             open_latest
         else
@@ -798,7 +802,7 @@ class OpenTideConstants
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
         opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open,
-                 logger: @logger }
+                 logger: @logger, commercial_only: @commercial_only }
         return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
         if index
