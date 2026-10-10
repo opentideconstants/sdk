@@ -59,11 +59,12 @@ def run(root):
 
 
 def status(out, lang):
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[0] in ("PASS", "FAIL") and parts[1] == lang:
-            return parts[0]
-    return None
+    """The PASS or FAIL of a language's status line (None if there is none). A language with more than one status
+    line fails the test, so a second line cannot hide a failure."""
+    found = [parts[0] for line in out.splitlines()
+             if len(parts := line.split()) >= 2 and parts[0] in ("PASS", "FAIL") and parts[1] == lang]
+    assert len(found) <= 1, f"{lang} has {len(found)} status lines:\n{out}"
+    return found[0] if found else None
 
 
 def plant(root, rel, text):
@@ -96,7 +97,7 @@ def test_the_real_tree_passes(tree):
 
 def test_missing_ruby_version_file(tree):
     (tree / "ruby/lib/opentideconstants/version.rb").unlink()
-    plant(tree, "ruby/lib/opentideconstants/zz_decl.rb", 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION = "1.0"\nend')
+    plant(tree, "ruby/lib/opentideconstants/zz_decl.rb", 'class OpenTideConstants\n  SUPPORTED_FORMAT_VERSION = "1.0"\nend')
     assert_fails(tree, "ruby", "version.rb")
 
 
@@ -146,9 +147,12 @@ def test_supported_formats_json_that_is_a_directory(tree):
 
 def test_c_version_define_with_spaces_after_the_hash(tree):
     h = tree / "c/include/opentideconstants.h"
-    h.write_text(h.read_text(encoding="utf-8").replace("#define OTC_VERSION ", "#  define OTC_VERSION ", 1), encoding="utf-8")
+    text = h.read_text(encoding="utf-8")
+    assert "#define OTC_VERSION " in text  # else the replace changes nothing and the test proves nothing
+    h.write_text(text.replace("#define OTC_VERSION ", "#  define OTC_VERSION ", 1), encoding="utf-8")
     rc, out = run(tree)
     assert rc == 0, out
+    assert "#  define OTC_VERSION " in h.read_text(encoding="utf-8")
 
 
 def test_c_version_define_with_a_different_version_and_spaces_after_the_hash(tree):
@@ -165,6 +169,7 @@ PY_UNREADABLE = {
     "import-from-alias": "from ._zz_other import OTHER as SUPPORTED_FORMAT_VERSION",
     "import-module-alias": "import os as SUPPORTED_FORMAT_VERSION",
     "import-from-outside-the-package": "from os import SUPPORTED_FORMAT_VERSION",
+    "star-import-from-outside-the-package": "from os import *",
     "nested-tuple-target": 'a, (SUPPORTED_FORMAT_VERSION, b) = 1, ("2.0", 3)',
     "starred-target": 'a, *SUPPORTED_FORMAT_VERSION = 1, "2.0"',
     "list-target": '[SUPPORTED_FORMAT_VERSION] = ["2.0"]',
@@ -208,12 +213,25 @@ def test_python_literal_declaration_with_another_value_fails(tree, decl):
     'A = SUPPORTED_FORMAT_VERSION = "1.0"',
     "SUPPORTED_FORMAT_VERSION: str",
     'import opentideconstants as m\nx = getattr(m, "SUPPORTED_FORMAT_VERSION")',
+    "from ._release import *",
     '# SUPPORTED_FORMAT_VERSION = "2.0"\n"""SUPPORTED_FORMAT_VERSION = "2.0" in a docstring"""',
 ])
 def test_python_forms_that_are_not_a_conflicting_declaration_pass(tree, src):
     plant(tree, "python/src/opentideconstants/_zz.py", src)
     rc, out = run(tree)
     assert rc == 0, out
+
+
+def test_python_string_argument_to_a_call_fails_and_says_why(tree):
+    plant(tree, "python/src/opentideconstants/_zz.py", 'print("SUPPORTED_FORMAT_VERSION")')
+    assert_fails(tree, "python", "_zz.py", "a call to print names SUPPORTED_FORMAT_VERSION as a string argument")
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="the type statement needs Python 3.12")
+def test_python_type_alias_fails_and_says_so(tree):
+    plant(tree, "python/src/opentideconstants/_zz.py", "type SUPPORTED_FORMAT_VERSION = str")
+    out = assert_fails(tree, "python", "_zz.py", "a type alias")
+    assert "unpacking" not in out, out
 
 
 # --- R2-183: TypeScript/JavaScript, Ruby and C declarations in any position count. A comment is not parsed out:
@@ -241,6 +259,13 @@ TS_UNREADABLE = {
     "arrow-parameters": "export const g = (a: string, SUPPORTED_FORMAT_VERSION: string) => a;",
     "compound-assignment": 'SUPPORTED_FORMAT_VERSION += ".1";',
     "commented-out-declaration": '// export const SUPPORTED_FORMAT_VERSION = "2.0";',
+    "commented-out-declaration-same-value": '// export const SUPPORTED_FORMAT_VERSION = "1.0";',
+    "delete": "delete exports.SUPPORTED_FORMAT_VERSION;",
+    "delete-module-exports": "delete (module as any).exports.SUPPORTED_FORMAT_VERSION;",
+    "delete-string-key": 'delete exports["SUPPORTED_FORMAT_VERSION"];',
+    "reflect-delete-property": 'Reflect.deleteProperty(exports, "SUPPORTED_FORMAT_VERSION");',
+    "export-star-from-a-package": 'export * from "some-package";',
+    "export-star-from-a-package-single-quotes": "export * from 'some-package';",
 }
 
 TS_CONFLICT = {
@@ -251,6 +276,7 @@ TS_CONFLICT = {
     "inside-a-block-comment-not-starting-with-star": '/*\nexport const SUPPORTED_FORMAT_VERSION = "2.0";\n*/',
     "second-declarator-on-its-own-line": 'export const A = 1,\n  SUPPORTED_FORMAT_VERSION = "2.0";',
     "after-a-semicolon": 'void 0; export const SUPPORTED_FORMAT_VERSION = "2.0";',
+    "reassigned-after-a-semicolon": 'export let SUPPORTED_FORMAT_VERSION = "1.0"; SUPPORTED_FORMAT_VERSION = "2.0";',
 }
 
 
@@ -282,6 +308,15 @@ def test_typescript_declaration_with_another_value_fails(tree, form):
     'export const u = String(SUPPORTED_FORMAT_VERSION).length;\n'
     'export const o = { v: SUPPORTED_FORMAT_VERSION };\n'
     '/*\n newer than SUPPORTED_FORMAT_VERSION (spec 7.4).\n*/',
+    'export * from "./constants.js";',
+    'export const SUPPORTED_FORMAT_VERSION = "1.0"; export const X = 1;',
+    'export const r = (exports as any)["SUPPORTED_FORMAT_VERSION"];',
+    'export const q = (ok: boolean) => ok ? SUPPORTED_FORMAT_VERSION : "x";',
+    'export function k(v: string) { switch (v) { case SUPPORTED_FORMAT_VERSION: return 1; } return 0; }',
+    '/** SUPPORTED_FORMAT_VERSION: the newest format this SDK reads. */',
+    '/**\n * SUPPORTED_FORMAT_VERSION: the newest format this SDK reads.\n */',
+    'export const m = new Map<string, number>(); m.delete(SUPPORTED_FORMAT_VERSION);',
+    '// a release must never delete SUPPORTED_FORMAT_VERSION from the exports',
 ])
 def test_typescript_forms_that_are_not_a_conflicting_declaration_pass(tree, src):
     plant(tree, "js/src/zz.ts", src)
@@ -290,21 +325,30 @@ def test_typescript_forms_that_are_not_a_conflicting_declaration_pass(tree, src)
 
 
 RB_UNREADABLE = {
-    "multiple-assignment": 'module Opentideconstants\n  A, SUPPORTED_FORMAT_VERSION = "9", "2.0"\nend',
-    "multiple-assignment-first": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION, B = "2.0", 1\nend',
-    "nested-multiple-assignment": 'module Opentideconstants\n  (A, SUPPORTED_FORMAT_VERSION), B = ["1", "2.0"], 3\nend',
-    "multi-line-multiple-assignment": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION,\n    B = "2.0", 1\nend',
-    "const-set": 'Opentideconstants.const_set(:SUPPORTED_FORMAT_VERSION, "2.0")',
-    "compound-assignment": 'module Opentideconstants\n  SUPPORTED_FORMAT_VERSION += ".1"\nend',
-    "class": "module Opentideconstants\n  class SUPPORTED_FORMAT_VERSION; end\nend",
+    "multiple-assignment": 'class OpenTideConstants\n  A, SUPPORTED_FORMAT_VERSION = "9", "2.0"\nend',
+    "multiple-assignment-first": 'class OpenTideConstants\n  SUPPORTED_FORMAT_VERSION, B = "2.0", 1\nend',
+    "nested-multiple-assignment": 'class OpenTideConstants\n  (A, SUPPORTED_FORMAT_VERSION), B = ["1", "2.0"], 3\nend',
+    "multi-line-multiple-assignment": 'class OpenTideConstants\n  SUPPORTED_FORMAT_VERSION,\n    B = "2.0", 1\nend',
+    "const-set": 'OpenTideConstants.const_set(:SUPPORTED_FORMAT_VERSION, "2.0")',
+    "compound-assignment": 'class OpenTideConstants\n  SUPPORTED_FORMAT_VERSION += ".1"\nend',
+    "class": "class OpenTideConstants\n  class SUPPORTED_FORMAT_VERSION; end\nend",
     "for-target": 'for SUPPORTED_FORMAT_VERSION in ["2.0"]; end',
     "rescue-target": "begin; rescue => SUPPORTED_FORMAT_VERSION; end",
     "commented-out-declaration": '# SUPPORTED_FORMAT_VERSION = "2.0"',
+    "commented-out-declaration-same-value": '# SUPPORTED_FORMAT_VERSION = "1.0"',
+    "multiple-assignment-comma-on-the-line-before": 'class OpenTideConstants\n  A,\n  SUPPORTED_FORMAT_VERSION = "1.0"\nend',
+    "multiple-assignment-comma-and-a-comment-line-before":
+        'class OpenTideConstants\n  A, # the first\n\n  # the second\n  SUPPORTED_FORMAT_VERSION = "1.0"\nend',
+    "multiple-assignment-backslash-on-the-line-before": 'class OpenTideConstants\n  A, \\\n  SUPPORTED_FORMAT_VERSION = "1.0"\nend',
+    "remove-const": "class OpenTideConstants\n  remove_const(:SUPPORTED_FORMAT_VERSION)\nend",
+    "remove-const-through-send": "OpenTideConstants.send(:remove_const, :SUPPORTED_FORMAT_VERSION)",
+    "remove-const-string": 'OpenTideConstants.send("remove_const", "SUPPORTED_FORMAT_VERSION")',
+    "const-set-through-send": 'OpenTideConstants.send(:const_set, :SUPPORTED_FORMAT_VERSION, "2.0")',
 }
 
 RB_CONFLICT = {
-    "after-a-semicolon": 'module Opentideconstants; SUPPORTED_FORMAT_VERSION = "2.0"; end',
-    "qualified": 'Opentideconstants::SUPPORTED_FORMAT_VERSION = "2.0"',
+    "after-a-semicolon": 'class OpenTideConstants; SUPPORTED_FORMAT_VERSION = "2.0"; end',
+    "qualified": 'OpenTideConstants::SUPPORTED_FORMAT_VERSION = "2.0"',
     "or-assign-after-a-semicolon": 'x = 1; SUPPORTED_FORMAT_VERSION ||= "2.0"',
 }
 
@@ -323,12 +367,18 @@ def test_ruby_declaration_with_another_value_fails(tree, form):
 
 def test_ruby_forms_that_are_not_a_conflicting_declaration_pass(tree):
     plant(tree, "ruby/lib/opentideconstants/zz.rb", "\n".join([
-        "module Opentideconstants",
+        "class OpenTideConstants",
         '  A = "reads format #{SUPPORTED_FORMAT_VERSION}"; B = version_key(SUPPORTED_FORMAT_VERSION) rescue nil',
         "  C = SUPPORTED_FORMAT_VERSION",
         "  D = { SUPPORTED_FORMAT_VERSION => 1 }",
         "  E = (A == SUPPORTED_FORMAT_VERSION) && (A <= SUPPORTED_FORMAT_VERSION)",
         "  # newer than SUPPORTED_FORMAT_VERSION (§7.4).",
+        "  F = {",
+        "    A => 1,",
+        "    SUPPORTED_FORMAT_VERSION => 2,",
+        "  }",
+        "  G = [A,",
+        "       SUPPORTED_FORMAT_VERSION]",
         "end",
     ]))
     rc, out = run(tree)
@@ -394,6 +444,41 @@ def move_sdk_to(root, lang, value):
     assert decl in text
     p.write_text(text.replace(decl, decl.replace('"1.0"', f'"{value}"')), encoding="utf-8")
     set_sfv(root, lang, value)
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_an_sdk_that_declares_nothing_fails(tree, lang):
+    rel, decl = DECLS[lang]
+    p = tree / rel
+    text = p.read_text(encoding="utf-8")
+    assert text.count(decl) == 1
+    p.write_text(text.replace(decl, ""), encoding="utf-8")
+    assert_fails(tree, lang, "declares no")
+
+
+LINKS = {"python": "python/src/opentideconstants/zz_link.py", "ruby": "ruby/lib/opentideconstants/zz_link.rb",
+         "js": "js/src/zz_link.ts", "c": "c/src/zz_link.c"}
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_a_broken_link_among_the_sources_fails(tree, lang):
+    link = tree / LINKS[lang]
+    try:
+        os.symlink(tree / "no-such-file", link)
+    except OSError as e:  # Windows without the privilege
+        pytest.skip(f"cannot make a symbolic link: {e}")
+    assert_fails(tree, lang, "zz_link")
+
+
+def test_an_old_python_is_refused_with_a_message(tree):
+    tool = tree / "conformance" / "tools" / "check_supported_formats.py"
+    tool.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(CHECKER, tool)
+    stub = "import runpy, sys; sys.version_info = (3, 9, 6, 'final', 0); runpy.run_path(sys.argv[1], run_name='__main__')"
+    p = subprocess.run([sys.executable, "-c", stub, str(tool)], capture_output=True, text=True, timeout=60)
+    assert p.returncode == 2, p.stdout + p.stderr
+    assert "Python 3.10" in p.stderr and "Traceback" not in p.stderr, p.stderr
+    assert not any(line.startswith(("PASS", "FAIL")) for line in p.stdout.splitlines()), p.stdout
 
 
 def test_every_sdk_agreeing_on_a_version_api_json_does_not_name_fails(tree):
