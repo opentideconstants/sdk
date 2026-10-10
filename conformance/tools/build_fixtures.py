@@ -64,12 +64,12 @@ def _require_formats():
 def validator(schema):
     return Draft202012Validator(schema, format_checker=FORMATS)
 
-# Format 1.0 and its index schema, from the site repository at the merge that published format 1.0,
-# pinned by commit and SHA-256.
-SCHEMA_COMMIT = "0833df89c988049abe38d0ddd8b482e4f3d425c0"
+# Format 1.0 and its index schema, from the site repository at the merge of site PR #47 (the datum schema,
+# which revised format 1.0 in place), pinned by commit and SHA-256.
+SCHEMA_COMMIT = "d90a7a678afd8079494b63daad20e2eace6596ca"
 _RAW = f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_COMMIT}/src/schema"
 SCHEMAS = {
-    "1.0": (f"{_RAW}/otc-1.0.schema.json", "e27d5f6b5886b4366dbb8b7bb83ebb375cce99bdfe93ae32189cf27cf8463845"),
+    "1.0": (f"{_RAW}/otc-1.0.schema.json", "0e305a6c281d68e7a74c853d43dce0840f456fff0fbd4cf073f5e6a5fad751cf"),
     "index-1.0": (f"{_RAW}/otc-index-1.0.schema.json", "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb"),
 }
 SCHEMA_FILES = {"1.0": "otc-1.0.schema.json", "index-1.0": "otc-index-1.0.schema.json"}
@@ -307,7 +307,9 @@ def release_doc(datestamp):
     noaa_set = cset(
         s1, "noaa", "noaa", "official", "noaa-greenwich-v1", "noaa", full_constituents(1.0),
         record_span={"start": "2080-01-01T00:00:00Z", "end": "2098-12-31T23:00:00Z", "good_samples": 166000},
-        datum={"msl_offset_m": 0.0, "named": {"MHHW": 0.91, "MLLW": -0.93}},
+        datum={"msl_offset_m": 0.0, "named": {"mhhw": 0.91, "mllw": -0.93},
+               "basis": {"mhhw": {"kind": "published", "method": "source"},
+                         "mllw": {"kind": "published", "method": "source"}}},
         provenance={"adapter_version": "0.0.0-test",
                     "input_sha256": [hashlib.sha256(b"noaa-input").hexdigest()],
                     "selection_reason": "official constants from the operating agency",
@@ -1586,6 +1588,9 @@ def cross_ref_errors(doc):
                 errs.append(f"{cs['set_id']}: convention_id {cs['convention_id']} does not resolve")
             if cs["licence_id"] not in lic:
                 errs.append(f"{cs['set_id']}: licence_id {cs['licence_id']} does not resolve")
+            datum = cs.get("datum") or {}
+            if set(datum.get("named", {})) != set(datum.get("basis", {})):
+                errs.append(f"{cs['set_id']}: datum.basis and datum.named have different keys (build check 9)")
             names = [c["name"] for c in cs["constituents"]]
             if len(names) != len(set(names)):
                 errs.append(f"{cs['set_id']}: a constituent name appears twice (CR2 DR22)")

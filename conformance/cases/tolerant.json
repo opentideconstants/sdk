@@ -158,10 +158,20 @@
          ],
          "convention_id": "noaa-greenwich-v1",
          "datum": {
+          "basis": {
+           "mhhw": {
+            "kind": "published",
+            "method": "source"
+           },
+           "mllw": {
+            "kind": "published",
+            "method": "source"
+           }
+          },
           "msl_offset_m": 0.0,
           "named": {
-           "MHHW": 0.91,
-           "MLLW": -0.93
+           "mhhw": 0.91,
+           "mllw": -0.93
           }
          },
          "future_set_field": "1.1 set field",
@@ -449,10 +459,20 @@
        ],
        "convention_id": "noaa-greenwich-v1",
        "datum": {
+        "basis": {
+         "mhhw": {
+          "kind": "published",
+          "method": "source"
+         },
+         "mllw": {
+          "kind": "published",
+          "method": "source"
+         }
+        },
         "msl_offset_m": 0.0,
         "named": {
-         "MHHW": 0.91,
-         "MLLW": -0.93
+         "mhhw": 0.91,
+         "mllw": -0.93
         }
        },
        "future_set_field": "1.1 set field",
@@ -597,8 +617,8 @@
        "datum": {
         "msl_offset_m": 0.0,
         "named": {
-         "MHHW": 0.91,
-         "MLLW": -0.93
+         "mhhw": 0.91,
+         "mllw": -0.93
         }
        },
        "qc_status": "ok",

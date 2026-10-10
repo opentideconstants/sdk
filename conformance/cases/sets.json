@@ -34,8 +34,8 @@
        "datum": {
         "msl_offset_m": 0.0,
         "named": {
-         "MHHW": 0.91,
-         "MLLW": -0.93
+         "mhhw": 0.91,
+         "mllw": -0.93
         }
        },
        "qc_status": "ok",

@@ -1136,13 +1136,13 @@
      "driver": "json_set",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/stations/21/offset",
-     "value": 25837
+     "value": 25939
     },
     {
      "driver": "assert_json",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "match": {
-      "/stations/21/offset": 25837
+      "/stations/21/offset": 25939
      }
     },
     {
@@ -2444,7 +2444,7 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231.2/.verified",
-     "text": "{\n \"files\": {\n  \"OTC_20991231.2.json\": {\n   \"sha256\": \"3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e\",\n   \"size\": 29814\n  },\n  \"OTC_20991231.2.json.gz\": {\n   \"sha256\": \"0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd\",\n   \"size\": 4474\n  },\n  \"OTC_20991231.2.jsonl\": {\n   \"sha256\": \"759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1\",\n   \"size\": 25827\n  },\n  \"OTC_20991231.2.meta.json\": {\n   \"sha256\": \"f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350\",\n   \"size\": 3974\n  }\n }\n}\n"
+     "text": "{\n \"files\": {\n  \"OTC_20991231.2.json\": {\n   \"sha256\": \"c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd\",\n   \"size\": 29916\n  },\n  \"OTC_20991231.2.json.gz\": {\n   \"sha256\": \"2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955\",\n   \"size\": 4498\n  },\n  \"OTC_20991231.2.jsonl\": {\n   \"sha256\": \"84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0\",\n   \"size\": 25929\n  },\n  \"OTC_20991231.2.meta.json\": {\n   \"sha256\": \"f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350\",\n   \"size\": 3974\n  }\n }\n}\n"
     },
     {
      "driver": "server_stop"
@@ -2554,7 +2554,7 @@
      "driver": "json_set",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/stations/1/offset",
-     "value": 5272
+     "value": 5374
     },
     {
      "driver": "server_stop"
@@ -2696,7 +2696,7 @@
      "driver": "json_set",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/jsonl_size",
-     "value": 25827.0
+     "value": 25929.0
     },
     {
      "driver": "json_set",
@@ -2708,7 +2708,7 @@
      "driver": "json_set",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "pointer": "/stations/0/length",
-     "value": 5272.0
+     "value": 5374.0
     },
     {
      "driver": "json_set",
@@ -3276,7 +3276,7 @@
      "driver": "json_set",
      "path": "${cache}/v1/releases/20991231.2/.verified",
      "pointer": "/files/OTC_20991231.2.jsonl/size",
-     "value": 25827.0
+     "value": 25929.0
     },
     {
      "driver": "json_set",

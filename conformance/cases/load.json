@@ -28,20 +28,20 @@
        {
         "name": "OTC_20991231.2.json",
         "url": null,
-        "size": 29814,
-        "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
        },
        {
         "name": "OTC_20991231.2.json.gz",
         "url": null,
-        "size": 4474,
-        "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+        "size": 4498,
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
        },
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25827,
-        "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
        },
        {
         "name": "OTC_20991231.2.meta.json",
@@ -89,19 +89,19 @@
         "name": "OTC_20991231.2.json",
         "url": null,
         "size": null,
-        "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
        },
        {
         "name": "OTC_20991231.2.json.gz",
         "url": null,
         "size": null,
-        "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
        },
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25827,
-        "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
        },
        {
         "name": "OTC_20991231.2.meta.json",
@@ -147,7 +147,7 @@
        {
         "name": "OTC_20991231.2.json",
         "url": null,
-        "size": 29814,
+        "size": 29916,
         "sha256": null
        }
       ]
@@ -188,7 +188,7 @@
        {
         "name": "OTC_20991231.2.jsonl",
         "url": null,
-        "size": 25827,
+        "size": 25929,
         "sha256": null
        },
        {
@@ -590,7 +590,7 @@
        "file": {
         "$contains": "OTC_20991231.2.jsonl"
        },
-       "expected": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1",
+       "expected": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
        "actual": {
         "$regex": "^[0-9a-f]{64}$"
        }
@@ -826,7 +826,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nthis is not a row\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nthis is not a row\n"
     },
     {
      "op": "open",
@@ -858,7 +858,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd\n"
     },
     {
      "op": "open",
@@ -890,7 +890,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105  OTC_20991231.2.extra\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744c  OTC_20991231.2.extra\n"
     },
     {
      "op": "open",
@@ -922,7 +922,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e0  OTC_20991231.2.extra\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd0  OTC_20991231.2.extra\n"
     },
     {
      "op": "open",
@@ -954,7 +954,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105eOTC_20991231.2.extra\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cdOTC_20991231.2.extra\n"
     },
     {
      "op": "open",
@@ -986,7 +986,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105g  OTC_20991231.2.extra\n"
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cg  OTC_20991231.2.extra\n"
     },
     {
      "op": "open",
@@ -1018,7 +1018,7 @@
     {
      "driver": "write",
      "path": "${tmp}/rel/OTC_20991231.2.sha256",
-     "text": "\n \t\r\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e \t*OTC_20991231.2.json\r\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd \t*OTC_20991231.2.json.gz\r\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1 \t*OTC_20991231.2.jsonl\r\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350 \t*OTC_20991231.2.meta.json\r\n\f\u000b\n\n"
+     "text": "\n \t\r\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd \t*OTC_20991231.2.json\r\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955 \t*OTC_20991231.2.json.gz\r\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0 \t*OTC_20991231.2.jsonl\r\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350 \t*OTC_20991231.2.meta.json\r\n\f\u000b\n\n"
     },
     {
      "op": "open",

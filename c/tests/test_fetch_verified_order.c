@@ -8,7 +8,7 @@
 #include "otc_test.h"
 #include "otc_internal.h"
 
-#define JSONL_SHA "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"   /* good/OTC_20991231.2.jsonl */
+#define JSONL_SHA "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"   /* good/OTC_20991231.2.jsonl */
 
 int main(void)
 {

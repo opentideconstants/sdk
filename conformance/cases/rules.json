@@ -412,7 +412,7 @@
        "status": 200,
        "body": "<html>captive portal</html>",
        "headers": {
-        "ETag": "\"f0164bb38464df86942e9dab686c29927463b1617bfe3fc0305ea999224ffdae\"",
+        "ETag": "\"1fae5d743b93f22e0cf5b98adbd3532c7050e848fcebaf43901df16c96acbeef\"",
         "Content-Type": "text/html"
        }
       }
@@ -513,20 +513,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -538,7 +538,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -552,20 +552,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -577,7 +577,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -631,20 +631,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -656,7 +656,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -670,20 +670,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -695,7 +695,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -3632,20 +3632,20 @@
         {
          "name": "OTC_20991231.2.json",
          "url": "${server}/good/OTC_20991231.2.json",
-         "size": 29814,
-         "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         "size": 29916,
+         "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
         },
         {
          "name": "OTC_20991231.2.json.gz",
          "url": "${server}/good/OTC_20991231.2.json.gz",
-         "size": 4474,
-         "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         "size": 4498,
+         "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
         },
         {
          "name": "OTC_20991231.2.jsonl",
          "url": "${server}/good/OTC_20991231.2.jsonl",
-         "size": 25827,
-         "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         "size": 25929,
+         "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
         },
         {
          "name": "OTC_20991231.2.meta.json",
@@ -3657,7 +3657,7 @@
          "name": "OTC_20991231.2.sha256",
          "url": "${server}/good/OTC_20991231.2.sha256",
          "size": 353,
-         "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
         }
        ]
       }
@@ -3749,20 +3749,20 @@
         {
          "name": "OTC_20991231.2.json",
          "url": "${server}/good/OTC_20991231.2.json",
-         "size": 29814,
-         "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+         "size": 29916,
+         "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
         },
         {
          "name": "OTC_20991231.2.json.gz",
          "url": "${server}/good/OTC_20991231.2.json.gz",
-         "size": 4474,
-         "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+         "size": 4498,
+         "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
         },
         {
          "name": "OTC_20991231.2.jsonl",
          "url": "${server}/good/OTC_20991231.2.jsonl",
-         "size": 25827,
-         "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+         "size": 25929,
+         "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
         },
         {
          "name": "OTC_20991231.2.meta.json",
@@ -3774,7 +3774,7 @@
          "name": "OTC_20991231.2.sha256",
          "url": "${server}/good/OTC_20991231.2.sha256",
          "size": 353,
-         "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+         "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
         }
        ]
       }
@@ -4233,7 +4233,7 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
-     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n"
+     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n"
     },
     {
      "driver": "clear_log"
@@ -4285,7 +4285,7 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
-     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\n0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd  OTC_20991231.2.json.gz\n3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e  OTC_20991231.2.json\n"
+     "text": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\nc5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n"
     },
     {
      "op": "verify",
@@ -4329,7 +4329,7 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231/OTC_20991231.sha256",
-     "text": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c  OTC_20991231.meta.json\n4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352  OTC_20991231.jsonl\n494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c  OTC_20991231.json.gz\nc8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749  OTC_20991231.json\n"
+     "text": "4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c  OTC_20991231.meta.json\n773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255  OTC_20991231.jsonl\n0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84  OTC_20991231.json.gz\n982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30  OTC_20991231.json\n"
     },
     {
      "op": "verify",
@@ -4357,11 +4357,11 @@
        "file": "good/OTC_latest-f1.json",
        "pointer": "",
        "set": {
-        "/files/0/sha256": "3D71BD028039DC06AE9941103566A98E256EF39E1DFBFA09C76AFD067473105E",
-        "/files/1/sha256": "0873F8CE01FA88ED2B796EB16F8172DBCDE5758671360D8B698BE8BC3C62A6BD",
-        "/files/2/sha256": "759D6BB9E54684E82C3A007D8970E2AC5E3DF19A3C2093F74C3FBC1BD69499B1",
+        "/files/0/sha256": "C5F783E44D9DE259D1E2A88734668DE19399F53B9B5693DB86FDD6101D8744CD",
+        "/files/1/sha256": "2F760E0B8B22D8FA8879C19A93157752280B4F0C02CA9A432C0646FF882F6955",
+        "/files/2/sha256": "84BA5C138D233BE93C031BDEC7B243CAA72D27BBF6A7B3D0DF14AA61FE36FAB0",
         "/files/3/sha256": "F1CECA5D49337F6228594B5D26EC4A0C7B60807D9C774C51784BF5D8FFA41350",
-        "/files/4/sha256": "03CE8F212577D71A6A6E2EE4F84FD600B65631BB9ACEA04EE2C0B5B84677C088"
+        "/files/4/sha256": "E7E3D0B207F77BE28E18782D5C035080B2F181A7C3BE19682F4EDAA0427360B8"
        }
       }
      ]
@@ -4441,11 +4441,11 @@
        "file": "good/OTC_latest-f1.json",
        "pointer": "",
        "set": {
-        "/files/0/sha256": "3D71BD028039DC06AE9941103566A98E256EF39E1DFBFA09C76AFD067473105E",
-        "/files/1/sha256": "0873F8CE01FA88ED2B796EB16F8172DBCDE5758671360D8B698BE8BC3C62A6BD",
-        "/files/2/sha256": "759D6BB9E54684E82C3A007D8970E2AC5E3DF19A3C2093F74C3FBC1BD69499B1",
+        "/files/0/sha256": "C5F783E44D9DE259D1E2A88734668DE19399F53B9B5693DB86FDD6101D8744CD",
+        "/files/1/sha256": "2F760E0B8B22D8FA8879C19A93157752280B4F0C02CA9A432C0646FF882F6955",
+        "/files/2/sha256": "84BA5C138D233BE93C031BDEC7B243CAA72D27BBF6A7B3D0DF14AA61FE36FAB0",
         "/files/3/sha256": "F1CECA5D49337F6228594B5D26EC4A0C7B60807D9C774C51784BF5D8FFA41350",
-        "/files/4/sha256": "03CE8F212577D71A6A6E2EE4F84FD600B65631BB9ACEA04EE2C0B5B84677C088"
+        "/files/4/sha256": "E7E3D0B207F77BE28E18782D5C035080B2F181A7C3BE19682F4EDAA0427360B8"
        }
       }
      ]
@@ -5908,7 +5908,7 @@
        "status": 200,
        "body": "{\"error\": \"blocked by the proxy\"}",
        "headers": {
-        "ETag": "\"f0164bb38464df86942e9dab686c29927463b1617bfe3fc0305ea999224ffdae\"",
+        "ETag": "\"1fae5d743b93f22e0cf5b98adbd3532c7050e848fcebaf43901df16c96acbeef\"",
         "Content-Type": "application/json"
        }
       }
@@ -6007,7 +6007,7 @@
        "status": 200,
        "body": "[]",
        "headers": {
-        "ETag": "\"f0164bb38464df86942e9dab686c29927463b1617bfe3fc0305ea999224ffdae\"",
+        "ETag": "\"1fae5d743b93f22e0cf5b98adbd3532c7050e848fcebaf43901df16c96acbeef\"",
         "Content-Type": "application/json"
        }
       }
@@ -6246,20 +6246,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6271,7 +6271,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6285,20 +6285,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -6310,7 +6310,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -6368,20 +6368,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6393,7 +6393,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6407,20 +6407,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -6432,7 +6432,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -6540,20 +6540,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6565,7 +6565,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6579,20 +6579,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -6604,7 +6604,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -6662,20 +6662,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6687,7 +6687,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6701,20 +6701,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -6726,7 +6726,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -6834,20 +6834,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6859,7 +6859,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6873,20 +6873,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -6898,7 +6898,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -6956,20 +6956,20 @@
          {
           "name": "OTC_20991231.2.json",
           "url": "${server}/good/OTC_20991231.2.json",
-          "size": 29814,
-          "sha256": "3d71bd028039dc06ae9941103566a98e256ef39e1dfbfa09c76afd067473105e"
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
          },
          {
           "name": "OTC_20991231.2.json.gz",
           "url": "${server}/good/OTC_20991231.2.json.gz",
-          "size": 4474,
-          "sha256": "0873f8ce01fa88ed2b796eb16f8172dbcde5758671360d8b698be8bc3c62a6bd"
+          "size": 4498,
+          "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
          },
          {
           "name": "OTC_20991231.2.jsonl",
           "url": "${server}/good/OTC_20991231.2.jsonl",
-          "size": 25827,
-          "sha256": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1"
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
          },
          {
           "name": "OTC_20991231.2.meta.json",
@@ -6981,7 +6981,7 @@
           "name": "OTC_20991231.2.sha256",
           "url": "${server}/good/OTC_20991231.2.sha256",
           "size": 353,
-          "sha256": "03ce8f212577d71a6a6e2ee4f84fd600b65631bb9acea04ee2c0b5b84677c088"
+          "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
          }
         ]
        },
@@ -6995,20 +6995,20 @@
          {
           "name": "OTC_20991231.json",
           "url": "${server}/good/OTC_20991231.json",
-          "size": 29779,
-          "sha256": "c8990db35199f0acda36431f89aa9b45818b58b1691a3346a5b6615f8956e749"
+          "size": 29881,
+          "sha256": "982572ef586fdb4acb8966682a91e4993e77ad4ad47a318017e974268c49fc30"
          },
          {
           "name": "OTC_20991231.json.gz",
           "url": "${server}/good/OTC_20991231.json.gz",
-          "size": 4469,
-          "sha256": "494fb192a96102dcc3bed69fb2a39ec6a80cd07e07dbca5cad2cc973b3cdcc5c"
+          "size": 4491,
+          "sha256": "0dfbaf91c624d25a4919e708a0d4e3bbe2187b0fc9bfca06eb140851fb160d84"
          },
          {
           "name": "OTC_20991231.jsonl",
           "url": "${server}/good/OTC_20991231.jsonl",
-          "size": 25682,
-          "sha256": "4e62152b270515cf95ee7528f8187792b756290dad7be049ddf65186e9a74352"
+          "size": 25784,
+          "sha256": "773b114521bd17a3f1fef520948526b2a617de6662a945fb7b58dfc8d3c19255"
          },
          {
           "name": "OTC_20991231.meta.json",
@@ -7020,7 +7020,7 @@
           "name": "OTC_20991231.sha256",
           "url": "${server}/good/OTC_20991231.sha256",
           "size": 345,
-          "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796"
+          "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c"
          }
         ]
        }
@@ -10602,12 +10602,12 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231/.verified",
-     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.jsonl\": {\"sha256\": \"7e618717dc62ecf1062bf00c88504209fbc09bf183338f8d19a07b98c624a553\", \"size\": 25629, \"url\": null}, \"OTC_20991231.meta.json\": {\"sha256\": \"4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c\", \"size\": 4084, \"url\": null}, \"OTC_20991231.sha256\": {\"sha256\": \"252bc70c1741f643d8515ed8b43fe7770d79af40d0e8b2d8eb8f2589c7d11fa3\", \"size\": 345, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.jsonl\": {\"sha256\": \"e99b6534aca28b8aec59384c4e256f0265464f71680eacf637713d62351c1d22\", \"size\": 25731, \"url\": null}, \"OTC_20991231.meta.json\": {\"sha256\": \"4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c\", \"size\": 4084, \"url\": null}, \"OTC_20991231.sha256\": {\"sha256\": \"4767f05d1c7058573ac382f5337e596931dbfc4c596669ff2086f5095769de2f\", \"size\": 345, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
     },
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231/index-v1.json",
-     "text": "{\"index_version\": 1, \"datestamp\": \"20991231\", \"jsonl\": \"OTC_20991231.jsonl\", \"jsonl_sha256\": \"7e618717dc62ecf1062bf00c88504209fbc09bf183338f8d19a07b98c624a553\", \"jsonl_size\": 25629, \"by\": \"opentideconstants-conformance/1.0\", \"stations\": [{\"offset\": 0, \"length\": 5272, \"station_id\": \"OTC-T-0001\", \"status\": \"active\", \"name\": \"San Francisco\", \"name_folded\": \"san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.8063, \"lon\": -122.4659, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0001a\", \"test-gesla-0001b\"], \"kartverket\": [\"TSF\"], \"noaa\": [\"9900001\"], \"slackwater\": [\"sw-0001\"], \"ticon\": [\"test-ticon-0001\"], \"webcaltides\": [\"wct-0001\"], \"xtide\": [\"San Francisco (test), California\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0001/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0001/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}, {\"set_id\": \"OTC-T-0001/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}]}, {\"offset\": 5273, \"length\": 2450, \"station_id\": \"OTC-T-0002\", \"status\": \"active\", \"name\": \"South San Francisco\", \"name_folded\": \"south san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.665, \"lon\": -122.38, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900002\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0002/fallback\", \"sets\": [{\"set_id\": \"OTC-T-0002/fallback\", \"source\": \"ticon-fallback\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}, {\"set_id\": \"OTC-T-0002/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"no_constants\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": []}]}, {\"offset\": 7724, \"length\": 447, \"station_id\": \"OTC-T-0003\", \"status\": \"active\", \"name\": \"Alameda\", \"name_folded\": \"alameda\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.772, \"lon\": -122.3, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900003\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": \"kartverket\", \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 8172, \"length\": 934, \"station_id\": \"OTC-T-0004\", \"status\": \"active\", \"name\": \"Oakland Pier\", \"name_folded\": \"oakland pier\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.795, \"lon\": -122.33, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900004\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0004/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0004/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 9107, \"length\": 197, \"station_id\": \"OTC-T-0005\", \"status\": \"removed\", \"name\": \"Old Pier\", \"name_folded\": \"old pier\", \"country\": null, \"type\": null, \"lat\": null, \"lon\": null, \"kind\": null, \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 9305, \"length\": 761, \"station_id\": \"OTC-T-0006\", \"status\": \"active\", \"name\": \"Tromsø\", \"name_folded\": \"tromso\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 69.6468, \"lon\": 18.9543, \"kind\": \"tide\", \"aliases\": {\"kartverket\": [\"TOS\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0006/kartverket\", \"sets\": [{\"set_id\": \"OTC-T-0006/kartverket\", \"source\": \"kartverket\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"kartverket-utc1-v1\", \"licence_id\": \"kartverket\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10067, \"length\": 706, \"station_id\": \"OTC-T-0007\", \"status\": \"active\", \"name\": \"Antimeridian East\", \"name_folded\": \"antimeridian east\", \"country\": \"FJI\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0007/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0007/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10774, \"length\": 707, \"station_id\": \"OTC-T-0008\", \"status\": \"active\", \"name\": \"Antimeridian West\", \"name_folded\": \"antimeridian west\", \"country\": \"KIR\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": -179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0008/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0008/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 11482, \"length\": 707, \"station_id\": \"OTC-T-0009\", \"status\": \"active\", \"name\": \"Polar Station\", \"name_folded\": \"polar station\", \"country\": \"SJM\", \"type\": \"reference\", \"lat\": 89.9, \"lon\": 0.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0009/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0009/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 12190, \"length\": 1175, \"station_id\": \"OTC-T-0010\", \"status\": \"active\", \"name\": \"Equator Station\", \"name_folded\": \"equator station\", \"country\": \"GAB\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 9.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0010/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0010/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 13366, \"length\": 1266, \"station_id\": \"OTC-T-0011\", \"status\": \"active\", \"name\": \"Ålesund\", \"name_folded\": \"alesund\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 62.4722, \"lon\": 6.1517, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0011\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0011/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0011/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 14633, \"length\": 1118, \"station_id\": \"OTC-T-0012\", \"status\": \"active\", \"name\": \"Łeba\", \"name_folded\": \"leba\", \"country\": \"POL\", \"type\": \"reference\", \"lat\": 54.76, \"lon\": 17.556, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0012/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0012/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 15752, \"length\": 1165, \"station_id\": \"OTC-T-0013\", \"status\": \"active\", \"name\": \"Straße\", \"name_folded\": \"strasse\", \"country\": \"DEU\", \"type\": \"reference\", \"lat\": 54.0, \"lon\": 10.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0013/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0013/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 16918, \"length\": 1164, \"station_id\": \"OTC-T-0014\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.8, \"lon\": -1.1, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0014/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0014/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 18083, \"length\": 1166, \"station_id\": \"OTC-T-0015\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"IRL\", \"type\": \"reference\", \"lat\": 53.35, \"lon\": -6.2, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0015/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0015/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 19250, \"length\": 1170, \"station_id\": \"OTC-T-0016\", \"status\": \"active\", \"name\": \"Harbour Point\", \"name_folded\": \"harbour point\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.7, \"lon\": -1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0016/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0016/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 20421, \"length\": 1171, \"station_id\": \"OTC-T-0017\", \"status\": \"active\", \"name\": \"North Harbour\", \"name_folded\": \"north harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 55.0, \"lon\": -1.4, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0017/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0017/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 21593, \"length\": 1167, \"station_id\": \"OTC-T-0018\", \"status\": \"active\", \"name\": \"Seaharbour\", \"name_folded\": \"seaharbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 51.0, \"lon\": 1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0018/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0018/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 22761, \"length\": 1019, \"station_id\": \"OTC-T-0019\", \"status\": \"active\", \"name\": \"Test Current Pass\", \"name_folded\": \"test current pass\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 47.9, \"lon\": -122.6, \"kind\": \"current\", \"aliases\": {\"noaa\": [\"TEST1901\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0019/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0019/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"current\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": []}]}, {\"offset\": 23781, \"length\": 677, \"station_id\": \"OTC-T-0020\", \"status\": \"active\", \"name\": \"Minimal Station\", \"name_folded\": \"minimal station\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 21.3, \"lon\": -157.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0020/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0020/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 24459, \"length\": 1169, \"station_id\": \"OTC-T-0021\", \"status\": \"active\", \"name\": \"Closing Pier\", \"name_folded\": \"closing pier\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 52.0, \"lon\": 1.7, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0021/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0021/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}]}"
+     "text": "{\"index_version\": 1, \"datestamp\": \"20991231\", \"jsonl\": \"OTC_20991231.jsonl\", \"jsonl_sha256\": \"e99b6534aca28b8aec59384c4e256f0265464f71680eacf637713d62351c1d22\", \"jsonl_size\": 25731, \"by\": \"opentideconstants-conformance/1.0\", \"stations\": [{\"offset\": 0, \"length\": 5374, \"station_id\": \"OTC-T-0001\", \"status\": \"active\", \"name\": \"San Francisco\", \"name_folded\": \"san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.8063, \"lon\": -122.4659, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0001a\", \"test-gesla-0001b\"], \"kartverket\": [\"TSF\"], \"noaa\": [\"9900001\"], \"slackwater\": [\"sw-0001\"], \"ticon\": [\"test-ticon-0001\"], \"webcaltides\": [\"wct-0001\"], \"xtide\": [\"San Francisco (test), California\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0001/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0001/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}, {\"set_id\": \"OTC-T-0001/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}]}, {\"offset\": 5375, \"length\": 2450, \"station_id\": \"OTC-T-0002\", \"status\": \"active\", \"name\": \"South San Francisco\", \"name_folded\": \"south san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.665, \"lon\": -122.38, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900002\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0002/fallback\", \"sets\": [{\"set_id\": \"OTC-T-0002/fallback\", \"source\": \"ticon-fallback\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}, {\"set_id\": \"OTC-T-0002/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"no_constants\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": []}]}, {\"offset\": 7826, \"length\": 447, \"station_id\": \"OTC-T-0003\", \"status\": \"active\", \"name\": \"Alameda\", \"name_folded\": \"alameda\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.772, \"lon\": -122.3, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900003\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": \"kartverket\", \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 8274, \"length\": 934, \"station_id\": \"OTC-T-0004\", \"status\": \"active\", \"name\": \"Oakland Pier\", \"name_folded\": \"oakland pier\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.795, \"lon\": -122.33, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900004\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0004/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0004/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 9209, \"length\": 197, \"station_id\": \"OTC-T-0005\", \"status\": \"removed\", \"name\": \"Old Pier\", \"name_folded\": \"old pier\", \"country\": null, \"type\": null, \"lat\": null, \"lon\": null, \"kind\": null, \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 9407, \"length\": 761, \"station_id\": \"OTC-T-0006\", \"status\": \"active\", \"name\": \"Tromsø\", \"name_folded\": \"tromso\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 69.6468, \"lon\": 18.9543, \"kind\": \"tide\", \"aliases\": {\"kartverket\": [\"TOS\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0006/kartverket\", \"sets\": [{\"set_id\": \"OTC-T-0006/kartverket\", \"source\": \"kartverket\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"kartverket-utc1-v1\", \"licence_id\": \"kartverket\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10169, \"length\": 706, \"station_id\": \"OTC-T-0007\", \"status\": \"active\", \"name\": \"Antimeridian East\", \"name_folded\": \"antimeridian east\", \"country\": \"FJI\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0007/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0007/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10876, \"length\": 707, \"station_id\": \"OTC-T-0008\", \"status\": \"active\", \"name\": \"Antimeridian West\", \"name_folded\": \"antimeridian west\", \"country\": \"KIR\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": -179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0008/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0008/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 11584, \"length\": 707, \"station_id\": \"OTC-T-0009\", \"status\": \"active\", \"name\": \"Polar Station\", \"name_folded\": \"polar station\", \"country\": \"SJM\", \"type\": \"reference\", \"lat\": 89.9, \"lon\": 0.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0009/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0009/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 12292, \"length\": 1175, \"station_id\": \"OTC-T-0010\", \"status\": \"active\", \"name\": \"Equator Station\", \"name_folded\": \"equator station\", \"country\": \"GAB\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 9.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0010/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0010/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 13468, \"length\": 1266, \"station_id\": \"OTC-T-0011\", \"status\": \"active\", \"name\": \"Ålesund\", \"name_folded\": \"alesund\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 62.4722, \"lon\": 6.1517, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0011\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0011/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0011/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 14735, \"length\": 1118, \"station_id\": \"OTC-T-0012\", \"status\": \"active\", \"name\": \"Łeba\", \"name_folded\": \"leba\", \"country\": \"POL\", \"type\": \"reference\", \"lat\": 54.76, \"lon\": 17.556, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0012/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0012/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 15854, \"length\": 1165, \"station_id\": \"OTC-T-0013\", \"status\": \"active\", \"name\": \"Straße\", \"name_folded\": \"strasse\", \"country\": \"DEU\", \"type\": \"reference\", \"lat\": 54.0, \"lon\": 10.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0013/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0013/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 17020, \"length\": 1164, \"station_id\": \"OTC-T-0014\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.8, \"lon\": -1.1, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0014/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0014/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 18185, \"length\": 1166, \"station_id\": \"OTC-T-0015\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"IRL\", \"type\": \"reference\", \"lat\": 53.35, \"lon\": -6.2, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0015/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0015/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 19352, \"length\": 1170, \"station_id\": \"OTC-T-0016\", \"status\": \"active\", \"name\": \"Harbour Point\", \"name_folded\": \"harbour point\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.7, \"lon\": -1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0016/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0016/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 20523, \"length\": 1171, \"station_id\": \"OTC-T-0017\", \"status\": \"active\", \"name\": \"North Harbour\", \"name_folded\": \"north harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 55.0, \"lon\": -1.4, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0017/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0017/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 21695, \"length\": 1167, \"station_id\": \"OTC-T-0018\", \"status\": \"active\", \"name\": \"Seaharbour\", \"name_folded\": \"seaharbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 51.0, \"lon\": 1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0018/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0018/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 22863, \"length\": 1019, \"station_id\": \"OTC-T-0019\", \"status\": \"active\", \"name\": \"Test Current Pass\", \"name_folded\": \"test current pass\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 47.9, \"lon\": -122.6, \"kind\": \"current\", \"aliases\": {\"noaa\": [\"TEST1901\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0019/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0019/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"current\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": []}]}, {\"offset\": 23883, \"length\": 677, \"station_id\": \"OTC-T-0020\", \"status\": \"active\", \"name\": \"Minimal Station\", \"name_folded\": \"minimal station\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 21.3, \"lon\": -157.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0020/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0020/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 24561, \"length\": 1169, \"station_id\": \"OTC-T-0021\", \"status\": \"active\", \"name\": \"Closing Pier\", \"name_folded\": \"closing pier\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 52.0, \"lon\": 1.7, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0021/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0021/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}]}"
     },
     {
      "op": "open",
@@ -10685,12 +10685,12 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231/.verified",
-     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.jsonl\": {\"sha256\": \"3bba84894f08911b7cf6a5630ba1633b3919f9ccff4fd2a8787cab99542f164d\", \"size\": 25684, \"url\": null}, \"OTC_20991231.meta.json\": {\"sha256\": \"4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c\", \"size\": 4084, \"url\": null}, \"OTC_20991231.sha256\": {\"sha256\": \"cd3b968ccea598bf35f5e468f8aff58f25622582a504658b049df6c358599f82\", \"size\": 345, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.jsonl\": {\"sha256\": \"8796c12051fcf0aa6221748404c6e05c9e95d6f0dcd082a16e7b59f36e4880f4\", \"size\": 25786, \"url\": null}, \"OTC_20991231.meta.json\": {\"sha256\": \"4695bc26c92478d176f86362de5aa5a7d976e0bd8fffe45a98df2bdb5074e39c\", \"size\": 4084, \"url\": null}, \"OTC_20991231.sha256\": {\"sha256\": \"d261246a0fef4bfe0353b6c0927a7b9bfe5068dcdb9dce2a7612b6bb8c6cb869\", \"size\": 345, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
     },
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231/index-v1.json",
-     "text": "{\"index_version\": 1, \"datestamp\": \"20991231\", \"jsonl\": \"OTC_20991231.jsonl\", \"jsonl_sha256\": \"3bba84894f08911b7cf6a5630ba1633b3919f9ccff4fd2a8787cab99542f164d\", \"jsonl_size\": 25684, \"by\": \"opentideconstants-conformance/1.0\", \"stations\": [{\"offset\": 0, \"length\": 5272, \"station_id\": \"OTC-T-0001\", \"status\": \"active\", \"name\": \"San Francisco\", \"name_folded\": \"san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.8063, \"lon\": -122.4659, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0001a\", \"test-gesla-0001b\"], \"kartverket\": [\"TSF\"], \"noaa\": [\"9900001\"], \"slackwater\": [\"sw-0001\"], \"ticon\": [\"test-ticon-0001\"], \"webcaltides\": [\"wct-0001\"], \"xtide\": [\"San Francisco (test), California\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0001/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0001/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}, {\"set_id\": \"OTC-T-0001/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}]}, {\"offset\": 5273, \"length\": 2503, \"station_id\": \"OTC-T-0002\", \"status\": \"active\", \"name\": \"South San Francisco\", \"name_folded\": \"south san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.665, \"lon\": -122.38, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900002\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0002/fallback\", \"sets\": [{\"set_id\": \"OTC-T-0002/fallback\", \"source\": \"ticon-fallback\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}, {\"set_id\": \"OTC-T-0002/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"no_constants\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": []}]}, {\"offset\": 7777, \"length\": 447, \"station_id\": \"OTC-T-0003\", \"status\": \"active\", \"name\": \"Alameda\", \"name_folded\": \"alameda\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.772, \"lon\": -122.3, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900003\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": \"kartverket\", \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 8225, \"length\": 934, \"station_id\": \"OTC-T-0004\", \"status\": \"active\", \"name\": \"Oakland Pier\", \"name_folded\": \"oakland pier\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.795, \"lon\": -122.33, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900004\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0004/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0004/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 9160, \"length\": 197, \"station_id\": \"OTC-T-0005\", \"status\": \"removed\", \"name\": \"Old Pier\", \"name_folded\": \"old pier\", \"country\": null, \"type\": null, \"lat\": null, \"lon\": null, \"kind\": null, \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 9358, \"length\": 761, \"station_id\": \"OTC-T-0006\", \"status\": \"active\", \"name\": \"Tromsø\", \"name_folded\": \"tromso\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 69.6468, \"lon\": 18.9543, \"kind\": \"tide\", \"aliases\": {\"kartverket\": [\"TOS\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0006/kartverket\", \"sets\": [{\"set_id\": \"OTC-T-0006/kartverket\", \"source\": \"kartverket\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"kartverket-utc1-v1\", \"licence_id\": \"kartverket\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10120, \"length\": 706, \"station_id\": \"OTC-T-0007\", \"status\": \"active\", \"name\": \"Antimeridian East\", \"name_folded\": \"antimeridian east\", \"country\": \"FJI\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0007/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0007/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10827, \"length\": 707, \"station_id\": \"OTC-T-0008\", \"status\": \"active\", \"name\": \"Antimeridian West\", \"name_folded\": \"antimeridian west\", \"country\": \"KIR\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": -179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0008/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0008/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 11535, \"length\": 707, \"station_id\": \"OTC-T-0009\", \"status\": \"active\", \"name\": \"Polar Station\", \"name_folded\": \"polar station\", \"country\": \"SJM\", \"type\": \"reference\", \"lat\": 89.9, \"lon\": 0.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0009/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0009/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 12243, \"length\": 1177, \"station_id\": \"OTC-T-0010\", \"status\": \"active\", \"name\": \"Equator Station\", \"name_folded\": \"equator station\", \"country\": \"GAB\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 9.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0010/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0010/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 13421, \"length\": 1266, \"station_id\": \"OTC-T-0011\", \"status\": \"active\", \"name\": \"Ålesund\", \"name_folded\": \"alesund\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 62.4722, \"lon\": 6.1517, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0011\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0011/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0011/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 14688, \"length\": 1118, \"station_id\": \"OTC-T-0012\", \"status\": \"active\", \"name\": \"Łeba\", \"name_folded\": \"leba\", \"country\": \"POL\", \"type\": \"reference\", \"lat\": 54.76, \"lon\": 17.556, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0012/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0012/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 15807, \"length\": 1165, \"station_id\": \"OTC-T-0013\", \"status\": \"active\", \"name\": \"Straße\", \"name_folded\": \"strasse\", \"country\": \"DEU\", \"type\": \"reference\", \"lat\": 54.0, \"lon\": 10.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0013/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0013/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 16973, \"length\": 1164, \"station_id\": \"OTC-T-0014\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.8, \"lon\": -1.1, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0014/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0014/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 18138, \"length\": 1166, \"station_id\": \"OTC-T-0015\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"IRL\", \"type\": \"reference\", \"lat\": 53.35, \"lon\": -6.2, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0015/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0015/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 19305, \"length\": 1170, \"station_id\": \"OTC-T-0016\", \"status\": \"active\", \"name\": \"Harbour Point\", \"name_folded\": \"harbour point\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.7, \"lon\": -1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0016/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0016/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 20476, \"length\": 1171, \"station_id\": \"OTC-T-0017\", \"status\": \"active\", \"name\": \"North Harbour\", \"name_folded\": \"north harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 55.0, \"lon\": -1.4, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0017/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0017/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 21648, \"length\": 1167, \"station_id\": \"OTC-T-0018\", \"status\": \"active\", \"name\": \"Seaharbour\", \"name_folded\": \"seaharbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 51.0, \"lon\": 1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0018/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0018/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 22816, \"length\": 1019, \"station_id\": \"OTC-T-0019\", \"status\": \"active\", \"name\": \"Test Current Pass\", \"name_folded\": \"test current pass\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 47.9, \"lon\": -122.6, \"kind\": \"current\", \"aliases\": {\"noaa\": [\"TEST1901\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0019/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0019/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"current\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": []}]}, {\"offset\": 23836, \"length\": 677, \"station_id\": \"OTC-T-0020\", \"status\": \"active\", \"name\": \"Minimal Station\", \"name_folded\": \"minimal station\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 21.3, \"lon\": -157.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0020/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0020/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 24514, \"length\": 1169, \"station_id\": \"OTC-T-0021\", \"status\": \"active\", \"name\": \"Closing Pier\", \"name_folded\": \"closing pier\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 52.0, \"lon\": 1.7, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0021/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0021/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}]}"
+     "text": "{\"index_version\": 1, \"datestamp\": \"20991231\", \"jsonl\": \"OTC_20991231.jsonl\", \"jsonl_sha256\": \"8796c12051fcf0aa6221748404c6e05c9e95d6f0dcd082a16e7b59f36e4880f4\", \"jsonl_size\": 25786, \"by\": \"opentideconstants-conformance/1.0\", \"stations\": [{\"offset\": 0, \"length\": 5374, \"station_id\": \"OTC-T-0001\", \"status\": \"active\", \"name\": \"San Francisco\", \"name_folded\": \"san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.8063, \"lon\": -122.4659, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0001a\", \"test-gesla-0001b\"], \"kartverket\": [\"TSF\"], \"noaa\": [\"9900001\"], \"slackwater\": [\"sw-0001\"], \"ticon\": [\"test-ticon-0001\"], \"webcaltides\": [\"wct-0001\"], \"xtide\": [\"San Francisco (test), California\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0001/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0001/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}, {\"set_id\": \"OTC-T-0001/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"S2\", \"N2\", \"K1\", \"O1\"]}]}, {\"offset\": 5375, \"length\": 2503, \"station_id\": \"OTC-T-0002\", \"status\": \"active\", \"name\": \"South San Francisco\", \"name_folded\": \"south san francisco\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 37.665, \"lon\": -122.38, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900002\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0002/fallback\", \"sets\": [{\"set_id\": \"OTC-T-0002/fallback\", \"source\": \"ticon-fallback\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}, {\"set_id\": \"OTC-T-0002/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"no_constants\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": []}]}, {\"offset\": 7879, \"length\": 447, \"station_id\": \"OTC-T-0003\", \"status\": \"active\", \"name\": \"Alameda\", \"name_folded\": \"alameda\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.772, \"lon\": -122.3, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900003\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": \"kartverket\", \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 8327, \"length\": 934, \"station_id\": \"OTC-T-0004\", \"status\": \"active\", \"name\": \"Oakland Pier\", \"name_folded\": \"oakland pier\", \"country\": \"USA\", \"type\": \"subordinate\", \"lat\": 37.795, \"lon\": -122.33, \"kind\": \"tide\", \"aliases\": {\"noaa\": [\"9900004\"]}, \"reference_station_id\": \"OTC-T-0001\", \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0004/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0004/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 9262, \"length\": 197, \"station_id\": \"OTC-T-0005\", \"status\": \"removed\", \"name\": \"Old Pier\", \"name_folded\": \"old pier\", \"country\": null, \"type\": null, \"lat\": null, \"lon\": null, \"kind\": null, \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": null, \"sets\": []}, {\"offset\": 9460, \"length\": 761, \"station_id\": \"OTC-T-0006\", \"status\": \"active\", \"name\": \"Tromsø\", \"name_folded\": \"tromso\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 69.6468, \"lon\": 18.9543, \"kind\": \"tide\", \"aliases\": {\"kartverket\": [\"TOS\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0006/kartverket\", \"sets\": [{\"set_id\": \"OTC-T-0006/kartverket\", \"source\": \"kartverket\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"kartverket-utc1-v1\", \"licence_id\": \"kartverket\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10222, \"length\": 706, \"station_id\": \"OTC-T-0007\", \"status\": \"active\", \"name\": \"Antimeridian East\", \"name_folded\": \"antimeridian east\", \"country\": \"FJI\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0007/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0007/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 10929, \"length\": 707, \"station_id\": \"OTC-T-0008\", \"status\": \"active\", \"name\": \"Antimeridian West\", \"name_folded\": \"antimeridian west\", \"country\": \"KIR\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": -179.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0008/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0008/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 11637, \"length\": 707, \"station_id\": \"OTC-T-0009\", \"status\": \"active\", \"name\": \"Polar Station\", \"name_folded\": \"polar station\", \"country\": \"SJM\", \"type\": \"reference\", \"lat\": 89.9, \"lon\": 0.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0009/eot20\", \"sets\": [{\"set_id\": \"OTC-T-0009/eot20\", \"source\": \"eot20\", \"source_type\": \"model\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"eot20\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 12345, \"length\": 1177, \"station_id\": \"OTC-T-0010\", \"status\": \"active\", \"name\": \"Equator Station\", \"name_folded\": \"equator station\", \"country\": \"GAB\", \"type\": \"reference\", \"lat\": 0.0, \"lon\": 9.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0010/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0010/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 13523, \"length\": 1266, \"station_id\": \"OTC-T-0011\", \"status\": \"active\", \"name\": \"Ålesund\", \"name_folded\": \"alesund\", \"country\": \"NOR\", \"type\": \"reference\", \"lat\": 62.4722, \"lon\": 6.1517, \"kind\": \"tide\", \"aliases\": {\"gesla\": [\"test-gesla-0011\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0011/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0011/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 14790, \"length\": 1118, \"station_id\": \"OTC-T-0012\", \"status\": \"active\", \"name\": \"Łeba\", \"name_folded\": \"leba\", \"country\": \"POL\", \"type\": \"reference\", \"lat\": 54.76, \"lon\": 17.556, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0012/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0012/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"flagged\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 15909, \"length\": 1165, \"station_id\": \"OTC-T-0013\", \"status\": \"active\", \"name\": \"Straße\", \"name_folded\": \"strasse\", \"country\": \"DEU\", \"type\": \"reference\", \"lat\": 54.0, \"lon\": 10.0, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0013/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0013/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 17075, \"length\": 1164, \"station_id\": \"OTC-T-0014\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.8, \"lon\": -1.1, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0014/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0014/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 18240, \"length\": 1166, \"station_id\": \"OTC-T-0015\", \"status\": \"active\", \"name\": \"Harbour\", \"name_folded\": \"harbour\", \"country\": \"IRL\", \"type\": \"reference\", \"lat\": 53.35, \"lon\": -6.2, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0015/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0015/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 19407, \"length\": 1170, \"station_id\": \"OTC-T-0016\", \"status\": \"active\", \"name\": \"Harbour Point\", \"name_folded\": \"harbour point\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 50.7, \"lon\": -1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0016/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0016/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 20578, \"length\": 1171, \"station_id\": \"OTC-T-0017\", \"status\": \"active\", \"name\": \"North Harbour\", \"name_folded\": \"north harbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 55.0, \"lon\": -1.4, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0017/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0017/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 21750, \"length\": 1167, \"station_id\": \"OTC-T-0018\", \"status\": \"active\", \"name\": \"Seaharbour\", \"name_folded\": \"seaharbour\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 51.0, \"lon\": 1.3, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0018/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0018/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 22918, \"length\": 1019, \"station_id\": \"OTC-T-0019\", \"status\": \"active\", \"name\": \"Test Current Pass\", \"name_folded\": \"test current pass\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 47.9, \"lon\": -122.6, \"kind\": \"current\", \"aliases\": {\"noaa\": [\"TEST1901\"]}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0019/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0019/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"current\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": []}]}, {\"offset\": 23938, \"length\": 677, \"station_id\": \"OTC-T-0020\", \"status\": \"active\", \"name\": \"Minimal Station\", \"name_folded\": \"minimal station\", \"country\": \"USA\", \"type\": \"reference\", \"lat\": 21.3, \"lon\": -157.9, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0020/noaa\", \"sets\": [{\"set_id\": \"OTC-T-0020/noaa\", \"source\": \"noaa\", \"source_type\": \"official\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"noaa-greenwich-v1\", \"licence_id\": \"noaa\", \"constituents\": [\"M2\", \"K1\"]}]}, {\"offset\": 24616, \"length\": 1169, \"station_id\": \"OTC-T-0021\", \"status\": \"active\", \"name\": \"Closing Pier\", \"name_folded\": \"closing pier\", \"country\": \"GBR\", \"type\": \"reference\", \"lat\": 52.0, \"lon\": 1.7, \"kind\": \"tide\", \"aliases\": {}, \"reference_station_id\": null, \"offsets_licence_id\": null, \"recommended_set_id\": \"OTC-T-0021/gesla-fit\", \"sets\": [{\"set_id\": \"OTC-T-0021/gesla-fit\", \"source\": \"gesla-fit\", \"source_type\": \"gauge\", \"quantity\": \"water_level\", \"qc_status\": \"ok\", \"convention_id\": \"otc-greenwich-v1\", \"licence_id\": \"gesla-derived\", \"constituents\": [\"M2\", \"K1\"]}]}]}"
     },
     {
      "op": "open",
@@ -10771,12 +10771,12 @@
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.sha256",
-     "text": "759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1  OTC_20991231.2.jsonl\nd70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa  OTC_20991231.2.meta.json\n"
+     "text": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nd70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa  OTC_20991231.2.meta.json\n"
     },
     {
      "driver": "write",
      "path": "${cache}/v1/releases/20991231.2/.verified",
-     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.2.jsonl\": {\"sha256\": \"759d6bb9e54684e82c3a007d8970e2ac5e3df19a3c2093f74c3fbc1bd69499b1\", \"size\": 25827, \"url\": null}, \"OTC_20991231.2.meta.json\": {\"sha256\": \"d70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa\", \"size\": 5350, \"url\": null}, \"OTC_20991231.2.sha256\": {\"sha256\": \"517948045d2fe586eda1dcb386488bc2a7d77d27d5654f43a302c2d9720e3dcf\", \"size\": 178, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"files\": {\"OTC_20991231.2.jsonl\": {\"sha256\": \"84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0\", \"size\": 25929, \"url\": null}, \"OTC_20991231.2.meta.json\": {\"sha256\": \"d70ab835918abe8d07e4391ae0682b643ae7652164deb49bb7e262c53324b1fa\", \"size\": 5350, \"url\": null}, \"OTC_20991231.2.sha256\": {\"sha256\": \"cc8f177094a389740b32d4cff4d657acfc78f4ffd912603f8de1cc131077ac4c\", \"size\": 178, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
     },
     {
      "op": "open",

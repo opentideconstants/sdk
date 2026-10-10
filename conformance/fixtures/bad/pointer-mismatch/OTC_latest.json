@@ -7,19 +7,19 @@
   {
    "name": "OTC_20991231.json",
    "sha256": "85412d389613037cae4c50b0b21c925fc22ac2a2cff5c1eaada4ba1665cb4070",
-   "size": 29779,
+   "size": 29881,
    "url": "OTC_20991231.json"
   },
   {
    "name": "OTC_20991231.json.gz",
    "sha256": "eced067478ba8b0bb4ddaea49bcf69a92bfe6a964e43b66c41d9d11c2ae53a6e",
-   "size": 4469,
+   "size": 4491,
    "url": "OTC_20991231.json.gz"
   },
   {
    "name": "OTC_20991231.jsonl",
    "sha256": "a328f0e3faacf1084bf3278f1df0e7e74f814dfb60b3a72e36c3215d08d1a021",
-   "size": 25682,
+   "size": 25784,
    "url": "OTC_20991231.jsonl"
   },
   {
@@ -30,7 +30,7 @@
   },
   {
    "name": "OTC_20991231.sha256",
-   "sha256": "157fa45c7901b1bdda0303de4108c8ee8ba9e396f693fe486416591d42e4e796",
+   "sha256": "bb803cc81f8dbb5dccd93b044e4097e8703c78332bb5c611a4c3592db7e5af7c",
    "size": 345,
    "url": "OTC_20991231.sha256"
   }
