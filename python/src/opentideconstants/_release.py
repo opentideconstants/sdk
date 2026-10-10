@@ -156,6 +156,36 @@ def _typed(cls, v):
     return None if m is None else m.value
 
 
+_OFFSETS_SOURCE = "noaa"  # the source of every subordinate_offsets in format 1.0 (spec §4.2, K-NC DR106)
+
+
+def _effective_id(e, lic_by_id):
+    """The effective recommended set of a station under commercial_only (spec §4.2, K-NC DR106), from its index
+    entry (the sets in file order): the release's recommended set when its licence allows commercial use;
+    otherwise the first set in file order of the same typed quantity, qc_status ok, with a commercial licence;
+    then the same with flagged; otherwise None. A set with no quantity never matches."""
+    rid = e.get("recommended_set_id")
+    sets = e.get("sets") or ()
+    rec = next((cs for cs in sets if rid is not None and cs["set_id"] == rid), None)
+    if rec is None:
+        return None
+    if lic_by_id[rec["licence_id"]].commercial_use is True:
+        return rid
+    q = _typed(E.Quantity, rec.get("quantity"))
+    if q is None:
+        return None
+    for status in ("ok", "flagged"):
+        for cs in sets:
+            if (cs.get("qc_status") == status and _typed(E.Quantity, cs.get("quantity")) == q
+                    and lic_by_id[cs["licence_id"]].commercial_use is True):
+                return cs["set_id"]
+    return None
+
+
+def _effective_ids(entries, lic_by_id):
+    return {e["station_id"]: _effective_id(e, lic_by_id) for e in entries if e.get("status") == "active"}
+
+
 def haversine(lat1, lon1, lat2, lon2):
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dl = math.radians(lon2 - lon1)
@@ -344,9 +374,10 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "_opened", "__weakref__")
+                 "_index_path", "_opened", "_commercial_only", "_effective", "__weakref__")
 
-    def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None):
+    def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None,
+                 commercial_only=False):
         self._meta = meta
         self._index_path = index_path
         self._opened = ()  # the files this release was loaded from (the client sets it; verify hashes them)
@@ -373,6 +404,9 @@ class Release:
         parse_time(rel.get("created"), "release.created")
         _check_ids(entries, self._conventions, self._licences)
         _resolve_kinds(entries)
+        # commercial_only (spec §4.2, K-NC DR106): station_id -> the effective recommended set_id (or None)
+        self._commercial_only = commercial_only
+        self._effective = _effective_ids(entries, self._lic_by_id) if commercial_only else None
         active = sorted((e for e in entries if e.get("status") == "active"), key=lambda e: e["station_id"])
         self._entries = active
         self._by_id = {e["station_id"]: e for e in active}
@@ -528,7 +562,10 @@ class Release:
                 self._lru.move_to_end(sid)
                 return st
             d = self._read_line(e)
-        st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"))
+        if self._effective is not None:
+            st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"), self._effective[sid])
+        else:
+            st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"))
         with self._lock:
             self._lru[sid] = st
             if len(self._lru) > LRU_SIZE:
@@ -637,7 +674,9 @@ class Release:
             if source is not None and not any(s.get("source") == source and s.get("qc_status") in _USABLE for s in sets):
                 continue
             if source_type is not None:
-                rec = [s for s in sets if s.get("set_id") == e.get("recommended_set_id")]
+                # with commercial_only, the effective recommended set (spec §4.4, K-NC DR106)
+                rid = e.get("recommended_set_id") if self._effective is None else self._effective[e["station_id"]]
+                rec = [s for s in sets if rid is not None and s.get("set_id") == rid]
                 if not rec or _typed(E.SourceType, rec[0].get("source_type")) != str(source_type):
                     continue
             out.append(e)
@@ -764,8 +803,10 @@ class Release:
         if stations is not None and (isinstance(stations, (str, bytes)) or not hasattr(stations, "__iter__")):
             raise InvalidArgumentError("stations must be a list of Station objects")
         stations = None if stations is None else list(stations)
-        if not stations:  # None or an empty list: every licence in the release (CR D2 c)
-            lic_ids = {x.licence_id for x in self._licences}
+        co = self._commercial_only
+        if not stations:  # None or an empty list: every licence in the release (CR D2 c); with commercial_only
+            # only the commercial ones (K-NC DR106)
+            lic_ids = {x.licence_id for x in self._licences if not co or x.commercial_use is True}
         else:
             lic_ids = set()
             for st in stations:
@@ -776,6 +817,9 @@ class Release:
                     # unknown, removed or from another release: never skipped silently (CR D2 a)
                     raise InvalidArgumentError(f"station {st.station_id} is not an active station of release "
                                                f"{self.datestamp}")
+                if co:  # the licences of the station's tide source (spec §4.2, §4.6, K-NC DR106)
+                    lic_ids.update(self._tide_source_licences(self._by_id[st.station_id]))
+                    continue
                 if st.recommended_set is not None:
                     lic_ids.add(st.recommended_set.licence.licence_id)
                 lic_ids.update(self._chain_licences(self._by_id[st.station_id]))
@@ -790,8 +834,37 @@ class Release:
             seen.add(lic.provider)
             parts.append(f"{lic.provider}: {lic.attribution}")
         ident = f"doi:{self.concept_doi}" if self.concept_doi else f"{DATA_URL}OTC_{self.datestamp}.json"
-        return (f"Tidal constants: OpenTideConstants {self.datestamp}, {ident}, CC BY 4.0. Sources: "
-                + "; ".join(parts))
+        head = f"Tidal constants: OpenTideConstants {self.datestamp}, {ident}, CC BY 4.0."
+        if not lic_ids:  # an empty scope: the dataset header alone (spec §4.6, K-NC DR106)
+            return head
+        text = head + " Sources: " + "; ".join(parts)
+        # the non-commercial notice (spec §4.6, K-NC DR105): once, then one entry per non-commercial licence in
+        # scope, by licence_id; a null provider gives the licence_id
+        nc = [self._lic_by_id[lid] for lid in sorted(lic_ids) if self._lic_by_id[lid].commercial_use is not True]
+        if nc:
+            text += ". Non-commercial use only: " + "; ".join(
+                f"{x.licence_id if x.provider is None else x.provider} ({x.spdx}, {x.terms_url})" for x in nc)
+        return text
+
+    def _tide_source_licences(self, e) -> List[str]:
+        """The licences of a station's tide source under commercial_only (spec §4.2, K-NC DR106): its effective
+        recommended set; else the one-link offsets path (the reference station's first set in file order from the
+        offsets' source, water_level, ok or flagged), usable only when the offsets' licence and that set's
+        licence allow commercial use; else none (no usable tides)."""
+        eff = self._effective[e["station_id"]]
+        if eff is not None:
+            return [next(cs["licence_id"] for cs in e["sets"] if cs["set_id"] == eff)]
+        if e["reference_station_id"] is None and e["offsets_licence_id"] is None:
+            return []
+        ref = self._by_id.get(e["reference_station_id"])
+        if ref is None:
+            return []
+        refset = next((cs for cs in ref["sets"] if cs.get("source") == _OFFSETS_SOURCE and cs.get("qc_status") in _USABLE
+                       and _typed(E.Quantity, cs.get("quantity")) == "water_level"), None)
+        if refset is None:
+            return []
+        out = [refset["licence_id"]] + ([e["offsets_licence_id"]] if e["offsets_licence_id"] else [])
+        return out if all(self._lic_by_id[x].commercial_use is True for x in out) else []
 
     def _chain_licences(self, e) -> List[str]:
         """The licences of a station's reference chain (spec §4.6, CR2 DR1): the walk follows reference_station_id
@@ -865,8 +938,9 @@ def _validate_refs(d, conventions, licences):
 
 
 def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None,
-                  index_sha256: Optional[str] = None) -> Release:
-    """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json)."""
+                  index_sha256: Optional[str] = None, commercial_only: bool = False) -> Release:
+    """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json). commercial_only: the
+    open option of spec §4.2 (K-NC DR106)."""
     name = path.name
     if name.endswith(".jsonl"):
         meta = _json(_read_bytes(meta_path_for(path)), str(meta_path_for(path)))
@@ -874,13 +948,14 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         conv, lic = _refs(meta, str(meta_path_for(path)))
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path, index_sha256)
-            return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path)
+            return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
+                           commercial_only=commercial_only)
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
             if line.strip():
                 docs.append(_json(line, f"{path} line {i + 1}"))
-        return _eager(meta, docs, files)
+        return _eager(meta, docs, files, commercial_only)
     data = _read_bytes(path)
     if name.endswith(".gz"):
         try:
@@ -896,10 +971,10 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
     if mode == "stream":
         # a .json file has no lines to seek to: keep the parsed stations, as in eager mode
         mode = "eager"
-    return _eager(meta, stations, files)
+    return _eager(meta, stations, files, commercial_only)
 
 
-def _eager(meta, docs, files) -> Release:
+def _eager(meta, docs, files, commercial_only=False) -> Release:
     conv, lic = _refs(meta, "the release")
     try:
         entries = [_entry(d) for d in docs]
@@ -913,7 +988,15 @@ def _eager(meta, docs, files) -> Release:
             stations[d["station_id"]] = build_station(d, conv, lic, kinds.get(d["station_id"]))
         elif _status(d) == "removed":
             tombs[d["station_id"]] = Tombstone._parse(d)
-    return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs)
+    if commercial_only:   # the Stations give the effective recommended set (spec §4.2, K-NC DR106); every
+        # licence reference resolved in the pass above
+        eff = _effective_ids(entries, lic)
+        for d in docs:
+            sid = d["station_id"]
+            if _status(d) == "active" and eff[sid] != d.get("recommended_set_id"):
+                stations[sid] = build_station(d, conv, lic, kinds.get(sid), eff[sid])
+    return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs,
+                   commercial_only=commercial_only)
 
 
 def file_sha256(path: Path) -> str:

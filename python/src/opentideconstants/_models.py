@@ -124,6 +124,9 @@ class Licence:
     citation: Optional[str]
     attribution: Optional[str]
     url: Optional[str]
+    commercial_use: bool
+    restriction: Optional[str]
+    terms_url: Optional[str]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
 
     def __hash__(self):  # CR D16: hashable by id; == still compares the fields
@@ -131,8 +134,25 @@ class Licence:
 
     @classmethod
     def _parse(cls, d):
+        check_licence(d)
         return cls(d["licence_id"], d.get("spdx"), d.get("provider"), d.get("citation"), d.get("attribution"),
-                   d.get("url"), freeze(d))
+                   d.get("url"), d["commercial_use"], d.get("restriction"), d.get("terms_url"), freeze(d))
+
+
+def check_licence(d):
+    """The load rules of the licence fields (spec §4.6, K-NC DR104): commercial_use is a JSON boolean (absent or
+    null is invalid); restriction and terms_url, when present, are strings (a JSON null is not one, CR3 DR71); a
+    non-commercial licence has both, and an spdx, which the non-commercial notice prints."""
+    lid = d.get("licence_id") if isinstance(d, dict) else None
+    if not isinstance(d, dict) or not isinstance(d.get("commercial_use"), bool):
+        raise InvalidReleaseError(f"licence {lid!r}: commercial_use must be true or false")
+    for k in ("restriction", "terms_url"):
+        if k in d and not isinstance(d[k], str):
+            raise InvalidReleaseError(f"licence {lid!r}: {k} must be a string")
+    if d["commercial_use"] is False:
+        for k in ("restriction", "terms_url", "spdx"):
+            if not isinstance(d.get(k), str):
+                raise InvalidReleaseError(f"licence {lid!r}: a licence with commercial_use false needs {k}")
 
 
 @dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
@@ -544,14 +564,20 @@ def check_station_types(d) -> None:
             _check_types(e, _EVIDENCE_TYPES, f"{what}: time_base.evidence")
 
 
-def build_station(d, conventions, licences, kind):
+_RELEASE_REC = object()  # build_station: the station's recommended set is the release's
+
+
+def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
     """Build a Station from the parsed JSON of a station line (the caller passes active lines only; the status
-    is not checked here). conventions/licences: id -> object. Raises InvalidReleaseError when a reference does
-    not resolve or a field is malformed."""
+    is not checked here). conventions/licences: id -> object. recommended: the set_id (or None) that the Station
+    gives as its recommended set, when it is not the release's (the effective recommended set of commercial_only,
+    spec §4.2, K-NC DR106). Raises InvalidReleaseError when a reference does not resolve or a field is
+    malformed."""
     try:
         check_station_types(d)
         sid = d["station_id"]
-        rid = d.get("recommended_set_id")
+        release_rid = d.get("recommended_set_id")
+        rid = release_rid if recommended is _RELEASE_REC else recommended
         rows = tuple(Validation._parse(v) for v in (d.get("validation") or ()))
         sets = []
         for cs in d.get("constant_sets") or ():
@@ -582,9 +608,9 @@ def build_station(d, conventions, licences, kind):
                 TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
                 freeze(cs)))
+        if release_rid is not None and not any(s.set_id == release_rid for s in sets):
+            raise InvalidReleaseError(f"{sid}: recommended_set_id {release_rid!r} does not resolve")
         rec = [s for s in sets if rid is not None and s.set_id == rid]
-        if rid is not None and not rec:
-            raise InvalidReleaseError(f"{sid}: recommended_set_id {rid!r} does not resolve")
         ordered = tuple(rec + sorted((s for s in sets if s.set_id != rid), key=lambda s: s.set_id))
         off = d.get("subordinate_offsets")
         if off is not None and off.get("licence_id") is not None and off.get("licence_id") not in licences:

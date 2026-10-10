@@ -97,7 +97,7 @@ CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "amplitud
                "amp_uncertainty_m", "phase_uncertainty_deg", "kept_reason"]
 CONVENTION = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
               "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"]
-LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url"]
+LICENCE = ["licence_id", "spdx", "provider", "citation", "attribution", "url", "commercial_use", "restriction", "terms_url"]
 PROVENANCE = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"]
 VALIDATION = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
               "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m",

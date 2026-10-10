@@ -1634,3 +1634,17 @@ class ProxyTrustTest(unittest.TestCase):
         self.assertEqual(self._get(target + "/x"), b"target")   # the control: the system roots are used
         with self.assertRaises(otc.NetworkError):
             self._get(target + "/x", ca_file=str(self.files["private"][0]))
+
+
+class CommercialOnlyTest(unittest.TestCase):
+    """K-NC DR106 (spec §4.2): commercial_only must be a bool; any other value, None included, is invalid_argument."""
+
+    def test_commercial_only_must_be_a_bool(self):
+        f = str(FIXTURES / "knc" / "OTC_20991231.2.jsonl")
+        for v in (1, 0, "true", None, [True]):
+            with self.assertRaises(otc.InvalidArgumentError, msg=repr(v)):
+                otc.OpenTideConstants(file=f, commercial_only=v)
+        with otc.OpenTideConstants(file=f, commercial_only=True) as c:
+            self.assertEqual(c.station("OTC-T-0181").recommended_set.set_id, "OTC-T-0181/w-ok")
+        with otc.OpenTideConstants(file=f, commercial_only=False) as c:
+            self.assertEqual(c.station("OTC-T-0181").recommended_set.set_id, "OTC-T-0181/x-nc")

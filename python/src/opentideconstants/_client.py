@@ -181,7 +181,8 @@ class OpenTideConstants:
     def __init__(self, *, release: str = "latest", file=None, cache_dir=None, offline: bool = False,
                  mode: str = "eager", base_url: Optional[str] = None, timeout=None, proxy=None, ca_file=None,
                  user_agent: Optional[str] = None, on_network_error: str = "use_cache", auto_update: bool = False,
-                 update_interval=86_400, logger: Optional[logging.Logger] = None, verify_on_open: bool = False):
+                 update_interval=86_400, logger: Optional[logging.Logger] = None, verify_on_open: bool = False,
+                 commercial_only: bool = False):
         self._log = logger or logging.getLogger("opentideconstants")
         self._lock = threading.RLock()
         self._release: Optional[Release] = None
@@ -196,7 +197,8 @@ class OpenTideConstants:
             raise InvalidArgumentError(f"mode must be one of {_MODES}, not {mode!r}")
         if on_network_error not in _ON_ERR:
             raise InvalidArgumentError(f"on_network_error must be one of {_ON_ERR}, not {on_network_error!r}")
-        for name, v in (("offline", offline), ("auto_update", auto_update), ("verify_on_open", verify_on_open)):
+        for name, v in (("offline", offline), ("auto_update", auto_update), ("verify_on_open", verify_on_open),
+                        ("commercial_only", commercial_only)):
             if not isinstance(v, bool):
                 raise InvalidArgumentError(f"{name} must be a boolean")
         # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
@@ -223,6 +225,9 @@ class OpenTideConstants:
         self._auto_update = auto_update
         self._update_interval = float(update_interval if update_interval is not None else 86_400)
         self._verify_on_open = verify_on_open
+        # select only sets whose licence allows commercial use, in every release this client loads (spec §4.2,
+        # K-NC DR106)
+        self._commercial_only = commercial_only
         ua = f"opentideconstants-python/{__version__} (+https://opentideconstants.org)"
         _check_user_agent(user_agent)
         if user_agent:
@@ -316,7 +321,7 @@ class OpenTideConstants:
         else:
             files = [FileInfo(p.name, None, p.stat().st_size, None) for p in sorted(opened, key=lambda p: p.name)]
             lf = "file_unverified"
-        rel = load_document(path, self._mode, files)
+        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only)
         rel._opened = tuple(opened)
         self._set(rel, lf)
 
@@ -371,7 +376,8 @@ class OpenTideConstants:
                 self._check_file(p, rec.get("sha256"))
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
-                            index_sha256=(v["files"].get(path.name) or {}).get("sha256"))
+                            index_sha256=(v["files"].get(path.name) or {}).get("sha256"),
+                            commercial_only=self._commercial_only)
         rel._zenodo_version_doi = v.get("zenodo_version_doi")
         rel._opened = tuple(check)
         return rel
@@ -766,7 +772,8 @@ class OpenTideConstants:
             files_infos = [FileInfo(n, f.get("url"), f.get("size"), f.get("sha256")) for n, f in sorted(files.items())]
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
-                                index_sha256=(files.get(data_name) or {}).get("sha256"))
+                                index_sha256=(files.get(data_name) or {}).get("sha256"),
+                                commercial_only=self._commercial_only)
             # a null DOI never erases a known one (CR2 DR11)
             zdoi = info.zenodo_version_doi if info is not None and info.zenodo_version_doi is not None \
                 else old.get("zenodo_version_doi")
