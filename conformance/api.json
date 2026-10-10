@@ -1608,22 +1608,19 @@
      "name": "name",
      "kind": "field",
      "type": "string",
-     "nullable": false,
-     "note": "C char name[16]"
+     "nullable": false
     },
     {
      "name": "source_name",
      "kind": "field",
      "type": "string",
-     "nullable": true,
-     "note": "C char source_name[32]"
+     "nullable": true
     },
     {
      "name": "doodson",
      "kind": "field",
      "type": "string",
-     "nullable": true,
-     "note": "C char doodson[8]"
+     "nullable": true
     },
     {
      "name": "speed_deg_per_hour",
@@ -2588,7 +2585,7 @@
    "code": "unsupported",
    "class": "UnsupportedError",
    "c": null,
-   "when": "TypeScript in a browser: an operation that needs a file system (download), and the options proxy and caFile",
+   "when": "TypeScript in a browser: an operation that needs a file system (download), and the options proxy and ca_file",
    "fields": [],
    "languages": [
     "typescript"

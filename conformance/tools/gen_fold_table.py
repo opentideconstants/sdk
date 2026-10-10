@@ -19,6 +19,9 @@ For each code point in the covered blocks (CR D12):
   5. map the letters that do not decompose (EXTRA below).
 Only code points whose folded string differs from the code point itself are
 written. A code point that is not in the table folds to itself.
+Step 1 is not the only source of U+0020: a spacing accent whose NFKD is U+0020
+and a combining mark (U+00A8, 00AF, 00B4, 00B8, 0384, 0385, ...) folds to " "
+after step 3, so "O´Brien" folds to "o brien".
 """
 import argparse
 import json
@@ -59,11 +62,13 @@ EXTRA = {
     "\u00b7": "",  # middle dot: removed, so that ŀ (NFKD: l, U+00B7) folds to l
 }
 
-# The White_Space code points that step 2 of the search (SDK spec 4.4.1) handles itself.
-# unicodedata has no White_Space property, so the list is spelled out (Unicode PropList.txt).
+# The Unicode White_Space property. unicodedata has no White_Space property, so the list is
+# spelled out (Unicode PropList.txt).
 WHITE_SPACE = {0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020, 0x0085, 0x00A0, 0x1680, 0x2000, 0x2001, 0x2002,
                0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F,
                0x3000}
+# The White_Space code points that step 2 of the search (SDK spec 4.4.1) handles itself, so the
+# table leaves them as they are.
 KEPT_WHITE_SPACE = {0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020}
 
 OUT = Path(__file__).resolve().parent.parent / "name_fold.json"
