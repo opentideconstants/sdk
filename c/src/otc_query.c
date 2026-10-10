@@ -13,7 +13,7 @@ static int typed_is(const char *name, const char *want)
     return name && !strcmp(name, want);
 }
 
-int otc__filter_match(const otc_filter *f, const otc__entry *e)
+int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e)
 {
     if (!f) return 1;
     if (f->country && otc__strcmp_null(e->country, f->country) != 0) return 0;
@@ -26,9 +26,12 @@ int otc__filter_match(const otc_filter *f, const otc__entry *e)
             if (!strcmp(e->sources[i], f->source)) hit = 1;
         if (!hit) return 0;
     }
-    if (f->source_type
-        && (!e->has_rec || !typed_is(otc_source_type_name(otc__parse_source_type(e->rec_source_type)), f->source_type)))
-        return 0;
+    if (f->source_type) {
+        /* with commercial_only, the effective recommended set's (spec 4.4, K-NC DR106) */
+        int has = rel->commercial_only ? e->eff_pos >= 0 : e->has_rec;
+        const char *type = rel->commercial_only ? e->eff_source_type : e->rec_source_type;
+        if (!has || !typed_is(otc_source_type_name(otc__parse_source_type(type)), f->source_type)) return 0;
+    }
     return 1;
 }
 
@@ -44,7 +47,7 @@ static otc_status load_entry(const otc_release *rel, const otc__entry *e, otc_st
     cJSON *root = NULL;
     otc_status st = otc__read_station_line(rel, e->id, e->offset, e->length, e->view, &root);
     if (st != OTC_OK) return st;
-    st = otc__station_build(rel, root, e->kind, out);
+    st = otc__station_build(rel, root, e->kind, rel->commercial_only ? e->eff_pos : OTC__REC_FROM_LINE, out);
     return st == OTC_OK ? st : otc__fail(rel, st, "cannot build station %s", e->id);
 }
 
@@ -135,7 +138,7 @@ otc_status otc_stations(const otc_release *rel, const otc_filter *filter, const 
     if (!rel || !count || (!ids && cap) || !filter_ok(filter))
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_stations: bad argument");
     for (i = 0; i < rel->n_st; i++) {
-        if (!otc__filter_match(filter, &rel->st[i])) continue;
+        if (!otc__filter_match(rel, filter, &rel->st[i])) continue;
         if (ids && n < cap) ids[n] = rel->st[i].id;
         n++;
     }
@@ -185,7 +188,7 @@ otc_status otc_iter_next(otc_iter *it, otc_station_t **out)
     if (!it || !out) return OTC_E_INVALID_ARGUMENT;
     while (it->pos < it->rel->n_st) {
         const otc__entry *e = &it->rel->st[it->pos++];
-        if (otc__filter_match(&it->filter, e)) return load_entry(it->rel, e, out);
+        if (otc__filter_match(it->rel, &it->filter, e)) return load_entry(it->rel, e, out);
     }
     return OTC_E_NOT_FOUND;
 }
@@ -263,7 +266,7 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     if (!r) { free(q); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
     for (i = 0; i < rel->n_st; i++) {
         int k;
-        if (!otc__filter_match(filter, &rel->st[i])) continue;
+        if (!otc__filter_match(rel, filter, &rel->st[i])) continue;
         k = name_rank(rel->st[i].folded, rel->st[i].folded_len, q, filter && filter->match_exact);
         if (k < 0) continue;
         r[n].rank = k;
@@ -320,7 +323,7 @@ static otc_status geo_scan(const otc_release *rel, double lat, double lon, doubl
         const otc__entry *e = &rel->st[i];
         double d;
         if (fabs(e->lat - lat) > band) continue;
-        if (!otc__filter_match(f, e)) continue;
+        if (!otc__filter_match(rel, f, e)) continue;
         d = haversine(lat, lon, e->lat, e->lon);
         if (d > max_km) continue;
         hits[n].id = e->id;

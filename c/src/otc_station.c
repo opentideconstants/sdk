@@ -166,7 +166,7 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     return OTC_OK;
 }
 
-otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, otc_station_t **out)
+otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out)
 {
     otc_station_t *st = (otc_station_t *)calloc(1, sizeof *st);
     const cJSON *sets = otc__jget(root, "constant_sets"), *vals = otc__jget(root, "validation"), *x;
@@ -191,6 +191,8 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
     if (cJSON_IsArray(sets)) {
         cJSON_ArrayForEach(x, sets) {
             if ((rc = build_set(st, &st->sets[i], x, rec_id, vals)) != OTC_OK) break;
+            /* under commercial_only the recommended set is the effective one (spec 4.2, K-NC DR106) */
+            if (eff_pos != OTC__REC_FROM_LINE) st->sets[i].recommended = (long)i == eff_pos;
             if (st->sets[i].recommended) st->rec = &st->sets[i];
             st->order_all[i] = &st->sets[i];
             i++;

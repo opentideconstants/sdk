@@ -194,6 +194,9 @@ static void free_entry(otc__entry *e)
     free(e->rec_licence);
     free(e->ref_id);
     free(e->off_licence);
+    free(e->eff_source_type);
+    free(e->eff_licence);
+    free(e->offsets_ref_licence);
     for (i = 0; i < e->n_sources; i++) free(e->sources[i]);
     free(e->sources);
 }
@@ -251,7 +254,31 @@ typedef struct builder {
     size_t       n_set_ids, cap_set_ids;
     char       **unknown;    /* "<station_id> <status>" of each line whose status the library does not know */
     size_t       n_unknown, cap_unknown;
+    /* commercial_only (spec 4.2, K-NC DR106), per station line, while its sets are read: the position of the
+     * set being read and of the recommended set; for each typed quantity (water_level, current, other) and
+     * qc_status (ok, flagged), the first set in file order with a commercial licence (position, source_type,
+     * licence_id; borrowed from the line); and the licence of the first noaa water_level set with constants */
+    long         set_pos, rec_pos;
+    long         cand_pos[3][2];
+    const char  *cand_type[3][2], *cand_lic[3][2];
+    const char  *ref_lic;
 } builder;
+
+/* The source of every subordinate_offsets in format 1.0 (spec 4.2, K-NC DR106). */
+#define OTC__OFFSETS_SOURCE "noaa"
+
+/* The row of a typed quantity in builder.cand: water_level 0, current 1, any other value 2; -1 for none (a
+ * set with no quantity never matches, spec 4.2). */
+static int quantity_row(otc_quantity q)
+{
+    return q == OTC_QUANTITY_WATER_LEVEL ? 0 : q == OTC_QUANTITY_CURRENT ? 1 : q == OTC_QUANTITY_OTHER ? 2 : -1;
+}
+
+static bool licence_commercial(const otc_release *r, const char *id)
+{
+    const otc_licence *l = id ? otc__find_licence(r, id) : NULL;
+    return l && l->commercial_use;
+}
 
 #define GROW(ptr, n, cap)                                                        \
     do {                                                                         \
@@ -574,9 +601,22 @@ static otc_status index_set(builder *b, const cJSON *set, otc__entry *e, const c
             e->n_sources++;
         }
     }
+    if (r->commercial_only) {
+        /* the candidates of the effective recommended set and the offsets' reference set (K-NC DR106) */
+        otc_quantity q = otc__parse_quantity(otc__jstr(set, "quantity"));
+        int row = quantity_row(q), col = qcs == OTC_QC_STATUS_OK ? 0 : qcs == OTC_QC_STATUS_FLAGGED ? 1 : -1;
+        if (row >= 0 && col >= 0 && b->cand_pos[row][col] < 0 && licence_commercial(r, lic)) {
+            b->cand_pos[row][col] = b->set_pos;
+            b->cand_type[row][col] = otc__jstr(set, "source_type");
+            b->cand_lic[row][col] = lic;
+        }
+        if (!b->ref_lic && col >= 0 && q == OTC_QUANTITY_WATER_LEVEL && source && !strcmp(source, OTC__OFFSETS_SOURCE))
+            b->ref_lic = lic;
+    }
     /* the first set with the recommended id (a repeated set_id is refused when every line is in) */
     if (!e->has_rec && otc__jstr_same(rec_id, otc__jstr_item(set, "set_id"))) {   /* in full: a NUL inside never matches less */
         e->has_rec = 1;
+        b->rec_pos = b->set_pos;
         e->rec_quantity = otc__parse_quantity(otc__jstr(set, "quantity"));
         if (otc__jstr(set, "source_type") && !(e->rec_source_type = otc__strdup(otc__jstr(set, "source_type"))))
             return OTC_E_NOMEM;
@@ -601,6 +641,33 @@ static char *set_id_key(const cJSON *sid)
     }
     free(lit);
     return key;
+}
+
+/* The effective recommended set of a station under commercial_only (spec 4.2, K-NC DR106), from the candidates
+ * that index_set kept: the release's recommended set when its licence allows commercial use; otherwise the first
+ * set in file order of the same typed quantity, qc_status ok, with a commercial licence; then the same with
+ * flagged; otherwise none. Also the licence of the offsets' reference set. */
+static otc_status effective_set(builder *b, otc__entry *e)
+{
+    const char *type = NULL, *lic = NULL;
+    e->eff_pos = -1;
+    if (e->has_rec && licence_commercial(b->rel, e->rec_licence)) {
+        e->eff_pos = b->rec_pos;
+        type = e->rec_source_type;
+        lic = e->rec_licence;
+    } else if (e->has_rec && quantity_row(e->rec_quantity) >= 0) {
+        int row = quantity_row(e->rec_quantity), col = b->cand_pos[row][0] >= 0 ? 0 : 1;
+        if (b->cand_pos[row][col] >= 0) {
+            e->eff_pos = b->cand_pos[row][col];
+            type = b->cand_type[row][col];
+            lic = b->cand_lic[row][col];
+        }
+    }
+    if (e->eff_pos >= 0) {
+        if ((type && !(e->eff_source_type = otc__strdup(type))) || !(e->eff_licence = otc__strdup(lic))) return OTC_E_NOMEM;
+    }
+    if (b->ref_lic && !(e->offsets_ref_licence = otc__strdup(b->ref_lic))) return OTC_E_NOMEM;
+    return OTC_OK;
 }
 
 /* Indexes one parsed station line (root is not freed here). */
@@ -638,6 +705,7 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
         }
         e = &r->st[r->n_st++];
         memset(e, 0, sizeof *e);
+        e->eff_pos = -1;
         e->offset = offset;
         e->length = len;
         e->lat = lat->valuedouble;
@@ -658,6 +726,14 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
             e->off_licence = otc__strdup(ol);
             if ((ref && !e->ref_id) || (ol && !e->off_licence)) return OTC_E_NOMEM;
         }
+        {
+            int qi, ci;
+            b->set_pos = 0;
+            b->rec_pos = -1;
+            b->ref_lic = NULL;
+            for (qi = 0; qi < 3; qi++)
+                for (ci = 0; ci < 2; ci++) b->cand_pos[qi][ci] = -1;
+        }
         cJSON_ArrayForEach(s, sets) {
             const cJSON *sid = otc__jstr_item(s, "set_id");
             if (sid) {   /* spec 6.1 (CR D5): a set_id once in the release; checked when every line is in */
@@ -666,7 +742,9 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
                 b->n_set_ids++;
             }
             if ((st = index_set(b, s, e, rec_id)) != OTC_OK) break;
+            b->set_pos++;
         }
+        if (st == OTC_OK && r->commercial_only) st = effective_set(b, e);
         if (st == OTC_OK) {
             cJSON_ArrayForEach(a, aliases) {
                 if (cJSON_IsString(a)) {
@@ -1262,6 +1340,36 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
                 return OTC_E_INVALID_RELEASE;
             }
         }
+        {   /* the licence fields (spec 4.6, K-NC DR104): commercial_use a JSON boolean; restriction and terms_url,
+             * when present, strings (a JSON null is not one, CR3 DR71); a non-commercial licence has both, and an
+             * spdx, which the non-commercial notice prints */
+            const cJSON *cu = otc__jget(c, "commercial_use");
+            static const char *const str_keys[] = {"restriction", "terms_url"};
+            static const char *const nc_keys[] = {"restriction", "terms_url", "spdx"};
+            size_t k;
+            if (!cJSON_IsBool(cu)) {
+                otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "licence %s: commercial_use must be true or false",
+                             r->lic[i].id);
+                return OTC_E_INVALID_RELEASE;
+            }
+            for (k = 0; k < 2; k++) {
+                /* not otc__jget, which reads a null as absent: a present null is not a string (CR3 DR71) */
+                const cJSON *v = cJSON_GetObjectItemCaseSensitive(c, str_keys[k]);
+                if (v && !cJSON_IsString(v)) {
+                    otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "licence %s: %s must be a string", r->lic[i].id,
+                                 str_keys[k]);
+                    return OTC_E_INVALID_RELEASE;
+                }
+            }
+            r->lic[i].commercial_use = cJSON_IsTrue(cu);
+            for (k = 0; !r->lic[i].commercial_use && k < 3; k++) {
+                if (!cJSON_IsString(otc__jget(c, nc_keys[k]))) {
+                    otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path,
+                                 "licence %s: a licence with commercial_use false needs %s", r->lic[i].id, nc_keys[k]);
+                    return OTC_E_INVALID_RELEASE;
+                }
+            }
+        }
         i++;
     }
     return OTC_OK;
@@ -1374,6 +1482,7 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
     } else {
         r->loaded_from = OTC_LOADED_FROM_FILE_UNVERIFIED;
     }
+    r->commercial_only = OTC__COMMERCIAL_ONLY(opts);   /* fixed on the handle (spec 4.2, K-NC DR106) */
     if ((st = load_meta(r, meta_path, meta_text, meta_len, err)) != OTC_OK) goto done;
     b.rel = r;
     b.err = err;
@@ -1483,7 +1592,8 @@ otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_rel
         return OTC_E_INVALID_ARGUMENT;
     }
     *out = NULL;
-    if (opts && opts->struct_size < sizeof *opts) {
+    /* a struct from before K-NC (no commercial_only) is still taken (spec 6.4, K-NC DR106) */
+    if (opts && opts->struct_size < OTC__OPEN_OPTIONS_MIN) {
         otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
         return OTC_E_INVALID_ARGUMENT;
     }
@@ -1647,7 +1757,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
 {
     const char **lic = NULL;
     const char **seen_prov = NULL, **seen_att = NULL;
-    size_t n_lic = 0, cap, i, n_seen = 0, total;
+    size_t n_lic = 0, cap, i, n_seen = 0, total, n_nc = 0;
     const char *d, *doi;
     char *head, *text;
     size_t head_cap;
@@ -1669,7 +1779,26 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     }
     if (!ids) {
-        for (i = 0; i < rel->n_lic; i++) lic[n_lic++] = rel->lic[i].id;
+        /* with commercial_only, only the commercial licences (K-NC DR106) */
+        for (i = 0; i < rel->n_lic; i++)
+            if (!rel->commercial_only || rel->lic[i].commercial_use) lic[n_lic++] = rel->lic[i].id;
+    } else if (rel->commercial_only) {
+        /* the licences of each station's tide source (spec 4.2, 4.6, K-NC DR106): its effective recommended set;
+         * else the one-link offsets path (the reference station's first set from the offsets' source), usable
+         * only when the offsets' licence and that set's licence allow commercial use; else none */
+        for (i = 0; i < n_ids; i++) {
+            const otc__entry *e = otc__find_entry(rel, ids[i]), *ref;
+            if (e->eff_pos >= 0) {
+                lic[n_lic++] = e->eff_licence;
+                continue;
+            }
+            if (!e->has_offsets) continue;
+            ref = e->ref_id ? otc__find_entry(rel, e->ref_id) : NULL;
+            if (!ref || !ref->offsets_ref_licence || !licence_commercial(rel, ref->offsets_ref_licence)) continue;
+            if (e->off_licence && !licence_commercial(rel, e->off_licence)) continue;
+            lic[n_lic++] = ref->offsets_ref_licence;
+            if (e->off_licence) lic[n_lic++] = e->off_licence;
+        }
     } else {
         for (i = 0; i < n_ids; i++) {
             const otc__entry *e = otc__find_entry(rel, ids[i]);
@@ -1709,16 +1838,22 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
         return otc__fail(rel, OTC_E_NOMEM, "out of memory");
     }
-    if (doi) snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0. Sources: ", d, doi);
-    else snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0. Sources: ", d, d);
+    if (doi) snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, doi:%s, CC BY 4.0.", d, doi);
+    else snprintf(head, head_cap, "Tidal constants: OpenTideConstants %s, https://data.opentideconstants.org/OTC_%s.json, CC BY 4.0.", d, d);
     /* one entry per licence id (sorted), then one per provider */
-    total = strlen(head) + 1;
+    total = strlen(head) + strlen(" Sources: ") + 1;
     for (i = 0; i < n_lic; i++) {
         const otc_licence *l = (i > 0 && !strcmp(lic[i], lic[i - 1])) ? NULL : otc__find_licence(rel, lic[i]);
         const char *prov, *att;
         size_t j;
         int dup = 0;
         if (!l) continue;
+        if (!l->commercial_use) {   /* its notice entry (K-NC DR105): "{provider or licence_id} ({spdx}, {terms_url})" */
+            const char *np = otc__jstr(l->json, "provider");
+            const char *sp = otc__jstr(l->json, "spdx"), *tu = otc__jstr(l->json, "terms_url");
+            total += strlen(np ? np : l->id) + (sp ? strlen(sp) : 0) + (tu ? strlen(tu) : 0) + 7;   /* "; " " (" ", " ")" */
+            n_nc++;
+        }
         prov = otc__jstr(l->json, "provider");
         att = otc__jstr(l->json, "attribution");
         /* each provider once; a licence with no provider is its own entry, never merged (CR D2) */
@@ -1729,6 +1864,7 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
         seen_att[n_seen++] = att;
         total += (prov ? strlen(prov) + 2 : 0) + (att ? strlen(att) : 0) + 2;
     }
+    total += n_nc ? strlen(". Non-commercial use only: ") : 0;
     text = (char *)malloc(total);
     if (!text) {
         free(head); free((void *)lic); free((void *)seen_prov); free((void *)seen_att);
@@ -1736,6 +1872,8 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
     }
     strcpy(text, head);
     free(head);
+    /* an empty scope: the dataset header alone (spec 4.6, K-NC DR106) */
+    if (n_lic) strcat(text, " Sources: ");
     for (i = 0; i < n_seen; i++) {
         if (i) strcat(text, "; ");
         if (seen_prov[i]) {   /* "{provider}: {attribution}", or the attribution alone */
@@ -1743,6 +1881,27 @@ otc_status otc_attribution(const otc_release *rel, const char *const *ids, size_
             strcat(text, ": ");
         }
         strcat(text, seen_att[i] ? seen_att[i] : "");
+    }
+    /* the non-commercial notice (spec 4.6, K-NC DR105): once, then one entry per non-commercial licence in scope,
+     * by licence_id, joined with "; "; a null provider gives the licence_id */
+    if (n_nc) {
+        size_t k = 0;
+        strcat(text, ". Non-commercial use only: ");
+        for (i = 0; i < n_lic; i++) {
+            const otc_licence *l = (i > 0 && !strcmp(lic[i], lic[i - 1])) ? NULL : otc__find_licence(rel, lic[i]);
+            const char *np, *sp, *tu;
+            if (!l || l->commercial_use) continue;
+            np = otc__jstr(l->json, "provider");
+            sp = otc__jstr(l->json, "spdx");
+            tu = otc__jstr(l->json, "terms_url");
+            if (k++) strcat(text, "; ");
+            strcat(text, np ? np : l->id);
+            strcat(text, " (");
+            strcat(text, sp ? sp : "");
+            strcat(text, ", ");
+            strcat(text, tu ? tu : "");
+            strcat(text, ")");
+        }
     }
     st = otc__copy_str(text, buf, len, needed);
     free(text);
@@ -1901,6 +2060,13 @@ LIC_STR(otc_licence_provider, "provider")
 LIC_STR(otc_licence_citation, "citation")
 LIC_STR(otc_licence_attribution, "attribution")
 LIC_STR(otc_licence_url, "url")
+LIC_STR(otc_licence_restriction, "restriction")
+LIC_STR(otc_licence_terms_url, "terms_url")
+
+bool otc_licence_commercial_use(const otc_licence *l)
+{
+    return l && l->commercial_use;
+}
 
 otc_status otc_licence_raw_json(const otc_licence *l, char *buf, size_t len, size_t *needed)
 {

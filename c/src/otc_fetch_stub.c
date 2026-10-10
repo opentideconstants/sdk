@@ -60,7 +60,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
 {
     (void)release;
     if (out) *out = NULL;
-    if (oopts && oopts->struct_size >= sizeof *oopts && oopts->error && oopts->error != opts_error(fopts)) {
+    if (oopts && oopts->struct_size >= OTC__OPEN_OPTIONS_MIN && oopts->error && oopts->error != opts_error(fopts)) {
         otc__err_reset(oopts->error);
         otc__err_set(oopts->error, OTC_E_NOT_BUILT, NULL,
                      "otc_fetch_open: this build has no otc_fetch module (configure with -DOTC_WITH_FETCH=ON)");

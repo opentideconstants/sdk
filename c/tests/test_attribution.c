@@ -7,10 +7,10 @@
 
 #define META "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"concept_doi\":\"10.1/x\"}," \
     "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[" \
-    "{\"licence_id\":\"a\",\"provider\":\"P\",\"attribution\":\"A1\"}," \
-    "{\"licence_id\":\"b\",\"attribution\":\"Anonymous B\"}," \
-    "{\"licence_id\":\"c\",\"attribution\":\"Anonymous C\"}," \
-    "{\"licence_id\":\"d\",\"provider\":\"P\",\"attribution\":\"A2\"}]}"
+    "{\"licence_id\":\"a\",\"commercial_use\":true,\"provider\":\"P\",\"attribution\":\"A1\"}," \
+    "{\"licence_id\":\"b\",\"commercial_use\":true,\"attribution\":\"Anonymous B\"}," \
+    "{\"licence_id\":\"c\",\"commercial_use\":true,\"attribution\":\"Anonymous C\"}," \
+    "{\"licence_id\":\"d\",\"commercial_use\":true,\"provider\":\"P\",\"attribution\":\"A2\"}]}"
 
 #define ST(id, lic) "{\"station_id\":\"" id "\",\"status\":\"active\",\"name\":\"N\",\"lat\":1,\"lon\":1,\"type\":\"reference\"," \
     "\"recommended_set_id\":\"" id "/s\",\"constant_sets\":[{\"set_id\":\"" id "/s\",\"source\":\"x\",\"quantity\":\"water_level\"," \

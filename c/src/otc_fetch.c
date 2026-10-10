@@ -429,7 +429,7 @@ typedef struct fctx {
     double      connect_s, read_s;
     int         raise;     /* on_network_error RAISE */
     otc_error   own;       /* the error detail when the caller passed none */
-    const otc_open_options *oo;   /* otc_fetch_open's caller options (log_fn, require_checksum), or NULL */
+    const otc_open_options *oo;   /* otc_fetch_open's caller options (log_fn, require_checksum, commercial_only), or NULL */
     char       *proxy_ca;  /* the proxy hop's CA blob (CR2 DR39), made once by proxy_ca_blob, or NULL */
     size_t      proxy_ca_len;
     int         proxy_ca_done;
@@ -444,6 +444,7 @@ static void cache_open_options(const fctx *c, otc_open_options *oo)
         oo->require_checksum = c->oo->require_checksum;
         oo->log_fn = c->oo->log_fn;
         oo->log_user_data = c->oo->log_user_data;
+        oo->commercial_only = OTC__COMMERCIAL_ONLY(c->oo);   /* the caller's, when its struct has it (K-NC DR106) */
     }
     oo->error = c->err;
 }
@@ -2808,11 +2809,12 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     otc_loaded_from lf = OTC_LOADED_FROM_UNSET;
     char *ds = NULL, msg[512];
     otc_status last = OTC_OK, st;
-    otc_error *oerr = (oopts && oopts->struct_size >= sizeof *oopts) ? otc__err_usable(oopts->error) : NULL;
+    otc_error *oerr = (oopts && oopts->struct_size >= OTC__OPEN_OPTIONS_MIN) ? otc__err_usable(oopts->error) : NULL;
     if (out) *out = NULL;
     st = ctx_init(&c, fopts);
     if (st == OTC_OK && !out) st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "out is NULL");
-    if (st == OTC_OK && oopts && oopts->struct_size < sizeof *oopts)
+    /* a struct from before K-NC (no commercial_only) is still taken (spec 6.4, K-NC DR106) */
+    if (st == OTC_OK && oopts && oopts->struct_size < OTC__OPEN_OPTIONS_MIN)
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
     if (st == OTC_OK) c.oo = oopts;   /* require_checksum and log_fn apply to the open of the cached file (C25) */
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);

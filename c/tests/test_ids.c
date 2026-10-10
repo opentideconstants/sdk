@@ -49,11 +49,11 @@ int main(void)
                             "\"aliases\":{\"noaa\":[\"9900002\",\"9900003\"]},\"constant_sets\":[]}\n"),
                  OTC_OK);
     CHECK_STATUS(open_lines("{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\"},"
-                            "\"conventions\":[{\"convention_id\":\"c1\"},{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\"}]}",
+                            "\"conventions\":[{\"convention_id\":\"c1\"},{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true}]}",
                             TEST_STATION("OTC-X-1", "One") "\n"),
                  OTC_E_INVALID_RELEASE);
     CHECK_STATUS(open_lines("{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\"},"
-                            "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\"},{\"licence_id\":\"l1\"}]}",
+                            "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true},{\"licence_id\":\"l1\",\"commercial_use\":true}]}",
                             TEST_STATION("OTC-X-1", "One") "\n"),
                  OTC_E_INVALID_RELEASE);
     /* C5: a repeated set_id in one station (the recommended one, so the index entry would get two) */

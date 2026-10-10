@@ -78,6 +78,7 @@ static struct {
     char    *cache_dir, *base_url, *proxy, *ca_file, *user_agent;
     bool     offline;
     bool     require_checksum;           /* otc_open_options.require_checksum, for every open (CR2 DR34) */
+    bool     commercial_only;            /* otc_open_options.commercial_only, for every open (K-NC DR106) */
     double   timeout_s;
     otc_on_network_error on_network_error;
     unsigned formats;
@@ -359,6 +360,8 @@ DEF_STR(s_lic_provider, otc_licence_provider, otc_licence)
 DEF_STR(s_lic_citation, otc_licence_citation, otc_licence)
 DEF_STR(s_lic_attribution, otc_licence_attribution, otc_licence)
 DEF_STR(s_lic_url, otc_licence_url, otc_licence)
+DEF_STR(s_lic_restriction, otc_licence_restriction, otc_licence)
+DEF_STR(s_lic_terms_url, otc_licence_terms_url, otc_licence)
 DEF_TEXT(s_lic_raw, otc_licence_raw_json, otc_licence)
 DEF_STR(s_st_id, otc_station_station_id, otc_station_t)
 DEF_STR(s_st_name, otc_station_name, otc_station_t)
@@ -682,6 +685,9 @@ static cJSON *enc_licence(const otc_licence *l, int *bad)
     cJSON_AddItemToObject(o, "citation", s_lic_citation(l, bad));
     cJSON_AddItemToObject(o, "attribution", s_lic_attribution(l, bad));
     cJSON_AddItemToObject(o, "url", s_lic_url(l, bad));
+    cJSON_AddItemToObject(o, "commercial_use", cJSON_CreateBool(otc_licence_commercial_use(l)));
+    cJSON_AddItemToObject(o, "restriction", s_lic_restriction(l, bad));
+    cJSON_AddItemToObject(o, "terms_url", s_lic_terms_url(l, bad));
     return o;
 }
 
@@ -878,6 +884,7 @@ static void open_options(otc_open_options *oo, otc_error *err)
     otc_open_options_init(oo);
     oo->error = err;
     oo->require_checksum = g_client.require_checksum;
+    oo->commercial_only = g_client.commercial_only;
 }
 
 static void op_open(request *q, reply *r)
@@ -909,6 +916,7 @@ static void op_open(request *q, reply *r)
         const char *user_agent = arg_str(&q->a, "user_agent");
         bool offline = arg_bool(&q->a, "offline", false), auto_update = arg_bool(&q->a, "auto_update", false);
         bool require_checksum = arg_bool(&q->a, "require_checksum", false);
+        bool commercial_only = arg_bool(&q->a, "commercial_only", false);
         /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it
          * is, so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails
          * loudly */
@@ -929,6 +937,7 @@ static void op_open(request *q, reply *r)
         g_client.user_agent = dup_or_null(user_agent);
         g_client.offline = offline;
         g_client.require_checksum = require_checksum;
+        g_client.commercial_only = commercial_only;
         g_client.timeout_s = timeout_s;
         g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
         /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */

@@ -27,7 +27,7 @@ static otc_status open_with(const char *dir, const char *created, const char *se
     otc_status st;
     snprintf(meta, sizeof meta,
              "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"%s\"},"
-             "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"attribution\":\"A\"}]}", created);
+             "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true,\"attribution\":\"A\"}]}", created);
     snprintf(line, sizeof line,
              "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"One\",\"lat\":1.0,\"lon\":2.0,"
              "\"type\":\"reference\",\"recommended_set_id\":\"OTC-X-1/s\",\"constant_sets\":[{\"set_id\":\"OTC-X-1/s\","
@@ -127,7 +127,7 @@ int main(void)
     /* through the API */
     test_write(dir, "OTC_20990101.meta.json",
                "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"2099-12-31T02:00:00.5+02:00\"},"
-               "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"attribution\":\"A\"}]}");
+               "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true,\"attribution\":\"A\"}]}");
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") "\n");
     path = test_join(dir, "OTC_20990101.jsonl");
     CHECK_STATUS(otc_open_file(path, NULL, &rel), OTC_OK);

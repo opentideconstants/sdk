@@ -256,6 +256,14 @@ typedef struct otc_open_options {
     otc_error  *error;            /* detail of a failed open; NULL = not wanted */
     otc_log_fn  log_fn;           /* optional */
     void       *log_user_data;
+    /* Select only constant sets whose licence allows commercial use (spec 4.2,
+     * K-NC DR106): each station's recommended set is its effective
+     * recommended set, the source_type filter compares it, and otc_attribution
+     * names the licences of each station's tide source and never carries the
+     * non-commercial notice. Fixed on the handle at open. false (the default)
+     * changes nothing. Added after the fields above: a caller whose
+     * struct_size ends before it gets false. */
+    bool        commercial_only;
 } otc_open_options;
 OTC_API void otc_open_options_init(otc_open_options *opts);
 
@@ -371,6 +379,16 @@ OTC_API otc_status otc_licence_provider(const otc_licence *l, char *buf, size_t 
 OTC_API otc_status otc_licence_citation(const otc_licence *l, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_licence_attribution(const otc_licence *l, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_licence_url(const otc_licence *l, char *buf, size_t len, size_t *needed);
+/* true: the licence allows commercial use, on its own terms; false:
+ * non-commercial use only (spec 4.6, K-NC DR104). Never null in a loaded
+ * release (a licence without a JSON boolean commercial_use is
+ * OTC_E_INVALID_RELEASE at open). false for a NULL l. */
+OTC_API bool otc_licence_commercial_use(const otc_licence *l);
+/* What use is not allowed and why; always set when commercial_use is false.
+ * OTC_E_NOT_FOUND when absent. */
+OTC_API otc_status otc_licence_restriction(const otc_licence *l, char *buf, size_t len, size_t *needed);
+/* The upstream terms; always set when commercial_use is false. OTC_E_NOT_FOUND when absent. */
+OTC_API otc_status otc_licence_terms_url(const otc_licence *l, char *buf, size_t len, size_t *needed);
 OTC_API otc_status otc_licence_raw_json(const otc_licence *l, char *buf, size_t len, size_t *needed);
 
 /* ---------------------------------------------------------- station queries */

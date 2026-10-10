@@ -221,7 +221,7 @@ static const char *test_server(void)
 /* A minimal release: format 1.0, one convention, one licence. */
 #define TEST_META(ds)                                                                               \
     "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"" ds "\",\"created\":\"2099-12-31T00:00:00Z\"},"  \
-    "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"provider\":\"P\","     \
+    "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true,\"provider\":\"P\","     \
     "\"attribution\":\"A\"}]}"
 
 #define TEST_STATION(id, name)                                                                      \

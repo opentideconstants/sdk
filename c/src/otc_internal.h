@@ -21,6 +21,7 @@
 #include "cJSON.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,7 +202,16 @@ struct otc_convention {
 struct otc_licence {
     cJSON      *json;
     const char *id;
+    bool        commercial_use;   /* the licence's commercial_use (spec 4.6, K-NC DR104) */
 };
+
+/* The size of otc_open_options before K-NC added commercial_only: the smallest
+ * struct_size the library takes (spec 6.4, K-NC DR106). */
+#define OTC__OPEN_OPTIONS_MIN offsetof(otc_open_options, commercial_only)
+/* opts->commercial_only when struct_size covers it, else false. */
+#define OTC__COMMERCIAL_ONLY(opts)                                                                          \
+    ((opts) && (opts)->struct_size >= offsetof(otc_open_options, commercial_only) + sizeof(bool)            \
+     && (opts)->commercial_only)
 
 struct otc_file_info {
     char   *name;
@@ -253,6 +263,16 @@ typedef struct otc__entry {
     int                has_offsets;
     char              *ref_id;          /* subordinate_offsets.reference_station_id */
     char              *off_licence;     /* subordinate_offsets.licence_id */
+    /* commercial_only (spec 4.2, K-NC DR106): the effective recommended set, by
+     * its position in the line's constant_sets (-1: none), with its source_type
+     * and licence; and the licence of the first set in file order from the
+     * offsets' source (noaa), water_level, ok or flagged (the reference set of
+     * the one-link offsets path), or NULL. Set only when the release has the
+     * option. */
+    long               eff_pos;
+    char              *eff_source_type;
+    char              *eff_licence;
+    char              *offsets_ref_licence;
     char             **sources;         /* sources of sets with constants (qc_status ok or flagged) */
     size_t             n_sources;
     uint64_t           offset;
@@ -297,6 +317,7 @@ struct otc_release {
     char            created[21];        /* release.created in UTC (spec 4.3); "" when absent or not a time */
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
+    bool            commercial_only;   /* the open option (spec 4.2, K-NC DR106) */
     otc__kvlist     source_counts;
     otc__kvlist     qc_counts;
     /* the only mutable state after open: the last failure on this handle */
@@ -323,7 +344,7 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
  * (PK-R2-07). */
 otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
                                   uint64_t view, cJSON **out);
-int otc__filter_match(const otc_filter *f, const otc__entry *e);
+int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */
 
@@ -383,7 +404,11 @@ struct otc_tombstone {
     cJSON *root;
 };
 
-/* Builds a station from its parsed line (takes ownership of root). */
-otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, otc_station_t **out);
+/* Builds a station from its parsed line (takes ownership of root). eff_pos:
+ * OTC__REC_FROM_LINE for the line's recommended_set_id, else the position in
+ * constant_sets of the set the station gives as recommended (-1: none; the
+ * effective recommended set of commercial_only, K-NC DR106). */
+#define OTC__REC_FROM_LINE (-2L)
+otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out);
 
 #endif /* OTC_INTERNAL_H */
