@@ -81,7 +81,7 @@
    "positional": false,
    "default": null,
    "enum": "source_type",
-   "note": "applied to the recommended set"
+   "note": "applied to the recommended set; with commercial_only, to the effective recommended set, and a station with none matches no value (K-NC DR106)"
   }
  ],
  "objects": {
