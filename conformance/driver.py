@@ -69,7 +69,8 @@ VARIANTS = [
 FILTERS = ["country", "type", "kind", "source", "source_type"]
 OPEN_ARGS = ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file", "user_agent",
              "on_network_error", "auto_update", "update_interval", "verify_on_open",
-             "require_checksum"]   # require_checksum: C only, so a step that passes it needs that feature (CR2 DR34)
+             "require_checksum",   # require_checksum: C only, so a step that passes it needs that feature (CR2 DR34)
+             "commercial_only"]    # K-NC DR106 (C: otc_open_options.commercial_only)
 # op -> allowed argument names (README "Operations")
 OPS = {
     "open": OPEN_ARGS, "close": [], "hold_release": ["name"], "loaded_from": [], "last_error": [],
@@ -422,7 +423,20 @@ def expand(cases):
                 args = {"file": f"${{fixtures}}/{m['root']}/OTC_{rel}{ext}", "mode": mode}
                 exp = {"loaded_from": "file", "datestamp": rel}
             exp.update(c.get("open_expect") or {})
-            v["steps"] = [{"op": "open", "args": args, "expect": exp}] + v["steps"]
+            args.update(m.get("open_args") or {})
+            # a step {"matrix_open": {...}} opens the case's release again in this variant, with the case's
+            # open_args changed by the given ones (a null removes one), for example to compare with an option off
+            steps = []
+            for st in v["steps"]:
+                if isinstance(st, dict) and "matrix_open" in st:
+                    again = {**args, **st["matrix_open"]}
+                    # the server variant's first open filled the cache: the pinned release now comes from it
+                    again_exp = dict(exp, loaded_from="cache") if ext is None else dict(exp)
+                    steps.append({"op": "open", "args": {k: x for k, x in again.items() if x is not None},
+                                  "expect": again_exp})
+                else:
+                    steps.append(st)
+            v["steps"] = [{"op": "open", "args": args, "expect": exp}] + steps
             out.append(v)
     return out
 
@@ -470,6 +484,9 @@ def structure_problems(c):
             out.append(f"{where}: a step needs a string op or driver")
         if "args" in st and not isinstance(st["args"], dict):
             out.append(f"{where}: args must be an object")
+        if "matrix_open" in st and not (st.get("op") == "open" and isinstance(st["matrix_open"], dict) and c.get("matrix")
+                                        and "args" not in st and "expect" not in st):
+            out.append(f"{where}: matrix_open needs a matrix case, op open, an object, and no args or expect")
         if st.get("expect") is not None and not isinstance(st["expect"], dict):
             out.append(f"{where}: expect must be an object")
         eim = st.get("expect_if_missing")
@@ -576,7 +593,7 @@ def requires_problems(c):
     roles = c.get("roles") or {"main": []}
     covered = {r: base | set(f) for r, f in roles.items()}
     for i, st in enumerate(c.get("steps", [])):
-        if "op" not in st:
+        if "op" not in st or "matrix_open" in st:   # a matrix_open step becomes the variant's open (expand)
             continue
         who = st.get("as", "main") if c.get("roles") else "main"
         eim = set(st.get("expect_if_missing") or {})

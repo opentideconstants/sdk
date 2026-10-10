@@ -71,7 +71,8 @@ def status_of(s):
 class Rel:
     """One fixture release, indexed the way an SDK indexes it (spec §6.1)."""
 
-    def __init__(self, root, datestamp):
+    def __init__(self, root, datestamp, commercial_only=False):
+        self.commercial_only = commercial_only   # the open option of K-NC DR106 (spec 4.2)
         self.root = root
         self.datestamp = datestamp
         self.doc = load_release(root, datestamp)
@@ -91,6 +92,53 @@ class Rel:
             if cs["set_id"] == rid:
                 return cs
         return None
+
+    def commercial(self, licence_id):
+        """The licence allows commercial use: its commercial_use is true (spec 4.2, 4.6; K-NC DR104)."""
+        return self.licences[licence_id].get("commercial_use") is True
+
+    def effective_set(self, s):
+        """The effective recommended set under commercial_only (spec 4.2, K-NC DR106): the release's recommended
+        set when its licence is commercial; otherwise the first set in file order with the same typed quantity,
+        qc_status ok, and a commercial licence; then the same with flagged; otherwise none. A set with no quantity
+        never matches."""
+        rs = self.rec_set(s)
+        if rs is None or self.commercial(rs["licence_id"]):
+            return rs
+        q = typed(rs.get("quantity"), QUANTITIES)
+        if q is None:
+            return None
+        for status in ("ok", "flagged"):
+            for cs in s.get("constant_sets", []):
+                if typed(cs.get("quantity"), QUANTITIES) == q and read_qc(cs) == status and self.commercial(cs["licence_id"]):
+                    return cs
+        return None
+
+    def eff_set(self, s):
+        """The station's recommended set as the SDK gives it: the effective one with commercial_only, else the
+        release's (spec 4.5)."""
+        return self.effective_set(s) if self.commercial_only else self.rec_set(s)
+
+    def tide_source_licences(self, s):
+        """The licences of the station's tide source under commercial_only (spec 4.2, K-NC DR106): its effective
+        set; else the one-link offsets path (the reference station's first set in file order from the offsets'
+        source, noaa in format 1.0, water_level, ok or flagged), usable only when the offsets' licence and that
+        set's licence are commercial; else none (no usable tides)."""
+        es = self.effective_set(s)
+        if es is not None:
+            return {es["licence_id"]}
+        off = s.get("subordinate_offsets")
+        if not off:
+            return set()
+        ref = self.by_id.get(off.get("reference_station_id"))
+        if ref is None:
+            return set()
+        refset = next((cs for cs in ref.get("constant_sets", []) if cs.get("source") == OFFSETS_SOURCE
+                       and typed(cs.get("quantity"), QUANTITIES) == "water_level" and read_qc(cs) in WITH_CONSTANTS), None)
+        if refset is None:
+            return set()
+        lics = {refset["licence_id"]} | ({off["licence_id"]} if off.get("licence_id") else set())
+        return lics if all(self.commercial(x) for x in lics) else set()
 
     def kind(self, s, seen=()):
         rs = self.rec_set(s)
@@ -120,6 +168,7 @@ def g(d, k):
 
 STATION_TYPES = ("reference", "subordinate")
 QUANTITIES = ("water_level", "current")
+OFFSETS_SOURCE = "noaa"   # the source of every subordinate_offsets in format 1.0 (spec 4.2, K-NC DR106)
 SOURCE_TYPES = ("official", "gauge", "model")
 
 
@@ -130,7 +179,7 @@ def typed(v, known):
 
 def enc_station(rel, s):
     k = rel.kind(s)
-    rs = rel.rec_set(s)
+    rs = rel.eff_set(s)
     return {
         "station_id": s["station_id"], "name": s["name"], "country": s["country"],
         "lat": s["lat"], "lon": s["lon"], "type": typed(s["type"], STATION_TYPES), "kind": k,
@@ -160,7 +209,7 @@ def enc_set(rel, s, cs):
         "qc_flags": [{"flag": f["flag"], "reason": f["reason"], "values": f.get("values")} for f in cs.get("qc_flags") or []],
         "dropped_constituents": [{"name": d["name"], "dropped_reason": d["dropped_reason"], "detail": d.get("detail")} for d in cs.get("dropped_constituents") or []],
         "time_base": enc_time_base(cs.get("time_base")),
-        "is_recommended": cs["set_id"] == s.get("recommended_set_id"),
+        "is_recommended": rel.eff_set(s) is not None and cs["set_id"] == rel.eff_set(s)["set_id"],
         "convention_id": cs["convention_id"], "licence_id": cs["licence_id"],
         "constituent_count": len(cs.get("constituents") or []),
     }
@@ -170,7 +219,8 @@ CONSTITUENT_FIELDS = ["name", "source_name", "doodson", "speed_deg_per_hour", "a
                       "amp_uncertainty_m", "phase_uncertainty_deg", "kept_reason"]
 CONVENTION_FIELDS = ["convention_id", "phase_reference", "utc_offset_hours", "v0_model", "nodal_handling",
                      "nodal_formula_ids", "constituent_table_version", "tables_sha256", "canary"]
-LICENCE_FIELDS = ["licence_id", "spdx", "provider", "citation", "attribution", "url"]
+LICENCE_FIELDS = ["licence_id", "spdx", "provider", "citation", "attribution", "url",
+                  "commercial_use", "restriction", "terms_url"]   # the last three: K-NC DR104
 PROVENANCE_FIELDS = ["adapter_version", "input_sha256", "selection_reason", "decision", "carried_from_release"]
 VALIDATION_FIELDS = ["set_id", "reference_source", "reference_station", "reference_distance_km", "window",
                      "time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m",
@@ -292,7 +342,7 @@ def apply_filters(rel, stations, f):
         if "source" in f and f["source"] not in usable_sources(s):
             continue
         if "source_type" in f:
-            rs = rel.rec_set(s)
+            rs = rel.eff_set(s)   # the effective recommended set under commercial_only (K-NC DR106)
             if rs is None or typed(rs["source_type"], SOURCE_TYPES) != f["source_type"]:
                 continue
         out.append(s)
@@ -358,7 +408,14 @@ def nearest(rel, lat, lon, max_km=None, **f):
 
 def attribution(rel, station_ids=None):
     r = rel.doc["release"]
-    if not station_ids:   # None or an empty list: every licence in the release (CR D2 c)
+    if rel.commercial_only:   # K-NC DR106: the commercial licences of the release, or of each station's tide source
+        if not station_ids:
+            lic_ids = {x for x in rel.licences if rel.commercial(x)}
+        else:
+            lic_ids = set()
+            for sid in station_ids:
+                lic_ids |= rel.tide_source_licences(rel.by_id[sid])
+    elif not station_ids:   # None or an empty list: every licence in the release (CR D2 c)
         lic_ids = set(rel.licences)
     else:
         lic_ids = set()
@@ -396,7 +453,16 @@ def attribution(rel, station_ids=None):
         seen.add(lic["provider"])
         parts.append(f"{lic['provider']}: {lic['attribution']}")
     ident = f"doi:{r['concept_doi']}" if r.get("concept_doi") else f"https://data.opentideconstants.org/OTC_{r['datestamp']}.json"
-    return f"Tidal constants: OpenTideConstants {r['datestamp']}, {ident}, CC BY 4.0. Sources: " + "; ".join(parts)
+    head = f"Tidal constants: OpenTideConstants {r['datestamp']}, {ident}, CC BY 4.0."
+    if not lic_ids:   # an empty scope: the dataset header alone (K-NC DR106, spec 4.6)
+        return head
+    text = head + " Sources: " + "; ".join(parts)
+    # K-NC DR105: one notice after the Sources list, one entry per non-commercial licence in scope, by licence_id
+    nc = [rel.licences[x] for x in sorted(lic_ids) if not rel.commercial(x)]
+    if nc:
+        text += ". Non-commercial use only: " + "; ".join(
+            f"{x['licence_id'] if x.get('provider') is None else x['provider']} ({x['spdx']}, {x['terms_url']})" for x in nc)
+    return text
 
 
 def citation(rel, version_doi=None):
@@ -423,8 +489,13 @@ def stats(rel):
             "qc_status": count(read_qc(cs) for cs in sets)}
 
 
-def sets_in_order(s, include_no_constants=False):
-    rid = s.get("recommended_set_id")
+def sets_in_order(s, include_no_constants=False, rel=None):
+    """The recommended set first (with rel: the set the SDK gives as recommended, the effective one under
+    commercial_only), then the others by set_id."""
+    if rel is None:
+        rid = s.get("recommended_set_id")
+    else:
+        rid = rel.eff_set(s)["set_id"] if rel.eff_set(s) is not None else None
     sets = [cs for cs in s.get("constant_sets", []) if include_no_constants or cs["qc_status"] not in NOT_USABLE]
     rec = [cs for cs in sets if cs["set_id"] == rid]
     rest = sorted([cs for cs in sets if cs["set_id"] != rid], key=lambda c: c["set_id"])
@@ -2969,6 +3040,173 @@ def rules_r2_pk09():
     return out
 
 
+# The exact texts of SDK spec 7.1 (K-NC fixtures and cases), byte for byte. The oracle must give each of them:
+# build_cases.py fails when it does not, so the spec and the cases cannot drift apart.
+KNC_TEXT = {
+    "non-commercial-exact": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Meteorological Agency: Synthetic test data in the style of JMA.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: Example Meteorological Agency (LicenseRef-JMA-Test, https://example.org/jma-test-terms)",
+    "all-licences-with-nc": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Meteorological Agency: Synthetic test data in the style of JMA.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: Example Meteorological Agency (LicenseRef-JMA-Test, https://example.org/jma-test-terms)",
+    "non-commercial-per-licence": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Restricted Agency: Synthetic restricted test data.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: Example Restricted Agency (LicenseRef-NC-Test, https://example.org/nc-test-terms); Example Restricted Agency (LicenseRef-NC-Test-2, https://example.org/nc-test-2-terms)",
+    "null-provider-1": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Anonymous synthetic test data.; Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: anon (LicenseRef-Anon-Test, https://example.org/anon-terms)",
+    "null-provider-2": "Tidal constants: OpenTideConstants 20991231, https://data.opentideconstants.org/OTC_20991231.json, CC BY 4.0. Sources: Example tide model, interpolated by OpenTideConstants tests.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.",
+    "empty-scope-v1": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0.",
+    "default-off-0188": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Restricted Agency: Synthetic restricted test data.. Non-commercial use only: Example Restricted Agency (LicenseRef-NC-Test, https://example.org/nc-test-terms)",
+    "default-off-0189": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Restricted Agency: Synthetic restricted test data.. Non-commercial use only: Example Restricted Agency (LicenseRef-NC-Test, https://example.org/nc-test-terms)",
+    "default-off-0190": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Restricted Agency: Synthetic restricted test data.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: Example Restricted Agency (LicenseRef-NC-Test, https://example.org/nc-test-terms)",
+    "co-0186": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.",
+    "co-0190": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Ocean Service: Synthetic test data in the style of a public-domain US agency.",
+    "co-0189": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.",
+    "co-all": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Terms Agency: Synthetic test data, Example Terms Agency.; Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.",
+    "co-empty": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0.",
+    "co-good-0004": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.",
+    "good-0004": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.",
+}
+
+
+def knc_text(key, got):
+    """The oracle's text, which must be the spec's exact text for key."""
+    if got != KNC_TEXT[key]:
+        raise SystemExit(f"K-NC text {key}: the oracle gives\n  {got!r}\nthe spec says\n  {KNC_TEXT[key]!r}")
+    return got
+
+
+def group_knc():
+    """K-NC DR104 to DR106 (SDK spec 4.2, 4.6, 7.1 K-NC fixtures and cases): the Licence fields commercial_use,
+    restriction and terms_url; the non-commercial notice of attribution; the empty scope; commercial_only."""
+    out = []
+    V = Rel("v1", V1)
+    K = Rel("knc", "20991231.2")
+    KC = Rel("knc", "20991231.2", commercial_only=True)
+    R2 = Rel("good", "20991231.2")
+    G2C = Rel("good", "20991231.2", commercial_only=True)
+    NPC = Rel("bad/licence-provider-null-nc", "20991231")
+    NP = Rel("bad/licence-provider-null", "20991231")
+    CO = {"commercial_only": True}
+
+    def att(rel, ids=None):
+        return step("attribution", {"attribution": attribution(rel, ids)}, **({} if ids is None else {"station_ids": ids}))
+
+    def att_text(key, rel, ids=None):
+        return step("attribution", {"attribution": knc_text(key, attribution(rel, ids))},
+                    **({} if ids is None else {"station_ids": ids}))
+
+    def rec(rel, sid, expect_id):
+        got = rel.eff_set(rel.by_id[sid])
+        got = got["set_id"] if got else None
+        if got != expect_id:
+            raise SystemExit(f"K-NC: {sid} recommended set {got!r}, the spec says {expect_id!r}")
+        return step("recommended_set", {"set_id": got}, station_id=sid)
+
+    # ---- DR104: the Licence fields
+    out.append(mcase("release/licence-fields-nc", "v1: jma has commercial_use false, restriction and terms_url; every other licence true, null, null (K-NC DR104)", "4.6",
+                     [step("licences", {"licences": [pick(x, LICENCE_FIELDS) for x in V.doc["licences"]]}),
+                      step("licence", {"licence": pick(V.licences["jma"], LICENCE_FIELDS)}, licence_id="jma")],
+                     root="v1", release=V1))
+    out.append(mcase("release/licence-fields-commercial-with-terms", "knc: c-terms is commercial with restriction and terms_url; nc-test-2 is non-commercial (K-NC DR104)", "4.6",
+                     [step("licence", {"licence": pick(K.licences["c-terms"], LICENCE_FIELDS)}, licence_id="c-terms"),
+                      step("licence", {"licence": pick(K.licences["nc-test-2"], LICENCE_FIELDS)}, licence_id="nc-test-2"),
+                      step("licences", {"licences": [pick(x, LICENCE_FIELDS) for x in K.doc["licences"]]})],
+                     root="knc", release="20991231.2"))
+    for root in ["licence-commercial-use-missing", "licence-commercial-use-null", "licence-commercial-use-string",
+                 "licence-nc-no-restriction", "licence-nc-no-terms-url", "licence-nc-no-spdx",
+                 "licence-restriction-not-string", "licence-terms-url-not-string",
+                 "licence-restriction-null", "licence-terms-url-null"]:
+        for ext, req, mode in [(".json", ["json", "eager"], "eager"), (".json.gz", ["json", "eager"], "eager"),
+                               (".jsonl", ["eager"], "eager"), (".jsonl", ["stream"], "stream")]:
+            label = ext.replace(".", "-") + ("-stream" if mode == "stream" else "")
+            out.append(case(f"release/bad-{root}{label}", f"bad/{root} opened as {ext} ({mode}): invalid_release at open (K-NC DR104)", "4.6, 4.8",
+                            [step("open", err("invalid_release"), file=f"{FIX}/bad/{root}/OTC_20991231{ext}", mode=mode)],
+                            requires=["fs"] + req))
+    # ---- DR105: the non-commercial notice (without the option)
+    out.append(mcase("attribution/non-commercial-exact", "v1, stations OTC-T-0106 and OTC-T-0101: the notice names jma once, after the Sources list (K-NC DR105)", "4.6",
+                     [att_text("non-commercial-exact", V, ["OTC-T-0106", "OTC-T-0101"])], root="v1", release=V1))
+    out.append(mcase("attribution/all-licences-with-nc", "v1, no stations: every licence, then the notice for jma (K-NC DR105)", "4.6",
+                     [att_text("all-licences-with-nc", V)], root="v1", release=V1))
+    for ids in (None, ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"]):
+        if "Non-commercial" in attribution(R2, ids):
+            raise SystemExit("K-NC: the all-commercial control has a notice")
+    out.append(mcase("attribution/all-commercial-unchanged", "good 20991231.2, where every licence is commercial: the texts of release/attribution-all-20991231.2 and release/attribution-ordered-by-licence-id, with no notice (K-NC DR105)", "4.6",
+                     [att(R2), att(R2, ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"])]))
+    out.append(mcase("attribution/non-commercial-per-licence", "knc, stations OTC-T-0187 and OTC-T-0188: one notice entry per non-commercial licence, also for one provider (K-NC DR105)", "4.6",
+                     [att_text("non-commercial-per-licence", K, ["OTC-T-0187", "OTC-T-0188"])], root="knc", release="20991231.2"))
+    if attribution(NP, ["OTC-T-0004"]) != KNC_TEXT["null-provider-2"]:
+        raise SystemExit("K-NC: null-provider step 2 differs from rules/pk15/attribution-null-provider")
+    out.append(mcase("attribution/non-commercial-null-provider", "a non-commercial licence with a null provider: the notice entry is {licence_id} ({spdx}, {terms_url}); a commercial null-provider licence gets no entry (K-NC DR105)", "4.6",
+                     [att_text("null-provider-1", NPC), att_text("null-provider-2", NPC, ["OTC-T-0004"])],
+                     root="bad/licence-provider-null-nc", release="20991231"))
+    out.append(mcase("attribution/empty-scope", "v1, station OTC-T-0104 (a reference station with no recommended set): no licence in scope, the dataset header alone (K-NC DR106, spec 4.6)", "4.6",
+                     [att_text("empty-scope-v1", V, ["OTC-T-0104"])], root="v1", release=V1))
+    # ---- DR106: commercial_only
+    knc = {"root": "knc", "release": "20991231.2"}
+    out.append(mcase("commercial-only/default-off", "knc without the option: the release's recommended set, and the CR2 DR1 walk with the notice (K-NC DR106)", "4.2, 4.6",
+                     [rec(K, "OTC-T-0181", "OTC-T-0181/x-nc"),
+                      att_text("default-off-0188", K, ["OTC-T-0188"]),
+                      att_text("default-off-0189", K, ["OTC-T-0189"]),
+                      att_text("default-off-0190", K, ["OTC-T-0190"])], **knc))
+
+    def co_case(cid, title, steps, root="knc", release="20991231.2"):
+        c = mcase(cid, title, "4.2, 4.4, 4.5, 4.6", steps, root=root, release=release)
+        c["matrix"]["open_args"] = dict(CO)
+        return c
+    out.append(co_case("commercial-only/keep-commercial-recommended", "OTC-T-0184 keeps its recommended set a-flag (commercial), although b-ok is ok; OTC-T-0181 shows that the option is on (K-NC DR106)",
+                       [rec(KC, "OTC-T-0184", "OTC-T-0184/a-flag"), rec(KC, "OTC-T-0181", "OTC-T-0181/w-ok")]))
+    s181 = KC.by_id["OTC-T-0181"]
+    order = [c["set_id"] for c in sets_in_order(s181, rel=KC)]
+    if order != [f"OTC-T-0181/{x}" for x in ("w-ok", "v-ok2", "x-nc", "y-flagged", "z-current")]:
+        raise SystemExit(f"K-NC: OTC-T-0181 constant_sets {order}")
+    out.append(co_case("commercial-only/ok-before-flagged", "OTC-T-0181 gives w-ok: not y-flagged (earlier, flagged), not z-current (another quantity), not v-ok2 (later in file order); constant_sets puts it first and only it is recommended (K-NC DR106)",
+                       [rec(KC, "OTC-T-0181", "OTC-T-0181/w-ok"),
+                        step("constant_sets", {"set_ids": order}, station_id="OTC-T-0181"),
+                        step("station", {"station": enc_station(KC, s181)}, station_id="OTC-T-0181")]
+                       + [step("constant_set", {"set": enc_set(KC, s181, cs)}, station_id="OTC-T-0181", set_id=cs["set_id"])
+                          for cs in s181["constant_sets"]]))
+    out.append(co_case("commercial-only/flagged-fallback", "OTC-T-0182 gives b-flag (commercial, flagged), never the no_constants set a-noc (K-NC DR106)",
+                       [rec(KC, "OTC-T-0182", "OTC-T-0182/b-flag")]))
+    s183 = KC.by_id["OTC-T-0183"]
+    if [c["set_id"] for c in sets_in_order(s183, rel=KC)] != ["OTC-T-0183/a-nc", "OTC-T-0183/c-cur"] or KC.kind(s183) != "tide":
+        raise SystemExit("K-NC: OTC-T-0183")
+    out.append(co_case("commercial-only/no-commercial-set", "OTC-T-0183 has no recommended set under the option; constant_sets still lists every set; its kind is still tide; stations and search still return it (K-NC DR106)",
+                       [rec(KC, "OTC-T-0183", None),
+                        step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s183, rel=KC)]}, station_id="OTC-T-0183"),
+                        step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s183, True, rel=KC)]}, station_id="OTC-T-0183", include_no_constants=True),
+                        step("station", {"station": enc_station(KC, s183)}, station_id="OTC-T-0183"),
+                        step("stations", {"station_ids": [x["station_id"] for x in KC.active]}),
+                        step("search", {"station_ids": search(KC, "KNC 0183")}, name="KNC 0183")]))
+    with_opt = [x["station_id"] for x in apply_filters(KC, KC.active, {"source_type": "official"})]
+    without = [x["station_id"] for x in apply_filters(K, K.active, {"source_type": "official"})]
+    if with_opt != ["OTC-T-0185"] or without != ["OTC-T-0181", "OTC-T-0182", "OTC-T-0183", "OTC-T-0185", "OTC-T-0190"]:
+        raise SystemExit(f"K-NC: source_type filter {with_opt} / {without}")
+    out.append(co_case("commercial-only/source-type-filter", "source_type compares the effective recommended set; a station with none matches no value; without the option the release's (K-NC DR106)",
+                       [step("stations", {"station_ids": with_opt}, source_type="official"),
+                        step("iter_stations", {"station_ids": with_opt}, source_type="official"),
+                        {"op": "open", "matrix_open": {"commercial_only": None}},
+                        step("stations", {"station_ids": without}, source_type="official")]))
+    out.append(co_case("commercial-only/subordinate-tides", "OTC-T-0186: the one-link offsets path (kartverket, noaa); OTC-T-0190: no effective set, so the offsets path (noaa twice, one licence) (K-NC DR106)",
+                       [att_text("co-0186", KC, ["OTC-T-0186"]), att_text("co-0190", KC, ["OTC-T-0190"])]))
+    out.append(co_case("commercial-only/no-usable-tides", "OTC-T-0187 (non-commercial offsets licence) and OTC-T-0188 (non-commercial reference set) add no licence; OTC-T-0189 uses its own set, not its offsets (K-NC DR106)",
+                       [att_text("co-0186", KC, ["OTC-T-0187", "OTC-T-0188", "OTC-T-0186"]),
+                        att_text("co-0189", KC, ["OTC-T-0189"])]))
+    out.append(co_case("commercial-only/attribution-all", "no stations: every commercial licence of the release, and no notice (K-NC DR106)",
+                       [att_text("co-all", KC)]))
+    out.append(co_case("commercial-only/empty-scope", "stations with no usable tides: the dataset header alone (K-NC DR106)",
+                       [att_text("co-empty", KC, ["OTC-T-0187", "OTC-T-0188"])]))
+    steps = [att(R2), att(R2, ["OTC-T-0006", "OTC-T-0010", "OTC-T-0007"]), att(R2, ["OTC-T-0003"])]
+    for st in steps:   # the texts without the option, which the option must not change here
+        st_args = st.get("args", {}).get("station_ids")
+        if attribution(G2C, st_args) != st["expect"]["attribution"]:
+            raise SystemExit(f"K-NC: good attribution differs under the option for {st_args}")
+    for x in G2C.active:
+        if G2C.eff_set(x) is not R2.rec_set(R2.by_id[x["station_id"]]) and (G2C.eff_set(x) or {}).get("set_id") != (R2.rec_set(R2.by_id[x["station_id"]]) or {}).get("set_id"):
+            raise SystemExit(f"K-NC: {x['station_id']} changes its recommended set under the option in good")
+    if attribution(R2, ["OTC-T-0004"]) != KNC_TEXT["good-0004"]:
+        raise SystemExit("K-NC: release/attribution-subordinate-with-own-set differs from the spec text")
+    steps += [step("recommended_set", {"set_id": R2.rec_set(x)["set_id"] if R2.rec_set(x) else None}, station_id=x["station_id"])
+              for x in R2.active]
+    steps.append(att_text("co-good-0004", G2C, ["OTC-T-0004"]))
+    out.append(co_case("commercial-only/all-commercial-unchanged", "good 20991231.2 (every licence commercial) under the option: the attribution texts and every recommended set as without it; OTC-T-0004 (a subordinate with its own set) gives only its set's licence (K-NC DR106)",
+                       steps, root="good"))
+    return out
+
+
 GROUPS = {
     "load": lambda R2, R1: group_load(),
     "release": group_release,
@@ -2985,6 +3223,7 @@ GROUPS = {
     "format": lambda R2, R1: group_format(),
     "rules": lambda R2, R1: group_rules(),
     "lifecycle": lambda R2, R1: group_lifecycle(R2),
+    "knc": lambda R2, R1: group_knc(),
 }
 
 

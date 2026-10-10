@@ -392,7 +392,10 @@
         "provider": "Example Ocean Service",
         "citation": null,
         "attribution": "Synthetic test data in the style of a public-domain US agency.",
-        "url": null
+        "url": null,
+        "commercial_use": true,
+        "restriction": null,
+        "terms_url": null
        },
        {
         "licence_id": "kartverket",
@@ -400,7 +403,10 @@
         "provider": "Example Mapping Authority",
         "citation": null,
         "attribution": "Synthetic test data, Example Mapping Authority.",
-        "url": null
+        "url": null,
+        "commercial_use": true,
+        "restriction": null,
+        "terms_url": null
        },
        {
         "licence_id": "eot20",
@@ -408,7 +414,10 @@
         "provider": "Example Tide Model Group",
         "citation": null,
         "attribution": "Example tide model, interpolated by OpenTideConstants tests.",
-        "url": null
+        "url": null,
+        "commercial_use": true,
+        "restriction": null,
+        "terms_url": null
        },
        {
         "licence_id": "gesla-derived",
@@ -416,7 +425,10 @@
         "provider": "Example Gauge Agency via GESLA",
         "citation": "Example Gauge Agency (2099). Example sea level records. Test citation.",
         "attribution": "Contains synthetic test data in the style of GESLA-4.",
-        "url": "https://example.org/gesla-test"
+        "url": "https://example.org/gesla-test",
+        "commercial_use": true,
+        "restriction": null,
+        "terms_url": null
        }
       ]
      }
@@ -444,7 +456,10 @@
        "provider": "Example Gauge Agency via GESLA",
        "citation": "Example Gauge Agency (2099). Example sea level records. Test citation.",
        "attribution": "Contains synthetic test data in the style of GESLA-4.",
-       "url": "https://example.org/gesla-test"
+       "url": "https://example.org/gesla-test",
+       "commercial_use": true,
+       "restriction": null,
+       "terms_url": null
       }
      }
     },

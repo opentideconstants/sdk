@@ -211,6 +211,15 @@
        "positional": false,
        "default": false,
        "note": "hash the whole file on every open (spec 5.3)"
+      },
+      {
+       "name": "commercial_only",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false,
+       "c": "(C: otc_open_options.commercial_only)",
+       "note": "select only constant sets whose licence allows commercial use: the effective recommended set, the source_type filter and the attribution's tide source (spec 4.2, K-NC DR106); not a boolean is invalid_argument; C: a bool field of otc_open_options (otc_fetch_open takes it through oopts)"
       }
      ],
      "returns": "Client",
@@ -1774,6 +1783,27 @@
      "kind": "field",
      "type": "url",
      "nullable": true
+    },
+    {
+     "name": "commercial_use",
+     "kind": "field",
+     "type": "boolean",
+     "nullable": false,
+     "note": "true: the licence allows commercial use, on its own terms; false: non-commercial use only. Absent, null or not a boolean is invalid_release (K-NC DR104); C bool otc_licence_commercial_use"
+    },
+    {
+     "name": "restriction",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "note": "always present when commercial_use is false; null or not a string in the file is invalid_release (K-NC DR104, CR3 DR71)"
+    },
+    {
+     "name": "terms_url",
+     "kind": "field",
+     "type": "url",
+     "nullable": true,
+     "note": "always present when commercial_use is false; null or not a string in the file is invalid_release (K-NC DR104, CR3 DR71)"
     },
     {
      "name": "raw",

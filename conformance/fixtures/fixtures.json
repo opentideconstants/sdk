@@ -122,6 +122,16 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "non-commercial licences and ten stations whose sets are in recommendation-rank order, for the non-commercial notice and commercial_only (K-NC DR104 to DR106)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "knc"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"
@@ -1052,6 +1062,125 @@
     "20991231"
    ],
    "root": "bad/tombstone-twice"
+  },
+  {
+   "defect": "the noaa licence has no commercial_use (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-commercial-use-missing"
+  },
+  {
+   "defect": "the noaa licence's commercial_use is null (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-commercial-use-null"
+  },
+  {
+   "defect": "the noaa licence's commercial_use is the string \"false\" (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-commercial-use-string"
+  },
+  {
+   "defect": "the noaa licence has commercial_use false and terms_url, but no restriction (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-nc-no-restriction"
+  },
+  {
+   "defect": "the noaa licence has commercial_use false and restriction, but no terms_url (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-nc-no-terms-url"
+  },
+  {
+   "defect": "the noaa licence has commercial_use false, restriction and terms_url, but no spdx (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-nc-no-spdx"
+  },
+  {
+   "defect": "the noaa licence (commercial) has restriction the number 5 (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-restriction-not-string"
+  },
+  {
+   "defect": "the noaa licence (commercial) has terms_url the number 5 (K-NC DR104)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-terms-url-not-string"
+  },
+  {
+   "defect": "the noaa licence (commercial) has \"restriction\": null (K-NC DR104, CR3 DR71)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-restriction-null"
+  },
+  {
+   "defect": "the noaa licence (commercial) has \"terms_url\": null (K-NC DR104, CR3 DR71)",
+   "expect": {
+    "error": "invalid_release"
+   },
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-terms-url-null"
+  },
+  {
+   "defect": "the licence-provider-null release with the anon licence non-commercial (null provider; K-NC DR105); it must load (CR D2 b)",
+   "expect": "load",
+   "latest": "20991231",
+   "releases": [
+    "20991231"
+   ],
+   "root": "bad/licence-provider-null-nc"
   },
   {
    "defect": "format 1.1: OTC-T-0016's status is retired; a 1.0 reader reads it as other: not a station, not a tombstone, in no query and no count (CR2 DR8)",

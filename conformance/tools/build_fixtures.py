@@ -84,7 +84,7 @@ NEXT_MAJOR = "2.0"
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
-GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "values-nul", "fold", "aliases", "chain", "nogz",
+GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "values-nul", "fold", "aliases", "chain", "knc", "nogz",
              "bad", "fixtures.json"]
 
 BASE = "20991231"
@@ -739,6 +739,22 @@ def _null_providers(doc):
                             "attribution": "Anonymous synthetic test data.", "commercial_use": True})
 
 
+def _null_providers_nc(doc):
+    _null_providers(doc)
+    anon = _licence(doc, "anon")
+    anon.clear()
+    anon.update({"licence_id": "anon", "spdx": "LicenseRef-Anon-Test", "provider": None,
+                                  "attribution": "Anonymous synthetic test data.", "commercial_use": False,
+                                  "restriction": "Test: non-commercial use only.",
+                                  "terms_url": "https://example.org/anon-terms"})
+
+
+def _nc_no_spdx(doc):
+    lic = _licence(doc, "noaa")
+    lic.update(commercial_use=False, restriction="Test: non-commercial use only.", terms_url="https://example.org/noaa-terms")
+    lic.pop("spdx")
+
+
 def index_honest(files, sums, entry, reuse):
     """Keep the pointer and index entry valid (1.0, a time): the defect is in the release file only."""
     entry = copy.deepcopy(entry)
@@ -996,7 +1012,35 @@ BAD = [
      changed_doc(lambda d: _station(d, "OTC-T-0010")["constant_sets"][0]["record_span"].update(end="2098-12-31T24:00:00Z")), None),
     ("proto-keys", "load", "format 1.1: an alias system __proto__ and constructor, and a source constructor (JavaScript Object.prototype keys); it must load and keep them",
      changed_doc(_proto_keys), None),
-] + [(name, "invalid_release", defect, docs, tamper) for name, defect, docs, tamper in BAD_R2_05]
+] + [(name, "invalid_release", defect, docs, tamper) for name, defect, docs, tamper in BAD_R2_05] + [
+    # K-NC DR104 (SDK spec 4.6 Licence fields): the good release 20991231 with one licence changed, each
+    # invalid_release in every form. The reference reader refuses each by the schema ($defs.licence: commercial_use
+    # required and boolean; restriction and terms_url strings; both required when commercial_use is false; spdx
+    # required on every licence).
+    ("licence-commercial-use-missing", "invalid_release", "the noaa licence has no commercial_use (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").pop("commercial_use")), None),
+    ("licence-commercial-use-null", "invalid_release", "the noaa licence's commercial_use is null (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(commercial_use=None)), None),
+    ("licence-commercial-use-string", "invalid_release", "the noaa licence's commercial_use is the string \"false\" (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(commercial_use="false")), None),
+    ("licence-nc-no-restriction", "invalid_release", "the noaa licence has commercial_use false and terms_url, but no restriction (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(commercial_use=False, terms_url="https://example.org/noaa-terms")), None),
+    ("licence-nc-no-terms-url", "invalid_release", "the noaa licence has commercial_use false and restriction, but no terms_url (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(commercial_use=False, restriction="Test: non-commercial use only.")), None),
+    ("licence-nc-no-spdx", "invalid_release", "the noaa licence has commercial_use false, restriction and terms_url, but no spdx (K-NC DR104)",
+     changed_doc(_nc_no_spdx), None),
+    ("licence-restriction-not-string", "invalid_release", "the noaa licence (commercial) has restriction the number 5 (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(restriction=5)), None),
+    ("licence-terms-url-not-string", "invalid_release", "the noaa licence (commercial) has terms_url the number 5 (K-NC DR104)",
+     changed_doc(lambda d: _licence(d, "noaa").update(terms_url=5)), None),
+    ("licence-restriction-null", "invalid_release", "the noaa licence (commercial) has \"restriction\": null (K-NC DR104, CR3 DR71)",
+     changed_doc(lambda d: _licence(d, "noaa").update(restriction=None)), None),
+    ("licence-terms-url-null", "invalid_release", "the noaa licence (commercial) has \"terms_url\": null (K-NC DR104, CR3 DR71)",
+     changed_doc(lambda d: _licence(d, "noaa").update(terms_url=None)), None),
+    # K-NC DR105: the licence-provider-null release with anon non-commercial; it loads, as its base does
+    ("licence-provider-null-nc", "load", "the licence-provider-null release with the anon licence non-commercial (null provider; K-NC DR105); it must load (CR D2 b)",
+     changed_doc(_null_providers_nc), None),
+]
 
 
 # Review round 2, PK-R2-09: values the four SDKs gave different answers for.
@@ -1319,6 +1363,107 @@ def chain_doc():
     return doc
 
 
+KNC_D = "20991231.2"
+
+
+def knc_doc():
+    """The K-NC root (SDK spec 7.1 K-NC fixtures and cases; K-NC DR104 to DR106): the release object, conventions,
+    constituents table and astro tables of good 20991231.2, seven licences (two non-commercial, one commercial with
+    restriction and terms_url) and ten active stations whose sets are written in the recommendation-rank order of
+    the spec 4.2 guarantee, for commercial_only and the non-commercial notice."""
+    good = release_doc(SECOND)
+    licences = [
+        {"licence_id": "noaa", "spdx": "LicenseRef-PublicDomain-USGov", "provider": "Example Ocean Service",
+         "attribution": "Synthetic test data in the style of a public-domain US agency.", "commercial_use": True},
+        {"licence_id": "kartverket", "spdx": "CC-BY-4.0", "provider": "Example Mapping Authority",
+         "attribution": "Synthetic test data, Example Mapping Authority.", "commercial_use": True},
+        {"licence_id": "eot20", "spdx": "CC-BY-4.0", "provider": "Example Tide Model Group",
+         "attribution": "Example tide model, interpolated by OpenTideConstants tests.", "commercial_use": True},
+        {"licence_id": "gesla-derived", "spdx": "CC-BY-4.0", "provider": "Example Gauge Agency via GESLA",
+         "attribution": "Contains synthetic test data in the style of GESLA-4.",
+         "citation": "Example Gauge Agency (2099). Example sea level records. Test citation.",
+         "url": "https://example.org/gesla-test", "commercial_use": True},
+        {"licence_id": "nc-test", "spdx": "LicenseRef-NC-Test", "provider": "Example Restricted Agency",
+         "attribution": "Synthetic restricted test data.", "commercial_use": False,
+         "restriction": "Test: non-commercial use only.", "terms_url": "https://example.org/nc-test-terms"},
+        {"licence_id": "nc-test-2", "spdx": "LicenseRef-NC-Test-2", "provider": "Example Restricted Agency",
+         "attribution": "Synthetic restricted test data, second licence.", "commercial_use": False,
+         "restriction": "Test: non-commercial use only, second licence.", "terms_url": "https://example.org/nc-test-2-terms"},
+        {"licence_id": "c-terms", "spdx": "CC-BY-4.0", "provider": "Example Terms Agency",
+         "attribution": "Synthetic test data, Example Terms Agency.", "commercial_use": True,
+         "restriction": "Test: attribution in the app's about screen.", "terms_url": "https://example.org/c-terms"},
+    ]
+
+    def rank_span(g):
+        return {"start": "2002-01-01T00:00:00Z", "end": "2020-12-31T23:00:00Z", "good_hours": g}
+
+    def official(sid, suffix, source, licence, g, scale):
+        conv = "noaa-greenwich-v1" if source == "noaa" else "otc-greenwich-v1"
+        return cset(sid, suffix, source, "official", conv, licence, simple_constituents(scale), record_span=rank_span(g))
+
+    def gauge(sid, suffix, source, licence, g, scale, flagged=False):
+        # a flagged set has the time_base flag and annotation of good OTC-T-0001/gesla-fit (not short_record)
+        return gauge_set(sid, suffix, simple_constituents(scale), source=source, licence_id=licence,
+                         time_base=UNVERIFIED if flagged else VERIFIED, record_span=rank_span(g))
+
+    def no_constants(sid, suffix):
+        # as good OTC-T-0002/gesla-fit
+        return gauge_set(sid, suffix, [], qc_status="no_constants", no_constants_reason="fit_unusable", good_hours=9000.0,
+                         record_issues=[{"issue": "datum_step", "start": "2095-06-01T00:00:00Z", "reason": "a 0.4 m datum step",
+                                         "values": {"step_m": 0.4}}],
+                         qc_flags=[{"flag": "broken_record", "reason": "no segment gives a usable fit", "values": {"step_m": 0.4}}])
+
+    def current(sid, suffix):
+        # as good OTC-T-0019/noaa
+        return cset(sid, suffix, "noaa", "official", "noaa-greenwich-v1", "noaa", [], quantity="current",
+                    current_bins=current_bins(1.3))
+
+    def model(sid, suffix):
+        # as good OTC-T-0007/eot20
+        return cset(sid, suffix, "eot20", "model", "otc-greenwich-v1", "eot20", simple_constituents(0.6))
+
+    def station(n, sets, recommended=None, offsets=None):
+        sid = f"OTC-T-{n:04d}"
+        built = [f(sid) for f in sets]
+        kw = {}
+        if offsets is not None:
+            licence, ref = offsets
+            kw["subordinate_offsets"] = {"reference_station_id": ref, "time_offset_high_min": 12, "time_offset_low_min": 20,
+                                         "height_offset_high": 1.05, "height_offset_low": 0.98,
+                                         "height_adjusted_type": "R", "licence_id": licence}
+        st = active(sid, f"KNC {n:04d}", "USA", round(30.0 + (n - 180) * 0.1, 4), -120.0, "America/Los_Angeles", built,
+                    type_="subordinate" if offsets is not None else "reference",
+                    recommended=None if recommended is None else f"{sid}/{recommended}", **kw)
+        if recommended is None:
+            st["recommended_set_id"] = None
+        return st
+
+    stations = [
+        station(181, [lambda s: official(s, "x-nc", "noaa", "nc-test", 150000.0, 1.0),
+                      lambda s: gauge(s, "y-flagged", "gesla-fit", "gesla-derived", 140000.0, 0.99, flagged=True),
+                      lambda s: gauge(s, "w-ok", "gesla-fit", "gesla-derived", 130000.0, 0.98),
+                      lambda s: gauge(s, "v-ok2", "gesla-fit", "gesla-derived", 120000.0, 0.97),
+                      lambda s: current(s, "z-current")], recommended="x-nc"),
+        station(182, [lambda s: official(s, "c-nc", "nc-agency", "nc-test", 150000.0, 1.0),
+                      lambda s: gauge(s, "b-flag", "gesla-fit", "gesla-derived", 140000.0, 0.99, flagged=True),
+                      lambda s: no_constants(s, "a-noc")], recommended="c-nc"),
+        station(183, [lambda s: official(s, "a-nc", "nc-agency", "nc-test", 150000.0, 1.0),
+                      lambda s: no_constants(s, "b-noc"),
+                      lambda s: current(s, "c-cur")], recommended="a-nc"),
+        station(184, [lambda s: gauge(s, "a-flag", "gesla-fit", "gesla-derived", 150000.0, 1.0, flagged=True),
+                      lambda s: gauge(s, "b-ok", "terms-agency", "c-terms", 140000.0, 0.99)], recommended="a-flag"),
+        station(185, [lambda s: official(s, "a-noaa", "noaa", "noaa", 150000.0, 1.0)], recommended="a-noaa"),
+        station(186, [], offsets=("kartverket", "OTC-T-0185")),
+        station(187, [], offsets=("nc-test-2", "OTC-T-0185")),
+        station(188, [], offsets=("kartverket", "OTC-T-0181")),
+        station(189, [lambda s: model(s, "a-ok")], recommended="a-ok", offsets=("kartverket", "OTC-T-0181")),
+        station(190, [lambda s: official(s, "a-nc", "nc-agency", "nc-test", 150000.0, 1.0)], recommended="a-nc",
+                offsets=("noaa", "OTC-T-0185")),
+    ]
+    return {"format_version": FORMAT, "release": good["release"], "conventions": good["conventions"], "licences": licences,
+            "constituents": good["constituents"], "astro_tables": good["astro_tables"], "stations": stations}
+
+
 def no_gz(files, sums, entry, reuse):
     """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
     files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
@@ -1361,6 +1506,10 @@ ROOTS = [
     ("chain", lambda: [chain_doc()], {}, (),
      {"releases": [CHAIN_D], "latest": CHAIN_D, "expect": "load", "defect": None,
       "note": "subordinate stations two and three links from their reference station, for the attribution (CR2 DR1)"}),
+    ("knc", lambda: [knc_doc()], {}, (),
+     {"releases": [KNC_D], "latest": KNC_D, "expect": "load", "defect": None,
+      "note": "non-commercial licences and ten stations whose sets are in recommendation-rank order, for the "
+              "non-commercial notice and commercial_only (K-NC DR104 to DR106)"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,

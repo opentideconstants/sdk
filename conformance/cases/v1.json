@@ -1754,7 +1754,7 @@
     {
      "op": "attribution",
      "expect": {
-      "attribution": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Meteorological Agency: Synthetic test data in the style of JMA.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency."
+      "attribution": "Tidal constants: OpenTideConstants 20991231.3, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests.; Example Gauge Agency via GESLA: Contains synthetic test data in the style of GESLA-4.; Example Meteorological Agency: Synthetic test data in the style of JMA.; Example Mapping Authority: Synthetic test data, Example Mapping Authority.; Example Ocean Service: Synthetic test data in the style of a public-domain US agency.. Non-commercial use only: Example Meteorological Agency (LicenseRef-JMA-Test, https://example.org/jma-test-terms)"
      }
     },
     {
