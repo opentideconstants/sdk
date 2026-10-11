@@ -168,15 +168,16 @@ class OpenTideConstants
         # The parsed .verified of a release, or nil when the directory is not
         # trusted: no .verified, or one that is not a JSON object whose files
         # rows are objects with a string or null sha256 and url and an integer
-        # or null size (R2-088); a size written as 1024.0 is the integer 1024
-        # (CR2 DR10). A .verified that cannot be read is cache.
+        # size (R2-088); a null or absent size makes it malformed (spec §5.4,
+        # CR3 spec review 2 B10 and 3 C4); a size written as 1024.0 is the
+        # integer 1024 (CR2 DR10). A .verified that cannot be read is cache.
         def verified(datestamp)
             text = read_file(File.join(release_dir(datestamp), ".verified"))
             return nil unless text
             doc = JSON.parse(text.force_encoding(Encoding::UTF_8))
             return nil unless doc.is_a?(Hash) && doc["files"].is_a?(Hash)
             doc["files"].each_value { |row| return nil unless verified_row?(row) }
-            doc["files"].each_value { |row| row["size"] = Reader.integral(row["size"]) unless row["size"].nil? }
+            doc["files"].each_value { |row| row["size"] = Reader.integral(row["size"]) }
             doc
         rescue JSON::ParserError, EncodingError
             nil
@@ -184,7 +185,7 @@ class OpenTideConstants
 
         def verified_row?(row)
             row.is_a?(Hash) && [row["sha256"], row["url"]].all? { |v| v.nil? || v.is_a?(String) } &&
-                (row["size"].nil? || Reader.integral(row["size"]).is_a?(Integer))
+                Reader.integral(row["size"]).is_a?(Integer)
         end
 
         # True when name is in the release directory, listed in .verified and
@@ -203,13 +204,22 @@ class OpenTideConstants
         # .verified also has the datestamp (spec §5.4, CR D26).
         VERIFIED_INFO = %w[format_version min_reader_version zenodo_version_doi].freeze
 
+        # files: the rows of the files this open stored and verified. A row of
+        # the old .verified stays only while its file is in the release
+        # directory, and a row for OTC_<D>.sha256 never does (spec §5.4, CR3
+        # DR100); every SHA-256 is written in lowercase.
         def write_verified(datestamp, files, info = {})
-            path = File.join(release_dir(datestamp), ".verified")
+            dir = release_dir(datestamp)
+            path = File.join(dir, ".verified")
             prev = verified(datestamp)
-            merged = prev ? prev["files"].dup : {}
+            sums = "OTC_#{datestamp}.sha256"
+            merged = (prev ? prev["files"] : {}).select do |name, row|
+                name != sums && row["sha256"].is_a?(String) && File.file?(File.join(dir, name))
+            end
+            merged = merged.transform_values { |row| row.merge("sha256" => row["sha256"].downcase) }
             files.each do |name, row|
                 old = merged[name] || {}
-                merged[name] = { "sha256" => row["sha256"] || old["sha256"], "size" => row["size"] || old["size"],
+                merged[name] = { "sha256" => (row["sha256"] || old["sha256"])&.downcase, "size" => row["size"] || old["size"],
                                  "url" => row["url"] || old["url"] }
             end
             doc = { "datestamp" => datestamp, "files" => merged.sort.to_h, "verified_at" => Time.now.utc.iso8601,

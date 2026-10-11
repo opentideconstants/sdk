@@ -785,7 +785,7 @@ class OpenTideConstants
     # Loads cached release d, or nil when it is no longer usable (another
     # process removed it after the caller checked it). doi: a version DOI
     # newer than .verified's (a pointer entry); anything but a String keeps .verified's.
-    def load_cached(d, doi: nil)
+    def load_cached(d, doi: nil, files: nil)
         ver = cache.verified(d)
         dir = cache.release_dir(d)
         names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(dir, n)) } }
@@ -797,7 +797,7 @@ class OpenTideConstants
             raise ChecksumError.new("#{n}: the size does not match .verified", file: p, expected: ver["files"][n]["sha256"], actual: nil)
         end
         checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
-        files = ver["files"].map do |name, row|
+        files ||= ver["files"].map do |name, row|
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
@@ -888,7 +888,9 @@ class OpenTideConstants
             next if usable_cached?(d)
             download_into_cache(d, entry, pointer_url)
         end
-        load_cached(d) or raise CacheError, "release #{d} left the cache while it was opened"
+        # release.files (spec §4.3.1): the pointer entry for a download of latest, else the .verified rows
+        files = entry && release_info(entry, pointer_url).files
+        load_cached(d, files: files) or raise CacheError, "release #{d} left the cache while it was opened"
     end
 
     def download_into_cache(d, entry, pointer_url)
@@ -908,17 +910,11 @@ class OpenTideConstants
             f && f["url"] ? resolve(pointer_url, f["url"]) : @base_url + name
         end
         sha_name = "OTC_#{d}.sha256"
+        # .verified gets a row only for each file stored and verified here, with
+        # its real size (spec §5.4, CR3 DR100); release.files of a download of
+        # latest is the pointer entry (fetch_release).
         verified = {}
-        rows.each do |name, sha|
-            pf = pointer_files[name]
-            verified[name] = { "sha256" => sha, "size" => pf && pf["size"], "url" => url_of.call(name) }
-        end
-        # The .sha256 file is in release.files only when the pointer lists it
-        # (a pinned download reads no pointer: README, suite choices).
-        if pointer_files[sha_name]
-            verified[sha_name] = { "sha256" => Digest::SHA256.hexdigest(sha_bytes), "size" => sha_bytes.bytesize,
-                                   "url" => url_of.call(sha_name) }
-        end
+        row = ->(name, size) { verified[name] = { "sha256" => rows[name], "size" => size, "url" => url_of.call(name) } }
         cache.write_atomic(File.join(dir, sha_name), sha_bytes)
         # Only the keys the entry has: a missing or null zenodo_version_doi keeps the stored one (CR2 DR11).
         info = entry ? entry.slice(*Cache::VERIFIED_INFO) : {}
@@ -927,20 +923,19 @@ class OpenTideConstants
             %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
                 size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],
                                                 pointer_files.dig(name, "size"))
-                verified[name]["size"] = size
+                row.call(name, size)
             end
         elsif !rows[gz]
             size = Downloader.fetch_checked(self, url_of.call(json), dir, File.join(dir, json), json, rows[json],
                                             pointer_files.dig(json, "size"))
-            verified[json]["size"] = size
+            row.call(json, size)
         else
             tmp_gz = Cache.tmp_path(dir)
             begin
                 Downloader.fetch_checked(self, url_of.call(gz), dir, nil, gz, rows[gz], pointer_files.dig(gz, "size"),
                                          keep_tmp: tmp_gz)
                 size = Downloader.gunzip_checked(tmp_gz, dir, File.join(dir, json), json, rows[json])
-                verified[json]["size"] = size
-                verified[gz]["size"] ||= File.size(tmp_gz) if verified[gz]
+                row.call(json, size)
             ensure
                 FileUtils.rm_f(tmp_gz)
             end
