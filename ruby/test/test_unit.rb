@@ -27,6 +27,8 @@ class VersionTest < Minitest::Test
         assert_equal "1.0", OpenTideConstants::SUPPORTED_FORMAT_VERSION
         sf = JSON.parse(File.read(File.join(ROOT, "ruby", "supported-formats.json")))
         assert_equal OpenTideConstants::SUPPORTED_FORMAT_VERSION, sf["supported_format_version"]
+        assert_equal OpenTideConstants::VERSION, sf["version"]
+        assert_equal "ruby", sf["language"]
     end
 
     def test_readable_versions
@@ -222,8 +224,10 @@ class CredentialsRedactedTest < Minitest::Test
 
     def test_bad_proxy_option_message
         ["socks5://otcuser:#{SECRET}@proxy.invalid:1080", "otcuser:#{SECRET}@proxy invalid"].each do |proxy|
-            e = assert_raises(OpenTideConstants::InvalidArgumentError) do
-                OpenTideConstants.new(proxy: proxy, cache_dir: Dir.mktmpdir)
+            e = Dir.mktmpdir do |dir|
+                assert_raises(OpenTideConstants::InvalidArgumentError) do
+                    OpenTideConstants.new(proxy: proxy, cache_dir: dir)
+                end
             end
             assert_redacted(e.message)
         end
