@@ -2097,6 +2097,9 @@ def build(out, reuse):
 # table and datum term a call names is the fixture's own; --check regenerates it and compares.
 
 PREDICT_CALLS = Path(__file__).resolve().parent / "predict_calls.json"
+# The 5 s brute-force cross-check of spec 6.1 that a step asks the case harness for: of h' (extremes) or W' and W
+# (current events), of W' only (current peaks), or of W only (slacks). None: no cross-check.
+CROSSCHECKS = ("scan_5s", "scan_5s_peaks", "scan_5s_slacks")
 T_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -2125,6 +2128,14 @@ class _Release:
 
     def recommended(self, sid):
         return self.st[sid]["recommended_set_id"]
+
+    def require_reference_set(self, ref_sid, quantity="water_level", source="noaa", bin_=None):
+        """reference_set, for a call that predicts by offsets: a missing set is a builder error, never a None."""
+        cs = self.reference_set(ref_sid, quantity, source, bin_)
+        if cs is None:
+            raise ValueError(f"{self.root}: reference station {ref_sid} has no usable {quantity} set "
+                             f"({'bin ' + str(bin_) if bin_ is not None else 'source ' + source}) for a call that predicts")
+        return cs
 
     def reference_set(self, ref_sid, quantity="water_level", source="noaa", bin_=None):
         """Spec 4.8 step 1 / 4.9 step 1: the first set in file order of the reference station with the offsets'
@@ -2203,15 +2214,17 @@ def predict_calls():
                                                                "times": strict_times or times, "datum_term": term,
                                                                "astro": R.table_of(cs)}}}
 
-    def extremes(sid, start, stop, datum=None, set_id=None, R=P, expect=None, crosscheck=False):
+    def extremes(sid, start, stop, datum=None, set_id=None, R=P, expect=None, crosscheck: "str | None" = None):
         cs = tide_set(R, sid, set_id)
         term, name, _ = _datum_term(cs, datum)
         e = {"method": "harmonic", "set_id": cs["set_id"]}
         e.update(expect or {})
         s = {"entry": "extremes_strict", "args": {"constituents": {"$set": cs["set_id"]}, "start": start, "stop": stop,
                                                   "datum_term": term, "astro": R.table_of(cs)}}
-        if crosscheck:
-            s["crosscheck"] = "scan_5s"
+        if crosscheck is not None:
+            if crosscheck != "scan_5s":   # extremes have one cross-check: the scan of h'
+                raise ValueError(f"extremes: cross-check {crosscheck!r} is not scan_5s")
+            s["crosscheck"] = crosscheck
         return {"op": "extremes", "args": args(station_id=sid, start=start, stop=stop, datum=datum, set_id=set_id),
                 "expect": e, "strict": s}
 
@@ -2227,8 +2240,10 @@ def predict_calls():
     def sub_tide(op, sid, start, stop=None, step_s=None, datum=None, R=P, expect=None, times=None):
         st = R.st[sid]
         o = st["subordinate_offsets"]
-        ref = R.reference_set(o["reference_station_id"])
-        rd = ref["datum"]
+        ref = R.require_reference_set(o["reference_station_id"])
+        rd = ref.get("datum")
+        if not rd or "msl_offset_m" not in rd or rd.get("chart_datum") not in rd.get("named", {}):
+            raise ValueError(f"{R.root}: {ref['set_id']} has no chart datum term, so {sid} cannot predict by offsets")
         c_ref = rd["msl_offset_m"] - rd["named"][rd["chart_datum"]]
         sd = o.get("datum") or {}
         shift = 0.0
@@ -2268,13 +2283,15 @@ def predict_calls():
                                                                 "times": _series(start, stop, step_s or 600),
                                                                 "astro": R.table_of(cs)}}}
 
-    def current_events(sid, start, stop, bin_number=None, R=P, expect=None, crosscheck=False):
+    def current_events(sid, start, stop, bin_number=None, R=P, expect=None, crosscheck: "str | None" = None):
         cs, n = cur_bin(R, sid, bin_number)
         e = {"method": "harmonic", "set_id": cs["set_id"], "bin_number": n}
         e.update(expect or {})
         s = {"entry": "current_events_strict", "args": {"bin": {"$bin": [cs["set_id"], n]}, "start": start, "stop": stop,
                                                         "astro": R.table_of(cs)}}
-        if crosscheck:
+        if crosscheck is not None:
+            if crosscheck not in CROSSCHECKS:
+                raise ValueError(f"current_events: cross-check {crosscheck!r} is not one of {CROSSCHECKS}")
             s["crosscheck"] = crosscheck
         return {"op": "current_events", "args": args(station_id=sid, start=start, stop=stop, bin_number=bin_number),
                 "expect": e, "strict": s}
@@ -2282,7 +2299,7 @@ def predict_calls():
     def sub_current_events(sid, start, stop, bin_number=None, R=P, expect=None):
         st = R.st[sid]
         co = next(c for c in st["current_offsets"] if c["bin"] == (bin_number or min(x["bin"] for x in st["current_offsets"])))
-        ref = R.reference_set(co["reference_station_id"], "current", bin_=co["reference_bin"])
+        ref = R.require_reference_set(co["reference_station_id"], "current", bin_=co["reference_bin"])
         omitted = [t for t, (adj, ratio) in (("max_flood", ("time_adj_max_flood_min", "flood_amp_ratio")),
                                               ("max_ebb", ("time_adj_max_ebb_min", "ebb_amp_ratio")),
                                               ("slack_before_flood", ("time_adj_slack_before_flood_min", None)),
@@ -2434,15 +2451,15 @@ def predict_calls():
          [dict(extremes(B, "2031-01-01T00:00:00Z", "2031-01-01T00:00:00Z"), expect={"items": [], "method": "harmonic"}, strict=None)])
     # ------------------------------------------------------------------ extremes
     case("predict-extremes/basic", "extremes at the basic station over 3 days (cross-checked by a 5 s scan)", "4.6",
-         [extremes(B, D + "00:00:00Z", "2010-03-04T00:00:00Z", crosscheck=True)])
+         [extremes(B, D + "00:00:00Z", "2010-03-04T00:00:00Z", crosscheck="scan_5s")])
     we = _window_edges(P)
     case("predict-extremes/window-edges", "an event exactly at start and one just before stop are reported", "4.6 step 7",
          [extremes(B, we[0], we[1])], note=f"the window starts at a reported event time and stops 1 s after another ({we[2]})")
     case("predict-extremes/single-constituent", "M2 only, 2010-03-01 to 2010-03-31: 116 extremes, equal to a 5 s scan", "4.6 step 3",
-         [extremes("OTC-P-0005", *PW["single"], expect={"items": {"$len": 116}}, crosscheck=True)])
+         [extremes("OTC-P-0005", *PW["single"], expect={"items": {"$len": 116}}, crosscheck="scan_5s")])
     large = []
     for sid_set, key in (("OTC-P-0012/m2-5m", "large-m2"), ("OTC-P-0012/m2-7m5", "large-m2"), ("OTC-P-0012/k1-40m", "large-k1")):
-        large.append(extremes("OTC-P-0012", *PW[key], set_id=sid_set, crosscheck=True))
+        large.append(extremes("OTC-P-0012", *PW[key], set_id=sid_set, crosscheck="scan_5s"))
     case("predict-extremes/large-amplitude", "M2 at 5 m and 7.5 m in December 2099, K1 at 40 m on 2025-12-22: counts equal a 5 s scan (pins E)",
          "4.6 step 3", large)
     for cid, title, n in (("current-peaks-large-amplitude", "max_flood and max_ebb of the same amplitudes in m/s: counts equal a 5 s scan of W'", "scan_5s_peaks"),
@@ -3312,7 +3329,9 @@ def tolerate_prediction(doc, meta, lines):
             c["nodal_handling"] = "none"
             c.pop("astro_table_id", None)
     for t in by_id.values():
-        rows = t.get("constituents") if isinstance(t.get("constituents"), dict) else {}
+        rows = t.get("constituents")
+        if not isinstance(rows, dict):
+            continue   # not an object: the schema reports it
         first, last = t.get("first_year"), t.get("last_year")
         n = last - first + 1 if isinstance(first, int) and isinstance(last, int) else None
         for name, row in rows.items():
@@ -3334,7 +3353,8 @@ def tolerate_prediction(doc, meta, lines):
     def fix_station(st, note):
         for cs in sets_of(st):
             table = conv_table.get(cs.get("convention_id"))
-            for c in cs.get("constituents") if isinstance(cs.get("constituents"), list) else ():
+            consts = cs.get("constituents")
+            for c in consts if isinstance(consts, list) else ():
                 if not isinstance(c, dict):
                     continue
                 amp = c.get("amplitude_m")
@@ -3342,8 +3362,9 @@ def tolerate_prediction(doc, meta, lines):
                     if note:
                         notes.append(f"{cs.get('set_id')}: {c.get('name')} amplitude_m {amp} is negative (a range fault an SDK reads)")
                     c["amplitude_m"] = -amp
-                rows = table.get("constituents") if table and isinstance(table.get("constituents"), dict) else None
-                if rows is not None and c.get("name") not in rows and isinstance(speeds.get(c.get("name")), (int, float)):
+                rows = table.get("constituents") if isinstance(table, dict) else None
+                if (isinstance(table, dict) and isinstance(rows, dict) and c.get("name") not in rows
+                        and isinstance(speeds.get(c.get("name")), (int, float))):
                     if note:
                         notes.append(f"{cs.get('set_id')}: {c.get('name')} has no row in astro table "
                                      f"{table.get('astro_table_id')} (found when it predicts: unsupported_constituent)")
