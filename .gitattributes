@@ -18,8 +18,10 @@ name_fold.json        -text
 js/src/fold-table.ts  -text
 c/src/otc_fold_table.c -text
 # Byte-checked on every platform too: the vendored sources (their SHA-256 is
-# checked), the C supported-formats.json (cmp against the bundle), and the
-# Ruby README, whose code blocks test_readme.rb reads in binary mode.
+# checked), the C supported-formats.json (c.yml compares the bundle's copy with
+# the committed bytes), and the Ruby README: test_readme.rb finds its code
+# blocks by a "```ruby" line that ends in LF, so a CRLF checkout hides them.
+# gen_sources.py --check compares the C fold table byte for byte.
 c/vendor/**           -text
 c/supported-formats.json -text
 ruby/README.md        -text

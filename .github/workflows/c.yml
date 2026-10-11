@@ -27,6 +27,7 @@ jobs:
   conformance:
     name: ${{ matrix.os }} ${{ matrix.cc }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +73,7 @@ jobs:
   conformance-fetch:
     name: fetch ${{ matrix.os }} ${{ matrix.cc }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -118,6 +120,7 @@ jobs:
   sanitizers:
     name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }} fetch=${{ matrix.fetch }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -163,6 +166,7 @@ jobs:
   valgrind:
     name: valgrind fetch=${{ matrix.fetch }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -226,15 +230,21 @@ jobs:
           OTC_RUNNER_THREADS: "4"
           OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
         run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
-      # Also after a failed run, so the report that failed it is printed.
+      # Also after a failed run, so the report that failed it is printed. Each wrapped step
+      # must leave its own logs (ctest-*, <pid>, mt-<pid>): one step alone does not meet the
+      # count of another (R3-319).
       - name: No Valgrind reports
         if: ${{ !cancelled() }}
         run: |
-          count=$(find vg -type f | wc -l)
-          echo "valgrind log files: $count"
+          ctest_logs=$(find vg -type f -name 'ctest-*' | wc -l)
+          single=$(find vg -type f -name '[0-9]*.log' | wc -l)
+          mt=$(find vg -type f -name 'mt-*.log' | wc -l)
+          echo "valgrind log files: c/tests $ctest_logs, conformance $single, conformance 4 threads $mt"
           bad=$(find vg -type f -size +0)
           if [ -n "$bad" ]; then echo "$bad" | xargs head -60; exit 1; fi
-          test "$count" -gt 400
+          test "$ctest_logs" -gt 10
+          test "$single" -gt 400
+          test "$mt" -gt 400
           echo "every valgrind log is empty"
 
   # The installed library as an application gets it (R2-241): a static or a
@@ -242,7 +252,8 @@ jobs:
   # then a consumer built through opentideconstants.pc (run without
   # LD_LIBRARY_PATH) and through find_package, before and after the install
   # is moved. One lane also installs a sanitizer build, and one an absolute
-  # CMAKE_INSTALL_LIBDIR under an install-time --prefix (C72).
+  # CMAKE_INSTALL_LIBDIR under an install-time --prefix (C72), also with an
+  # absolute CMAKE_INSTALL_DATADIR (R3-316).
   install:
     name: install ${{ matrix.os }} shared=${{ matrix.shared }} fetch=${{ matrix.fetch }} ${{ matrix.sanitize }}
     runs-on: ${{ matrix.os }}
@@ -288,10 +299,16 @@ jobs:
         if: matrix.abs_libdir
         run: |
           abs="$RUNNER_TEMP/otc-abs"
-          cmake -S c -B c/build-abs -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DOTC_BUILD_RUNNER=OFF -DCMAKE_INSTALL_PREFIX=/nonexistent/otc -DCMAKE_INSTALL_LIBDIR="$abs/lib"
+          cmake -S c -B c/build-abs -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_RUNNER=OFF -DCMAKE_INSTALL_PREFIX=/nonexistent/otc -DCMAKE_INSTALL_LIBDIR="$abs/lib"
           cmake --build c/build-abs --parallel
           cmake --install c/build-abs --prefix "$abs"
           sh c/tests/consumer/check_install.sh "$abs" 0 fixed
+          # LIBDIR and DATADIR both absolute: the CMake package still follows the --prefix
+          absd="$RUNNER_TEMP/otc-absd"
+          cmake -S c -B c/build-absd -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_RUNNER=OFF -DCMAKE_INSTALL_PREFIX=/nonexistent/otc -DCMAKE_INSTALL_LIBDIR="$absd/lib" -DCMAKE_INSTALL_DATADIR="$absd/share"
+          cmake --build c/build-absd --parallel
+          cmake --install c/build-absd --prefix "$absd"
+          sh c/tests/consumer/check_install.sh "$absd" 0 fixed
 
   # The single-file bundle with the C99 compilers people use: gcc and clang on
   # Linux, Apple clang on macOS. The runner on it also runs every query in 8
@@ -299,6 +316,7 @@ jobs:
   amalgamation:
     name: amalgamation ${{ matrix.os }} ${{ matrix.cc }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -316,8 +334,9 @@ jobs:
       - run: python c/tools/gen_sources.py --check
       - run: python c/tools/check_manifest.py
       - run: python c/tools/amalgamate.py --out dist
-      - name: The bundle carries supported-formats.json (spec 7.4)
-        run: cmp c/supported-formats.json dist/supported-formats.json
+      # against the committed bytes, so a checkout that changed them (CRLF) fails here (R3-319)
+      - name: The bundle carries supported-formats.json as committed (spec 7.4)
+        run: git show HEAD:c/supported-formats.json | cmp - dist/supported-formats.json
       - name: Build with only cc -std=c99
         run: $CC -std=c99 -c dist/opentideconstants.c -o dist/otc.o
       - name: Every global symbol of the bundle starts with otc_ (nm)
