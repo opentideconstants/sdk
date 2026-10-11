@@ -1,6 +1,6 @@
 # Vendored code
 
-These files are copied from upstream byte for byte. Do not edit them. To update one, copy the new upstream files, update this table, and run the conformance suite again. The SHA-256 values are of the files in this directory.
+These files are copied from upstream byte for byte. Do not edit them. To update one: copy the new upstream files; update this table and the same SHA-256 list in `.github/workflows/c.yml` (the amalgamation job checks the files against it); run `uv run c/tools/gen_sources.py` to regenerate the rename headers (a new public symbol must be renamed, and `--check` fails until they are regenerated); then run the conformance suite again. The SHA-256 values are of the files in this directory.
 
 | Directory | Upstream | Version | Licence | File | SHA-256 |
 |---|---|---|---|---|---|
