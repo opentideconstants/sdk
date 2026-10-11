@@ -17,8 +17,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -201,8 +219,26 @@
       ]
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -242,8 +278,26 @@
       "stop": "2010-03-01T03:07:13Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -290,8 +344,27 @@
       "stop": "2010-03-01T00:00:00Z"
      },
      "expect": {
-      "items": [],
-      "method": "harmonic"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "items": [],
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": null
@@ -378,8 +451,26 @@
       "stop": "2010-01-01T02:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -442,8 +533,26 @@
       ]
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -474,7 +583,8 @@
    ],
    "root": "predict",
    "runners": [
-    "python"
+    "python",
+    "python-no-tz"
    ],
    "spec": "4.1",
    "steps": [
@@ -495,7 +605,7 @@
   },
   {
    "id": "predict-heights/fractional-instants",
-   "note": "steps 0 and 2 must equal steps 1 and 3; the strict mode gets the floored instants",
+   "note": "steps 0 and 2 have the items of steps 1 and 3 (same_items_as_step); the strict mode gets the floored instants",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -503,7 +613,9 @@
    "root": "predict",
    "runners": [
     "python",
+    "python-no-tz",
     "ruby",
+    "ruby-no-tz",
     "typescript",
     "typescript-browser"
    ],
@@ -517,18 +629,29 @@
       ]
      },
      "expect": {
-      "items": [
-       {
-        "height_m": {
-         "$from_step": 1
-        },
-        "time": "2010-03-01T12:00:00Z"
-       }
-      ],
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
+     "same_items_as_step": 1,
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -551,8 +674,26 @@
       ]
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -576,10 +717,29 @@
       "stop": "2010-03-01T12:30:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
+     "same_items_as_step": 3,
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -603,8 +763,26 @@
       "stop": "2010-03-01T12:30:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -656,7 +834,7 @@
   },
   {
    "id": "predict-local-phase-convention",
-   "note": "both steps have the same expected numbers (the SDK ignores utc_offset_hours)",
+   "note": "both steps have the same expected items (the SDK ignores utc_offset_hours); their convention_id differs",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -673,8 +851,26 @@
       "stop": "2010-03-01T06:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0004/kartverket"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-local-utc1-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0004/kartverket",
+       "station_id": "OTC-P-0004",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -711,8 +907,26 @@
       "stop": "2010-03-01T06:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0004/greenwich"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0004/greenwich",
+       "station_id": "OTC-P-0004",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -744,6 +958,66 @@
    "title": "the UTC+1 convention's set predicts the same as a Greenwich set with the same published phases"
   },
   {
+   "id": "predict-set-speed",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict",
+   "spec": "4.3, 3.3",
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0001",
+      "times": [
+       "2010-03-01T03:00:00Z",
+       "2010-12-31T21:00:00Z",
+       "2010-12-31T23:00:00Z"
+      ]
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "heights_at",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "datum_term": 0.0,
+       "times": [
+        "2010-03-01T03:00:00Z",
+        "2010-12-31T21:00:00Z",
+        "2010-12-31T23:00:00Z"
+       ]
+      },
+      "entry": "predict_strict"
+     }
+    }
+   ],
+   "title": "OTC-P-0001's M2 set speed is 8e-8 deg/h off the table's (within the build's 1e-7): the speed comes from the table (late in the year the difference is ~1e-5 m)"
+  },
+  {
    "id": "predict-datum/mean-level",
    "release": "20991231.7",
    "requires": [
@@ -761,12 +1035,26 @@
       ]
      },
      "expect": {
-      "datum": "mean_level",
-      "datum_kind": null,
-      "datum_name": "mean_level",
-      "datum_uncertainty_m": null,
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mean_level",
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -804,11 +1092,26 @@
       ]
      },
      "expect": {
-      "datum": "zero",
-      "datum_kind": null,
-      "datum_name": "MLLW",
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "zero",
+       "datum_kind": null,
+       "datum_name": "MLLW",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -846,12 +1149,26 @@
       ]
      },
      "expect": {
-      "datum": "mhhw",
-      "datum_kind": "published",
-      "datum_name": "mhhw",
-      "datum_uncertainty_m": null,
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mhhw",
+       "datum_kind": "published",
+       "datum_name": "mhhw",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -889,12 +1206,26 @@
       ]
      },
      "expect": {
-      "datum": "chart",
-      "datum_kind": "published",
-      "datum_name": "mllw",
-      "datum_uncertainty_m": 0.01,
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "chart",
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": 0.01,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -910,9 +1241,101 @@
       },
       "entry": "predict_strict"
      }
+    },
+    {
+     "args": {
+      "datum": "chart",
+      "station_id": "OTC-P-0060",
+      "times": [
+       "2010-03-01T03:00:00Z",
+       "2010-03-01T09:00:00Z"
+      ]
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "chart",
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0060",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "heights_at",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0060/noaa"
+       },
+       "datum_term": 1.5499999999999998,
+       "times": [
+        "2010-03-01T03:00:00Z",
+        "2010-03-01T09:00:00Z"
+       ]
+      },
+      "entry": "predict_strict"
+     }
+    },
+    {
+     "args": {
+      "datum": "zero",
+      "station_id": "OTC-P-0060",
+      "times": [
+       "2010-03-01T03:00:00Z"
+      ]
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "zero",
+       "datum_kind": null,
+       "datum_name": "STND",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0060",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "heights_at",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0060/noaa"
+       },
+       "datum_term": 2.4,
+       "times": [
+        "2010-03-01T03:00:00Z"
+       ]
+      },
+      "entry": "predict_strict"
+     }
     }
    ],
-   "title": "datum chart resolves to mllw, with its basis kind and uncertainty"
+   "title": "datum chart resolves to mllw, with its basis kind and uncertainty; at a set whose zero is not its chart datum (named[chart_datum] 0.85), chart is msl_offset_m + h - 0.85"
   },
   {
    "id": "predict-datum/unavailable",
@@ -1051,11 +1474,26 @@
       ]
      },
      "expect": {
-      "datum_kind": "computed",
-      "datum_name": "otc_lat",
-      "datum_uncertainty_m": 0.02,
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "otc_lat",
+       "datum_kind": "computed",
+       "datum_name": "otc_lat",
+       "datum_uncertainty_m": 0.02,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -1093,9 +1531,26 @@
       ]
      },
      "expect": {
-      "datum_name": "NAP",
-      "method": "harmonic",
-      "set_id": "OTC-P-0052/rws"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "zero",
+       "datum_kind": null,
+       "datum_name": "NAP",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0052/rws",
+       "station_id": "OTC-P-0052",
+       "timezone": "Europe/Amsterdam",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -1117,11 +1572,47 @@
       "station_id": "OTC-P-0052"
      },
      "expect": {
-      "chart_datum": null,
-      "msl_offset_m": 0.08,
-      "set_id": "OTC-P-0052/rws",
-      "zero": "vertical_datum",
-      "zero_name": "NAP"
+      "datums": {
+       "chart_datum": null,
+       "levels": [
+        {
+         "above_chart_m": null,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "mhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.02
+        },
+        {
+         "above_chart_m": null,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "nap",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 0.0
+        }
+       ],
+       "msl_offset_m": 0.08,
+       "set_id": "OTC-P-0052/rws",
+       "zero": "vertical_datum",
+       "zero_name": "NAP"
+      }
      },
      "op": "datums",
      "strict": null
@@ -1282,11 +1773,10 @@
         "$set": "OTC-P-0001/noaa"
        },
        "datum_term": 0.0,
-       "times": [
-        "2010-03-01T00:00:00Z"
-       ]
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-01T12:00:00Z"
       },
-      "entry": "predict_strict"
+      "entry": "extremes_strict"
      }
     }
    ],
@@ -1478,8 +1968,26 @@
       "stop": "2031-01-01T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -1516,8 +2024,27 @@
       "stop": "2031-01-01T00:00:00Z"
      },
      "expect": {
-      "items": [],
-      "method": "harmonic"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "items": [],
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": null
@@ -1541,8 +2068,26 @@
       "stop": "2010-03-04T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -1564,7 +2109,7 @@
   },
   {
    "id": "predict-extremes/window-edges",
-   "note": "the window starts at a reported event time and stops 1 s after another (events at 2010-03-10T11:22:50Z and 2010-03-10T18:05:38Z)",
+   "note": "steps 1 and 2 meet at 18:05:38: the event there is in step 2 only (the window is [start, stop))",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -1579,10 +2124,40 @@
       "stop": "2010-03-10T18:05:39Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-03-10T11:22:50Z",
+        "type": "high"
+       },
+       {
+        "time": "2010-03-10T18:05:38Z",
+        "type": "low"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -1595,12 +2170,113 @@
       },
       "entry": "extremes_strict"
      }
+    },
+    {
+     "args": {
+      "start": "2010-03-10T11:22:50Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2010-03-10T18:05:38Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-03-10T11:22:50Z",
+        "type": "high"
+       }
+      ]
+     },
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "datum_term": 0.0,
+       "start": "2010-03-10T11:22:50Z",
+       "stop": "2010-03-10T18:05:38Z"
+      },
+      "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {
+      "start": "2010-03-10T18:05:38Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2010-03-10T18:05:39Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-03-10T18:05:38Z",
+        "type": "low"
+       }
+      ]
+     },
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "datum_term": 0.0,
+       "start": "2010-03-10T18:05:38Z",
+       "stop": "2010-03-10T18:05:39Z"
+      },
+      "entry": "extremes_strict"
+     }
     }
    ],
-   "title": "an event exactly at start and one just before stop are reported"
+   "title": "an event exactly at start is reported; one exactly at stop is not; windows that meet at an event report it once"
   },
   {
    "id": "predict-extremes/single-constituent",
+   "note": "not band-checked (spec 6.3 band 3 vs this fixed window; raised for revision 29): 4 of its 116 events lie within 0.01 s of a half second",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -1615,13 +2291,31 @@
       "stop": "2010-03-31T00:00:00Z"
      },
      "expect": {
-      "items": {
-       "$len": 116
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0005/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0005/noaa",
+       "station_id": "OTC-P-0005",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "count": 116
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -1656,8 +2350,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0012/m2-5m"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": null,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0012/m2-5m",
+       "station_id": "OTC-P-0012",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -1682,8 +2394,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0012/m2-7m5"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": null,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0012/m2-7m5",
+       "station_id": "OTC-P-0012",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -1708,8 +2438,26 @@
       "stop": "2025-12-23T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0012/k1-40m"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": null,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0012/k1-40m",
+       "station_id": "OTC-P-0012",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -1746,9 +2494,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 1,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1775,9 +2540,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 2,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1804,9 +2586,26 @@
       "stop": "2025-12-23T00:00:00Z"
      },
      "expect": {
-      "bin_number": 3,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 3,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1826,7 +2625,7 @@
      }
     }
    ],
-   "title": "max_flood and max_ebb of the same amplitudes in m/s: counts equal a 5 s scan of W'"
+   "title": "max_flood and max_ebb of the same amplitudes in m/s: their count equals a 5 s scan of W' (scan_5s_peaks compares the max_* events only)"
   },
   {
    "id": "predict-slacks-large-amplitude",
@@ -1845,9 +2644,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 1,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1874,9 +2690,26 @@
       "stop": "2099-12-25T00:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 2,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1903,9 +2736,26 @@
       "stop": "2025-12-23T00:00:00Z"
      },
      "expect": {
-      "bin_number": 3,
-      "method": "harmonic",
-      "set_id": "OTC-P-0013/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 3,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -1925,7 +2775,7 @@
      }
     }
    ],
-   "title": "the slacks of the same bins: counts equal a 5 s scan of W"
+   "title": "the slacks of the same bins: their count equals a 5 s scan of W (scan_5s_slacks compares the slack_* events only)"
   },
   {
    "id": "predict-extremes/close-high-low",
@@ -1943,13 +2793,40 @@
       "stop": "2010-04-15T12:06:00Z"
      },
      "expect": {
-      "items": {
-       "$len": 2
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0008/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0008/noaa",
+       "station_id": "OTC-P-0008",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-04-15T12:01:37Z",
+        "type": "high"
+       },
+       {
+        "time": "2010-04-15T12:04:38Z",
+        "type": "low"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -1982,13 +2859,44 @@
       "stop": "2010-05-03T06:06:00Z"
      },
      "expect": {
-      "items": {
-       "$len": 3
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0009/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0009/noaa",
+       "station_id": "OTC-P-0009",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-05-03T06:01:23Z",
+        "type": "high"
+       },
+       {
+        "time": "2010-05-03T06:02:53Z",
+        "type": "low"
+       },
+       {
+        "time": "2010-05-03T06:04:23Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2021,13 +2929,44 @@
       "stop": "2010-05-20T19:03:00Z"
      },
      "expect": {
-      "items": {
-       "$len": 3
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0010/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0010/noaa",
+       "station_id": "OTC-P-0010",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-05-20T17:52:55Z",
+        "type": "high"
+       },
+       {
+        "time": "2010-05-20T18:02:53Z",
+        "type": "low"
+       },
+       {
+        "time": "2010-05-20T18:12:52Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2046,7 +2985,6 @@
   },
   {
    "id": "predict-extremes/sub-second",
-   "note": "step 1 keeps the second high (09:01:11 rounded from r about 11.08 s); step 2 keeps the first (about 10.23 s)",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -2062,11 +3000,31 @@
       "stop": "2010-06-07T03:02:31Z"
      },
      "expect": {
-      "items": [],
-      "method": "harmonic",
-      "set_id": "OTC-P-0011/pair"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0011/pair",
+       "station_id": "OTC-P-0011",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": []
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2088,13 +3046,36 @@
       "stop": "2010-06-20T09:01:20Z"
      },
      "expect": {
-      "items": {
-       "$len": 1
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0011/triple-higher"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0011/triple-higher",
+       "station_id": "OTC-P-0011",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-06-20T09:01:11Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2117,13 +3098,36 @@
       "stop": "2010-07-03T09:01:20Z"
      },
      "expect": {
-      "items": {
-       "$len": 1
-      },
-      "method": "harmonic",
-      "set_id": "OTC-P-0011/triple-equal"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "zero",
+       "datum_kind": null,
+       "datum_name": "unknown",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0011/triple-equal",
+       "station_id": "OTC-P-0011",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-07-03T09:01:10Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2138,7 +3142,7 @@
      }
     }
    ],
-   "title": "the close-root filter: an even cluster dropped; one high of a high-low-high kept (the higher; on equal heights the first)"
+   "title": "the close-root filter: an even cluster dropped; one high of a high-low-high kept (the higher, the second; on equal heights the first)"
   },
   {
    "id": "predict-extremes/year-boundary-step",
@@ -2156,10 +3160,36 @@
       "stop": "2010-01-01T01:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0006/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0006/noaa",
+       "station_id": "OTC-P-0006",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2009-12-31T23:56:40Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2187,15 +3217,41 @@
    "steps": [
     {
      "args": {
-      "start": "2009-12-31T18:00:00Z",
+      "start": "2009-12-31T23:30:00Z",
       "station_id": "OTC-P-0007",
-      "stop": "2010-01-01T06:00:00Z"
+      "stop": "2010-01-01T00:30:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0007/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0007/noaa",
+       "station_id": "OTC-P-0007",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-01-01T00:00:00Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2203,14 +3259,14 @@
         "$set": "OTC-P-0007/noaa"
        },
        "datum_term": 0.0,
-       "start": "2009-12-31T18:00:00Z",
-       "stop": "2010-01-01T06:00:00Z"
+       "start": "2009-12-31T23:30:00Z",
+       "stop": "2010-01-01T00:30:00Z"
       },
       "entry": "extremes_strict"
      }
     }
    ],
-   "title": "K1 and O1 jump +5 at 2010-01-01: the high missed by both tables is inserted at T, with the new year's height"
+   "title": "K1 and O1 jump +5 at 2010-01-01: the high missed by both tables is inserted at exactly T, with the new year's height"
   },
   {
    "id": "predict-extremes/new-year-doubled",
@@ -2223,15 +3279,41 @@
    "steps": [
     {
      "args": {
-      "start": "2010-12-31T18:00:00Z",
+      "start": "2010-12-31T23:30:00Z",
       "station_id": "OTC-P-0007",
-      "stop": "2011-01-01T06:00:00Z"
+      "stop": "2011-01-01T00:30:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0007/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0007/noaa",
+       "station_id": "OTC-P-0007",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "items": [
+       {
+        "time": "2011-01-01T00:08:11Z",
+        "type": "high"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -2239,18 +3321,18 @@
         "$set": "OTC-P-0007/noaa"
        },
        "datum_term": 0.0,
-       "start": "2010-12-31T18:00:00Z",
-       "stop": "2011-01-01T06:00:00Z"
+       "start": "2010-12-31T23:30:00Z",
+       "stop": "2011-01-01T00:30:00Z"
       },
       "entry": "extremes_strict"
      }
     }
    ],
-   "title": "the opposite jump at 2011-01-01: the high at T - 10 min (old) and T + 8 min (new) is reported once, the higher (the new year's)"
+   "title": "the opposite jump at 2011-01-01: the high at T - 10 min (old) and T + 8 min (new) is reported exactly once, the higher (the new year's)"
   },
   {
    "id": "predict-extremes/negative-amplitude",
-   "note": "the expected items are those of predict-extremes/single-constituent with high and low swapped and each height negated",
+   "note": "swap_of: the items of that step with high and low swapped and each height negated",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -2265,14 +3347,36 @@
       "stop": "2010-03-31T00:00:00Z"
      },
      "expect": {
-      "items": {
-       "$len": 116
-      },
-      "method": "harmonic"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0005/noaa",
+       "station_id": "OTC-P-0005",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
+     "outcome": {
+      "count": 116
+     },
      "strict": null,
-     "swap_of": "predict-extremes/single-constituent"
+     "swap_of": {
+      "case": "predict-extremes/single-constituent",
+      "step": 0
+     }
     }
    ],
    "title": "M2 at -1.0 m over the single-constituent window: 116 extremes, highs and lows swapped (SDK only; the strict mode refuses a negative amplitude)"
@@ -2293,9 +3397,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -2477,9 +3598,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0017/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -2661,9 +3799,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0017/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -2845,9 +4000,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 3,
-      "method": "harmonic",
-      "set_id": "OTC-P-0017/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 3,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3030,9 +4202,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 4,
-      "method": "harmonic",
-      "set_id": "OTC-P-0017/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 4,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3095,9 +4284,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "bin_number": 5,
-      "method": "harmonic",
-      "set_id": "OTC-P-0017/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 5,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3158,9 +4364,26 @@
       "stop": "2010-03-01T03:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3203,9 +4426,26 @@
       "stop": "2010-03-01T03:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0018/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0018/noaa",
+       "station_id": "OTC-P-0018",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3261,9 +4501,26 @@
       "stop": "2010-03-01T03:00:00Z"
      },
      "expect": {
-      "bin_number": 3,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 3,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -3394,9 +4651,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -3419,6 +4693,64 @@
    "title": "events of the default bin over 2 days (cross-checked by a 5 s scan of W' and W)"
   },
   {
+   "id": "predict-current-events/flood-sign",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict",
+   "spec": "4.7",
+   "steps": [
+    {
+     "args": {
+      "bin_number": 3,
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0017",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 3,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0017/noaa",
+       "station_id": "OTC-P-0017",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "current_events",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "bin": {
+        "$bin": [
+         "OTC-P-0017/noaa",
+         3
+        ]
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "crosscheck": "scan_5s",
+      "entry": "current_events_strict"
+     }
+    }
+   ],
+   "title": "events on a bin with sigma = -1 (flood opposite the azimuth): W = -U, so max_flood and max_ebb and the two slack types are those of -U"
+  },
+  {
    "id": "predict-current-events/weak",
    "release": "20991231.7",
    "requires": [
@@ -3434,9 +4766,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0019/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0019/noaa",
+       "station_id": "OTC-P-0019",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -3474,11 +4823,44 @@
       "stop": "2010-07-20T12:06:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0020/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0020/noaa",
+       "station_id": "OTC-P-0020",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-07-20T12:01:53Z",
+        "type": "slack_before_flood"
+       },
+       {
+        "time": "2010-07-20T12:03:53Z",
+        "type": "slack_before_ebb"
+       }
+      ],
+      "types": [
+       "slack_before_flood",
+       "slack_before_ebb"
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3499,6 +4881,7 @@
   },
   {
    "id": "predict-current-events/sub-second-slacks",
+   "note": "the outcomes compare the slack_* events only: step 0's weak flood between its two slacks is a max_flood of W = 4.4e-10 m/s, reported; the other two windows' max_* events come from the ripple's cluster and are the strict mode's",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -3514,11 +4897,35 @@
       "stop": "2010-07-30T12:01:20Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0020/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0020/noaa",
+       "station_id": "OTC-P-0020",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [],
+      "types": [
+       "slack_before_flood",
+       "slack_before_ebb"
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3542,11 +4949,40 @@
       "stop": "2010-08-09T06:01:20Z"
      },
      "expect": {
-      "bin_number": 3,
-      "method": "harmonic",
-      "set_id": "OTC-P-0020/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 3,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0020/noaa",
+       "station_id": "OTC-P-0020",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-08-09T06:01:10Z",
+        "type": "slack_before_flood"
+       }
+      ],
+      "types": [
+       "slack_before_flood",
+       "slack_before_ebb"
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3570,11 +5006,40 @@
       "stop": "2010-01-20T06:02:30Z"
      },
      "expect": {
-      "bin_number": 4,
-      "method": "harmonic",
-      "set_id": "OTC-P-0020/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 4,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0020/noaa",
+       "station_id": "OTC-P-0020",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [
+       {
+        "time": "2010-01-20T06:02:21Z",
+        "type": "slack_before_flood"
+       }
+      ],
+      "types": [
+       "slack_before_flood",
+       "slack_before_ebb"
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3591,7 +5056,7 @@
      }
     }
    ],
-   "title": "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood (index 0 kept); five, each less than 1 s after the one before, in five leaves (index 2 kept)"
+   "title": "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood (index 0 kept, a slack_before_flood); five, each less than 1 s after the one before, in five leaves (index 2 kept)"
   },
   {
    "id": "predict-current-events/new-year-slack",
@@ -3605,16 +5070,41 @@
     {
      "args": {
       "bin_number": 1,
-      "start": "2011-12-31T18:00:00Z",
+      "start": "2011-12-31T23:30:00Z",
       "station_id": "OTC-P-0021",
-      "stop": "2012-01-01T06:00:00Z"
+      "stop": "2012-01-01T00:30:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "harmonic",
-      "set_id": "OTC-P-0021/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0021/noaa",
+       "station_id": "OTC-P-0021",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [
+       {
+        "time": "2012-01-01T00:00:00Z",
+        "type": "slack_before_flood"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3624,8 +5114,8 @@
          1
         ]
        },
-       "start": "2011-12-31T18:00:00Z",
-       "stop": "2012-01-01T06:00:00Z"
+       "start": "2011-12-31T23:30:00Z",
+       "stop": "2012-01-01T00:30:00Z"
       },
       "entry": "current_events_strict"
      }
@@ -3633,16 +5123,41 @@
     {
      "args": {
       "bin_number": 2,
-      "start": "2011-12-31T18:00:00Z",
+      "start": "2011-12-31T23:30:00Z",
       "station_id": "OTC-P-0021",
-      "stop": "2012-01-01T06:00:00Z"
+      "stop": "2012-01-01T00:30:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0021/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0021/noaa",
+       "station_id": "OTC-P-0021",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
+     "outcome": {
+      "items": [
+       {
+        "time": "2011-12-31T23:57:00Z",
+        "type": "slack_before_flood"
+       }
+      ]
+     },
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -3652,14 +5167,14 @@
          2
         ]
        },
-       "start": "2011-12-31T18:00:00Z",
-       "stop": "2012-01-01T06:00:00Z"
+       "start": "2011-12-31T23:30:00Z",
+       "stop": "2012-01-01T00:30:00Z"
       },
       "entry": "current_events_strict"
      }
     }
    ],
-   "title": "2012-01-01: a slack missed at T is inserted at T (bin 1); a doubled one keeps L (bin 2)"
+   "title": "2012-01-01: a slack missed at T is inserted at exactly T (bin 1); a doubled one keeps L, the old year's (bin 2)"
   },
   {
    "id": "predict-subordinate/tide-ratio",
@@ -3677,9 +5192,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0030",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -3718,9 +5250,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0031",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -3759,9 +5308,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0032",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -3786,12 +5352,13 @@
   },
   {
    "id": "predict-subordinate/tide-order-swap",
+   "note": "step 1: the reference high at 05:01:52 shifts +250 min to 09:11:52; a padding of 120 min (or none) loses it",
    "release": "20991231.7",
    "requires": [
     "predict"
    ],
    "root": "predict",
-   "spec": "4.8 step 4",
+   "spec": "4.8 steps 2, 4",
    "steps": [
     {
      "args": {
@@ -3800,9 +5367,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0033",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -3821,9 +5405,55 @@
       },
       "entry": "subordinate_extremes_strict"
      }
+    },
+    {
+     "args": {
+      "start": "2010-03-01T08:00:00Z",
+      "station_id": "OTC-P-0033",
+      "stop": "2010-03-02T08:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0033",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.12,
+       "datum_shift": 0.0,
+       "offsets": {
+        "$offsets": "OTC-P-0033"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "start": "2010-03-01T08:00:00Z",
+       "stop": "2010-03-02T08:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict"
+     }
     }
    ],
-   "title": "shifted events that swap order are ordered by time"
+   "title": "shifted events that swap order are ordered by time; a reference high 178 min before start (inside the padding M = 250 + 60 min) lands inside the window"
   },
   {
    "id": "predict-subordinate/tide-fractional-offset",
@@ -3841,9 +5471,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0034",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -3862,9 +5509,55 @@
       },
       "entry": "subordinate_extremes_strict"
      }
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0062",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0062",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.12,
+       "datum_shift": 0.0,
+       "offsets": {
+        "$offsets": "OTC-P-0062"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict"
+     }
     }
    ],
-   "title": "+12.5 and -7.25 min give whole-second times, floor(t + 0.5)"
+   "title": "+12.5 and -7.25 min give whole-second times, floor(t + 0.5); +12.345 and -7.29 min (740.7 s, -437.4 s) are added to the unrounded r, then rounded once"
   },
   {
    "id": "predict-subordinate/series",
@@ -3932,6 +5625,7 @@
   },
   {
    "id": "predict-subordinate/current",
+   "note": "step 1: the reference slack_before_flood at 08:54:40 shifts +5.5 min to 09:00:10",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -3946,12 +5640,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "offsets",
-      "omitted_event_types": [],
-      "reference_bin": 1,
-      "reference_station_id": "OTC-P-0016",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0050",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -3977,6 +5685,56 @@
     },
     {
      "args": {
+      "start": "2010-03-01T09:00:00Z",
+      "station_id": "OTC-P-0050",
+      "stop": "2010-03-02T09:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0050",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "current_events",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "offset": {
+        "$current_offset": [
+         "OTC-P-0050",
+         1
+        ]
+       },
+       "ref_bin": {
+        "$bin": [
+         "OTC-P-0016/noaa",
+         1
+        ]
+       },
+       "start": "2010-03-01T09:00:00Z",
+       "stop": "2010-03-02T09:00:00Z"
+      },
+      "entry": "subordinate_current_events_strict"
+     }
+    },
+    {
+     "args": {
       "start": "2010-03-01T00:00:00Z",
       "station_id": "OTC-P-0050",
       "stop": "2010-03-01T06:00:00Z"
@@ -3988,7 +5746,7 @@
      "strict": null
     }
    ],
-   "title": "a subordinate current station: events by offsets; currents is extremes_only"
+   "title": "a subordinate current station: events by offsets (a reference slack 5 min 20 s before start lands inside the window); currents is extremes_only"
   },
   {
    "id": "predict-subordinate/current-null-adjustment",
@@ -4006,15 +5764,29 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "offsets",
-      "omitted_event_types": [
-       "max_ebb",
-       "slack_before_ebb"
-      ],
-      "reference_bin": 1,
-      "reference_station_id": "OTC-P-0016",
-      "set_id": "OTC-P-0016/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [
+        "max_ebb",
+        "slack_before_ebb"
+       ],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0051",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -4042,6 +5814,158 @@
    "title": "a null adjustment or ratio drops that event type (omitted_event_types)"
   },
   {
+   "id": "predict-subordinate/event-datum",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict",
+   "spec": "4.8 steps 2, 5",
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.5499999999999998,
+       "datum_shift": 0.0,
+       "offsets": {
+        "$offsets": "OTC-P-0061"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0060/noaa"
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict"
+     }
+    },
+    {
+     "args": {
+      "datum": "mhhw",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mhhw",
+       "datum_kind": "published",
+       "datum_name": "mhhw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.5499999999999998,
+       "datum_shift": -1.6,
+       "offsets": {
+        "$offsets": "OTC-P-0061"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0060/noaa"
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict"
+     }
+    },
+    {
+     "args": {
+      "datum": "msl",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "msl",
+       "datum_kind": "published",
+       "datum_name": "msl",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.5499999999999998,
+       "datum_shift": -0.8,
+       "offsets": {
+        "$offsets": "OTC-P-0061"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0060/noaa"
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict"
+     }
+    }
+   ],
+   "title": "the event path on a reference whose chart datum is 0.85 above its zero, with the subordinate's own datum: chart (the default), mhhw and msl"
+  },
+  {
    "id": "predict-subordinate/folded-ratio",
    "release": "20991231.7",
    "requires": [
@@ -4057,9 +5981,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -4242,9 +6183,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0036",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -4413,7 +6371,6 @@
   },
   {
    "id": "predict-subordinate/folded-extremes",
-   "note": "the case harness also runs subordinate_extremes_strict on the same window: times within 1 s, heights within 1e-5 m",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -4427,10 +6384,45 @@
       "station_id": "OTC-P-0035",
       "stop": "2010-03-03T00:00:00Z"
      },
+     "compare": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "chart_datum_term": 1.12,
+       "datum_shift": 0.0,
+       "offsets": {
+        "$offsets": "OTC-P-0035"
+       },
+       "ref_constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-03T00:00:00Z"
+      },
+      "entry": "subordinate_extremes_strict",
+      "height_m": 1e-05,
+      "time_s": 1
+     },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -4451,7 +6443,7 @@
      }
     }
    ],
-   "title": "the folded station's extremes (equal to the event method's away from New Year)"
+   "title": "the folded station's extremes, equal to the event method's away from New Year (times within 1 s, heights within 1e-5 m: the step's compare)"
   },
   {
    "id": "predict-subordinate/folded-new-year",
@@ -4469,9 +6461,26 @@
       "stop": "2013-01-01T02:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0037",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -4549,9 +6558,26 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0030",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -4632,11 +6658,10 @@
        "ref_constituents": {
         "$set": "OTC-P-0001/noaa"
        },
-       "times": [
-        "2010-03-01T00:00:00Z"
-       ]
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-02T00:00:00Z"
       },
-      "entry": "folded_heights"
+      "entry": "folded_extremes"
      }
     },
     {
@@ -4688,11 +6713,10 @@
        "ref_constituents": {
         "$set": "OTC-P-0001/noaa"
        },
-       "times": [
-        "2010-03-01T00:00:00Z"
-       ]
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-02T00:00:00Z"
       },
-      "entry": "folded_heights"
+      "entry": "folded_extremes"
      }
     },
     {
@@ -4716,10 +6740,11 @@
        "ref_constituents": {
         "$set": "OTC-P-0001/noaa"
        },
-       "start": "2010-03-01T00:00:00Z",
-       "stop": "2010-03-02T00:00:00Z"
+       "times": [
+        "2010-03-01T00:00:00Z"
+       ]
       },
-      "entry": "subordinate_extremes_strict"
+      "entry": "folded_heights"
      }
     },
     {
@@ -4770,10 +6795,11 @@
        "ref_constituents": {
         "$set": "OTC-P-0001/noaa"
        },
-       "start": "2010-03-01T00:00:00Z",
-       "stop": "2010-03-02T00:00:00Z"
+       "times": [
+        "2010-03-01T00:00:00Z"
+       ]
       },
-      "entry": "subordinate_extremes_strict"
+      "entry": "folded_heights"
      }
     },
     {
@@ -4808,7 +6834,7 @@
   },
   {
    "id": "predict-subordinate/unknown-adjusted-type",
-   "note": "OTC-P-0049's reference has no noaa set (reference_unavailable without the X); see the slot report on 'missing reference'",
+   "note": "OTC-P-0049's reference has no noaa set (reference_unavailable without the X)",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -4939,10 +6965,11 @@
        "ref_constituents": {
         "$set": "OTC-P-0001/noaa"
        },
-       "start": "2010-03-01T00:00:00Z",
-       "stop": "2010-03-02T00:00:00Z"
+       "times": [
+        "2010-03-01T00:00:00Z"
+       ]
       },
-      "entry": "subordinate_extremes_strict"
+      "entry": "folded_heights"
      }
     }
    ],
@@ -5107,6 +7134,33 @@
    "title": "a current_offsets reference that is not in the release (it loads: current_offsets are raw in 1.0): current_events is reference_unavailable"
   },
   {
+   "id": "predict-subordinate/current-reference-removed",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict-bad/current-reference-removed",
+   "spec": "4.9 step 1",
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0097"
+      }
+     },
+     "op": "current_events",
+     "strict": null
+    }
+   ],
+   "title": "a current_offsets reference that is a removed station (a tombstone; it loads): current_events is reference_unavailable"
+  },
+  {
    "id": "predict-reference-set-file-order",
    "release": "20991231.7",
    "requires": [
@@ -5122,9 +7176,26 @@
       "stop": "2010-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "offsets",
-      "reference_station_id": "OTC-P-0042",
-      "set_id": "OTC-P-0042/noaa-b-flagged"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0042",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0042/noaa-b-flagged",
+       "station_id": "OTC-P-0043",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -5155,36 +7226,37 @@
     "localtime"
    ],
    "root": "predict",
-   "spec": "4.1",
+   "spec": "4.1, 5.3",
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2021-03-13T12:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2021-03-15T00:00:00Z"
-       },
-       "op": "extremes"
-      }
+      "start": "2021-03-13T12:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2021-03-15T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
-     "local": {
-      "zone": "America/New_York"
-     },
-     "op": "to_local",
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5199,33 +7271,73 @@
      }
     },
     {
-     "args": {
-      "of": {
-       "args": {
-        "start": "2022-10-29T12:00:00Z",
-        "station_id": "OTC-P-0002",
-        "stop": "2022-10-31T00:00:00Z"
-       },
-       "op": "extremes"
-      }
-     },
+     "args": {},
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0002/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
       }
      },
      "local": {
-      "zone": "Europe/Oslo"
+      "zone": "America/New_York"
      },
      "op": "to_local",
+     "strict": {
+      "same_as_step": 0
+     }
+    },
+    {
+     "args": {
+      "start": "2022-10-29T12:00:00Z",
+      "station_id": "OTC-P-0002",
+      "stop": "2022-10-31T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5240,33 +7352,73 @@
      }
     },
     {
-     "args": {
-      "of": {
-       "args": {
-        "start": "2023-04-01T00:00:00Z",
-        "station_id": "OTC-P-0003",
-        "stop": "2023-04-02T12:00:00Z"
-       },
-       "op": "extremes"
-      }
-     },
+     "args": {},
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0003/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
       }
      },
      "local": {
-      "zone": "Australia/Lord_Howe"
+      "zone": "Europe/Oslo"
      },
      "op": "to_local",
+     "strict": {
+      "same_as_step": 2
+     }
+    },
+    {
+     "args": {
+      "start": "2023-04-01T00:00:00Z",
+      "station_id": "OTC-P-0003",
+      "stop": "2023-04-02T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0003/noaa",
+       "station_id": "OTC-P-0003",
+       "timezone": "Australia/Lord_Howe",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5279,9 +7431,48 @@
       },
       "entry": "extremes_strict"
      }
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0003/noaa",
+       "station_id": "OTC-P-0003",
+       "timezone": "Australia/Lord_Howe",
+       "tz": "Australia/Lord_Howe",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
+      }
+     },
+     "local": {
+      "zone": "Australia/Lord_Howe"
+     },
+     "op": "to_local",
+     "strict": {
+      "same_as_step": 4
+     }
     }
    ],
-   "title": "to_local() on extremes at America/New_York, Europe/Oslo and Australia/Lord_Howe stations, across a daylight-saving change"
+   "title": "to_local() on extremes at America/New_York, Europe/Oslo and Australia/Lord_Howe stations, across a daylight-saving change; tz is the station's zone, resolved"
   },
   {
    "id": "predict-local/named-zone",
@@ -5295,33 +7486,33 @@
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-11T00:00:00Z"
-       },
-       "op": "extremes"
-      },
-      "tz": "Asia/Kolkata"
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-11T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "Asia/Kolkata",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
-     "local": {
-      "zone": "Asia/Kolkata"
-     },
-     "op": "to_local",
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5337,33 +7528,74 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-04-06T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-04-07T12:00:00Z"
-       },
-       "op": "extremes"
-      },
-      "tz": "Pacific/Chatham"
+      "tz": "Asia/Kolkata"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "Pacific/Chatham",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Asia/Kolkata",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
       }
      },
      "local": {
-      "zone": "Pacific/Chatham"
+      "zone": "Asia/Kolkata"
      },
      "op": "to_local",
+     "strict": {
+      "same_as_step": 0
+     }
+    },
+    {
+     "args": {
+      "start": "2024-04-06T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-04-07T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5375,6 +7607,47 @@
        "stop": "2024-04-07T12:00:00Z"
       },
       "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {
+      "tz": "Pacific/Chatham"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Pacific/Chatham",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
+      }
+     },
+     "local": {
+      "zone": "Pacific/Chatham"
+     },
+     "op": "to_local",
+     "strict": {
+      "same_as_step": 2
      }
     }
    ],
@@ -5393,14 +7666,48 @@
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
        },
-       "op": "extremes"
+       "datum_term": 0.0,
+       "start": "2024-01-10T00:00:00Z",
+       "stop": "2024-01-10T12:00:00Z"
       },
+      "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {
       "tz": "Mars/Olympus"
      },
      "expect": {
@@ -5414,14 +7721,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "XYZ3"
      },
      "expect": {
@@ -5435,14 +7734,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "posix/Europe/Oslo"
      },
      "expect": {
@@ -5456,14 +7747,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "right/Europe/Oslo"
      },
      "expect": {
@@ -5477,14 +7760,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "posixrules"
      },
      "expect": {
@@ -5498,14 +7773,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "localtime"
      },
      "expect": {
@@ -5519,14 +7786,6 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
       "tz": "Factory"
      },
      "expect": {
@@ -5540,33 +7799,33 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0002",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      },
-      "tz": "Europe/Oslo"
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0002",
+      "stop": "2024-01-10T12:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0002/noaa",
-      "tz": "Europe/Oslo",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null
       }
      },
-     "local": {
-      "zone": "Europe/Oslo"
-     },
-     "op": "to_local",
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5578,6 +7837,47 @@
        "stop": "2024-01-10T12:00:00Z"
       },
       "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {
+      "tz": "Europe/Oslo"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
+      }
+     },
+     "local": {
+      "zone": "Europe/Oslo"
+     },
+     "op": "to_local",
+     "strict": {
+      "same_as_step": 8
      }
     }
    ],
@@ -5595,37 +7895,33 @@
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      }
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
-     "expect_if_missing": {
-      "localtime": {
-       "error": "local_time_unavailable"
-      }
-     },
-     "local": {
-      "zone": "America/New_York"
-     },
-     "op": "to_local",
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5637,6 +7933,53 @@
        "stop": "2024-01-10T12:00:00Z"
       },
       "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
+      }
+     },
+     "expect_if_missing": [
+      [
+       "localtime",
+       {
+        "error": "local_time_unavailable"
+       }
+      ]
+     ],
+     "local": {
+      "zone": "America/New_York"
+     },
+     "op": "to_local",
+     "strict": {
+      "same_as_step": 0
      }
     }
    ],
@@ -5661,22 +8004,54 @@
     },
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "op": "extremes",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
+       },
+       "datum_term": 0.0,
+       "start": "2024-01-10T00:00:00Z",
+       "stop": "2024-01-10T12:00:00Z"
+      },
+      "entry": "extremes_strict"
+     }
+    },
+    {
+     "args": {},
      "expect": {
       "error": "local_time_unavailable",
       "error_message": {
        "$contains": "no-such-zoneinfo"
       }
      },
-     "local": null,
      "op": "to_local",
      "strict": null
     }
@@ -5694,37 +8069,33 @@
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2024-01-10T00:00:00Z",
-        "station_id": "OTC-P-0001",
-        "stop": "2024-01-10T12:00:00Z"
-       },
-       "op": "extremes"
-      }
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
-     "expect_if_missing": {
-      "localtime_module": {
-       "error": "not_built"
-      }
-     },
-     "local": {
-      "zone": "America/New_York"
-     },
-     "op": "to_local",
+     "op": "extremes",
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
@@ -5737,9 +8108,62 @@
       },
       "entry": "extremes_strict"
      }
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
+      }
+     },
+     "expect_if_missing": [
+      [
+       "localtime_module",
+       {
+        "error": "not_built"
+       }
+      ],
+      [
+       "localtime",
+       {
+        "error": "local_time_unavailable"
+       }
+      ]
+     ],
+     "local": {
+      "zone": "America/New_York"
+     },
+     "op": "to_local",
+     "strict": {
+      "same_as_step": 0
+     }
     }
    ],
-   "title": "C without the local-time module: not_built"
+   "title": "C without the local-time module: not_built; with the module but no zone rules: local_time_unavailable"
   },
   {
    "id": "predict-local/format",
@@ -5753,28 +8177,82 @@
    "steps": [
     {
      "args": {
-      "of": {
-       "args": {
-        "start": "2022-06-01T22:00:00Z",
-        "station_id": "OTC-P-0001",
-        "step_s": 3600,
-        "stop": "2022-06-02T02:00:00Z"
+      "start": "2022-06-01T22:00:00Z",
+      "station_id": "OTC-P-0001",
+      "step_s": 3600,
+      "stop": "2022-06-02T02:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "heights",
+     "strict": {
+      "args": {
+       "astro": "otc-test-predict-a",
+       "constituents": {
+        "$set": "OTC-P-0001/noaa"
        },
-       "op": "heights"
+       "datum_term": 0.0,
+       "times": [
+        "2022-06-01T22:00:00Z",
+        "2022-06-01T23:00:00Z",
+        "2022-06-02T00:00:00Z",
+        "2022-06-02T01:00:00Z"
+       ]
       },
+      "entry": "predict_strict"
+     }
+    },
+    {
+     "args": {
       "tz": "UTC"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa",
-      "tz": "UTC",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "UTC",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
       }
      },
      "local": {
@@ -5804,45 +8282,86 @@
      },
      "op": "to_local",
      "strict": {
+      "same_as_step": 0
+     }
+    },
+    {
+     "args": {
+      "start": "2023-03-25T22:00:00Z",
+      "station_id": "OTC-P-0002",
+      "step_s": 3600,
+      "stop": "2023-03-26T03:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null
+      }
+     },
+     "op": "heights",
+     "strict": {
       "args": {
        "astro": "otc-test-predict-a",
        "constituents": {
-        "$set": "OTC-P-0001/noaa"
+        "$set": "OTC-P-0002/noaa"
        },
        "datum_term": 0.0,
        "times": [
-        "2022-06-01T22:00:00Z",
-        "2022-06-01T23:00:00Z",
-        "2022-06-02T00:00:00Z",
-        "2022-06-02T01:00:00Z"
+        "2023-03-25T22:00:00Z",
+        "2023-03-25T23:00:00Z",
+        "2023-03-26T00:00:00Z",
+        "2023-03-26T01:00:00Z",
+        "2023-03-26T02:00:00Z"
        ]
       },
       "entry": "predict_strict"
      }
     },
     {
-     "args": {
-      "of": {
-       "args": {
-        "start": "2023-03-25T22:00:00Z",
-        "station_id": "OTC-P-0002",
-        "step_s": 3600,
-        "stop": "2023-03-26T03:00:00Z"
-       },
-       "op": "heights"
-      }
-     },
+     "args": {},
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0002/noaa",
-      "tz": "station",
-      "tz_version": {
-       "$any_of": [
-        {
-         "$regex": "^[0-9]{4}[a-z]$"
-        },
-        null
-       ]
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z]$"
+         },
+         null
+        ]
+       }
       }
      },
      "local": {
@@ -5877,21 +8396,7 @@
      },
      "op": "to_local",
      "strict": {
-      "args": {
-       "astro": "otc-test-predict-a",
-       "constituents": {
-        "$set": "OTC-P-0002/noaa"
-       },
-       "datum_term": 0.0,
-       "times": [
-        "2023-03-25T22:00:00Z",
-        "2023-03-25T23:00:00Z",
-        "2023-03-26T00:00:00Z",
-        "2023-03-26T01:00:00Z",
-        "2023-03-26T02:00:00Z"
-       ]
-      },
-      "entry": "predict_strict"
+      "same_as_step": 2
      }
     }
    ],
@@ -5911,169 +8416,171 @@
       "station_id": "OTC-P-0001"
      },
      "expect": {
-      "chart_datum": "mllw",
-      "levels": [
-       {
-        "above_chart_m": -0.38,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": null,
-        "flags": [],
-        "key": "lat",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": -0.38
-       },
-       {
-        "above_chart_m": 2.31,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+      "datums": {
+       "chart_datum": "mllw",
+       "levels": [
+        {
+         "above_chart_m": -0.38,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "lat",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": -0.38
         },
-        "flags": [],
-        "key": "mhhw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 2.31
-       },
-       {
-        "above_chart_m": 2.05,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+        {
+         "above_chart_m": 2.31,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mhhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 2.31
         },
-        "flags": [],
-        "key": "mhw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 2.05
-       },
-       {
-        "above_chart_m": 0.0,
-        "control_set_id": null,
-        "control_source_id": "9990001",
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+        {
+         "above_chart_m": 2.05,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 2.05
         },
-        "flags": [],
-        "key": "mllw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": "source",
-        "uncertainty_m": 0.01,
-        "value_m": 0.0
-       },
-       {
-        "above_chart_m": 0.15,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+        {
+         "above_chart_m": 0.0,
+         "control_set_id": null,
+         "control_source_id": "9990001",
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mllw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": "source",
+         "uncertainty_m": 0.01,
+         "value_m": 0.0
         },
-        "flags": [],
-        "key": "mlw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 0.15
-       },
-       {
-        "above_chart_m": 1.12,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+        {
+         "above_chart_m": 0.15,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mlw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 0.15
         },
-        "flags": [],
-        "key": "msl",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 1.12
-       },
-       {
-        "above_chart_m": 1.1,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2001-12-31",
-         "name": "NTDE 1983-2001",
-         "start": "1983-01-01"
+        {
+         "above_chart_m": 1.12,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "msl",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.12
         },
-        "flags": [],
-        "key": "mtl",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 1.1
-       },
-       {
-        "above_chart_m": -0.41,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": {
-         "end": "2038-12-31",
-         "name": "OTC LAT 2020-2038",
-         "start": "2020-01-01"
+        {
+         "above_chart_m": 1.1,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mtl",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.1
         },
-        "flags": [],
-        "key": "otc_lat",
-        "kind": "computed",
-        "method": "harmonic_extremes",
-        "source_name": null,
-        "uncertainty_basis": "calibrated",
-        "uncertainty_m": 0.02,
-        "value_m": -0.41
-       }
-      ],
-      "msl_offset_m": 1.12,
-      "set_id": "OTC-P-0001/noaa",
-      "zero": "chart_datum",
-      "zero_name": "MLLW"
+        {
+         "above_chart_m": -0.41,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2038-12-31",
+          "name": "OTC LAT 2020-2038",
+          "start": "2020-01-01"
+         },
+         "flags": [],
+         "key": "otc_lat",
+         "kind": "computed",
+         "method": "harmonic_extremes",
+         "source_name": null,
+         "uncertainty_basis": "calibrated",
+         "uncertainty_m": 0.02,
+         "value_m": -0.41
+        }
+       ],
+       "msl_offset_m": 1.12,
+       "set_id": "OTC-P-0001/noaa",
+       "zero": "chart_datum",
+       "zero_name": "MLLW"
+      }
      },
      "op": "datums",
      "strict": null
@@ -6096,7 +8603,7 @@
       "station_id": "OTC-P-0001"
      },
      "expect": {
-      "groups": [
+      "datums": [
        {
         "chart_datum": "mllw",
         "levels": [
@@ -6276,7 +8783,7 @@
      "strict": null
     }
    ],
-   "title": "datums(all_sets: true): one group per set, in file order"
+   "title": "datums(all_sets: true): one DatumInfo per set, in file order"
   },
   {
    "id": "predict-datums/ranges",
@@ -6292,10 +8799,12 @@
       "station_id": "OTC-P-0001"
      },
      "expect": {
-      "dhq": 0.26000000000000023,
-      "dlq": 0.15,
-      "gt": 2.31,
-      "mn": 1.9
+      "ranges": {
+       "dhq": 0.26000000000000023,
+       "dlq": 0.15,
+       "gt": 2.31,
+       "mn": 1.9
+      }
      },
      "op": "ranges",
      "strict": null
@@ -6317,10 +8826,12 @@
       "station_id": "OTC-P-0054"
      },
      "expect": {
-      "dhq": 0.19999999999999996,
-      "dlq": 0.25,
-      "gt": null,
-      "mn": null
+      "ranges": {
+       "dhq": 0.19999999999999996,
+       "dlq": 0.25,
+       "gt": null,
+       "mn": null
+      }
      },
      "op": "ranges",
      "strict": null
@@ -6346,12 +8857,26 @@
       ]
      },
      "expect": {
-      "datum": "mhhw",
-      "datum_kind": "published",
-      "datum_name": "mhhw",
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-P-0001",
-      "set_id": "OTC-P-0001/noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mhhw",
+       "datum_kind": "published",
+       "datum_name": "mhhw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights_at",
      "strict": {
@@ -6391,77 +8916,79 @@
       "station_id": "OTC-P-0035"
      },
      "expect": {
-      "chart_datum": "mllw",
-      "levels": [
-       {
-        "above_chart_m": 1.9,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": null,
-        "flags": [],
-        "key": "mhhw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 1.9
-       },
-       {
-        "above_chart_m": 1.7,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": null,
-        "flags": [],
-        "key": "mhw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 1.7
-       },
-       {
-        "above_chart_m": 0.0,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": null,
-        "flags": [],
-        "key": "mllw",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 0.0
-       },
-       {
-        "above_chart_m": 0.95,
-        "control_set_id": null,
-        "control_source_id": null,
-        "control_station_id": null,
-        "data_span": null,
-        "epoch": null,
-        "flags": [],
-        "key": "msl",
-        "kind": "published",
-        "method": "source",
-        "source_name": null,
-        "uncertainty_basis": null,
-        "uncertainty_m": null,
-        "value_m": 0.95
-       }
-      ],
-      "msl_offset_m": null,
-      "set_id": null,
-      "zero": null,
-      "zero_name": null
+      "datums": {
+       "chart_datum": "mllw",
+       "levels": [
+        {
+         "above_chart_m": 1.9,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "mhhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.9
+        },
+        {
+         "above_chart_m": 1.7,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "mhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.7
+        },
+        {
+         "above_chart_m": 0.0,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "mllw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 0.0
+        },
+        {
+         "above_chart_m": 0.95,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "msl",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 0.95
+        }
+       ],
+       "msl_offset_m": null,
+       "set_id": null,
+       "zero": null,
+       "zero_name": null
+      }
      },
      "op": "datums",
      "strict": null
@@ -6534,12 +9061,8 @@
      "args": {},
      "expect": {
       "astro_table": {
-       "astro_table_id": "otc-test-predict-a",
        "first_year": 2000,
-       "generator": "synthetic test values (not congen output)",
-       "last_year": 2030,
-       "tables_sha256": "5b57a74b08d8e5b58fb612f2763abb78cb1d26bd94602ce2b74b627c57da18aa",
-       "v0_model": "schureman_tcd"
+       "last_year": 2030
       }
      },
      "op": "astro_table",
@@ -6551,12 +9074,8 @@
      },
      "expect": {
       "astro_table": {
-       "astro_table_id": "otc-test-predict-b",
        "first_year": 2020,
-       "generator": "synthetic test values (not congen output)",
-       "last_year": 2100,
-       "tables_sha256": "e7d64164252e8d7670cdcca6f8771cfc74cbbaa236aa296453d960ff79e1adf4",
-       "v0_model": "schureman_tcd"
+       "last_year": 2100
       }
      },
      "op": "astro_table",
@@ -6580,7 +9099,7 @@
      "expect": {
       "value": 120.0
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6591,7 +9110,7 @@
      "expect": {
       "value": 1.0
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6602,7 +9121,7 @@
      "expect": {
       "value": 15.0
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6613,7 +9132,7 @@
      "expect": {
       "value": 1.064
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6624,7 +9143,7 @@
      "expect": {
       "value": 14.228060756446212
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6635,7 +9154,7 @@
      "expect": {
       "value": 1.0067
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6646,7 +9165,7 @@
      "expect": {
       "value": 358.61267398488417
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6657,7 +9176,7 @@
      "expect": {
       "value": 1.0339
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6668,7 +9187,7 @@
      "expect": {
       "value": 166.0547408599523
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6679,7 +9198,7 @@
      "expect": {
       "value": 1.0166
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6690,7 +9209,7 @@
      "expect": {
       "value": 20.576757925387938
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6701,7 +9220,7 @@
      "expect": {
       "value": 0.9719
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6712,7 +9231,7 @@
      "expect": {
       "value": 120.0
      },
-     "op": "astro_equilibrium_for_year",
+     "op": "equilibrium_for_year",
      "strict": null
     },
     {
@@ -6723,7 +9242,7 @@
      "expect": {
       "value": 1.0
      },
-     "op": "astro_node_factor_for_year",
+     "op": "node_factor_for_year",
      "strict": null
     },
     {
@@ -6734,7 +9253,7 @@
      "expect": {
       "value": 91.15
      },
-     "op": "astro_equilibrium_for_year",
+     "op": "equilibrium_for_year",
      "strict": null
     },
     {
@@ -6745,7 +9264,7 @@
      "expect": {
       "value": 1.0067
      },
-     "op": "astro_node_factor_for_year",
+     "op": "node_factor_for_year",
      "strict": null
     },
     {
@@ -6756,7 +9275,7 @@
      "expect": {
       "value": 65.31
      },
-     "op": "astro_equilibrium_for_year",
+     "op": "equilibrium_for_year",
      "strict": null
     },
     {
@@ -6767,7 +9286,19 @@
      "expect": {
       "value": 1.0166
      },
-     "op": "astro_node_factor_for_year",
+     "op": "node_factor_for_year",
+     "strict": null
+    },
+    {
+     "args": {
+      "at": "2099-12-31T23:59:59Z",
+      "id": "otc-test-predict-b",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 300.6067579253868
+     },
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6776,7 +9307,18 @@
       "first_year": 2000,
       "last_year": 2030
      },
-     "op": "astro_valid_range",
+     "op": "valid_range",
+     "strict": null
+    },
+    {
+     "args": {
+      "id": "otc-test-predict-b"
+     },
+     "expect": {
+      "first_year": 2020,
+      "last_year": 2100
+     },
+     "op": "valid_range",
      "strict": null
     },
     {
@@ -6790,7 +9332,49 @@
        "constituent": "ZZ9"
       }
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
+     "strict": null
+    },
+    {
+     "args": {
+      "at": "2015-06-01T00:00:00Z",
+      "name": "ZZ9"
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "node_factor",
+     "strict": null
+    },
+    {
+     "args": {
+      "name": "ZZ9",
+      "year": 2015
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "equilibrium_for_year",
+     "strict": null
+    },
+    {
+     "args": {
+      "name": "ZZ9",
+      "year": 2015
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "node_factor_for_year",
      "strict": null
     },
     {
@@ -6805,7 +9389,7 @@
        "last_year": 2030
       }
      },
-     "op": "astro_equilibrium_argument",
+     "op": "equilibrium_argument",
      "strict": null
     },
     {
@@ -6820,7 +9404,7 @@
        "last_year": 2030
       }
      },
-     "op": "astro_node_factor",
+     "op": "node_factor",
      "strict": null
     },
     {
@@ -6835,7 +9419,7 @@
        "last_year": 2030
       }
      },
-     "op": "astro_equilibrium_for_year",
+     "op": "equilibrium_for_year",
      "strict": null
     },
     {
@@ -6850,11 +9434,11 @@
        "last_year": 2030
       }
      },
-     "op": "astro_node_factor_for_year",
+     "op": "node_factor_for_year",
      "strict": null
     }
    ],
-   "title": "every Astro function inside the range and at its edges; no row: unsupported_constituent; out of range: time_out_of_range"
+   "title": "every Astro function inside the range and at its edges, on table A and table B; no row: unsupported_constituent; out of range: time_out_of_range"
   },
   {
    "id": "predict-astro-negative-speed/used-row",
@@ -6926,11 +9510,10 @@
         "$set": "OTC-P-0005/noaa"
        },
        "datum_term": 0.0,
-       "times": [
-        "2010-03-01T00:00:00Z"
-       ]
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-01T12:00:00Z"
       },
-      "entry": "predict_strict"
+      "entry": "extremes_strict"
      }
     },
     {
@@ -6957,15 +9540,16 @@
      "strict": {
       "args": {
        "astro": "otc-test-predict-a",
-       "constituents": {
-        "$set": "OTC-P-0005/noaa"
+       "bin": {
+        "$bin": [
+         "OTC-P-0016/noaa",
+         1
+        ]
        },
-       "datum_term": 0.0,
-       "times": [
-        "2010-03-01T00:00:00Z"
-       ]
+       "start": "2010-03-01T00:00:00Z",
+       "stop": "2010-03-01T12:00:00Z"
       },
-      "entry": "predict_strict"
+      "entry": "current_events_strict"
      }
     },
     {
@@ -7091,22 +9675,26 @@
       "stop": "2010-03-01T01:00:00Z"
      },
      "expect": {
-      "algorithm": "otc-predict-1",
-      "astro_table_id": "otc-test-predict-a",
-      "bin_number": null,
-      "convention_id": "predict-greenwich-v1",
-      "datum": "chart",
-      "datum_kind": "published",
-      "datum_name": "mllw",
-      "datum_uncertainty_m": 0.01,
-      "method": "harmonic",
-      "omitted_event_types": null,
-      "reference_bin": null,
-      "reference_station_id": null,
-      "release": "20991231.7",
-      "set_id": "OTC-P-0001/noaa",
-      "station_id": "OTC-P-0001",
-      "timezone": "America/New_York"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "chart",
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": 0.01,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -7135,20 +9723,26 @@
       "stop": "2010-03-01T01:00:00Z"
      },
      "expect": {
-      "algorithm": "otc-predict-1",
-      "astro_table_id": "otc-test-predict-a",
-      "bin_number": null,
-      "convention_id": "predict-greenwich-v1",
-      "datum": null,
-      "datum_name": "mllw",
-      "method": "folded_offsets",
-      "omitted_event_types": null,
-      "reference_bin": null,
-      "reference_station_id": "OTC-P-0001",
-      "release": "20991231.7",
-      "set_id": "OTC-P-0001/noaa",
-      "station_id": "OTC-P-0035",
-      "timezone": "America/New_York"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -7181,21 +9775,26 @@
       "stop": "2010-03-01T01:00:00Z"
      },
      "expect": {
-      "algorithm": "otc-predict-1",
-      "astro_table_id": "otc-test-predict-a",
-      "bin_number": 2,
-      "convention_id": "predict-greenwich-v1",
-      "datum": null,
-      "datum_kind": null,
-      "datum_name": null,
-      "datum_uncertainty_m": null,
-      "method": "harmonic",
-      "omitted_event_types": null,
-      "reference_bin": null,
-      "reference_station_id": null,
-      "release": "20991231.7",
-      "set_id": "OTC-P-0016/noaa",
-      "station_id": "OTC-P-0016"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "currents",
      "strict": {
@@ -7226,22 +9825,29 @@
       "stop": "2010-03-02T00:00:00Z"
      },
      "expect": {
-      "algorithm": "otc-predict-1",
-      "astro_table_id": "otc-test-predict-a",
-      "bin_number": 1,
-      "convention_id": "predict-greenwich-v1",
-      "datum": null,
-      "datum_name": null,
-      "method": "offsets",
-      "omitted_event_types": [
-       "max_ebb",
-       "slack_before_ebb"
-      ],
-      "reference_bin": 1,
-      "reference_station_id": "OTC-P-0016",
-      "release": "20991231.7",
-      "set_id": "OTC-P-0016/noaa",
-      "station_id": "OTC-P-0051"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [
+        "max_ebb",
+        "slack_before_ebb"
+       ],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0051",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -7282,14 +9888,35 @@
       "stop": "2010-03-01T01:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
-     },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "heights",
      "strict": {
       "args": {
@@ -7328,14 +9955,35 @@
       ]
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
-     },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "heights_at",
      "strict": {
       "args": {
@@ -7368,14 +10016,35 @@
       "stop": "2010-03-01T12:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-P-0001/noaa"
-     },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "extremes",
      "strict": {
       "args": {
@@ -7407,15 +10076,35 @@
       "stop": "2010-03-01T01:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
-     },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "currents",
      "strict": {
       "args": {
@@ -7455,15 +10144,35 @@
       "stop": "2010-03-01T12:00:00Z"
      },
      "expect": {
-      "bin_number": 2,
-      "method": "harmonic",
-      "set_id": "OTC-P-0016/noaa"
-     },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null
       }
      },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "current_events",
      "strict": {
       "args": {
@@ -7494,19 +10203,18 @@
      "args": {},
      "expect": {
       "astro_table": {
-       "astro_table_id": "otc-test-predict-a",
        "first_year": 2000,
-       "generator": "synthetic test values (not congen output)",
-       "last_year": 2030,
-       "tables_sha256": "5b57a74b08d8e5b58fb612f2763abb78cb1d26bd94602ce2b74b627c57da18aa",
-       "v0_model": "schureman_tcd"
+       "last_year": 2030
       }
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
      "op": "astro_table",
      "strict": null
     }
@@ -7528,12 +10236,15 @@
      "expect": {
       "value": 120.0
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
-     "op": "astro_equilibrium_argument",
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
+     "op": "equilibrium_argument",
      "strict": null
     }
    ],
@@ -7554,12 +10265,15 @@
      "expect": {
       "value": 1.0
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
-     "op": "astro_node_factor",
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
+     "op": "node_factor",
      "strict": null
     }
    ],
@@ -7580,12 +10294,15 @@
      "expect": {
       "value": 120.0
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
-     "op": "astro_equilibrium_for_year",
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
+     "op": "equilibrium_for_year",
      "strict": null
     }
    ],
@@ -7606,12 +10323,15 @@
      "expect": {
       "value": 1.0
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
-     "op": "astro_node_factor_for_year",
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
+     "op": "node_factor_for_year",
      "strict": null
     }
    ],
@@ -7630,12 +10350,15 @@
       "first_year": 2000,
       "last_year": 2030
      },
-     "expect_if_missing": {
-      "predict": {
-       "error": "not_built"
-      }
-     },
-     "op": "astro_valid_range",
+     "expect_if_missing": [
+      [
+       "predict",
+       {
+        "error": "not_built"
+       }
+      ]
+     ],
+     "op": "valid_range",
      "strict": null
     }
    ],
@@ -7660,8 +10383,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-T-0181/w-ok"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "otc-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/w-ok",
+       "station_id": "OTC-T-0181",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -7979,8 +10720,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-T-0181/x-nc"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/x-nc",
+       "station_id": "OTC-T-0181",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -8330,8 +11089,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-T-0181/x-nc"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/x-nc",
+       "station_id": "OTC-T-0181",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -8687,9 +11464,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-T-0185",
-      "set_id": "OTC-T-0185/a-noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-T-0185",
+       "release": "20991231.2",
+       "set_id": "OTC-T-0185/a-noaa",
+       "station_id": "OTC-T-0186",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -8716,9 +11510,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-T-0185",
-      "set_id": "OTC-T-0185/a-noaa"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-T-0185",
+       "release": "20991231.2",
+       "set_id": "OTC-T-0185/a-noaa",
+       "station_id": "OTC-T-0190",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -8818,9 +11629,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "folded_offsets",
-      "reference_station_id": "OTC-T-0181",
-      "set_id": "OTC-T-0181/x-nc"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-T-0181",
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/x-nc",
+       "station_id": "OTC-T-0188",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "extremes",
      "strict": {
@@ -8862,8 +11690,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "method": "harmonic",
-      "set_id": "OTC-T-0189/a-ok"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": null,
+       "convention_id": "otc-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.2",
+       "set_id": "OTC-T-0189/a-ok",
+       "station_id": "OTC-T-0189",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "heights",
      "strict": {
@@ -9216,12 +12062,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "offsets",
-      "omitted_event_types": [],
-      "reference_bin": 1,
-      "reference_station_id": "OTC-T-0181",
-      "set_id": "OTC-T-0181/z-current"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": 1,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-T-0181",
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/z-current",
+       "station_id": "OTC-T-0191",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -9268,12 +12128,26 @@
       "stop": "2099-03-03T00:00:00Z"
      },
      "expect": {
-      "bin_number": 1,
-      "method": "offsets",
-      "omitted_event_types": [],
-      "reference_bin": 1,
-      "reference_station_id": "OTC-T-0181",
-      "set_id": "OTC-T-0181/z-current"
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-astro-1",
+       "bin_number": 1,
+       "convention_id": "noaa-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-T-0181",
+       "release": "20991231.2",
+       "set_id": "OTC-T-0181/z-current",
+       "station_id": "OTC-T-0192",
+       "timezone": "America/Los_Angeles",
+       "tz": null,
+       "tz_version": null
+      }
      },
      "op": "current_events",
      "strict": {
@@ -9301,104 +12175,23 @@
    "title": "current_events at OTC-T-0192 predict by offsets from OTC-T-0181/z-current"
   }
  ],
- "description": "Every prediction case of the prediction spec (revision 27) section 6.5 as calls on the fixture roots, with the hand-written expectations. Generated by conformance/tools/build_fixtures.py; do not edit. Steps with \"strict\" take their numbers from the reference engine's strict mode (KP1-H writes predict_expected.json); K2b-pin merges both into conformance/cases/predict-*.json.",
+ "description": "Every prediction case of the prediction spec (revision 28) section 6.5 as calls on the fixture roots, with the hand-written expectations. Generated by conformance/tools/build_fixtures.py; do not edit. Steps with \"strict\" take their numbers from the reference engine's strict mode (KP1-H writes predict_expected.json); K2b-pin merges both into conformance/cases/predict-*.json.",
  "interface": {
-  "case": "{id, title, spec, root, release, requires, steps, runners?, open_args?, note?}. root is a fixture root (fixtures.json); requires are runner features (K2: predict, localtime_module, localtime, tzdir_env); runners, when present, are the only profiles that run the case (Python-only and not-C cases: there is no feature for them); open_args are matrix.open_args.",
-  "matchers": "as the conformance cases, plus {$len: n} (an array of n items) and {$from_step: i} (equal to the same field of step i's result); K2b-pin resolves both",
-  "ops": {
-   "astro_equilibrium_argument": [
-    "id",
-    "name",
-    "at"
-   ],
-   "astro_equilibrium_for_year": [
-    "id",
-    "name",
-    "year"
-   ],
-   "astro_node_factor": [
-    "id",
-    "name",
-    "at"
-   ],
-   "astro_node_factor_for_year": [
-    "id",
-    "name",
-    "year"
-   ],
-   "astro_table": [
-    "id"
-   ],
-   "astro_valid_range": [
-    "id"
-   ],
-   "current_events": [
-    "station_id",
-    "start",
-    "stop",
-    "bin_number",
-    "set_id"
-   ],
-   "currents": [
-    "station_id",
-    "start",
-    "stop",
-    "step_s",
-    "bin_number",
-    "set_id"
-   ],
-   "datums": [
-    "station_id",
-    "set_id",
-    "all_sets"
-   ],
-   "extremes": [
-    "station_id",
-    "start",
-    "stop",
-    "datum",
-    "set_id"
-   ],
-   "heights": [
-    "station_id",
-    "start",
-    "stop",
-    "step_s",
-    "datum",
-    "set_id"
-   ],
-   "heights_at": [
-    "station_id",
-    "times",
-    "datum",
-    "set_id"
-   ],
-   "ranges": [
-    "station_id",
-    "set_id"
-   ],
-   "to_local": [
-    "of",
-    "tz"
-   ]
-  },
-  "results": {
-   "astro_*": "{value} (degrees or a node factor); astro_valid_range {first_year, last_year}. An astro op without id uses release.astro_table() with no id (C: otc_astro_table, then the function on that handle)",
-   "astro_table": "{astro_table: {astro_table_id, v0_model, tables_sha256, generator, first_year, last_year} or null}",
-   "current_events": "as heights, items [{time, type, velocity_ms, direction_deg}]",
-   "currents": "as heights, items [{time, velocity_major_ms, velocity_minor_ms, speed_ms, direction_deg}]",
-   "datums": "{set_id, zero, zero_name, chart_datum, msl_offset_m, levels: [{key, value_m, above_chart_m, kind, method, source_name, epoch, data_span, control_station_id, control_set_id, control_source_id, uncertainty_m, uncertainty_basis, flags}] in key order}; with all_sets: {groups: [that, per set, in file order]}",
-   "extremes": "as heights, items [{time, type (high|low), height_m}]",
-   "heights, heights_at": "{items: [{time, height_m}], station_id, timezone, method, set_id, convention_id, astro_table_id, reference_station_id, reference_bin, datum, datum_name, datum_kind, datum_uncertainty_m, bin_number, omitted_event_types, release, algorithm} (spec 5.3; a field that does not apply is null)",
-   "ranges": "{mn, gt, dhq, dlq}, each null unless both levels have the same kind and epoch",
-   "to_local": "the inner result with tz and tz_version, and local_time and utc_offset_s on every item. step.local.zone is the zone K2b-pin uses to add them to the strict items; step.local.check lists values they must equal"
-  },
-  "step": "{op, args, expect?, expect_if_missing?, strict, local?, swap_of?} or a driver step ({driver: restart_runner, env}) or {op: open, matrix_open} (open the case's root again with open_args changed; null removes one). expect holds the hand-written keys; the numeric items come from strict. An expect with error and a non-null strict is a modelled refusal: the case harness checks that the strict mode raises the same code.",
+  "case": "{id, title, spec, root, release, requires, steps, runners?, open_args?, note?}. root is a fixture root (fixtures.json); requires are runner features; runners (K2's case-level filter) are the only runners or profiles that run the case; open_args are matrix.open_args.",
+  "compare": "{entry, args, time_s, height_m}: a second strict computation the step's items must equal within these tolerances (subordinate-folded-extremes: the event method of 4.8, spec 4.8a).",
+  "expect_if_missing": "An ordered list of [feature, expectation] pairs: K2's driver takes the first feature the runner lacks, so K2b-pin writes them as an object in this order (predict-local/not-built: localtime_module before localtime, since a runner without the module lacks both).",
+  "k2": "The ops, their arguments and their results are K2's (conformance/driver.py OPS and conformance/README.md \"Operations\" and \"Result encodings\" at K2 343fbe3): prediction results are {prediction: Prediction}, datums {datums: DatumInfo or [DatumInfo]}, ranges {ranges: Ranges}, astro_table {astro_table: {first_year, last_year} or null}, the astro functions {value}, valid_range {first_year, last_year}. The case-level runners filter and \"localtime implies localtime_module\" are K2's too.",
+  "outcome": "Hand-written outcomes the spec fixes exactly, which K2b-pin checks against the strict items before it pins them: {count: n} (the number of items), or {items: [{time, type}]} (exactly these, in order), optionally with types: [...] (compare only the items of those types).",
+  "prediction_fields": "station_id, timezone, method, set_id, convention_id, astro_table_id, reference_station_id, reference_bin, datum, datum_name, datum_kind, datum_uncertainty_m, bin_number, omitted_event_types, tz, tz_version, release, algorithm. Readings of 5.3 for revision 29: datum is the argument, null when absent; datum_name is the resolved level's key (mean_level by default for a harmonic tide; for offsets the subordinate datum's chart_datum key, null when it has none); datum_kind and datum_uncertainty_m are that level's basis kind and uncertainty, null for mean_level, zero, or no basis; omitted_event_types is null except at a subordinate current station.",
+  "same_items_as_step": "The step's items equal that step's (heights-fractional-instants: the floored instants).",
+  "step": "{op, args, expect?, expect_if_missing?, strict, outcome?, compare?, local?, same_items_as_step?, swap_of?} or a driver step ({driver: restart_runner, env}) or {op: open, matrix_open}. expect is what the driver compares, in K2's encoding: a prediction step's expect.prediction holds every Prediction field except items, which K2b-pin takes from the strict mode (each item with local_time and utc_offset_s null unless to_local), or items when they are written here (an empty window). An expect with error and a non-null strict is a modelled refusal: the case harness checks that the strict mode raises the same code.",
   "strict": {
-   "crosscheck": "scan_5s (extremes: h'; current events: W' and W), scan_5s_peaks (W' only), scan_5s_slacks (W only): the 5 s brute-force count of spec 6.1 that must equal the event count",
-   "entries": "webcaltides lib/harmonics_strict.rb (237446c) Engine methods: predict_strict(constituents, times, datum_term:), extremes_strict(constituents, start, stop, datum_term:), currents_strict(bin, times), current_events_strict(bin, start, stop), subordinate_extremes_strict(ref_constituents, chart_datum_term, offsets, start, stop, datum_shift:), subordinate_current_events_strict(ref_bin, offset, start, stop); and two compositions: folded_heights = subordinate_folded_strict(ref_constituents, chart_datum_term, offsets, datum_shift:) then predict_strict on its constituents and datum_term at times; folded_extremes = the same then extremes_strict over start, stop.",
+   "crosscheck": "scan_5s (extremes: all events against the sign changes of h'; current events: the max_* events against W' and the slack_* events against W), scan_5s_peaks (the max_* events only, against W'), scan_5s_slacks (the slack_* events only, against W): the 5 s brute-force count of spec 6.1 that must equal the count",
+   "entries": "webcaltides lib/harmonics_strict.rb (237446c) Engine methods: predict_strict(constituents, times, datum_term:), extremes_strict(constituents, start, stop, datum_term:), currents_strict(bin, times), current_events_strict(bin, start, stop), subordinate_extremes_strict(ref_constituents, chart_datum_term, offsets, start, stop, datum_shift:), subordinate_current_events_strict(ref_bin, offset, start, stop); and two compositions: folded_heights = subordinate_folded_strict(ref_constituents, chart_datum_term, offsets, datum_shift:) then predict_strict on its constituents and datum_term at times; folded_extremes = the same then extremes_strict over start, stop. {same_as_step: i}: the strict items of step i (to_local).",
    "references": "{$set: set_id} is that set's constituents; {$bin: [set_id, bin]} that bin object; {$offsets: station_id} the station's subordinate_offsets; {$current_offset: [station_id, bin]} that current_offsets entry; astro is the astro_tables entry with that id, passed as astro: Strict::AstroTable.from_h(entry). All in the case's root."
   },
-  "times": "ISO 8601 UTC strings YYYY-MM-DDTHH:MM:SS(.fff)Z; a naive datetime has no Z (Python only). Result times are whole seconds YYYY-MM-DDTHH:MM:SSZ."
+  "swap_of": "{case, step}: the items are that step's with high and low swapped and each height negated (extremes-negative-amplitude; the strict mode refuses a negative amplitude).",
+  "times": "RFC 3339 UTC strings YYYY-MM-DDTHH:MM:SS(.fff)Z; a naive datetime has no Z (Python only). Result times are whole seconds YYYY-MM-DDTHH:MM:SSZ.",
+  "to_local": "A to_local step converts the result of the case's most recent prediction step (K2): args {tz} (absent = the station's zone). Its expect.prediction has tz, the resolved zone name, and tz_version, a version or null. strict.same_as_step names the step whose strict items it converts; local.zone is the zone K2b-pin uses to add local_time and utc_offset_s; local.check lists hand-written values they must equal."
  }
 }

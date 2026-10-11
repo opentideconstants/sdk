@@ -148,7 +148,8 @@ def test_prediction_roots_in_manifest():
     assert roots["predict"]["releases"] == [bf.PREDICT_D] and roots["predict"]["expect"] == "load"
     assert roots["knc-predict"]["releases"] == ["20991231.2"] and roots["knc-predict"]["expect"] == "load"
     for name in ("no-astro-table", "unsupported-constituent", "astro-negative-speed", "astro-negative-speed-unused",
-                 "astro-short-v0u", "extremes-negative-amplitude", "current-reference-missing", "unknown-adjusted-type"):
+                 "astro-short-v0u", "extremes-negative-amplitude", "current-reference-missing", "current-reference-removed",
+                 "unknown-adjusted-type"):
         assert roots[f"predict-bad/{name}"]["expect"] == "load", name
 
 
@@ -248,6 +249,7 @@ BAD_PATHS = {
     "extremes-negative-amplitude": None,
     "unknown-adjusted-type": None,
     "current-reference-missing": None,
+    "current-reference-removed": None,
 }
 
 
@@ -256,16 +258,21 @@ def test_bad_prediction_fixture_has_one_change(name, doc):
     bad = json.loads((FIX / "predict-bad" / name / f"OTC_{bf.PREDICT_D}.json").read_bytes())
     paths = set(diff_paths(doc, bad))
     if name == "no-astro-table":
+        # exactly: table A removed (the astro_tables list changes length, so the whole list differs), the local
+        # convention's astro_table_id removed, and nothing else; table B is unchanged
         conv = next(i for i, c in enumerate(doc["conventions"]) if c["convention_id"] == bf.CONV_LOCAL)
-        assert [t["astro_table_id"] for t in bad["astro_tables"]] == [bf.ASTRO_B]
-        assert paths == {f"/conventions/{conv}/astro_table_id"} | {p for p in paths if p.startswith("/astro_tables")}
-        assert all(c.get("astro_table_id") in (bf.ASTRO_A, bf.ASTRO_B) for c in bad["conventions"] if c["convention_id"] != bf.CONV_LOCAL)
+        assert paths == {"/astro_tables", f"/conventions/{conv}/astro_table_id"}
+        assert bad["astro_tables"] == [table(doc, bf.ASTRO_B)]
+        assert "astro_table_id" not in bad["conventions"][conv]
+        assert [c for i, c in enumerate(bad["conventions"]) if i != conv] == [c for i, c in enumerate(doc["conventions"]) if i != conv]
     elif name == "extremes-negative-amplitude":
         assert paths == {f"/stations/{station_index(doc, 'OTC-P-0005')}/constant_sets/0/constituents/0/amplitude_m"}
         assert bad["stations"][station_index(doc, "OTC-P-0005")]["constant_sets"][0]["constituents"][0]["amplitude_m"] == -1.0
-    elif name == "current-reference-missing":
+    elif name in ("current-reference-missing", "current-reference-removed"):
         assert paths == {f"/stations/{station_index(doc, 'OTC-P-0059')}/current_offsets/0/reference_station_id"}
-        assert "OTC-P-9999" not in {s["station_id"] for s in bad["stations"]}
+        ref = bad["stations"][station_index(doc, "OTC-P-0059")]["current_offsets"][0]["reference_station_id"]
+        status = {s["station_id"]: s["status"] for s in bad["stations"]}
+        assert (ref, status.get(ref)) == (("OTC-P-9999", None) if name == "current-reference-missing" else ("OTC-P-0097", "removed"))
     elif name == "unknown-adjusted-type":
         want = {"/format_version", "/future_top_level", "/release/future_release_field"}
         want |= {f"/stations/{station_index(doc, s)}/subordinate_offsets/height_adjusted_type"
@@ -279,7 +286,7 @@ def test_bad_prediction_fixture_has_one_change(name, doc):
 
 def test_mn4_is_in_no_set(doc):
     """astro-negative-speed's second sub-case puts the negative speed on a row that no set uses."""
-    used = {c["name"] for s in doc["stations"] for cs in s["constant_sets"] for c in cs["constituents"]
+    used = {c["name"] for s in doc["stations"] for cs in s.get("constant_sets", []) for c in cs["constituents"]
             + [x for b in cs.get("current_bins", []) for x in b["constituents"]]}
     assert "MN4" in table(doc, bf.ASTRO_A)["constituents"] and "MN4" not in used
 
@@ -373,7 +380,7 @@ def test_sub_second_triple_equal(doc):
     """The same shape, scaled down, above a zero 1.0 m below the mean level: the two highs' heights (datum zero) are
     the same double, anywhere in the 0.01 s bisection bracket, so the tie rule decides."""
     s, near = sub_second(doc, "OTC-P-0011/triple-equal", bf.PW["sub-second-triple-equal"][2], ["down", "up", "down"], 0.9)
-    msl = next(c for st in doc["stations"] for c in st["constant_sets"] if c["set_id"] == "OTC-P-0011/triple-equal")["datum"]["msl_offset_m"]
+    msl = next(c for st in doc["stations"] for c in st.get("constant_sets", []) if c["set_id"] == "OTC-P-0011/triple-equal")["datum"]["msl_offset_m"]
     heights = {msl + s.h(r + e) for r in (near[0][0], near[2][0]) for e in (-0.005, 0.0, 0.005)}
     assert len(heights) == 1
 
@@ -478,10 +485,12 @@ def test_currents_direction_north(doc):
     assert all(b["mean_major_ms"] + s.h(t) < 0 for t in range(t0, t1, 600))
 
 
+
+
 # --------------------------------------------------------------------------- predict_calls.json
 
-# Every prediction case that spec 6.5 names (as the call ids spell them, without the "predict-" prefix and with "/" as
-# "-"), except the two in BLOCKED.
+# Every prediction case that spec 6.5 (revision 28) names, spelled as the call ids are without "predict-" and with "/"
+# as "-". Each must be exactly one call id: no prefix matching, so a missing case is never covered by a longer one.
 SPEC_CASES = """heights-basic heights-at heights-step-alignment heights-empty-window heights-start-after-stop heights-step-zero
 heights-year-boundary heights-leap-day heights-naive-datetime datum-mean-level datum-zero datum-named datum-chart
 datum-unavailable no-constants quantity-mismatch unsupported-convention unsupported-constituent no-astro-table
@@ -489,28 +498,168 @@ time-out-of-range local-phase-convention extremes-basic extremes-window-edges ex
 extremes-large-amplitude current-peaks-large-amplitude slacks-large-amplitude extremes-close-high-low
 extremes-close-high-low-high extremes-double-high extremes-sub-second extremes-year-boundary-step extremes-new-year-missed
 extremes-new-year-doubled currents-series currents-mean currents-minor-sign currents-flood-sign currents-direction-null
-currents-direction-north currents-default-bin currents-explicit-bin bin-not-found bin-number-too-large current-events
+currents-direction-north currents-default-bin currents-explicit-bin bin-not-found bin-number-too-large current-events-basic
 current-events-weak current-events-close-slacks current-events-sub-second-slacks current-events-new-year-slack
 subordinate-tide-ratio subordinate-tide-additive subordinate-tide-missing-offsets subordinate-tide-order-swap
 subordinate-tide-fractional-offset subordinate-series subordinate-reference-no-chart-datum subordinate-current
 subordinate-current-null-adjustment subordinate-folded-ratio subordinate-folded-additive subordinate-folded-extremes
 subordinate-folded-new-year subordinate-differing-offsets-series subordinate-zero-ratio subordinate-unknown-adjusted-type
-subordinate-order-ratio-before-extremes-only local-station-zone local-named-zone local-unknown-zone
-local-missing-dependency local-missing-tzdir local-not-built local-format datums-list datums-all-sets datums-ranges
-datums-ranges-mixed-kinds datum-otc-key datum-subordinate-named datum-vertical-zero datum-subordinate-reference-wrong-source
-datum-subordinate-unpublished-chart astro-values astro-negative-speed extremes-negative-amplitude set-not-found
-empty-window-out-of-range heights-fractional-instants metadata reference-set-file-order
+subordinate-order-ratio-before-extremes-only subordinate-reference-no-usable-set subordinate-current-reference-no-set
+local-station-zone local-named-zone local-unknown-zone local-missing-dependency local-missing-tzdir local-not-built
+local-format datums-list datums-all-sets datums-ranges datums-ranges-mixed-kinds datum-otc-key datum-subordinate-named
+datum-vertical-zero datum-subordinate-reference-wrong-source datum-subordinate-unpublished-chart astro-values
+astro-negative-speed-used-row astro-negative-speed-unused-row astro-negative-speed-short-v0u extremes-negative-amplitude
+set-not-found empty-window-out-of-range heights-fractional-instants metadata reference-set-file-order
 commercial-only-effective-set commercial-only-explicit-nc-set commercial-only-no-constants commercial-only-offsets-usable
 commercial-only-offsets-nc-licence commercial-only-reference-set-nc commercial-only-own-set-wins
 commercial-only-current-offsets-nc commercial-only-current-offsets-usable""".split()
+# Sub-cases of 6.5 written as cases of their own, and the cases the G-K2b review added (A1-A8), by their call ids.
+EXTRA_CASES = {"subordinate-current-reference-no-set-missing", "subordinate-current-reference-removed",
+               "current-events-flood-sign", "set-speed", "subordinate-event-datum"}
 NOT_BUILT = ["otc_heights", "otc_heights_at", "otc_extremes", "otc_currents", "otc_current_events", "otc_astro_table",
              "otc_astro_equilibrium_argument", "otc_astro_node_factor", "otc_astro_equilibrium_for_year",
              "otc_astro_node_factor_for_year", "otc_astro_valid_range"]
-# Spec revision 28 removes these two: a subordinate_offsets reference that is missing or removed makes the release
-# fail to load (invalid_release), so the cases do not exist. It adds the two below.
-BLOCKED = {"subordinate-reference-removed", "datum-subordinate-reference-removed"}
-SPEC_CASES += ["subordinate-reference-no-usable-set", "subordinate-current-reference-no-set",
-               "subordinate-current-reference-no-set-missing"]
+# Revision 28 removed these: a missing or removed subordinate_offsets reference fails to load, so the cases do not exist.
+REMOVED = {"subordinate-reference-removed", "datum-subordinate-reference-removed"}
+# K2's prediction ops and their arguments (K2 343fbe3, conformance/driver.py OPS): the calls use exactly these.
+K2_OPS = {
+    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id"],
+    "heights_at": ["station_id", "times", "datum", "set_id"],
+    "extremes": ["station_id", "start", "stop", "datum", "set_id"],
+    "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id"],
+    "current_events": ["station_id", "start", "stop", "bin_number", "set_id"],
+    "datums": ["station_id", "set_id", "all_sets"], "ranges": ["station_id", "set_id"],
+    "astro_table": ["id"], "equilibrium_argument": ["id", "name", "at"], "node_factor": ["id", "name", "at"],
+    "equilibrium_for_year": ["id", "name", "year"], "node_factor_for_year": ["id", "name", "year"], "valid_range": ["id"],
+    "to_local": ["tz"],
+}
+PREDICTION_OPS = {"heights", "heights_at", "extremes", "currents", "current_events"}
+STRICT_FOR_OP = {"heights": {"predict_strict", "folded_heights"}, "heights_at": {"predict_strict", "folded_heights"},
+                 "extremes": {"extremes_strict", "subordinate_extremes_strict", "folded_extremes"},
+                 "currents": {"currents_strict"},
+                 "current_events": {"current_events_strict", "subordinate_current_events_strict"}}
+# Every case id and its steps (op, or driver action), exactly: a removed or added case or sub-case fails here.
+SUBCASES = {
+    'predict-heights/basic': 'heights',
+    'predict-heights/at': 'heights_at',
+    'predict-heights/step-alignment': 'heights',
+    'predict-heights/empty-window': 'heights',
+    'predict-heights/start-after-stop': 'heights',
+    'predict-heights/step-zero': 'heights heights',
+    'predict-heights/year-boundary': 'heights',
+    'predict-heights/leap-day': 'heights_at',
+    'predict-heights/naive-datetime': 'heights',
+    'predict-heights/fractional-instants': 'heights_at heights_at heights heights',
+    'predict-set-not-found': 'heights',
+    'predict-local-phase-convention': 'heights heights',
+    'predict-set-speed': 'heights_at',
+    'predict-datum/mean-level': 'heights_at',
+    'predict-datum/zero': 'heights_at',
+    'predict-datum/named': 'heights_at',
+    'predict-datum/chart': 'heights_at heights_at heights_at',
+    'predict-datum/unavailable': 'heights_at heights_at heights_at heights_at heights_at extremes',
+    'predict-datum/otc-key': 'heights_at',
+    'predict-datum/vertical-zero': 'heights_at datums',
+    'predict-no-constants': 'heights heights',
+    'predict-quantity-mismatch': 'heights currents',
+    'predict-unsupported-convention': 'heights',
+    'predict-unsupported-constituent': 'heights extremes',
+    'predict-no-astro-table': 'heights heights',
+    'predict-time-out-of-range': 'heights_at heights_at extremes extremes heights',
+    'predict-empty-window-out-of-range': 'extremes',
+    'predict-extremes/basic': 'extremes',
+    'predict-extremes/window-edges': 'extremes extremes extremes',
+    'predict-extremes/single-constituent': 'extremes',
+    'predict-extremes/large-amplitude': 'extremes extremes extremes',
+    'predict-current-peaks-large-amplitude': 'current_events current_events current_events',
+    'predict-slacks-large-amplitude': 'current_events current_events current_events',
+    'predict-extremes/close-high-low': 'extremes',
+    'predict-extremes/close-high-low-high': 'extremes',
+    'predict-extremes/double-high': 'extremes',
+    'predict-extremes/sub-second': 'extremes extremes extremes',
+    'predict-extremes/year-boundary-step': 'extremes',
+    'predict-extremes/new-year-missed': 'extremes',
+    'predict-extremes/new-year-doubled': 'extremes',
+    'predict-extremes/negative-amplitude': 'extremes',
+    'predict-currents/series': 'currents',
+    'predict-currents/mean': 'currents',
+    'predict-currents/minor-sign': 'currents',
+    'predict-currents/flood-sign': 'currents',
+    'predict-currents/direction-null': 'currents',
+    'predict-currents/direction-north': 'currents',
+    'predict-currents/default-bin': 'currents currents',
+    'predict-currents/explicit-bin': 'currents',
+    'predict-bin-not-found': 'currents current_events',
+    'predict-bin-number-too-large': 'currents currents',
+    'predict-current-events/basic': 'current_events',
+    'predict-current-events/flood-sign': 'current_events',
+    'predict-current-events/weak': 'current_events',
+    'predict-current-events/close-slacks': 'current_events',
+    'predict-current-events/sub-second-slacks': 'current_events current_events current_events',
+    'predict-current-events/new-year-slack': 'current_events current_events',
+    'predict-subordinate/tide-ratio': 'extremes',
+    'predict-subordinate/tide-additive': 'extremes',
+    'predict-subordinate/tide-missing-offsets': 'extremes',
+    'predict-subordinate/tide-order-swap': 'extremes extremes',
+    'predict-subordinate/tide-fractional-offset': 'extremes extremes',
+    'predict-subordinate/series': 'heights heights_at',
+    'predict-subordinate/reference-no-chart-datum': 'extremes',
+    'predict-subordinate/current': 'current_events current_events currents',
+    'predict-subordinate/current-null-adjustment': 'current_events',
+    'predict-subordinate/event-datum': 'extremes extremes extremes',
+    'predict-subordinate/folded-ratio': 'heights',
+    'predict-subordinate/folded-additive': 'heights',
+    'predict-subordinate/folded-extremes': 'extremes',
+    'predict-subordinate/folded-new-year': 'heights',
+    'predict-subordinate/differing-offsets-series': 'heights extremes',
+    'predict-subordinate/zero-ratio': 'heights extremes heights extremes heights extremes heights extremes',
+    'predict-subordinate/unknown-adjusted-type': 'heights extremes heights extremes heights extremes',
+    'predict-subordinate/order-ratio-before-extremes-only': 'heights',
+    'predict-subordinate/reference-no-usable-set': 'heights heights_at extremes heights heights_at extremes',
+    'predict-subordinate/current-reference-no-set': 'current_events',
+    'predict-subordinate/current-reference-no-set-missing': 'current_events',
+    'predict-subordinate/current-reference-removed': 'current_events',
+    'predict-reference-set-file-order': 'extremes',
+    'predict-local/station-zone': 'extremes to_local extremes to_local extremes to_local',
+    'predict-local/named-zone': 'extremes to_local extremes to_local',
+    'predict-local/unknown-zone': 'extremes to_local to_local to_local to_local to_local to_local to_local extremes to_local',
+    'predict-local/missing-dependency': 'extremes to_local',
+    'predict-local/missing-tzdir': 'restart_runner extremes to_local',
+    'predict-local/not-built': 'extremes to_local',
+    'predict-local/format': 'heights to_local heights to_local',
+    'predict-datums/list': 'datums',
+    'predict-datums/all-sets': 'datums',
+    'predict-datums/ranges': 'ranges',
+    'predict-datums/ranges-mixed-kinds': 'ranges',
+    'predict-datum/subordinate-named': 'heights_at heights_at datums',
+    'predict-datum/subordinate-reference-wrong-source': 'extremes',
+    'predict-datum/subordinate-unpublished-chart': 'extremes',
+    'predict-astro-values': 'astro_table astro_table astro_table equilibrium_argument node_factor equilibrium_argument node_factor equilibrium_argument node_factor equilibrium_argument node_factor equilibrium_argument node_factor equilibrium_argument node_factor equilibrium_for_year node_factor_for_year equilibrium_for_year node_factor_for_year equilibrium_for_year node_factor_for_year equilibrium_argument valid_range valid_range equilibrium_argument node_factor equilibrium_for_year node_factor_for_year equilibrium_argument node_factor equilibrium_for_year node_factor_for_year',
+    'predict-astro-negative-speed/used-row': 'heights extremes current_events astro_table',
+    'predict-astro-negative-speed/unused-row': 'heights',
+    'predict-astro-negative-speed/short-v0u': 'heights',
+    'predict-metadata': 'heights heights currents current_events',
+    'not-built/otc_heights': 'heights',
+    'not-built/otc_heights_at': 'heights_at',
+    'not-built/otc_extremes': 'extremes',
+    'not-built/otc_currents': 'currents',
+    'not-built/otc_current_events': 'current_events',
+    'not-built/otc_astro_table': 'astro_table',
+    'not-built/otc_astro_equilibrium_argument': 'equilibrium_argument',
+    'not-built/otc_astro_node_factor': 'node_factor',
+    'not-built/otc_astro_equilibrium_for_year': 'equilibrium_for_year',
+    'not-built/otc_astro_node_factor_for_year': 'node_factor_for_year',
+    'not-built/otc_astro_valid_range': 'valid_range',
+    'predict-commercial-only/effective-set': 'heights open heights',
+    'predict-commercial-only/explicit-nc-set': 'heights open heights',
+    'predict-commercial-only/no-constants': 'heights',
+    'predict-commercial-only/offsets-usable': 'extremes extremes',
+    'predict-commercial-only/offsets-nc-licence': 'extremes',
+    'predict-commercial-only/reference-set-nc': 'extremes open extremes',
+    'predict-commercial-only/own-set-wins': 'heights',
+    'predict-commercial-only/current-offsets-nc': 'current_events open current_events',
+    'predict-commercial-only/current-offsets-usable': 'current_events',
+}
 
 
 @pytest.fixture(scope="module")
@@ -522,22 +671,95 @@ def spelled(cid):
     return cid.removeprefix("predict-").replace("/", "-")
 
 
-def test_every_spec_case_is_a_call(calls):
-    ids = [spelled(c["id"]) for c in calls["cases"]]
-    assert len(ids) == len(set(ids))
-    for name in SPEC_CASES:
-        hits = [i for i in ids if i == name or i.startswith(name + "-")]
-        if name == "current-events":
-            hits = [i for i in ids if i == "current-events-basic"]
-        assert hits, name
-    for fn in NOT_BUILT:
-        assert f"not-built-{fn}" in ids
-    assert not any(i in BLOCKED for i in ids)
+def test_every_case_and_sub_case(calls):
+    got = {c["id"]: " ".join(s.get("op") or s.get("driver") for s in c["steps"]) for c in calls["cases"]}
+    assert len(got) == len(calls["cases"])
+    assert got == SUBCASES
+
+
+def test_every_spec_case_is_exactly_one_call(calls):
+    spelled_ids = [spelled(c["id"]) for c in calls["cases"] if not c["id"].startswith("not-built/")]
+    assert len(spelled_ids) == len(set(spelled_ids))
+    missing = [n for n in SPEC_CASES if n not in spelled_ids]
+    assert missing == []
+    assert sorted(set(spelled_ids) - set(SPEC_CASES)) == sorted(EXTRA_CASES)
+    assert {c["id"].removeprefix("not-built/") for c in calls["cases"] if c["id"].startswith("not-built/")} == set(NOT_BUILT)
+    assert not set(spelled_ids) & REMOVED
+
+
+def test_calls_use_k2_interface(calls, doc):
+    """Ops and arguments are K2's; a prediction step's expect is K2's {prediction} with every Prediction field; to_local
+    takes {tz} after a prediction step and expects the resolved zone; datums, ranges and astro_table use K2's wrappers."""
+    zones = {s["station_id"]: s.get("timezone") for s in doc["stations"]}
+    for c in calls["cases"]:
+        seen_prediction = None
+        for i, s in enumerate(c["steps"]):
+            if "driver" in s or s["op"] == "open":
+                continue
+            assert s["op"] in K2_OPS and set(s["args"]) <= set(K2_OPS[s["op"]]), (c["id"], i)
+            e = s.get("expect") or {}
+            if s["op"] in PREDICTION_OPS:
+                seen_prediction = s
+                if "error" in e:
+                    continue
+                assert set(e) == {"prediction"}, (c["id"], i)
+                assert set(e["prediction"]) - {"items"} == set(bf.PREDICTION_KEYS), (c["id"], i)
+                assert e["prediction"]["tz"] is None and e["prediction"]["release"] == c["release"]
+            elif s["op"] == "to_local":
+                assert seen_prediction is not None, (c["id"], i, "to_local with no prediction step before it")
+                if "error" in e:
+                    continue
+                want = s["args"].get("tz", "station")
+                zone = zones.get(seen_prediction["args"]["station_id"]) if want == "station" else want
+                assert e["prediction"]["tz"] == zone != "station", (c["id"], i)
+                assert e["prediction"]["tz_version"] == bf.TZ_VERSION
+                assert s["strict"] == {"same_as_step": c["steps"].index(seen_prediction)}
+                assert s["local"]["zone"] == zone
+            elif s["op"] == "datums" and "error" not in e:
+                assert set(e) == {"datums"}
+            elif s["op"] == "ranges":
+                assert set(e) == {"ranges"} and set(e["ranges"]) == {"mn", "gt", "dhq", "dlq"}
+            elif s["op"] == "astro_table" and "error" not in e:
+                assert set(e) == {"astro_table"} and (e["astro_table"] is None or set(e["astro_table"]) == {"first_year", "last_year"})
+
+
+def test_strict_entry_matches_its_step(calls):
+    """A step's strict entry is the one for its op (astro-negative-speed/used-row once modelled extremes and
+    current_events with predict_strict)."""
+    for c in calls["cases"]:
+        for i, s in enumerate(c["steps"]):
+            st = s.get("strict")
+            if not st or "same_as_step" in st:
+                continue
+            assert st["entry"] in STRICT_FOR_OP[s["op"]], (c["id"], i, st["entry"])
+            a = st["args"]
+            if s["op"] in ("current_events", "currents") and "bin" in a:
+                assert a["bin"]["$bin"][0].split("/")[0] == s["args"]["station_id"], (c["id"], i)
+            if "start" in s["args"] and "start" in a:
+                assert (a["start"], a["stop"]) == (s["args"]["start"], s["args"]["stop"]), (c["id"], i)
+
+
+def test_local_not_built_order(calls):
+    """predict-local/not-built: without the module, not_built; with the module but no zone rules, local_time_unavailable."""
+    c = next(c for c in calls["cases"] if c["id"] == "predict-local/not-built")
+    eim = c["steps"][-1]["expect_if_missing"]
+    assert eim == [["localtime_module", {"error": "not_built"}], ["localtime", {"error": "local_time_unavailable"}]]
+    for c in calls["cases"]:   # every expect_if_missing is an ordered list of [feature, expectation] pairs
+        for s in c["steps"]:
+            if "expect_if_missing" in s:
+                assert isinstance(s["expect_if_missing"], list) and all(len(x) == 2 for x in s["expect_if_missing"])
+
+
+def test_fold_compare_is_machine_readable(calls):
+    c = next(c for c in calls["cases"] if c["id"] == "predict-subordinate/folded-extremes")
+    (s,) = c["steps"]
+    cmp = s["compare"]
+    assert (cmp["entry"], cmp["time_s"], cmp["height_m"]) == ("subordinate_extremes_strict", 1, 1e-5)
+    assert {k: v for k, v in cmp["args"].items()} == s["strict"]["args"] and s["strict"]["entry"] == "folded_extremes"
 
 
 def test_calls_resolve(calls):
     manifest = {f["root"]: f for f in json.loads((FIX / "fixtures.json").read_bytes())["fixtures"]}
-    ops = calls["interface"]["ops"]
     for c in calls["cases"]:
         fx = manifest[c["root"]]
         assert c["release"] in fx["releases"], c["id"]
@@ -546,28 +768,19 @@ def test_calls_resolve(calls):
         sets = {cs["set_id"]: cs for s in d["stations"] for cs in s.get("constant_sets", [])}
         tables = {t["astro_table_id"] for t in d.get("astro_tables", [])}
         assert c["requires"] == [] if c["id"].startswith("not-built/") else "predict" in c["requires"], c["id"]
-        if c["root"] in ("knc-predict",):
+        if c["root"] == "knc-predict":
             assert c.get("open_args") == {"commercial_only": True}
         for s in c["steps"]:
-            if "driver" in s:
-                assert s["driver"] == "restart_runner"
+            if "driver" in s or s["op"] == "open":
                 continue
-            if s["op"] == "open":
-                assert set(s) == {"op", "matrix_open", "strict"} and c["root"] == "knc-predict"
-                continue
-            inner = s["args"]["of"] if s["op"] == "to_local" else s
-            assert inner["op"] in ops and set(inner["args"]) <= set(ops[inner["op"]]), (c["id"], inner)
-            a = inner["args"]
+            a = s["args"]
             if "station_id" in a:
                 assert a["station_id"] in st, (c["id"], a)
             if a.get("set_id") and "no-such" not in a["set_id"]:
                 assert a["set_id"] in sets, (c["id"], a)
-            strict = s.get("strict")
-            if not strict:
+            strict = s.get("strict") or {}
+            if "entry" not in strict:
                 continue
-            assert strict["entry"] in ("predict_strict", "extremes_strict", "currents_strict", "current_events_strict",
-                                       "subordinate_extremes_strict", "subordinate_current_events_strict",
-                                       "folded_heights", "folded_extremes"), c["id"]
             sa = strict["args"]
             assert sa["astro"] in tables, (c["id"], sa["astro"])
             for v in sa.values():
@@ -581,9 +794,8 @@ def test_calls_resolve(calls):
                 if isinstance(v, dict) and "$current_offset" in v:
                     sid, n = v["$current_offset"]
                     assert any(o["bin"] == n for o in st[sid]["current_offsets"]), (c["id"], v)
-            for k in ("times",):
-                for tm in sa.get(k, []):
-                    assert tm.endswith("Z") and "." not in tm, (c["id"], tm)   # the strict mode gets whole seconds
+            for tm in sa.get("times", []):
+                assert tm.endswith("Z") and "." not in tm, (c["id"], tm)   # the strict mode gets whole seconds
 
 
 def test_no_case_names_both_knc_roots(calls):
@@ -593,24 +805,181 @@ def test_no_case_names_both_knc_roots(calls):
         assert not ('"knc"' in text and "knc-predict" in text), c["id"]
 
 
-def test_hand_written_counts_match_the_design(calls, doc):
-    """Every hand-written event count ({$len: n}) in predict_calls.json equals the design scan of the same window
-    (5 s for M2 alone, 0.01 s for the close-root windows; the sub-second ones are the close-root filter's outcome)."""
-    by_id = {c["id"]: c for c in calls["cases"]}
+def test_bands(calls):
+    """Spec 6.3: every event step avoids the four bands (build_fixtures.band_problems), except the one recorded exception."""
+    assert bf.band_problems(calls) == []
+    assert set(bf.BAND_EXCEPTIONS) == {"predict-extremes/single-constituent"}
 
-    def lens(cid):
-        return [s["expect"]["items"]["$len"] for s in by_id[cid]["steps"]
-                if isinstance(s.get("expect", {}).get("items"), dict)]
+
+# --------------------------------------------------------------------------- the hand-written outcomes (spec 6.5, S4)
+
+def survivors(f, value, lo, hi, dt, slack=False):
+    """The reported candidates of spec 4.6 steps 2-6a (or the slack search of 4.7) of f over [lo, hi], from the
+    builder's band model (leaf cancellation is not modelled; every designed root here sits in its own leaf)."""
+    problems = []
+    out = bf._search(f, value, lo, hi, dt, problems, "test", slack)
+    assert problems == [], problems
+    return out
+
+
+def reported(cands, start, stop, kinds):
+    out = []
+    for r, k, v, y in cands:
+        t = math.floor(r + 0.5)
+        if start <= t < stop:
+            assert abs(r - math.floor(r) - 0.5) >= 0.01, f"an outcome event within 0.01 s of a half second at {r}"
+            out.append({"time": datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "type": kinds[k]})
+    return out
+
+
+TIDE = {"down": "high", "up": "low"}
+SLACK = {"up": "slack_before_flood", "down": "slack_before_ebb"}
+
+
+def outcome_steps(calls):
+    for c in calls["cases"]:
+        for i, s in enumerate(c["steps"]):
+            if "items" in (s.get("outcome") or {}) and c["root"] == "predict":
+                yield c, i, s
+
+
+def test_outcomes_equal_the_design(calls, doc):
+    """Every {items} outcome on the prediction release equals the design scan of its window: the survivors of the
+    close-root filter and the New Year reconciliation, rounded, in [start, stop), of the outcome's types."""
+    checked = 0
+    for c, i, s in outcome_steps(calls):
+        a = s["args"]
+        start, stop = ts(a["start"]), ts(a["stop"])
+        st = next(x for x in doc["stations"] if x["station_id"] == a["station_id"])
+        if s["op"] == "extremes":
+            cs = next(x for x in st["constant_sets"] if x["set_id"] == (a.get("set_id") or st["recommended_set_id"]))
+            sm = Sum(table(doc, bf.ASTRO_A), [(x["name"], x["amplitude_m"], x["phase_deg"]) for x in cs["constituents"]])
+            fast = max(table(doc, bf.ASTRO_A)["constituents"][x["name"]]["speed_deg_per_hour"] for x in cs["constituents"])
+            dt = min(1.0, 360.0 / fast * 3600 / 100)
+            cands = survivors(lambda t, y: sm.dh(t, y), lambda t, y: sm.h(t, y), start - 3600, stop + 3600, dt)
+            got = reported(cands, start, stop, TIDE)
+        else:
+            w, dw = bin_w(doc, st["constant_sets"][0]["set_id"], a["bin_number"])
+            b = next(b for b in st["constant_sets"][0]["current_bins"] if b["bin"] == a["bin_number"])
+            fast = max(table(doc, bf.ASTRO_A)["constituents"][x["name"]]["speed_deg_per_hour"] for x in b["constituents"])
+            dt = min(1.0, 360.0 / fast * 3600 / 100)
+            pad = 3600 if fast < 360 else 60   # the ripple windows: the slack zeros are local
+            cands = survivors(lambda t, y: w(t, y), lambda t, y: 0.0, start - pad, stop + pad, dt, slack=True)
+            got = reported(cands, start, stop, SLACK)
+        types = s["outcome"].get("types")
+        if types:
+            got = [x for x in got if x["type"] in types]
+        assert got == s["outcome"]["items"], (c["id"], i, got)
+        checked += 1
+    assert checked >= 14
+
+
+def test_counts_equal_the_design(calls, doc):
+    by_id = {c["id"]: c for c in calls["cases"]}
     s5 = set_sum(doc, "OTC-P-0005/noaa")
     t0, t1 = ts(bf.PW["single"][0]), ts(bf.PW["single"][1])
     n = len(scan(lambda t, y: s5.dh(t), t0, t1, 5.0))
-    assert lens("predict-extremes/single-constituent") == [n] == lens("predict-extremes/negative-amplitude")
-    for cid, sid, key in (("predict-extremes/close-high-low", "OTC-P-0008/noaa", "close-high-low"),
-                          ("predict-extremes/close-high-low-high", "OTC-P-0009/noaa", "close-high-low-high"),
-                          ("predict-extremes/double-high", "OTC-P-0010/noaa", "double-high")):
-        s = set_sum(doc, sid)
-        a, b = ts(bf.PW[key][0]), ts(bf.PW[key][1])
-        assert lens(cid) == [len(scan(lambda t, y: s.dh(t), a, b, 0.01))], cid
-    # an even cluster drops both; each triple keeps one
-    assert [s["expect"]["items"] if isinstance(s["expect"]["items"], list) else s["expect"]["items"]["$len"]
-            for s in by_id["predict-extremes/sub-second"]["steps"]] == [[], 1, 1]
+    assert by_id["predict-extremes/single-constituent"]["steps"][0]["outcome"] == {"count": n} == \
+        by_id["predict-extremes/negative-amplitude"]["steps"][0]["outcome"]
+
+
+# --------------------------------------------------------------------------- the review's added fixtures (A1-A8)
+
+def case_step(calls, cid, i=0):
+    return next(c for c in calls["cases"] if c["id"] == cid)["steps"][i]
+
+
+def test_a1_events_with_sigma_minus_one(calls, doc):
+    s = case_step(calls, "predict-current-events/flood-sign")
+    st = next(x for x in doc["stations"] if x["station_id"] == s["args"]["station_id"])
+    b = next(b for b in st["constant_sets"][0]["current_bins"] if b["bin"] == s["args"]["bin_number"])
+    assert math.cos(math.radians(b["azimuth_deg"] - b["mean_flood_dir_deg"])) < 0   # sigma = -1
+    assert s["strict"]["entry"] == "current_events_strict"
+
+
+def test_a2_window_seams(calls, doc):
+    """window-edges: an event at start is in, one at stop is out, and two windows meeting at an event report it once."""
+    steps = next(c for c in calls["cases"] if c["id"] == "predict-extremes/window-edges")["steps"]
+    whole, left, right = (s["outcome"]["items"] for s in steps)
+    assert left + right == whole and steps[0]["args"]["start"] == whole[0]["time"] == left[0]["time"]
+    assert steps[1]["args"]["stop"] == whole[-1]["time"] == right[0]["time"] == steps[2]["args"]["start"]
+
+
+def test_a3_reference_event_inside_the_padding(calls, doc):
+    """A reference event before start whose shifted time lands in the window: a padding M of 120 min (tides: M must be
+    250 + 60 min here) or 0 loses it (spec 4.8 step 2, 4.9 step 2)."""
+    s = case_step(calls, "predict-subordinate/tide-order-swap", 1)
+    start, stop = ts(s["args"]["start"]), ts(s["args"]["stop"])
+    ref = set_sum(doc, "OTC-P-0001/noaa")
+    highs = [r for r, k in scan(lambda t, y: ref.dh(t), start - 6 * 3600, start, 1.0) if k == "down"]
+    assert any(start - 250 * 60 <= r < start - 120 * 60 and start <= r + 250 * 60 < stop for r in highs)
+    s = case_step(calls, "predict-subordinate/current", 1)
+    start = ts(s["args"]["start"])
+    w, _ = bin_w(doc, "OTC-P-0016/noaa", 1)
+    ups = [r for r, k in scan(lambda t, y: w(t), start - 3600, start, 1.0) if k == "up"]
+    assert any(r < start <= r + 5.5 * 60 for r in ups)
+
+
+def test_a4_set_speed_off_the_table(calls, doc):
+    st = next(x for x in doc["stations"] if x["station_id"] == bf.P_BASIC)
+    m2 = next(c for c in st["constant_sets"][0]["constituents"] if c["name"] == "M2")
+    row = table(doc, bf.ASTRO_A)["constituents"]["M2"]["speed_deg_per_hour"]
+    assert 0 < abs(m2["speed_deg_per_hour"] - row) <= 1e-7
+    s = case_step(calls, "predict-set-speed")
+    t = ts(s["args"]["times"][-1])
+    a = Sum(table(doc, bf.ASTRO_A), [("M2", m2["amplitude_m"], m2["phase_deg"])])
+    alt = json.loads(json.dumps(table(doc, bf.ASTRO_A)))
+    alt["constituents"]["M2"]["speed_deg_per_hour"] = m2["speed_deg_per_hour"]
+    b = Sum(alt, [("M2", m2["amplitude_m"], m2["phase_deg"])])
+    assert abs(a.h(t) - b.h(t)) > 1e-6   # far above the cases' 1e-9 tolerance
+
+
+def test_a5_a6_chart_datum_above_zero_and_event_path_datum(calls, doc):
+    s = case_step(calls, "predict-datum/chart", 1)
+    cs = next(c for x in doc["stations"] for c in x.get("constant_sets", []) if c["set_id"] == s["strict"]["args"]["constituents"]["$set"])
+    assert cs["datum"]["named"][cs["datum"]["chart_datum"]] != 0 and "error" not in s["expect"]
+    assert s["strict"]["args"]["datum_term"] == cs["datum"]["msl_offset_m"] - cs["datum"]["named"]["mllw"]
+    steps = next(c for c in calls["cases"] if c["id"] == "predict-subordinate/event-datum")["steps"]
+    assert [x["strict"]["entry"] for x in steps] == ["subordinate_extremes_strict"] * 3
+    assert [x["args"].get("datum") for x in steps] == [None, "mhhw", "msl"]
+    assert steps[0]["strict"]["args"]["chart_datum_term"] == 2.4 - 0.85
+    assert [x["strict"]["args"]["datum_shift"] for x in steps] == [0.0, -1.6, -0.8]
+
+
+def test_a7_fractional_second_offsets(calls, doc):
+    """+12.345 and -7.29 min: some event in the window rounds differently when the offset is added to the rounded time."""
+    s = case_step(calls, "predict-subordinate/tide-fractional-offset", 1)
+    start, stop = ts(s["args"]["start"]), ts(s["args"]["stop"])
+    ref = set_sum(doc, "OTC-P-0001/noaa")
+    off = {"down": 12.345 * 60, "up": -7.29 * 60}
+    rs = scan(lambda t, y: ref.dh(t), start - 3 * 3600, stop + 3 * 3600, 1.0)
+    differ = [r for r, k in rs if start <= math.floor(r + off[k] + .5) < stop
+              and math.floor(r + off[k] + .5) != math.floor(math.floor(r + .5) + off[k] + .5)]
+    assert differ
+
+
+def test_a8_removed_current_reference(calls, doc):
+    s = case_step(calls, "predict-subordinate/current-reference-removed")
+    assert s["expect"] == {"error": "reference_unavailable", "error_fields": {"reference_station_id": "OTC-P-0097"}}
+    assert next(x for x in doc["stations"] if x["station_id"] == "OTC-P-0097")["status"] == "removed"
+
+
+# --------------------------------------------------------------------------- the reference reader's speed check (S6)
+
+@pytest.mark.parametrize("where,delta,bad", [("bin", 0.0058958, True), ("bin", 8e-8, False), ("table", 1e-6, True),
+                                             ("set", 8e-8, False)])
+def test_three_way_speed_check(where, delta, bad):
+    """Build check 7 (spec 3.3): a set's water-level or current constituent, its astro-table row and the constituent
+    table agree on the speed within 1e-7 deg/h, all three ways."""
+    d = json.loads(json.dumps(bf.predict_doc()))
+    if where == "bin":
+        st = next(s for s in d["stations"] if s["station_id"] == "OTC-P-0013")
+        st["constant_sets"][0]["current_bins"][0]["constituents"][0]["speed_deg_per_hour"] += delta
+    elif where == "table":
+        next(c for c in d["constituents"] if c["name"] == "S2")["speed_deg_per_hour"] += delta
+    else:
+        st = next(s for s in d["stations"] if s["station_id"] == "OTC-P-0002")
+        st["constant_sets"][0]["constituents"][0]["speed_deg_per_hour"] += delta
+    errs = [e for e in bf.cross_ref_errors(d) if "speed" in e]
+    assert bool(errs) == bad, errs
