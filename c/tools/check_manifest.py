@@ -21,12 +21,15 @@ CR D24). A C type T may be declared as T or T_t.
 
 A name counts as declared only by a declaration of its kind: a function by an OTC_API prototype or a
 function-like #define, a constant by #define or an enum value, a type by a typedef. A token in a comment
-or a macro body does not count. C has helpers the manifest does not list (otc_*_init, otc_*_free, otc_status_code), so extra
+or a macro body does not count, and neither does a declaration in an #if 0 block (its #else branch
+counts). Comments are removed in one pass from left to right that skips string and character literals,
+so "// x/*" or "a/*b" does not hide the code after it. C has helpers the manifest does not list (otc_*_init, otc_*_free, otc_status_code), so extra
 functions are not an error.
 
 After the check, the script runs its own mutation self-test (each mutation of the manifest or the header
 must be caught); --no-self-test skips it.
 """
+import argparse
 import copy
 import json
 import re
@@ -39,8 +42,106 @@ REQUIRED_KEYS = ("objects", "enums", "errors", "constants", "filters", "client_o
 
 
 def strip_comments(text):
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
-    return re.sub(r"//[^\n]*", " ", text)
+    """The text with every comment replaced by a space (a block comment keeps its newlines). One pass,
+    left to right: a "/*" inside a // comment or a string or character literal opens nothing (R3-310)."""
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            out.append(" ")
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            end = n if j < 0 else j + 2
+            out.append(" " + "\n" * text.count("\n", i, end))
+            i = end
+        elif c in "\"'":
+            j = i + 1
+            while j < n and text[j] != c and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def drop_if0(lines):
+    """The lines a compiler can see: the body of an #if 0 is left out, its #else (or #elif) is kept.
+    Any other conditional is kept whole (conservative: a name under #ifdef X counts) (R3-312)."""
+    keep = []
+    stack = []   # one entry per open conditional: True while its current branch is dead
+    for line in lines:
+        d = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
+        outer_dead = any(stack[:-1]) if stack else False
+        if d:
+            kw, rest = d.groups()
+            if kw in ("if", "ifdef", "ifndef"):
+                stack.append(any(stack) or (kw == "if" and re.fullmatch(r"\s*\(?\s*0\s*\)?\s*", rest) is not None))
+            elif kw in ("elif", "else") and stack:
+                stack[-1] = outer_dead
+            elif kw == "endif" and stack:
+                stack.pop()
+            continue
+        if not any(stack):
+            keep.append(line)
+    return keep
+
+
+def split_top(text, sep):
+    """text split at each sep that is not inside (), [] or {}."""
+    parts, depth, cur = [], 0, []
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == sep and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return parts
+
+
+def declarator_name(decl):
+    """The name a declarator declares: (*name)(...) for a function pointer, else the last word
+    after removing a bit-field width, array bounds and nested aggregate bodies."""
+    fp = re.search(r"\(\s*\*\s*(\w+)\s*\)", decl)
+    if fp:
+        return fp.group(1)
+    decl = re.sub(r"\[[^\]]*\]", " ", decl).split(":", 1)[0]
+    words = re.findall(r"\w+", decl)
+    return words[-1] if words else None
+
+
+def struct_members(body):
+    """The member names of a struct body: nested aggregates, function pointers, comma lists, bit-fields."""
+    names = set()
+    for decl in split_top(body, ";"):
+        head = re.sub(r"\{.*\}", " ", decl, flags=re.S)   # struct { ... } a, b  ->  struct a, b
+        for part in split_top(head, ","):
+            name = declarator_name(part)
+            if name:
+                names.add(name)
+    return names
+
+
+def braced(code, start):
+    """The index just after the } that closes the { at code[start]."""
+    depth = 0
+    for i in range(start, len(code)):
+        if code[i] == "{":
+            depth += 1
+        elif code[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return len(code)
 
 
 class Header:
@@ -48,7 +149,7 @@ class Header:
 
     def __init__(self, text):
         text = strip_comments(text).replace("\\\n", " ")
-        lines = text.split("\n")
+        lines = drop_if0(text.split("\n"))
         self.macros = set()
         self.function_macros = set()
         for line in lines:
@@ -61,20 +162,37 @@ class Header:
         self.functions = {}
         for m in re.finditer(r"\bOTC_API\b[^;{}()]*?\b(\w+)\s*\(([^;{}]*?)\)\s*;", code, re.S):
             params = []
-            for p in m.group(2).split(","):
-                words = re.findall(r"\w+", p)
-                if words and words != ["void"]:
-                    params.append(words[-1])
+            for p in split_top(m.group(2), ","):
+                if re.findall(r"\w+", p) not in ([], ["void"]):
+                    params.append(declarator_name(p))
             self.functions[m.group(1)] = params
+        # enum and struct definitions: typedef enum|struct [tag] { ... } T;  or  enum|struct tag { ... };
+        # with a later typedef enum|struct tag T; (b8-4 H6). The body is matched by brace depth (R3-320).
+        tag_types = {}
+        for m in re.finditer(r"\btypedef\s+(enum|struct)\s+(\w+)\s+(\w+)\s*;", code):
+            tag_types.setdefault((m.group(1), m.group(2)), []).append(m.group(3))
         self.enums = []
-        for m in re.finditer(r"\btypedef\s+enum\s*\w*\s*\{(.*?)\}\s*(\w+)\s*;", code, re.S):
-            self.enums.append((m.group(2), re.findall(r"\b(OTC_\w+)\b\s*(?:=[^,}]*)?(?:,|$)", m.group(1).strip())))
-        self.enum_values = {v for _, vals in self.enums for v in vals}
         self.structs = {}
-        for m in re.finditer(r"\btypedef\s+struct\s+\w*\s*\{(.*?)\}\s*(\w+)\s*;", code, re.S):
-            self.structs[m.group(2)] = set(re.findall(r"\b(\w+)\s*(?:\[[^\]]*\])?\s*;", m.group(1)))
+        for m in re.finditer(r"\b(typedef\s+)?(enum|struct)\s*(\w*)\s*\{", code):
+            end = braced(code, m.end() - 1)
+            body = code[m.end():end - 1]
+            after = re.match(r"\s*(\w*)\s*;", code[end:])
+            if m.group(1):
+                names = [after.group(1)] if after and after.group(1) else []
+            elif after and not after.group(1) and m.group(3):
+                names = tag_types.get((m.group(2), m.group(3)), [])
+            else:
+                continue   # a nested aggregate, or a definition with a variable
+            for name in names:
+                if m.group(2) == "enum":
+                    vals = [v.group(1) for item in split_top(body, ",")
+                            if (v := re.match(r"\s*([A-Za-z_]\w*)", item))]
+                    self.enums.append((name, vals))
+                else:
+                    self.structs[name] = struct_members(body)
+        self.enum_values = {v for _, vals in self.enums for v in vals}
         self.types = set(self.structs) | {name for name, _ in self.enums}
-        self.types |= set(re.findall(r"\btypedef\s+(?:struct\s+)?\w+\s*\*?\s*(\w+)\s*;", code))
+        self.types |= set(re.findall(r"\btypedef\s+(?:(?:struct|enum|union)\s+)?\w+\s*\*?\s*(\w+)\s*;", code))
         self.types |= set(re.findall(r"\btypedef\s+[^;{}]*?\(\s*\*\s*(\w+)\s*\)", code))
 
     def declared(self, name):
@@ -124,13 +242,22 @@ def check(api, header):
         langs = item.get("languages")
         return langs is None or "c" in langs
 
+    def need_param(fn, param, where):
+        if fn not in h.functions:
+            problems.append(f"{fn}  ({where}: no OTC_API function)")
+        elif param not in h.functions[fn]:
+            problems.append(f"{fn}({param})  ({where}: no such parameter)")
+
     # objects
     for oname, obj in api["objects"].items():
         ctype = obj.get("c")
         if ctype:
             need_type(ctype, f"type of {oname}")
-        for m in obj.get("members", []):
-            where = f"{oname}.{m.get('name')}"
+        for i, m in enumerate(obj.get("members", [])):
+            if not isinstance(m.get("name"), str) or not m["name"]:
+                problems.append(f"{oname}: member #{i} has no name  (api.json entry {m})")
+                continue
+            where = f"{oname}.{m['name']}"
             if not for_c(m):
                 continue
             c = m.get("c")
@@ -141,22 +268,27 @@ def check(api, header):
                     problems.append(f"{where}: {c} needs an object with a C type")
                 continue
             if c and c.startswith("(C: "):  # a struct member named in the note
-                struct, _, member = c[4:-1].rpartition(".")
-                need_member(struct or ctype, member, where)
+                note = re.fullmatch(r"\(C: (?:(\w+)\.)?(\w+)\)", c)
+                if not note:
+                    problems.append(f"{where}: c {c!r} is not \"(C: T.m)\" or \"(C: m)\"")
+                elif not (note.group(1) or ctype):
+                    problems.append(f"{where}: c {c!r} names no struct, and {oname} has no C type")
+                else:
+                    need_member(note.group(1) or ctype, note.group(2), where)
                 continue
             pm = re.fullmatch(r"(\w+)\((\w+)\)", c or "")
             if pm:  # a parameter of a function
-                fn, param = pm.groups()
-                if fn not in h.functions:
-                    problems.append(f"{fn}  ({where}: no OTC_API function)")
-                elif param not in h.functions[fn]:
-                    problems.append(f"{fn}({param})  ({where}: no such parameter)")
+                need_param(*pm.groups(), where)
                 continue
             if c and c.startswith("("):  # a note that says how C covers it
                 continue
             if c:
                 for fn in c.split("/"):
-                    need_function(fn, where)
+                    pm = re.fullmatch(r"(\w+)\((\w+)\)", fn)
+                    if pm:
+                        need_param(*pm.groups(), where)
+                    else:
+                        need_function(fn, where)
                 continue
             if not ctype:
                 problems.append(f"{where}: no C mapping (the object has no C type; give the member a c, "
@@ -169,16 +301,24 @@ def check(api, header):
                 need_member(ctype, m["name"], where)
                 continue
             acc = f"{base(ctype)}_{m['name']}"
-            singular = acc[:-1] if acc.endswith("s") else acc
+            singulars = [acc]   # aliases -> alias, entries -> entry, flags -> flag
+            if acc.endswith("ies"):
+                singulars.append(acc[:-3] + "y")
+            if acc.endswith("es"):
+                singulars.append(acc[:-2])
+            if acc.endswith("s"):
+                singulars.append(acc[:-1])
             fns = set(h.functions) | h.function_macros
             ok = acc in fns or acc + "_json" in fns or any(s + "_count" in fns and s + "_at" in fns
-                                                           for s in (acc, singular))
+                                                           for s in singulars)
             if not ok:
-                problems.append(f"{acc}  ({where}: no accessor {acc}, {acc}_json or {singular}_count/_at)")
+                pairs = ", ".join(f"{s}_count/_at" for s in singulars[1:] or singulars)
+                problems.append(f"{acc}  ({where}: no accessor {acc}, {acc}_json or {pairs})")
 
-    # filters: members of otc_filter
+    # filters: members of otc_filter (a filter whose languages leave out c is not)
     for f in api["filters"]:
-        need_member(FILTER_STRUCT, f.get("name"), f"filter {f.get('name')}")
+        if for_c(f):
+            need_member(FILTER_STRUCT, f.get("name"), f"filter {f.get('name')}")
 
     # enums: exactly the manifest's values, plus OTHER and an optional UNSET
     for ename, values in api["enums"].items():
@@ -240,9 +380,14 @@ def check(api, header):
         for s in structs:
             need_member(s, opt.get("name"), "client option, C only")
 
-    # phase 2 operations must not be declared yet
+    # phase 2 operations must not be declared yet; each names its C function(s), and a c "f(p)" names f
     for op in api["reserved_phase2"].get("operations", []):
-        for fn in (op.get("c") or "").split("/"):
+        if not op.get("c"):
+            problems.append(f"reserved_phase2 operation {op.get('object')}.{op.get('name')}: no c, so nothing "
+                            "checks that it is not declared")
+            continue
+        for fn in op["c"].split("/"):
+            fn = re.sub(r"\(\w+\)$", "", fn)
             if fn and h.declared(fn):
                 problems.append(f"{fn}  (reserved for phase 2: must not be declared yet)")
 
@@ -251,19 +396,44 @@ def check(api, header):
 
 # ---------------------------------------------------------------- self-test
 
+# The guards raise (not assert), so a mutation whose pattern drifted fails under python -O too.
 def _drop_line(pattern):
     def f(text):
         new, n = re.subn(pattern, "", text, count=1, flags=re.M)
-        assert n == 1, pattern
+        if n != 1:
+            raise ValueError(f"mutation pattern not found: {pattern}")
         return new
     return f
 
 
 def _sub(old, new):
     def f(text):
-        assert old in text, old
+        if old not in text:
+            raise ValueError(f"mutation text not found: {old!r}")
         return text.replace(old, new, 1)
     return f
+
+
+def _wrap(pattern, before, after):
+    """The first line matching pattern, with before and after lines around it."""
+    def f(text):
+        new, n = re.subn(pattern, lambda m: before + m.group(0) + after, text, count=1, flags=re.M)
+        if n != 1:
+            raise ValueError(f"mutation pattern not found: {pattern}")
+        return new
+    return f
+
+
+def _then(*fs):
+    def f(text):
+        for g in fs:
+            text = g(text)
+        return text
+    return f
+
+
+def _append(tail):
+    return lambda text: text.rstrip("\n") + "\n" + tail
 
 
 def _api(fn):
@@ -325,6 +495,33 @@ MUTATIONS = [
     ("no-constants-c_only", None, _api(lambda a: a["constants"].pop("c_only")), "constants has no c_only"),
     ("no-client_options-c_only", None, _api(lambda a: a["client_options"].pop("c_only")), "client_options has no c_only"),
     ("no-filters", None, _api(lambda a: a.pop("filters")), "api.json has no filters"),
+    # one mutation for each rule that had none (R3-313)
+    ("c-only-constant-missing", _drop_line(r"^#define OTC_ABI_VERSION .*$"), None, "OTC_ABI_VERSION  (constant, C only"),
+    ("C-note-struct-member-renamed", _sub("    const char *id;\n    double      distance_km;",
+                                          "    const char *ident;\n    double      distance_km;"), None,
+     "otc_nearby.id  (Nearby.station)"),
+    ("raw-json-missing", _drop_line(r"^OTC_API otc_status otc_station_raw_json\(.*$"), None, "otc_station_raw_json  (Station.raw"),
+    ("c-struct-member-missing", _drop_line(r"^    double                 time_mae_min;$"), None,
+     "otc_validation_t.time_mae_min  (Validation.time_mae_min)"),
+    ("object-type-missing", _drop_line(r"^typedef struct otc_release_info otc_release_info;.*$"), None,
+     "otc_release_info  (type of ReleaseInfo: no typedef)"),
+    # comments and #if 0 (R3-310, R3-312), enum values without the prefix (R3-311)
+    ("line-comment-opens-no-block", _then(_sub("OTC_API void otc_close(", "// see data/*.json\n"
+                                                "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
+                                           _append("/* end */\n")), None, "otc_heights  (reserved"),
+    ("string-opens-no-block", _then(_sub("OTC_API void otc_close(", '#define OTC_ZZ_URL "a/*b"\n'
+                                          "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
+                                     _append("/* end */\n")), None, "otc_heights  (reserved"),
+    ("unprefixed-extra-enum-value", _sub("OTC_ALIAS_SYSTEM_OTHER", "BOGUS_EXTRA, OTC_ALIAS_SYSTEM_OTHER"), None,
+     "extra value(s) ['BOGUS_EXTRA']"),
+    ("prototype-only-in-if-0", _wrap(r"^OTC_API void otc_close\(.*$", "#if 0\n", "\n#endif"), None,
+     "otc_close  (Client.close"),
+    ("define-in-else-of-if-0-ok", _wrap(r"^#define OTC_FORMAT_VERSION .*$", "#if 0\n#define OTC_ZZ 1\n#else\n", "\n#endif"),
+     None, None),
+    # declarator shapes that are declared (R3-320)
+    ("nested-aggregate-member-ok", _sub("typedef struct otc_filter {", "typedef struct otc_filter {\n    struct { int a; } zz;"),
+     None, None),
+    ("comma-declarator-ok", _sub("const char *source_type;", "const char *source_type, *zz_extra;"), None, None),
 ]
 
 
@@ -346,6 +543,9 @@ def self_test(api, header):
 
 
 def main(argv):
+    ap = argparse.ArgumentParser(description="Check the C public header against conformance/api.json.")
+    ap.add_argument("--no-self-test", action="store_true", help="skip the mutation self-test")
+    a = ap.parse_args(argv)
     api = json.loads((ROOT / "conformance/api.json").read_text(encoding="utf-8"))
     header = (ROOT / "c/include/opentideconstants.h").read_text(encoding="utf-8")
     problems, notes = check(api, header)
@@ -359,7 +559,7 @@ def main(argv):
         rc = 1
     else:
         print("C header declares every name the API manifest implies, and no extra enum value or phase 2 name")
-    if "--no-self-test" not in argv:
+    if not a.no_self_test:
         failures = self_test(api, header)
         if failures:
             print(f"self-test FAILED: {len(failures)} of {len(MUTATIONS)} mutation(s):")
