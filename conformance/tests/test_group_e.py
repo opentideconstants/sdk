@@ -75,13 +75,21 @@ def test_counter_order_fixture_and_cases():
 def test_cache_rows_check_file_values(cid):
     st = [s for s in runner_steps(cases_by_id()[cid]) if s["op"] == "release_files"]
     assert st, f"{cid} has no release_files step"
-    files = st[-1]["expect"]["files"]
-    # the rows are the pointer entry's files, value for value (url absolute against the base URL)
+    exp = st[-1]["expect"]
+    # the rows are the .verified rows: the pointer entry's values, for only the files the download stored (CR3
+    # DR100): the .json in the default eager mode, the .jsonl and the .meta.json in C's stream mode
     index = json.loads((CONF / "fixtures" / "good" / "OTC_index.json").read_text(encoding="utf-8"))
     entry = next(e for e in index["releases"] if e["datestamp"] == "20991231.2")
-    rows = sorted([{"name": f["name"], "url": "${server}/good/" + f["url"], "size": f["size"], "sha256": f["sha256"]}
-                   for f in entry["files"]], key=lambda f: f["name"])
-    assert files == rows, (files, rows)
+    rows = {f["name"]: {"name": f["name"], "url": "${server}/good/" + f["url"], "size": f["size"], "sha256": f["sha256"]}
+            for f in entry["files"]}
+    eager = [rows["OTC_20991231.2.json"]]
+    stream = [rows["OTC_20991231.2.jsonl"], rows["OTC_20991231.2.meta.json"]]
+    assert exp["files"] == {"$any_of": [eager, stream]}, exp
+    for ok in (eager, stream):
+        assert driver.evaluate(exp, {"ok": True, "result": {"files": ok}}) == []
+    # the pointer's whole list (the old writer) and a wrong value both fail
+    assert driver.evaluate(exp, {"ok": True, "result": {"files": sorted(rows.values(), key=lambda r: r["name"])}})
+    assert driver.evaluate(exp, {"ok": True, "result": {"files": [dict(eager[0], sha256="0" * 64)]}})
 
 
 # --- a pinned download needs no pointer or index (F6)
@@ -89,14 +97,25 @@ def test_cache_rows_check_file_values(cid):
 def test_pinned_download_files_come_from_sha256_only():
     c = cases_by_id()["net/pinned-download"]
     exp = [s for s in runner_steps(c) if s["op"] == "release_files"][0]["expect"]
-    rows = []
+    sums = {}
     for line in (CONF / "fixtures" / "good" / "OTC_20991231.sha256").read_text().splitlines():
         digest, name = line.split(None, 1)
-        rows.append({"name": name.strip(), "url": None, "size": None, "sha256": digest})
-    rows.sort(key=lambda r: r["name"])
-    assert driver.evaluate(exp, {"ok": True, "result": {"files": rows}}) == []
-    rows[0]["sha256"] = "0" * 64
-    assert driver.evaluate(exp, {"ok": True, "result": {"files": rows}})
+        sums[name.strip()] = digest
+
+    def rows(names, url=None, real=True):
+        return [{"name": n, "url": url and url + n, "size": (CONF / "fixtures" / "good" / n).stat().st_size if real else None,
+                 "sha256": sums[n]} for n in names]
+
+    # the rows of the files the open stored (CR3 DR100), with their real size; url null or the true value
+    for names in (["OTC_20991231.json"], ["OTC_20991231.jsonl", "OTC_20991231.meta.json"]):
+        assert driver.evaluate(exp, {"ok": True, "result": {"files": rows(names)}}) == []
+        assert driver.evaluate(exp, {"ok": True, "result": {"files": rows(names, "${server}/good/")}}) == []
+        bad = rows(names)
+        bad[0]["sha256"] = "0" * 64
+        assert driver.evaluate(exp, {"ok": True, "result": {"files": bad}})
+        assert driver.evaluate(exp, {"ok": True, "result": {"files": rows(names, real=False)}})
+    # every .sha256 row, sizes null (the old writer): fails
+    assert driver.evaluate(exp, {"ok": True, "result": {"files": rows(sorted(sums), real=False)}})
 
 
 # --- proxy cases do not depend on loopback handling (F10)
