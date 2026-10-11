@@ -1038,38 +1038,32 @@
     {
      "op": "release_files",
      "expect": {
-      "files": [
-       {
-        "name": "OTC_20991231.2.json",
-        "url": "${server}/good/OTC_20991231.2.json",
-        "size": 29916,
-        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
-       },
-       {
-        "name": "OTC_20991231.2.json.gz",
-        "url": "${server}/good/OTC_20991231.2.json.gz",
-        "size": 4498,
-        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
-       },
-       {
-        "name": "OTC_20991231.2.jsonl",
-        "url": "${server}/good/OTC_20991231.2.jsonl",
-        "size": 25929,
-        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
-       },
-       {
-        "name": "OTC_20991231.2.meta.json",
-        "url": "${server}/good/OTC_20991231.2.meta.json",
-        "size": 3974,
-        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
-       },
-       {
-        "name": "OTC_20991231.2.sha256",
-        "url": "${server}/good/OTC_20991231.2.sha256",
-        "size": 353,
-        "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
-       }
-      ]
+      "files": {
+       "$any_of": [
+        [
+         {
+          "name": "OTC_20991231.2.json",
+          "url": "${server}/good/OTC_20991231.2.json",
+          "size": 29916,
+          "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+         }
+        ],
+        [
+         {
+          "name": "OTC_20991231.2.jsonl",
+          "url": "${server}/good/OTC_20991231.2.jsonl",
+          "size": 25929,
+          "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+         },
+         {
+          "name": "OTC_20991231.2.meta.json",
+          "url": "${server}/good/OTC_20991231.2.meta.json",
+          "size": 3974,
+          "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+         }
+        ]
+       ]
+      }
      }
     }
    ]
@@ -2503,6 +2497,1757 @@
      "driver": "assert_sha256",
      "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
      "equals": "${fixtures}/good/OTC_20991231.2.jsonl"
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-pinned-stream-rows",
+   "title": "a pinned stream download: .verified has a row only for the .jsonl and the .meta.json, each with its real size, and no row for the .sha256 file; release.files lists exactly those rows (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-pinned-eager-rows",
+   "title": "a pinned eager download: .verified has a row only for the stored .json (not the fetched .json.gz), with its real size; release.files lists exactly that row (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        },
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-pinned-other-mode-adds",
+   "title": "a pinned stream open adds the .jsonl and the .meta.json to a release cached in eager mode: .verified keeps the .json row and adds the two; release.files lists the three (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       },
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        },
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-latest-stream-rows",
+   "title": "a download of latest in stream mode: .verified has a row only for the files it stored (real size, no .sha256 row); release.files is the pointer entry; a later cached open lists the .verified rows (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 4498,
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
+       }
+      ]
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-latest-eager-rows",
+   "title": "a download of latest in eager mode: .verified has a row only for the files it stored (real size, no .sha256 row); release.files is the pointer entry; a later cached open lists the .verified rows (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 4498,
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
+       }
+      ]
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        },
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-update-rows",
+   "title": "update downloads the newer latest: release.files is the pointer entry, and its .verified has a row only for the stored .json (DR100)",
+   "spec": "4.3, 4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_index.json",
+       "pointer": "/releases/1"
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "op": "update",
+     "expect": {
+      "updated": true,
+      "from": "20991231",
+      "to": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 4498,
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
+       }
+      ]
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-auto-update-rows",
+   "title": "an automatic update downloads the newer latest: release.files is the pointer entry, and its .verified has a row only for the stored .json (DR100)",
+   "spec": "4.3.1, 5.4, 5.6",
+   "requires": [
+    "fs",
+    "eager"
+   ],
+   "steps": [
+    {
+     "driver": "server_rules",
+     "rules": [
+      {
+       "match": "/good/OTC_latest(-f1)?\\.json$",
+       "action": "json",
+       "file": "good/OTC_index.json",
+       "pointer": "/releases/1"
+      }
+     ]
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager",
+      "auto_update": true,
+      "update_interval": 1
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "server_rules",
+     "rules": []
+    },
+    {
+     "driver": "sleep",
+     "s": 2.5
+    },
+    {
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0021"
+     },
+     "expect": {
+      "station": null
+     }
+    },
+    {
+     "op": "release_metadata",
+     "expect": {
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": "${server}/good/OTC_20991231.2.json",
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.json.gz",
+        "url": "${server}/good/OTC_20991231.2.json.gz",
+        "size": 4498,
+        "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": "${server}/good/OTC_20991231.2.jsonl",
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": "${server}/good/OTC_20991231.2.meta.json",
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       },
+       {
+        "name": "OTC_20991231.2.sha256",
+        "url": "${server}/good/OTC_20991231.2.sha256",
+        "size": 353,
+        "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8"
+       }
+      ]
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-sha256-row-dropped",
+   "title": "a .verified that an older writer left with a row for OTC_{D}.sha256: a pinned stream open that adds the .jsonl writes no such row, and release.files does not list it (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.sha256",
+     "value": {
+      "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8",
+      "size": 353,
+      "url": null
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       },
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        },
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-absent-file-row-dropped",
+   "title": "a .verified with a row for a file that is not in the release directory (the .json.gz): a pinned stream open that adds the .jsonl writes no row for it (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.json.gz",
+     "value": {
+      "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955",
+      "size": 4498,
+      "url": null
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.json": {
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd",
+        "size": 29916,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        }
+       },
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.json",
+          "${server}/good/OTC_20991231.2.json"
+         ]
+        },
+        "size": 29916,
+        "sha256": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+       },
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-stale-rows-dropped-stream",
+   "title": "a .verified with a row for OTC_{D}.sha256 and one for a file that is not there (the .json.gz), and the .jsonl gone: the pinned stream open that downloads the .jsonl again writes neither row (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.sha256",
+     "value": {
+      "sha256": "e7e3d0b207f77be28e18782d5c035080b2f181a7c3be19682f4edaa0427360b8",
+      "size": 353,
+      "url": null
+     }
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.json.gz",
+     "value": {
+      "sha256": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955",
+      "size": 4498,
+      "url": null
+     }
+    },
+    {
+     "driver": "delete",
+     "path": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl"
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-null-sha-row-dropped",
+   "title": "a .verified whose row for the stored .json has a null sha256 (that file is not verified): a pinned stream open that adds the .jsonl writes no row for the .json (DR100)",
+   "spec": "4.3.1, 5.4",
+   "requires": [
+    "fs",
+    "stream",
+    "eager"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "eager"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.json/sha256",
+     "value": null
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "release_files",
+     "expect": {
+      "files": [
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-null-size-offline",
+   "title": "offline, a row of the newest .verified has a null size: .verified is malformed, so that release is not a candidate (a pinned open is offline_unavailable, cached_releases leaves it out), the older one loads, and nothing is deleted (B10, C4)",
+   "spec": "5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.jsonl/size",
+     "value": null
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "error": "offline_unavailable"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ]
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-null-size-pinned-online",
+   "title": "online, a row of a pinned release's .verified has a null size: the release is downloaded again, and the new .verified has real sizes (B10, C4)",
+   "spec": "5.2, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "pointer": "/files/OTC_20991231.2.jsonl/size",
+     "value": null
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "/good/OTC_20991231\\.2\\.jsonl$",
+     "min": 1
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-absent-size-offline",
+   "title": "offline, a row of the newest .verified has a absent size: .verified is malformed, so that release is not a candidate (a pinned open is offline_unavailable, cached_releases leaves it out), the older one loads, and nothing is deleted (B10, C4)",
+   "spec": "5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"datestamp\": \"20991231.2\", \"files\": {\"OTC_20991231.2.jsonl\": {\"sha256\": \"84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0\", \"url\": null}, \"OTC_20991231.2.meta.json\": {\"sha256\": \"f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350\", \"size\": 3974, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "error": "offline_unavailable"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream",
+      "offline": true
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json"
+     ]
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cache/dr100-absent-size-pinned-online",
+   "title": "online, a row of a pinned release's .verified has a absent size: the release is downloaded again, and the new .verified has real sizes (B10, C4)",
+   "spec": "5.2, 5.4",
+   "requires": [
+    "fs",
+    "stream"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "restart_runner"
+    },
+    {
+     "driver": "write",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "text": "{\"by\": \"opentideconstants-conformance/1.0\", \"datestamp\": \"20991231.2\", \"files\": {\"OTC_20991231.2.jsonl\": {\"sha256\": \"84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0\", \"url\": null}, \"OTC_20991231.2.meta.json\": {\"sha256\": \"f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350\", \"size\": 3974, \"url\": null}}, \"verified_at\": \"2099-12-31T20:00:00Z\"}"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     },
+     "expect_if_missing": {
+      "fetch": {
+       "error": "not_built"
+      }
+     }
+    },
+    {
+     "driver": "assert_requests",
+     "match": "/good/OTC_20991231\\.2\\.jsonl$",
+     "min": 1
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/.verified",
+     "match": {
+      "files": {
+       "OTC_20991231.2.jsonl": {
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+        "size": 25929,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl",
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        }
+       },
+       "OTC_20991231.2.meta.json": {
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350",
+        "size": 3974,
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json",
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        }
+       }
+      }
+     }
     }
    ]
   }

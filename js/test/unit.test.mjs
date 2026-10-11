@@ -395,8 +395,12 @@ test("T81: .verified is checked key by key, not cast", async () => {
     const { parseVerified } = await import("../dist/core.js");
     const b = (v) => new TextEncoder().encode(JSON.stringify(v));
     assert.equal(parseVerified(b({ files: { a: 5 } }), "20991231"), null);
-    const v = parseVerified(b({ files: { a: { sha256: 7, size: "x", url: 3 } }, datestamp: 5 }), "20991231");
-    assert.deepEqual(v.files.a, { sha256: null, size: null, url: null });
+    // a size that is not an integer, null or absent makes .verified malformed (spec 5.4, B10, C4)
+    assert.equal(parseVerified(b({ files: { a: { sha256: null, size: "x", url: null } } }), "20991231"), null);
+    assert.equal(parseVerified(b({ files: { a: { sha256: null, size: null, url: null } } }), "20991231"), null);
+    assert.equal(parseVerified(b({ files: { a: { sha256: null, url: null } } }), "20991231"), null);
+    const v = parseVerified(b({ files: { a: { sha256: 7, size: 3, url: 3 } }, datestamp: 5 }), "20991231");
+    assert.deepEqual(v.files.a, { sha256: null, size: 3, url: null });
     assert.equal(v.datestamp, "20991231");
     assert.throws(() => parseVerified(b({ files: {}, format_version: "1" }), "20991231"), isCode("invalid_release"));
 });

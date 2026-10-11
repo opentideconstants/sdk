@@ -1092,6 +1092,15 @@ def group_load():
     return out
 
 
+def cached_rows(info):
+    """release.files of a cached open of a release that one download of latest stored (spec 4.3.1 cache row): the
+    .verified rows, that is the pointer's values for only the files stored (CR3 DR100). The default mode is eager
+    (the .json), C's is stream (the .jsonl and the .meta.json)."""
+    d = info["datestamp"]
+    by = {f["name"]: f for f in info["files"]}
+    return {"$any_of": [[by[f"OTC_{d}.json"]], [by[f"OTC_{d}.jsonl"], by[f"OTC_{d}.meta.json"]]]}
+
+
 def group_network():
     out = []
     G = f"{SRV}/good/"
@@ -1142,7 +1151,7 @@ def group_network():
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, base_url=G, cache_dir="${cache}")),
                      drv("assert_requests", match=r"/good/OTC_latest-f1\.json$", min=1, status=304, header={"if-none-match": '^"[0-9a-f]{64}"$'}),
                      drv("assert_requests", match=r"/good/OTC_20991231\.2\.", count=0),
-                     step("release_files", {"files": info2["files"]})],
+                     step("release_files", {"files": cached_rows(info2)})],
                     requires=["fs"]))
     out.append(case("net/pinned-cached-no-network", "a pinned, cached release opens with the server stopped and no socket", "4.2, 5.2, 6.5",
                     [net(step("open", {"loaded_from": "download", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
@@ -1151,10 +1160,12 @@ def group_network():
                      drv("assert_requests", source="any", count=0)],
                     requires=["fs"]))
     # A pinned download reads only OTC_{D}.sha256 (spec 5.2), so release.files is checked against that file
-    # alone: its names and digests; url and size are the true values or null (README "Choices").
-    pinned_rows = [{"name": n, "url": {"$any_of": [None, G + n]},
-                    "size": {"$any_of": [None, (FIXTURES / "good" / n).stat().st_size]}, "sha256": h}
-                   for n, h in sorted(sha256_rows("good", d1).items())]
+    # alone: its names and digests, for the files the open stored (the .verified rows, CR3 DR100), with their
+    # real sizes; url is the true value or null (README "Choices"). The default mode is eager (C: stream).
+    sums1 = sha256_rows("good", d1)
+    pinned_rows = {"$any_of": [[{"name": n, "url": {"$any_of": [None, G + n]}, "size": (FIXTURES / "good" / n).stat().st_size,
+                                 "sha256": sums1[n]} for n in names]
+                               for names in ([f"OTC_{d1}.json"], [f"OTC_{d1}.jsonl", f"OTC_{d1}.meta.json"])]}
     out.append(case("net/pinned-download", "a pinned older release downloads; its metadata is that release's; files from its .sha256", "4.2, 4.3.1, 5.2",
                     [net(step("open", {"loaded_from": "download", "datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}")),
                      drv("assert_requests", match=r"OTC_(latest|index)", count=0),
@@ -1189,7 +1200,7 @@ def group_network():
                      drv("server_rules", rules=[{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "status", "status": 500}]),
                      open_latest({"loaded_from": "cache_after_error", "datestamp": d2}),
                      step("last_error", {"code": "network"}),
-                     step("release_files", {"files": info2["files"]})],
+                     step("release_files", {"files": cached_rows(info2)})],
                     requires=["fs"], timeout_s=90))
     out.append(case("net/last-error-null", "last_error is null after a clean download", "4.3",
                     [open_latest(), step("last_error", {"code": None})], requires=["fs"]))
@@ -1629,8 +1640,8 @@ def group_cache():
     out.append(case("cache/files-from-verified", "loaded_from cache: release.files comes from .verified", "4.3.1",
                     [open_latest_step(G), drv("restart_runner"), drv("server_stop"),
                      net(step("open", {"loaded_from": "cache", "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}")),
-                     step("release_files", {"files": enc_release_info("good", d2, G)["files"]})], requires=["fs"]))
-    return out + corrupt_cache_cases() + missing_sha256_cases()
+                     step("release_files", {"files": cached_rows(enc_release_info("good", d2, G))})], requires=["fs"]))
+    return out + corrupt_cache_cases() + missing_sha256_cases() + dr100_cases()
 
 
 def missing_sha256_cases():
@@ -1757,6 +1768,114 @@ def corrupt_cache_cases():
     out.append(case("cache/verified-unreadable-offline", "offline, the newest .verified cannot be read: cache, not io and not absent", "5.2",
                     both + [drv("chmod", path=f"{r2}/.verified", mode="000")] + offline + [latest(err("cache"), offline=True)],
                     requires=["fs", "stream"]))
+    return out
+
+
+def dr100_cases():
+    """The .verified writer rule and the size reader rule (CR3 DR100, CR3 spec review 2 B10 and 3 C4, orchestrator
+    decisions 2026-10-09; spec 4.3.1, 5.4). A writer writes a files row only for a file that is present and verified
+    in the release directory, with its real size, and never a row for OTC_{D}.sha256. A pinned download lists exactly
+    those rows in release.files; a download of latest lists the pointer entry. A row with a null or absent size makes
+    .verified malformed: offline the release is not a candidate, online it is downloaded again."""
+    out = []
+    G = f"{SRV}/good/"
+    d2, d1 = "20991231.2", "20991231"
+    r2 = "${cache}/v1/releases/" + d2
+    shas = sha256_rows("good", d2)
+    info2 = enc_release_info("good", d2, G)
+    ptr = {f["name"]: f for f in info2["files"]}
+    n_json, n_jsonl, n_meta, n_gz, n_sums = (f"OTC_{d2}{x}" for x in (".json", ".jsonl", ".meta.json", ".json.gz", ".sha256"))
+
+    def size(n):
+        return (FIXTURES / "good" / n).stat().st_size
+
+    def vrow(n):   # a .verified row: the real size, the .sha256 digest, the true url or null
+        return {"sha256": shas[n], "size": size(n), "url": {"$any_of": [None, G + n, ptr[n]["url"]]}}
+
+    def frow(n):   # a release.files row of a pinned download
+        return {"name": n, "url": {"$any_of": [None, G + n, ptr[n]["url"]]}, "size": size(n), "sha256": shas[n]}
+
+    def vfiles(*names):
+        return drv("assert_json", path=f"{r2}/.verified", match={"files": {n: vrow(n) for n in names}})
+
+    def rfiles(*names):
+        return step("release_files", {"files": [frow(n) for n in sorted(names)]})
+
+    def pin(mode, expect="download", **kw):
+        return net(step("open", {"loaded_from": expect, "datestamp": d2}, release=d2, base_url=G, cache_dir="${cache}",
+                        mode=mode, **kw))
+
+    def latest(mode, expect="download", **kw):
+        return net(step("open", {"loaded_from": expect, "datestamp": d2}, base_url=G, cache_dir="${cache}", mode=mode, **kw))
+
+    STREAM, EAGER = [n_jsonl, n_meta], [n_json]
+    out.append(case("cache/dr100-pinned-stream-rows", "a pinned stream download: .verified has a row only for the .jsonl and the .meta.json, each with its real size, and no row for the .sha256 file; release.files lists exactly those rows (DR100)", "4.3.1, 5.4",
+                    [pin("stream"), vfiles(*STREAM), rfiles(*STREAM)], requires=["fs", "stream"]))
+    out.append(case("cache/dr100-pinned-eager-rows", "a pinned eager download: .verified has a row only for the stored .json (not the fetched .json.gz), with its real size; release.files lists exactly that row (DR100)", "4.3.1, 5.4",
+                    [pin("eager"), vfiles(*EAGER), rfiles(*EAGER)], requires=["fs", "eager"]))
+    out.append(case("cache/dr100-pinned-other-mode-adds", "a pinned stream open adds the .jsonl and the .meta.json to a release cached in eager mode: .verified keeps the .json row and adds the two; release.files lists the three (DR100)", "4.3.1, 5.4",
+                    [pin("eager"), drv("restart_runner"), pin("stream"), vfiles(n_json, n_jsonl, n_meta),
+                     rfiles(n_json, n_jsonl, n_meta)], requires=["fs", "stream", "eager"]))
+    for mode, names in (("stream", STREAM), ("eager", EAGER)):
+        out.append(case(f"cache/dr100-latest-{mode}-rows", f"a download of latest in {mode} mode: .verified has a row only for the files it stored (real size, no .sha256 row); release.files is the pointer entry; a later cached open lists the .verified rows (DR100)", "4.3.1, 5.4",
+                        [latest(mode), vfiles(*names), step("release_files", {"files": info2["files"]}),
+                         drv("restart_runner"), drv("server_stop"),
+                         latest(mode, "cache", offline=True), rfiles(*names)], requires=["fs", mode]))
+    # update and the automatic update download latest too, so release.files is the pointer entry. C's update gives a
+    # path, and the release is opened from the cache (the .verified rows), so these need a client update: eager.
+    old_pointer = [{"match": r"/good/OTC_latest(-f1)?\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "/releases/1"}]
+    out.append(case("cache/dr100-update-rows", "update downloads the newer latest: release.files is the pointer entry, and its .verified has a row only for the stored .json (DR100)", "4.3, 4.3.1, 5.4",
+                    [drv("server_rules", rules=old_pointer),
+                     net(step("open", {"loaded_from": "download", "datestamp": d1}, base_url=G, cache_dir="${cache}", mode="eager")),
+                     drv("server_rules", rules=[]),
+                     net(step("update", {"updated": True, "from": d1, "to": d2})),
+                     step("release_files", {"files": info2["files"]}), vfiles(*EAGER)], requires=["fs", "eager"]))
+    out.append(case("cache/dr100-auto-update-rows", "an automatic update downloads the newer latest: release.files is the pointer entry, and its .verified has a row only for the stored .json (DR100)", "4.3.1, 5.4, 5.6",
+                    [drv("server_rules", rules=old_pointer),
+                     net(step("open", {"datestamp": d1}, base_url=G, cache_dir="${cache}", mode="eager", auto_update=True, update_interval=1)),
+                     drv("server_rules", rules=[]), drv("sleep", s=2.5),
+                     # the first query after the interval switches the release (as update/auto): OTC-T-0021 is gone in .2
+                     step("station", {"station": None}, station_id="OTC-T-0021"),
+                     step("release_metadata", {"datestamp": d2}),
+                     step("release_files", {"files": info2["files"]}), vfiles(*EAGER)], requires=["fs", "eager"]))
+    # an older or other writer left a row for OTC_{D}.sha256, or for a file that is gone: the next writer drops it
+    sums_row = {"sha256": hashlib.sha256((FIXTURES / "good" / n_sums).read_bytes()).hexdigest(), "size": size(n_sums), "url": None}
+    out.append(case("cache/dr100-sha256-row-dropped", "a .verified that an older writer left with a row for OTC_{D}.sha256: a pinned stream open that adds the .jsonl writes no such row, and release.files does not list it (DR100)", "4.3.1, 5.4",
+                    [pin("eager"), drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_sums}", value=sums_row),
+                     drv("restart_runner"), pin("stream"), vfiles(n_json, n_jsonl, n_meta), rfiles(n_json, n_jsonl, n_meta)],
+                    requires=["fs", "stream", "eager"]))
+    gz_row = {"sha256": shas[n_gz], "size": size(n_gz), "url": None}
+    out.append(case("cache/dr100-absent-file-row-dropped", "a .verified with a row for a file that is not in the release directory (the .json.gz): a pinned stream open that adds the .jsonl writes no row for it (DR100)", "4.3.1, 5.4",
+                    [pin("eager"), drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_gz}", value=gz_row),
+                     drv("restart_runner"), pin("stream"), vfiles(n_json, n_jsonl, n_meta), rfiles(n_json, n_jsonl, n_meta)],
+                    requires=["fs", "stream", "eager"]))
+    out.append(case("cache/dr100-stale-rows-dropped-stream", "a .verified with a row for OTC_{D}.sha256 and one for a file that is not there (the .json.gz), and the .jsonl gone: the pinned stream open that downloads the .jsonl again writes neither row (DR100)", "4.3.1, 5.4",
+                    [pin("stream"), drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_sums}", value=sums_row),
+                     drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_gz}", value=gz_row),
+                     drv("delete", path=f"{r2}/{n_jsonl}"), drv("restart_runner"), pin("stream"), vfiles(*STREAM), rfiles(*STREAM)],
+                    requires=["fs", "stream"]))
+    out.append(case("cache/dr100-null-sha-row-dropped", "a .verified whose row for the stored .json has a null sha256 (that file is not verified): a pinned stream open that adds the .jsonl writes no row for the .json (DR100)", "4.3.1, 5.4",
+                    [pin("eager"), drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_json}/sha256", value=None),
+                     drv("restart_runner"), pin("stream"), vfiles(*STREAM), rfiles(*STREAM)],
+                    requires=["fs", "stream", "eager"]))
+    # the reader rule: a null or an absent size makes .verified malformed (B10, C4)
+    both = [net(step("open", {"datestamp": d1}, release=d1, base_url=G, cache_dir="${cache}", mode="stream")), pin("stream"),
+            drv("restart_runner")]
+    no_size = {"files": {n_jsonl: {"sha256": shas[n_jsonl], "url": None}, n_meta: {"sha256": shas[n_meta], "size": size(n_meta), "url": None}},
+               "datestamp": d2, "verified_at": "2099-12-31T20:00:00Z", "by": "opentideconstants-conformance/1.0"}
+    for label, bad in (("null", drv("json_set", path=f"{r2}/.verified", pointer=f"/files/{n_jsonl}/size", value=None)),
+                       ("absent", drv("write", path=f"{r2}/.verified", text=json.dumps(no_size, sort_keys=True)))):
+        out.append(case(f"cache/dr100-{label}-size-offline", f"offline, a row of the newest .verified has a {label} size: .verified is malformed, so that release is not a candidate (a pinned open is offline_unavailable, cached_releases leaves it out), the older one loads, and nothing is deleted (B10, C4)", "5.4",
+                        both + [bad, drv("server_stop"), drv("clear_log"),
+                                net(step("open", err("offline_unavailable"), release=d2, base_url=G, cache_dir="${cache}", mode="stream", offline=True)),
+                                net(step("open", {"loaded_from": "cache", "datestamp": d1}, base_url=G, cache_dir="${cache}", mode="stream", offline=True)),
+                                drv("assert_files", dir=r2, present=[".verified", n_jsonl, n_meta]),
+                                drv("assert_requests", source="any", count=0)],
+                        requires=["fs", "stream"]))
+        out.append(case(f"cache/dr100-{label}-size-pinned-online", f"online, a row of a pinned release's .verified has a {label} size: the release is downloaded again, and the new .verified has real sizes (B10, C4)", "5.2, 5.4",
+                        [pin("stream"), drv("restart_runner"), bad, drv("clear_log"), pin("stream"),
+                         drv("assert_requests", match=r"/good/OTC_20991231\.2\.jsonl$", min=1), vfiles(*STREAM)],
+                        requires=["fs", "stream"]))
     return out
 
 
@@ -1967,11 +2086,15 @@ def group_cross(R2):
                as_("reader", step("station", {"station": enc_station(R2, R2.by_id["OTC-T-0003"])}, station_id="OTC-T-0003")),
                as_("reader", step("citation", {"citation": citation(R2)})),
                as_("reader", step("attribution", {"attribution": attribution(R2, ids3)}, station_ids=ids3))]
+    # the writer's .verified rows: the files its pinned stream open stored, with their real sizes (CR3 DR100)
+    sums = sha256_rows("good", d)
+    stored = [{"name": n, "url": {"$any_of": [None, G + n]}, "size": (FIXTURES / "good" / n).stat().st_size, "sha256": sums[n]}
+              for n in (f"OTC_{d}.jsonl", f"OTC_{d}.meta.json")]
     out.append(case("cross/cache-offline-stream", "one SDK fills the cache in stream mode; another opens it offline (server stopped) and gets the same answers, with no request", "5.4, 5.5, 6.2",
                     fill + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("verify", {"verified": True})),
-                        as_("reader", step("release_files", {"files": {"$len_min": 4}}))] + queries + [
+                        as_("reader", step("release_files", {"files": stored}))] + queries + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("reader", step("cached_releases", {"datestamps": [d]})),
                         no_requests,
@@ -2243,13 +2366,15 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi}))],
                     roles={"writer": ["fs", "fetch", "stream"], "reader": ["fs", "fetch", "eager"]}))
     citation_v = citation(R2, vdoi)
+    # a stream-mode writer stores the .jsonl and the .meta.json, and .verified has a row for those only (CR3 DR100)
+    stream_rows = {f"OTC_{d}.jsonl": {"$type": "object"}, f"OTC_{d}.meta.json": {"$type": "object"}}
     out.append(case("cross/verified-doi-pinned-writer", "the writer caches a pinned release (no pointer, so no version DOI); the reader opens latest online, gets the cached release (a 304 path or a pointer for the same datestamp) and records the pointer's version DOI in .verified; the writer then has it offline (B1-5, D26, R2-151)", "4.3, 5.4",
                     [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, release=d, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("writer", step("close")),
                      as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("reader", step("release_metadata", {"zenodo_version_doi": vdoi})),
                      as_("reader", step("close")),
-                     drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi, "files": {"$len_min": 4}})] + offline + [
+                     drv("assert_json", path=f"{rdir}/.verified", match={"zenodo_version_doi": vdoi, "files": stream_rows})] + offline + [
                         as_("writer", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
                         as_("writer", step("verify", {"verified": True})),
                         as_("writer", step("citation", {"citation": citation_v})), no_requests],
@@ -2259,7 +2384,7 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
     out.append(case("cross/verified-keys", "the writer's .verified has the seven keys of D26 (files, verified_at, by, datestamp, format_version, min_reader_version, zenodo_version_doi); a reader opens offline a release whose .verified holds only files (D26, G13)", "5.4",
                     latest_writer + [
                         drv("assert_json", path=f"{rdir}/.verified", match={
-                            "files": {"$len_min": len(rows)}, "verified_at": {"$regex": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"},
+                            "files": stream_rows, "verified_at": {"$regex": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"},
                             "by": {"$regex": r"^opentideconstants-[a-z]+/\S+$"}, "datestamp": d, "format_version": R2.doc["format_version"],
                             "min_reader_version": R2.doc["release"]["min_reader_version"], "zenodo_version_doi": vdoi}),
                         drv("write", path=f"{rdir}/.verified", text=json.dumps(files_only, indent=1, sort_keys=True) + "\n")] + offline + [

@@ -97,9 +97,30 @@
      "as": "reader",
      "op": "release_files",
      "expect": {
-      "files": {
-       "$len_min": 4
-      }
+      "files": [
+       {
+        "name": "OTC_20991231.2.jsonl",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.jsonl"
+         ]
+        },
+        "size": 25929,
+        "sha256": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"
+       },
+       {
+        "name": "OTC_20991231.2.meta.json",
+        "url": {
+         "$any_of": [
+          null,
+          "${server}/good/OTC_20991231.2.meta.json"
+         ]
+        },
+        "size": 3974,
+        "sha256": "f1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350"
+       }
+      ]
      }
     },
     {
@@ -2336,7 +2357,12 @@
      "match": {
       "zenodo_version_doi": "10.5072/zenodo.2",
       "files": {
-       "$len_min": 4
+       "OTC_20991231.2.jsonl": {
+        "$type": "object"
+       },
+       "OTC_20991231.2.meta.json": {
+        "$type": "object"
+       }
       }
      }
     },
@@ -2427,7 +2453,12 @@
      "path": "${cache}/v1/releases/20991231.2/.verified",
      "match": {
       "files": {
-       "$len_min": 4
+       "OTC_20991231.2.jsonl": {
+        "$type": "object"
+       },
+       "OTC_20991231.2.meta.json": {
+        "$type": "object"
+       }
       },
       "verified_at": {
        "$regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
