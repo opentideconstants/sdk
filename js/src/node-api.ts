@@ -4,6 +4,7 @@
  * node.ts gives an object of this type; in a browser build "#node" resolves to no-node.ts, which gives null.
  */
 import type { Platform } from "./platform.js";
+import type { FileInfo } from "./types.js";
 
 /** The part of node:path that client.ts uses. */
 export interface NodePath {
@@ -17,6 +18,8 @@ export interface BlockingResult {
     ok: boolean;
     datestamp?: string;
     how?: string;
+    /** The pointer entry's files, which are release.files after a download of latest (spec 4.3.1). */
+    files?: FileInfo[];
     message?: string;
     /** The SDK error code of a failure (spec 4.8), and its url, status and path when it has them. */
     code?: string;

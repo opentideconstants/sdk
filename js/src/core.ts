@@ -364,9 +364,12 @@ export function parseVerified(b: Uint8Array, d: string): Verified | null {
         const sha = f["sha256"];
         const size = f["size"];
         const url = f["url"];
+        // a row's size is an integer: a null or absent one makes .verified malformed (spec 5.4, CR3 spec review 2
+        // B10 and 3 C4), the same as a size that is not a non-negative integer
+        if (!(typeof size === "number" && Number.isInteger(size) && size >= 0)) return null;
         files[name] = {
             sha256: typeof sha === "string" && /^[0-9a-fA-F]{64}$/.test(sha) ? sha.toLowerCase() : null,
-            size: typeof size === "number" && Number.isInteger(size) && size >= 0 ? size : null,
+            size,
             url: typeof url === "string" ? url : null,
         };
     }
@@ -569,15 +572,17 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         log(ctx, "info", `verified release ${d}`);
         for (const [name, bytes] of writes) await store.write(`${dir}/${name}`, bytes);
         await store.write(`${dir}/${n.sha}`, shaBytes);
-        const files: Verified["files"] = { ...(verified?.files ?? {}) };
-        const sizes = new Map(writes.map(([name, b]) => [name, b.length]));
-        sizes.set(n.sha, shaBytes.length);
-        if (entry) {
-            for (const f of entry.files) files[f.name] = { sha256: f.sha256, size: f.size, url: f.url };
-        } else {
-            for (const [name, sha] of rows) {
-                files[name] = { sha256: sha, size: sizes.get(name) ?? files[name]?.size ?? null, url: new URL(name, ctx.baseUrl).href };
-            }
+        // .verified has a row only for each file that is present and verified in the release directory, with its
+        // real size and lowercase SHA-256, and never one for the .sha256 file (spec 5.4, CR3 DR100): the rows of an
+        // earlier open in the other mode while their files are there, and the files written now
+        const there = new Set(await store.list(dir));
+        const files: Verified["files"] = {};
+        for (const [name, f] of Object.entries(verified?.files ?? {})) {
+            if (name !== n.sha && f.sha256 !== null && there.has(name)) files[name] = f;
+        }
+        for (const [name, b] of writes) {
+            const url = entry?.files.find((x) => x.name === name)?.url ?? new URL(name, ctx.baseUrl).href;
+            files[name] = { sha256: (rows.get(name) as string).toLowerCase(), size: b.length, url };
         }
         const v: Verified = {
             files, verified_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: SDK_ID, datestamp: d,
@@ -666,12 +671,14 @@ export interface SyncDir {
 
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined,
-    commercialOnly = false): Release {
+    commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
-    const files: FileInfo[] = Object.entries(verified.files)
+    const byName = (a: FileInfo, b: FileInfo) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    // release.files (spec 4.3.1): the pointer entry after a download of latest, else the .verified rows
+    const files: FileInfo[] = pointerFiles ? pointerFiles.map((f) => ({ ...f })).sort(byName) : Object.entries(verified.files)
         .map(([name, f]) => ({ name, url: f.url ?? null, size: f.size ?? null, sha256: f.sha256 ?? null }))
-        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        .sort(byName);
     const sized = (name: string): Uint8Array => {
         const b = dir.read(name);
         if (!b) throw new ChecksumError(`${name} is missing from the cache`, { file: name, expected: verified.files[name]?.sha256 ?? null, actual: null });

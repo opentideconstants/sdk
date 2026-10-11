@@ -19,7 +19,7 @@ import type { BlockingResult, NodeMod } from "./node-api.js";
 import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
 import type {
-    DownloadOptions, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
+    DownloadOptions, FileInfo, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
     PruneOptions, ReleaseInfo, SearchOptions, StationFilters, Tombstone, UpdateResult,
 } from "./types.js";
 
@@ -269,7 +269,7 @@ export class OpenTideConstants {
                 const entry = await getPointer(ctx);
                 from = await ensureRelease(ctx, entry.datestamp, entry);
                 d = entry.datestamp;
-                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen));
+                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen, entry.files));
             } catch (e) {
                 let got: { d: string; rel: Release } | null = null;
                 if (e instanceof NetworkError && onNetworkError === "use_cache") {
@@ -291,8 +291,9 @@ export class OpenTideConstants {
     }
 
     /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
-    static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean): Promise<Release> {
-        const rel = await OpenTideConstants.#loadStored(ctx, node, d);
+    static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean,
+        pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
+        const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles);
         if (verify) {
             try {
                 await verifyCached(ctx, d);
@@ -331,9 +332,11 @@ export class OpenTideConstants {
      * Load release d after ensureRelease said where it came from. A cached copy that is corrupt is healed and, online,
      * downloaded again once (spec 4.8, 5.2 step 6, 5.3); offline, or right after a download, the error is raised.
      */
-    static async #loadOrHeal(ctx: Ctx, node: NodeMod | null, d: string, from: LoadedFrom, verify: boolean): Promise<{ rel: Release; from: LoadedFrom }> {
+    static async #loadOrHeal(ctx: Ctx, node: NodeMod | null, d: string, from: LoadedFrom, verify: boolean,
+        pointerFiles: readonly FileInfo[] | null = null): Promise<{ rel: Release; from: LoadedFrom }> {
         try {
-            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify), from };
+            // after a download of latest, release.files is the pointer entry (spec 4.3.1, CR3 DR100)
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, from === "download" ? pointerFiles : null), from };
         } catch (e) {
             if (!OpenTideConstants.#corrupt(e)) throw e;
             await OpenTideConstants.#heal(ctx, d, e);
@@ -368,14 +371,14 @@ export class OpenTideConstants {
         return null;
     }
 
-    static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string): Promise<Release> {
+    static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string, pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
         const store = ctx.store;
         if (!store) throw new OfflineError("no cache");
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
         const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
-        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly);
+        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
@@ -483,7 +486,7 @@ export class OpenTideConstants {
             const v = vb ? parseVerified(vb, res.datestamp) : null;
             if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
             const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
-                ctx.commercialOnly);
+                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null);
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
@@ -663,7 +666,8 @@ export class OpenTideConstants {
         // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
         this.#check();
         if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
-        const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false);
+        const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false,
+            entry.files);
         if (this.#closed) got.rel._close();
         this.#check();
         this.#swap(got.rel, got.from);
