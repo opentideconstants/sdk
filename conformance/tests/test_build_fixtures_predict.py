@@ -469,3 +469,117 @@ def test_currents_direction_north(doc):
     t0, t1 = ts(bf.PW["currents"][0]), ts(bf.PW["currents"][1])
     assert b["azimuth_deg"] == 180.0 and all(c["minor_amplitude_ms"] == 0 for c in b["constituents"]) and "mean_minor_ms" not in b
     assert all(b["mean_major_ms"] + s.h(t) < 0 for t in range(t0, t1, 600))
+
+
+# --------------------------------------------------------------------------- predict_calls.json
+
+# Every prediction case that spec 6.5 names (as the call ids spell them, without the "predict-" prefix and with "/" as
+# "-"), except the two in BLOCKED.
+SPEC_CASES = """heights-basic heights-at heights-step-alignment heights-empty-window heights-start-after-stop heights-step-zero
+heights-year-boundary heights-leap-day heights-naive-datetime datum-mean-level datum-zero datum-named datum-chart
+datum-unavailable no-constants quantity-mismatch unsupported-convention unsupported-constituent no-astro-table
+time-out-of-range local-phase-convention extremes-basic extremes-window-edges extremes-single-constituent
+extremes-large-amplitude current-peaks-large-amplitude slacks-large-amplitude extremes-close-high-low
+extremes-close-high-low-high extremes-double-high extremes-sub-second extremes-year-boundary-step extremes-new-year-missed
+extremes-new-year-doubled currents-series currents-mean currents-minor-sign currents-flood-sign currents-direction-null
+currents-direction-north currents-default-bin currents-explicit-bin bin-not-found bin-number-too-large current-events
+current-events-weak current-events-close-slacks current-events-sub-second-slacks current-events-new-year-slack
+subordinate-tide-ratio subordinate-tide-additive subordinate-tide-missing-offsets subordinate-tide-order-swap
+subordinate-tide-fractional-offset subordinate-series subordinate-reference-no-chart-datum subordinate-current
+subordinate-current-null-adjustment subordinate-folded-ratio subordinate-folded-additive subordinate-folded-extremes
+subordinate-folded-new-year subordinate-differing-offsets-series subordinate-zero-ratio subordinate-unknown-adjusted-type
+subordinate-order-ratio-before-extremes-only local-station-zone local-named-zone local-unknown-zone
+local-missing-dependency local-missing-tzdir local-not-built local-format datums-list datums-all-sets datums-ranges
+datums-ranges-mixed-kinds datum-otc-key datum-subordinate-named datum-vertical-zero datum-subordinate-reference-wrong-source
+datum-subordinate-unpublished-chart astro-values astro-negative-speed extremes-negative-amplitude set-not-found
+empty-window-out-of-range heights-fractional-instants metadata reference-set-file-order
+commercial-only-effective-set commercial-only-explicit-nc-set commercial-only-no-constants commercial-only-offsets-usable
+commercial-only-offsets-nc-licence commercial-only-reference-set-nc commercial-only-own-set-wins
+commercial-only-current-offsets-nc commercial-only-current-offsets-usable""".split()
+NOT_BUILT = ["otc_heights", "otc_heights_at", "otc_extremes", "otc_currents", "otc_current_events", "otc_astro_table",
+             "otc_astro_equilibrium_argument", "otc_astro_node_factor", "otc_astro_equilibrium_for_year",
+             "otc_astro_node_factor_for_year", "otc_astro_valid_range"]
+# A reference that is missing or removed cannot be in a release an SDK loads: every SDK refuses at load a
+# reference_station_id that names no active station (invalid_release; Python _check_ids, the reference reader's
+# cross_ref_errors). So these two cases are not built; the slot report raises them with the orchestrator.
+BLOCKED = {"subordinate-reference-removed", "datum-subordinate-reference-removed"}
+
+
+@pytest.fixture(scope="module")
+def calls():
+    return json.loads((CONF / "tools" / "predict_calls.json").read_bytes())
+
+
+def spelled(cid):
+    return cid.removeprefix("predict-").replace("/", "-")
+
+
+def test_every_spec_case_is_a_call(calls):
+    ids = [spelled(c["id"]) for c in calls["cases"]]
+    assert len(ids) == len(set(ids))
+    for name in SPEC_CASES:
+        hits = [i for i in ids if i == name or i.startswith(name + "-")]
+        if name == "current-events":
+            hits = [i for i in ids if i == "current-events-basic"]
+        assert hits, name
+    for fn in NOT_BUILT:
+        assert f"not-built-{fn}" in ids
+    assert not any(i in BLOCKED for i in ids)
+
+
+def test_calls_resolve(calls):
+    manifest = {f["root"]: f for f in json.loads((FIX / "fixtures.json").read_bytes())["fixtures"]}
+    ops = calls["interface"]["ops"]
+    for c in calls["cases"]:
+        fx = manifest[c["root"]]
+        assert c["release"] in fx["releases"], c["id"]
+        d = json.loads((FIX / c["root"] / f"OTC_{c['release']}.json").read_bytes())
+        st = {s["station_id"]: s for s in d["stations"]}
+        sets = {cs["set_id"]: cs for s in d["stations"] for cs in s.get("constant_sets", [])}
+        tables = {t["astro_table_id"] for t in d.get("astro_tables", [])}
+        assert c["requires"] == [] if c["id"].startswith("not-built/") else "predict" in c["requires"], c["id"]
+        if c["root"] in ("knc-predict",):
+            assert c.get("open_args") == {"commercial_only": True}
+        for s in c["steps"]:
+            if "driver" in s:
+                assert s["driver"] == "restart_runner"
+                continue
+            if s["op"] == "open":
+                assert set(s) == {"op", "matrix_open", "strict"} and c["root"] == "knc-predict"
+                continue
+            inner = s["args"]["of"] if s["op"] == "to_local" else s
+            assert inner["op"] in ops and set(inner["args"]) <= set(ops[inner["op"]]), (c["id"], inner)
+            a = inner["args"]
+            if "station_id" in a:
+                assert a["station_id"] in st, (c["id"], a)
+            if a.get("set_id") and "no-such" not in a["set_id"]:
+                assert a["set_id"] in sets, (c["id"], a)
+            strict = s.get("strict")
+            if not strict:
+                continue
+            assert strict["entry"] in ("predict_strict", "extremes_strict", "currents_strict", "current_events_strict",
+                                       "subordinate_extremes_strict", "subordinate_current_events_strict",
+                                       "folded_heights", "folded_extremes"), c["id"]
+            sa = strict["args"]
+            assert sa["astro"] in tables, (c["id"], sa["astro"])
+            for v in sa.values():
+                if isinstance(v, dict) and "$set" in v:
+                    assert v["$set"] in sets, (c["id"], v)
+                if isinstance(v, dict) and "$bin" in v:
+                    sid, n = v["$bin"]
+                    assert any(b["bin"] == n for b in sets[sid]["current_bins"]), (c["id"], v)
+                if isinstance(v, dict) and "$offsets" in v:
+                    assert "subordinate_offsets" in st[v["$offsets"]], (c["id"], v)
+                if isinstance(v, dict) and "$current_offset" in v:
+                    sid, n = v["$current_offset"]
+                    assert any(o["bin"] == n for o in st[sid]["current_offsets"]), (c["id"], v)
+            for k in ("times",):
+                for tm in sa.get(k, []):
+                    assert tm.endswith("Z") and "." not in tm, (c["id"], tm)   # the strict mode gets whole seconds
+
+
+def test_no_case_names_both_knc_roots(calls):
+    """No case opens knc and knc-predict in the same cache (both are release 20991231.2, spec 6.5)."""
+    for c in calls["cases"]:
+        text = json.dumps(c)
+        assert not ('"knc"' in text and "knc-predict" in text), c["id"]

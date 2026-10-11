@@ -156,3 +156,5 @@ Each `predict-bad/<name>/` is `predict/` with one change. An SDK loads each, bec
 | `predict-bad/astro-short-v0u/` | table A's M2 `v0u_deg` is one entry short | first use of the table: `invalid_argument` |
 | `predict-bad/extremes-negative-amplitude/` | `OTC-P-0005`'s M2 amplitude is -1.0 | it predicts (highs and lows swapped) |
 | `predict-bad/unknown-adjusted-type/` | format 1.1: `height_adjusted_type` `X` (read as `other`) at `OTC-P-0030`, `0035` and `0049` | predicting: `invalid_argument` naming `X` |
+
+`conformance/tools/predict_calls.json` lists every prediction case of spec 6.5 as calls on these roots and `knc-predict/`, with the hand-written expectations; `build_fixtures.py` writes it and `--check` compares it. Steps whose numbers come from the reference engine's strict mode name the entry point and its arguments (`strict`); the case harness (KP1-H) computes them, and `build_cases.py` (K2b-pin) pins the cases. The file's `interface` describes the calls, the ops and the results.

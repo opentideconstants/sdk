@@ -1672,7 +1672,7 @@ DESIGN_BINS = {
 }
 
 
-# The windows of the designed cases (and the centres of the sub-second ones), shared with
+# The windows of the designed cases (and the centres of the sub-second ones), shared with predict_calls.json and with
 # conformance/tests/test_build_fixtures_predict.py, which confirms each design over them.
 PW = {
     "single": ("2010-03-01T00:00:00Z", "2010-03-31T00:00:00Z"),
@@ -2065,6 +2065,832 @@ def build(out, reuse):
                                      "expect": expect if expect == "load" else {"error": expect},
                                      "defect": defect, **(extra[0] if extra else {})})
     (out / "fixtures.json").write_bytes(dumps_pretty(manifest))
+
+
+# --------------------------------------------------------------------------- the prediction calls (K2b-fixtures)
+#
+# conformance/tools/predict_calls.json: every prediction case of spec 6.5 as calls on the fixture roots above, with
+# the hand-written expectations (errors, metadata, local time, datums, commercial_only, the SDK-only cases). Steps
+# whose numbers come from the reference engine's strict mode name its entry point and arguments in "strict"; KP1-H's
+# case harness (webcaltides scripts/otc/vectors/run_cases.rb) runs them and writes predict_expected.json, and
+# K2b-pin merges the two into conformance/cases/predict-*.json. Generated here, so that every set, bin, offsets entry,
+# table and datum term a call names is the fixture's own; --check regenerates it and compares.
+
+PREDICT_CALLS = Path(__file__).resolve().parent / "predict_calls.json"
+T_FMT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _t(iso):
+    """Whole seconds of an ISO 8601 UTC time, floored (spec 4.1: a fractional instant is floored)."""
+    return math.floor(datetime.datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+
+
+def _iso(t):
+    return datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime(T_FMT)
+
+
+class _Release:
+    """Lookups on one fixture release, for the calls."""
+
+    def __init__(self, root, doc):
+        self.root, self.doc = root, doc
+        self.st = {s["station_id"]: s for s in doc["stations"]}
+        self.conv = {c["convention_id"]: c for c in doc["conventions"]}
+
+    def set(self, set_id):
+        return next(c for c in self.st[set_id.split("/")[0]]["constant_sets"] if c["set_id"] == set_id)
+
+    def table_of(self, cs):
+        return self.conv[cs["convention_id"]].get("astro_table_id")
+
+    def recommended(self, sid):
+        return self.st[sid]["recommended_set_id"]
+
+    def reference_set(self, ref_sid, quantity="water_level", source="noaa", bin_=None):
+        """Spec 4.8 step 1 / 4.9 step 1: the first set in file order of the reference station with the offsets'
+        source (tides) or the reference bin (currents), the quantity, and qc_status ok or flagged."""
+        for cs in self.st[ref_sid]["constant_sets"]:
+            if cs["quantity"] != quantity or cs["qc_status"] not in ("ok", "flagged"):
+                continue
+            if bin_ is None and cs["source"] == source:
+                return cs
+            if bin_ is not None and any(b["bin"] == bin_ for b in cs.get("current_bins", [])):
+                return cs
+        return None
+
+
+def _datum_term(cs, datum):
+    """The height of the datum term (spec 4.5) and the resolved name: (term, datum_name, level key or None)."""
+    d = cs.get("datum") or {}
+    if datum in (None, "mean_level"):
+        return 0.0, "mean_level", None
+    if datum == "zero":
+        return d["msl_offset_m"], d.get("zero_name") or d.get("zero") or "unknown", None
+    key = d["chart_datum"] if datum == "chart" else datum
+    return d["msl_offset_m"] - d["named"][key], key, key
+
+
+def _equal_offsets(o):
+    """The fold test of spec 4.8a, after the absent-offset rule."""
+    ident = 1 if o["height_adjusted_type"] == "R" else 0
+    return (o.get("time_offset_high_min", 0) == o.get("time_offset_low_min", 0)
+            and o.get("height_offset_high", ident) == o.get("height_offset_low", ident))
+
+
+def _series(start, stop, step):
+    a, b = _t(start), _t(stop)
+    return [_iso(a + k * step) for k in range((b - a + step - 1) // step)] if b > a else []
+
+
+def predict_calls():
+    P = _Release("predict", predict_doc())
+    K = _Release("knc-predict", knc_predict_doc())
+    cases = []
+
+    def case(cid, title, spec, steps, root="predict", requires=("predict",), **extra):
+        rel = {"predict": P, "knc-predict": K}.get(root)
+        c = {"id": cid, "title": title, "spec": spec, "root": root,
+             "release": rel.doc["release"]["datestamp"] if rel else PREDICT_D, "requires": list(requires)}
+        c.update(extra)
+        c["steps"] = steps
+        cases.append(c)
+
+    def args(**kw):
+        return {k: v for k, v in kw.items() if v is not None}
+
+    # -- harmonic tide steps
+    def tide_set(R, sid, set_id):
+        return R.set(set_id or R.recommended(sid))
+
+    def heights(sid, start, stop, step_s=None, datum=None, set_id=None, R=P, expect=None, meta=True):
+        cs = tide_set(R, sid, set_id)
+        term, name, _ = _datum_term(cs, datum)
+        e = {"method": "harmonic", "set_id": cs["set_id"]} if meta else {}
+        e.update(expect or {})
+        return {"op": "heights", "args": args(station_id=sid, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id),
+                "expect": e,
+                "strict": {"entry": "predict_strict", "args": {"constituents": {"$set": cs["set_id"]},
+                                                               "times": _series(start, stop, step_s or 600),
+                                                               "datum_term": term, "astro": R.table_of(cs)}}}
+
+    def heights_at(sid, times, datum=None, set_id=None, R=P, expect=None, strict_times=None):
+        cs = tide_set(R, sid, set_id)
+        term, name, _ = _datum_term(cs, datum)
+        e = {"method": "harmonic", "set_id": cs["set_id"]}
+        e.update(expect or {})
+        return {"op": "heights_at", "args": args(station_id=sid, times=times, datum=datum, set_id=set_id), "expect": e,
+                "strict": {"entry": "predict_strict", "args": {"constituents": {"$set": cs["set_id"]},
+                                                               "times": strict_times or times, "datum_term": term,
+                                                               "astro": R.table_of(cs)}}}
+
+    def extremes(sid, start, stop, datum=None, set_id=None, R=P, expect=None, crosscheck=False):
+        cs = tide_set(R, sid, set_id)
+        term, name, _ = _datum_term(cs, datum)
+        e = {"method": "harmonic", "set_id": cs["set_id"]}
+        e.update(expect or {})
+        s = {"entry": "extremes_strict", "args": {"constituents": {"$set": cs["set_id"]}, "start": start, "stop": stop,
+                                                  "datum_term": term, "astro": R.table_of(cs)}}
+        if crosscheck:
+            s["crosscheck"] = "scan_5s"
+        return {"op": "extremes", "args": args(station_id=sid, start=start, stop=stop, datum=datum, set_id=set_id),
+                "expect": e, "strict": s}
+
+    def error(op, code, strict=None, fields=None, message=None, **kw):
+        e = {"error": code}
+        if fields:
+            e["error_fields"] = fields
+        if message is not None:
+            e["error_message"] = message
+        return {"op": op, "args": args(**kw), "expect": e, "strict": strict}
+
+    # -- offsets
+    def sub_tide(op, sid, start, stop=None, step_s=None, datum=None, R=P, expect=None, times=None):
+        st = R.st[sid]
+        o = st["subordinate_offsets"]
+        ref = R.reference_set(o["reference_station_id"])
+        rd = ref["datum"]
+        c_ref = rd["msl_offset_m"] - rd["named"][rd["chart_datum"]]
+        sd = o.get("datum") or {}
+        shift = 0.0
+        if datum not in (None, "chart"):
+            shift = sd.get("named", {}).get(sd.get("chart_datum"), 0.0) - sd["named"][datum]
+        folded = _equal_offsets(o)
+        e = {"method": "folded_offsets" if folded else "offsets", "set_id": ref["set_id"],
+             "reference_station_id": o["reference_station_id"]}
+        e.update(expect or {})
+        base = {"ref_constituents": {"$set": ref["set_id"]}, "chart_datum_term": c_ref, "offsets": {"$offsets": sid},
+                "datum_shift": shift, "astro": R.table_of(ref)}
+        if op == "extremes":
+            s = {"entry": "folded_extremes" if folded else "subordinate_extremes_strict", "args": dict(base, start=start, stop=stop)}
+            a = args(station_id=sid, start=start, stop=stop, datum=datum)
+        elif op == "heights":
+            s = {"entry": "folded_heights", "args": dict(base, times=_series(start, stop, step_s or 600))}
+            a = args(station_id=sid, start=start, stop=stop, step_s=step_s, datum=datum)
+        else:
+            s = {"entry": "folded_heights", "args": dict(base, times=times)}
+            a = args(station_id=sid, times=times, datum=datum)
+        return {"op": op, "args": a, "expect": e, "strict": s}
+
+    # -- currents
+    def cur_bin(R, sid, bin_number, set_id=None):
+        st = R.st[sid]
+        cs = R.set(set_id or st["recommended_set_id"])
+        n = bin_number or st.get("default_current_bin") or min(b["bin"] for b in cs["current_bins"])
+        return cs, n
+
+    def currents(sid, start, stop, step_s=None, bin_number=None, R=P, expect=None):
+        cs, n = cur_bin(R, sid, bin_number)
+        e = {"method": "harmonic", "set_id": cs["set_id"], "bin_number": n}
+        e.update(expect or {})
+        return {"op": "currents", "args": args(station_id=sid, start=start, stop=stop, step_s=step_s, bin_number=bin_number),
+                "expect": e,
+                "strict": {"entry": "currents_strict", "args": {"bin": {"$bin": [cs["set_id"], n]},
+                                                                "times": _series(start, stop, step_s or 600),
+                                                                "astro": R.table_of(cs)}}}
+
+    def current_events(sid, start, stop, bin_number=None, R=P, expect=None, crosscheck=False):
+        cs, n = cur_bin(R, sid, bin_number)
+        e = {"method": "harmonic", "set_id": cs["set_id"], "bin_number": n}
+        e.update(expect or {})
+        s = {"entry": "current_events_strict", "args": {"bin": {"$bin": [cs["set_id"], n]}, "start": start, "stop": stop,
+                                                        "astro": R.table_of(cs)}}
+        if crosscheck:
+            s["crosscheck"] = crosscheck
+        return {"op": "current_events", "args": args(station_id=sid, start=start, stop=stop, bin_number=bin_number),
+                "expect": e, "strict": s}
+
+    def sub_current_events(sid, start, stop, bin_number=None, R=P, expect=None):
+        st = R.st[sid]
+        co = next(c for c in st["current_offsets"] if c["bin"] == (bin_number or min(x["bin"] for x in st["current_offsets"])))
+        ref = R.reference_set(co["reference_station_id"], "current", bin_=co["reference_bin"])
+        omitted = [t for t, (adj, ratio) in (("max_flood", ("time_adj_max_flood_min", "flood_amp_ratio")),
+                                              ("max_ebb", ("time_adj_max_ebb_min", "ebb_amp_ratio")),
+                                              ("slack_before_flood", ("time_adj_slack_before_flood_min", None)),
+                                              ("slack_before_ebb", ("time_adj_slack_before_ebb_min", None)))
+                   if co.get(adj) is None or (ratio and co.get(ratio) is None)]
+        e = {"method": "offsets", "set_id": ref["set_id"], "reference_station_id": co["reference_station_id"],
+             "reference_bin": co["reference_bin"], "bin_number": co["bin"], "omitted_event_types": omitted}
+        e.update(expect or {})
+        return {"op": "current_events", "args": args(station_id=sid, start=start, stop=stop, bin_number=bin_number),
+                "expect": e,
+                "strict": {"entry": "subordinate_current_events_strict",
+                           "args": {"ref_bin": {"$bin": [ref["set_id"], co["reference_bin"]]},
+                                    "offset": {"$current_offset": [sid, co["bin"]]}, "start": start, "stop": stop,
+                                    "astro": R.table_of(ref)}}}
+
+    def to_local(inner, tz=None, zone=None, local_items=None, expect=None, expect_if_missing=None):
+        """to_local on the result of an inner prediction step. "local" tells K2b-pin to add local_time and utc_offset_s
+        to each item from its time in that zone (spec 4.1); "local.check" lists hand-written values it must equal."""
+        e = {"tz": tz or "station", "tz_version": {"$any_of": [{"$regex": "^[0-9]{4}[a-z]$"}, None]}}
+        e.update(inner.get("expect") or {})
+        e.update(expect or {})
+        st = {"op": "to_local", "args": args(of={"op": inner["op"], "args": inner["args"]}, tz=tz), "expect": e,
+              "strict": inner["strict"], "local": {"zone": zone}}
+        if local_items:
+            st["local"]["check"] = local_items
+        if expect_if_missing:
+            st["expect_if_missing"] = expect_if_missing
+        return st
+
+    D = "2010-03-01T"
+    B = P_BASIC
+    # ------------------------------------------------------------------ heights
+    case("predict-heights/basic", "heights at the basic station over one day, every 600 s (the default step)", "4.4, 5.2",
+         [heights(B, D + "00:00:00Z", "2010-03-02T00:00:00Z")])
+    case("predict-heights/at", "heights_at: one item per instant, in the given order, repeats kept", "4.1, 5.2",
+         [heights_at(B, [D + "06:00:00Z", D + "01:00:00Z", D + "06:00:00Z", "2015-07-04T12:34:56Z"])])
+    case("predict-heights/step-alignment", "series times are start + k * step_s, not aligned to a grid or the clock", "4.1",
+         [heights(B, D + "00:07:13Z", D + "03:07:13Z", 900)])
+    case("predict-heights/empty-window", "start == stop gives an empty result", "4.1",
+         [dict(heights(B, D + "00:00:00Z", D + "00:00:00Z"), expect={"items": [], "method": "harmonic"}, strict=None)])
+    case("predict-heights/start-after-stop", "start > stop is invalid_argument", "4.1, 5.4",
+         [error("heights", "invalid_argument", station_id=B, start=D + "01:00:00Z", stop=D + "00:00:00Z")])
+    case("predict-heights/step-zero", "step_s 0 and -600 are invalid_argument", "5.2, 5.4",
+         [error("heights", "invalid_argument", station_id=B, start=D + "00:00:00Z", stop=D + "01:00:00Z", step_s=0),
+          error("heights", "invalid_argument", station_id=B, start=D + "00:00:00Z", stop=D + "01:00:00Z", step_s=-600)])
+    case("predict-heights/year-boundary", "the step at 2010-01-01T00:00:00Z: each sample uses its own year's tables", "4.3",
+         [heights(B, "2009-12-31T22:00:00Z", "2010-01-01T02:00:00Z", 600)])
+    case("predict-heights/leap-day", "heights across 29 February 2012 and at the end of the leap year", "4.3",
+         [heights_at(B, ["2012-02-28T12:00:00Z", "2012-02-29T12:00:00Z", "2012-03-01T12:00:00Z", "2012-12-31T23:59:59Z"])])
+    case("predict-heights/naive-datetime", "a naive datetime (no zone) is invalid_argument (Python only)", "4.1",
+         [error("heights", "invalid_argument", station_id=B, start="2010-03-01T00:00:00", stop="2010-03-01T01:00:00")],
+         runners=["python"])
+    fr = heights_at(B, ["2010-03-01T12:00:00.7Z"], strict_times=["2010-03-01T12:00:00Z"],
+                    expect={"items": [{"time": "2010-03-01T12:00:00Z", "height_m": {"$from_step": 1}}]})
+    case("predict-heights/fractional-instants",
+         "an instant at 12:00:00.7 is floored to 12:00:00 and gives the whole-second height (TypeScript, Python, Ruby)", "4.1",
+         [fr, heights_at(B, ["2010-03-01T12:00:00Z"]),
+          heights(B, "2010-03-01T12:00:00.7Z", "2010-03-01T12:30:00Z"),
+          heights(B, "2010-03-01T12:00:00Z", "2010-03-01T12:30:00Z")],
+         runners=["python", "ruby", "typescript", "typescript-browser"],
+         note="steps 0 and 2 must equal steps 1 and 3; the strict mode gets the floored instants")
+    case("predict-set-not-found", "heights with a set_id that is not the station's is invalid_argument naming it", "4.2 step 1",
+         [error("heights", "invalid_argument", message={"$contains": "OTC-P-0001/no-such-set"}, station_id=B,
+                start=D + "00:00:00Z", stop=D + "01:00:00Z", set_id="OTC-P-0001/no-such-set")])
+    case("predict-local-phase-convention",
+         "the UTC+1 convention's set predicts the same as a Greenwich set with the same published phases", "3.3, 4.2",
+         [heights("OTC-P-0004", D + "00:00:00Z", D + "06:00:00Z", 1800, set_id="OTC-P-0004/kartverket"),
+          heights("OTC-P-0004", D + "00:00:00Z", D + "06:00:00Z", 1800, set_id="OTC-P-0004/greenwich")],
+         note="both steps have the same expected numbers (the SDK ignores utc_offset_hours)")
+    # ------------------------------------------------------------------ datums of heights
+    case("predict-datum/mean-level", "datum mean_level: h above the set's mean level", "4.5",
+         [heights_at(B, [D + "03:00:00Z"], datum="mean_level", expect={"datum": "mean_level", "datum_name": "mean_level",
+                                                                     "datum_kind": None, "datum_uncertainty_m": None})])
+    case("predict-datum/zero", "datum zero: msl_offset_m + h; datum_name is zero_name", "4.5",
+         [heights_at(B, [D + "03:00:00Z"], datum="zero", expect={"datum": "zero", "datum_name": "MLLW", "datum_kind": None})])
+    case("predict-datum/named", "datum mhhw (a key of named): msl_offset_m + h - named[mhhw]", "4.5",
+         [heights_at(B, [D + "03:00:00Z"], datum="mhhw", expect={"datum": "mhhw", "datum_name": "mhhw", "datum_kind": "published",
+                                                               "datum_uncertainty_m": None})])
+    case("predict-datum/chart", "datum chart resolves to mllw, with its basis kind and uncertainty", "4.5, 5.3",
+         [heights_at(B, [D + "03:00:00Z"], datum="chart", expect={"datum": "chart", "datum_name": "mllw", "datum_kind": "published",
+                                                                "datum_uncertainty_m": 0.01})])
+    case("predict-datum/unavailable", "each missing need is datum_unavailable, naming what is missing", "4.5, 5.4",
+         [error("heights_at", "datum_unavailable", message={"$contains": "msl_offset_m"}, station_id="OTC-P-0053",
+                times=[D + "03:00:00Z"], datum="zero", set_id="OTC-P-0053/no-datum"),
+          error("heights_at", "datum_unavailable", message={"$contains": "msl_offset_m"}, station_id="OTC-P-0053",
+                times=[D + "03:00:00Z"], datum="zero", set_id="OTC-P-0053/no-msl"),
+          error("heights_at", "datum_unavailable", message={"$contains": "msl_offset_m"}, station_id="OTC-P-0053",
+                times=[D + "03:00:00Z"], datum="chart", set_id="OTC-P-0053/no-msl"),
+          error("heights_at", "datum_unavailable", message={"$contains": "chart_datum"}, station_id="OTC-P-0053",
+                times=[D + "03:00:00Z"], datum="chart", set_id="OTC-P-0053/no-chart"),
+          error("heights_at", "datum_unavailable", message={"$contains": "mllw"}, station_id="OTC-P-0053",
+                times=[D + "03:00:00Z"], datum="mllw", set_id="OTC-P-0053/no-chart"),
+          error("extremes", "datum_unavailable", message={"$contains": "mllw"}, station_id="OTC-P-0053",
+                start=D + "00:00:00Z", stop=D + "12:00:00Z", datum="mllw", set_id="OTC-P-0053/no-chart")])
+    case("predict-datum/otc-key", "datum otc_lat (an otc_ key, kind computed)", "4.5; datums spec 7.2",
+         [heights_at(B, [D + "03:00:00Z"], datum="otc_lat", expect={"datum_name": "otc_lat", "datum_kind": "computed",
+                                                                  "datum_uncertainty_m": 0.02})])
+    case("predict-datum/vertical-zero", "datum zero on a set whose zero is vertical_datum NAP: datum_name NAP", "4.5",
+         [heights_at("OTC-P-0052", [D + "03:00:00Z"], datum="zero", expect={"datum_name": "NAP"}),
+          {"op": "datums", "args": {"station_id": "OTC-P-0052"}, "strict": None,
+           "expect": {"set_id": "OTC-P-0052/rws", "zero": "vertical_datum", "zero_name": "NAP", "chart_datum": None,
+                      "msl_offset_m": 0.08}}])
+    # ------------------------------------------------------------------ errors of choosing the constants
+    case("predict-no-constants", "a no_constants set (explicit set_id), and a station with no usable set and no offsets", "4.2 step 2",
+         [error("heights", "no_constants", station_id="OTC-P-0042", start=D + "00:00:00Z", stop=D + "01:00:00Z",
+                set_id="OTC-P-0042/noaa-a-noc"),
+          error("heights", "no_constants", station_id="OTC-P-0014", start=D + "00:00:00Z", stop=D + "01:00:00Z")])
+    case("predict-quantity-mismatch", "heights on a current set, currents on a water-level set", "4.2 step 3",
+         [error("heights", "quantity_mismatch", station_id="OTC-P-0016", start=D + "00:00:00Z", stop=D + "01:00:00Z"),
+          error("currents", "quantity_mismatch", station_id=B, start=D + "00:00:00Z", stop=D + "01:00:00Z")])
+    case("predict-unsupported-convention", "v0_model tamura_iho2006 is unsupported_convention", "4.2 step 4",
+         [error("heights", "unsupported_convention", station_id="OTC-P-0015", start=D + "00:00:00Z", stop=D + "01:00:00Z")])
+    us = lambda op, **kw: error(op, "unsupported_constituent", fields={"constituent": "M4"},
+                                strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0001/noaa"},
+                                                                            "times": [D + "00:00:00Z"], "datum_term": 0.0,
+                                                                            "astro": ASTRO_A}}, **kw)
+    case("predict-unsupported-constituent", "a constituent of the set with no table row (bad fixture: table A has no M4)", "4.2 step 6",
+         [us("heights", station_id=B, start=D + "00:00:00Z", stop=D + "01:00:00Z"),
+          us("extremes", station_id=B, start=D + "00:00:00Z", stop=D + "12:00:00Z")],
+         root="predict-bad/unsupported-constituent")
+    nat = lambda tid, conv: {"$all": [{"$contains": f'has no astro table "{tid}" for convention "{conv}"'},
+                                      {"$contains": "site PR #45"}]}
+    case("predict-no-astro-table", "the convention names a table that is absent; a convention with no astro_table_id ({id} empty)",
+         "4.2 step 5, 5.4",
+         [error("heights", "no_astro_table", message=nat(ASTRO_A, CONV_G), station_id=B, start=D + "00:00:00Z", stop=D + "01:00:00Z"),
+          error("heights", "no_astro_table", message=nat("", CONV_LOCAL), station_id="OTC-P-0004", start=D + "00:00:00Z",
+                stop=D + "01:00:00Z")],
+         root="predict-bad/no-astro-table", note="the fixture is invalid under the schema; the SDK loads it and fails only when it predicts")
+    oor = {"first_year": 2000, "last_year": 2030}
+    case("predict-time-out-of-range",
+         "1999-12-31T23:59:59Z and 2031-01-01T00:00:00Z; extremes whose grid padding reaches out of the table (heights with the same stop work)",
+         "4.3, 4.6 step 1",
+         [error("heights_at", "time_out_of_range", fields=oor, station_id=B, times=["1999-12-31T23:59:59Z"],
+                strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0001/noaa"},
+                                                            "times": ["1999-12-31T23:59:59Z"], "datum_term": 0.0, "astro": ASTRO_A}}),
+          error("heights_at", "time_out_of_range", fields=oor, station_id=B, times=["2031-01-01T00:00:00Z"],
+                strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0001/noaa"},
+                                                            "times": ["2031-01-01T00:00:00Z"], "datum_term": 0.0, "astro": ASTRO_A}}),
+          error("extremes", "time_out_of_range", fields=oor, station_id=B, start="2030-12-31T00:00:00Z", stop="2031-01-01T00:00:00Z",
+                strict={"entry": "extremes_strict", "args": {"constituents": {"$set": "OTC-P-0001/noaa"},
+                                                             "start": "2030-12-31T00:00:00Z", "stop": "2031-01-01T00:00:00Z",
+                                                             "datum_term": 0.0, "astro": ASTRO_A}}),
+          error("extremes", "time_out_of_range", fields=oor, station_id=B, start="2000-01-01T00:00:00Z", stop="2000-01-02T00:00:00Z",
+                strict={"entry": "extremes_strict", "args": {"constituents": {"$set": "OTC-P-0001/noaa"},
+                                                             "start": "2000-01-01T00:00:00Z", "stop": "2000-01-02T00:00:00Z",
+                                                             "datum_term": 0.0, "astro": ASTRO_A}}),
+          heights(B, "2030-12-31T22:00:00Z", "2031-01-01T00:00:00Z", 3600)])
+    case("predict-empty-window-out-of-range", "extremes with start == stop = 2031-01-01T00:00:00Z: empty, not time_out_of_range", "4.1",
+         [dict(extremes(B, "2031-01-01T00:00:00Z", "2031-01-01T00:00:00Z"), expect={"items": [], "method": "harmonic"}, strict=None)])
+    # ------------------------------------------------------------------ extremes
+    case("predict-extremes/basic", "extremes at the basic station over 3 days (cross-checked by a 5 s scan)", "4.6",
+         [extremes(B, D + "00:00:00Z", "2010-03-04T00:00:00Z", crosscheck=True)])
+    we = _window_edges(P)
+    case("predict-extremes/window-edges", "an event exactly at start and one just before stop are reported", "4.6 step 7",
+         [extremes(B, we[0], we[1])], note=f"the window starts at a reported event time and stops 1 s after another ({we[2]})")
+    case("predict-extremes/single-constituent", "M2 only, 2010-03-01 to 2010-03-31: 116 extremes, equal to a 5 s scan", "4.6 step 3",
+         [extremes("OTC-P-0005", *PW["single"], expect={"items": {"$len": 116}}, crosscheck=True)])
+    large = []
+    for sid_set, key in (("OTC-P-0012/m2-5m", "large-m2"), ("OTC-P-0012/m2-7m5", "large-m2"), ("OTC-P-0012/k1-40m", "large-k1")):
+        large.append(extremes("OTC-P-0012", *PW[key], set_id=sid_set, crosscheck=True))
+    case("predict-extremes/large-amplitude", "M2 at 5 m and 7.5 m in December 2099, K1 at 40 m on 2025-12-22: counts equal a 5 s scan (pins E)",
+         "4.6 step 3", large)
+    for cid, title, n in (("current-peaks-large-amplitude", "max_flood and max_ebb of the same amplitudes in m/s: counts equal a 5 s scan of W'", "scan_5s_peaks"),
+                          ("slacks-large-amplitude", "the slacks of the same bins: counts equal a 5 s scan of W", "scan_5s_slacks")):
+        case(f"predict-{cid}", title, "4.7",
+             [current_events("OTC-P-0013", *PW["large-m2"], bin_number=1, crosscheck=n),
+              current_events("OTC-P-0013", *PW["large-m2"], bin_number=2, crosscheck=n),
+              current_events("OTC-P-0013", *PW["large-k1"], bin_number=3, crosscheck=n)])
+    case("predict-extremes/close-high-low", "a high and a low 3 minutes apart inside one 6-minute step: both reported", "4.6",
+         [extremes("OTC-P-0008", *PW["close-high-low"], expect={"items": {"$len": 2}})])
+    case("predict-extremes/close-high-low-high", "three extremes inside one 6-minute step: all reported, in order", "4.6",
+         [extremes("OTC-P-0009", *PW["close-high-low-high"], expect={"items": {"$len": 3}})])
+    case("predict-extremes/double-high", "two highs 20 minutes apart with the low between: all three reported", "4.6",
+         [extremes("OTC-P-0010", *PW["double-high"], expect={"items": {"$len": 3}})])
+    case("predict-extremes/sub-second", "the close-root filter: an even cluster dropped; one high of a high-low-high kept "
+         "(the higher; on equal heights the first)", "4.6 step 6",
+         [extremes("OTC-P-0011", *PW["sub-second-pair"][:2], set_id="OTC-P-0011/pair", expect={"items": []}),
+          extremes("OTC-P-0011", *PW["sub-second-triple-higher"][:2], set_id="OTC-P-0011/triple-higher",
+                   expect={"items": {"$len": 1}}),
+          extremes("OTC-P-0011", *PW["sub-second-triple-equal"][:2], datum="zero", set_id="OTC-P-0011/triple-equal",
+                   expect={"items": {"$len": 1}})],
+         note="step 1 keeps the second high (09:01:11 rounded from r about 11.08 s); step 2 keeps the first (about 10.23 s)")
+    case("predict-extremes/year-boundary-step", "an extremum 200 s before 2010-01-01, found in the old year's step, with the old year's height",
+         "4.6 step 2", [extremes("OTC-P-0006", "2009-12-31T23:00:00Z", "2010-01-01T01:00:00Z")])
+    case("predict-extremes/new-year-missed", "K1 and O1 jump +5 at 2010-01-01: the high missed by both tables is inserted at T, "
+         "with the new year's height", "4.6 step 6a",
+         [extremes("OTC-P-0007", "2009-12-31T18:00:00Z", "2010-01-01T06:00:00Z")])
+    case("predict-extremes/new-year-doubled", "the opposite jump at 2011-01-01: the high at T - 10 min (old) and T + 8 min (new) "
+         "is reported once, the higher (the new year's)", "4.6 step 6a",
+         [extremes("OTC-P-0007", "2010-12-31T18:00:00Z", "2011-01-01T06:00:00Z")])
+    case("predict-extremes/negative-amplitude", "M2 at -1.0 m over the single-constituent window: 116 extremes, highs and lows "
+         "swapped (SDK only; the strict mode refuses a negative amplitude)", "4.4",
+         [dict(extremes("OTC-P-0005", *PW["single"]), strict=None,
+               expect={"items": {"$len": 116}, "method": "harmonic"}, swap_of="predict-extremes/single-constituent")],
+         root="predict-bad/extremes-negative-amplitude",
+         note="the expected items are those of predict-extremes/single-constituent with high and low swapped and each height negated")
+    # ------------------------------------------------------------------ currents
+    C0 = PW["currents"]
+    case("predict-currents/series", "currents at the default bin (2) over one day", "4.7", [currents("OTC-P-0016", *C0)])
+    case("predict-currents/mean", "the bin's mean_major_ms and mean_minor_ms are added", "4.7",
+         [currents("OTC-P-0017", *C0, bin_number=1)])
+    case("predict-currents/minor-sign", "a strong minor axis: V positive 90 degrees clockwise of the major axis (s = +1)", "4.7",
+         [currents("OTC-P-0017", *C0, bin_number=2)])
+    case("predict-currents/flood-sign", "sigma = -1 (flood opposite the azimuth): both components flip, direction is unchanged", "4.7",
+         [currents("OTC-P-0017", *C0, bin_number=3)])
+    case("predict-currents/direction-null", "zero speed: direction_deg is null", "4.7",
+         [currents("OTC-P-0017", *C0, step_s=3600, bin_number=4)])
+    case("predict-currents/direction-north", "azimuth 180 flowing toward north: direction_deg 0.0, never 360.0", "4.7",
+         [currents("OTC-P-0017", *C0, step_s=3600, bin_number=5)])
+    case("predict-currents/default-bin", "no bin_number: default_current_bin, else the lowest bin number in the set", "4.7",
+         [currents("OTC-P-0016", C0[0], "2010-03-01T03:00:00Z"), currents("OTC-P-0018", C0[0], "2010-03-01T03:00:00Z")])
+    case("predict-currents/explicit-bin", "bin_number 3", "4.7", [currents("OTC-P-0016", C0[0], "2010-03-01T03:00:00Z", bin_number=3)])
+    case("predict-bin-not-found", "a bin that is not in the set, and one that is not in the current_offsets", "4.7, 4.9",
+         [error("currents", "bin_not_found", station_id="OTC-P-0016", start=C0[0], stop="2010-03-01T01:00:00Z", bin_number=9),
+          error("current_events", "bin_not_found", station_id="OTC-P-0050", start=C0[0], stop="2010-03-01T12:00:00Z", bin_number=9)])
+    case("predict-bin-number-too-large", "bin_number 2^53 is invalid_argument in every SDK; 2^53 - 1 on a set without it is bin_not_found",
+         "5.2", [error("currents", "invalid_argument", station_id="OTC-P-0016", start=C0[0], stop="2010-03-01T01:00:00Z",
+                       bin_number=9007199254740992),
+                 error("currents", "bin_not_found", station_id="OTC-P-0016", start=C0[0], stop="2010-03-01T01:00:00Z",
+                       bin_number=9007199254740991)])
+    case("predict-current-events/basic", "events of the default bin over 2 days (cross-checked by a 5 s scan of W' and W)", "4.7",
+         [current_events("OTC-P-0016", "2010-03-01T00:00:00Z", "2010-03-03T00:00:00Z", crosscheck="scan_5s")])
+    case("predict-current-events/weak", "a local maximum of W below zero is not reported", "4.7",
+         [current_events("OTC-P-0019", *PW["current-events-weak"])])
+    case("predict-current-events/close-slacks", "two slacks inside one 6-minute step, 2 minutes apart: both reported", "4.7",
+         [current_events("OTC-P-0020", *PW["close-slacks"], bin_number=1)])
+    ss = []
+    for i, n in enumerate((2, 3, 4)):
+        c = _t(PW["sub-second-slacks"][i][:19] + "Z")
+        ss.append(current_events("OTC-P-0020", _iso(c - 10), _iso(c + 10), bin_number=n))
+    case("predict-current-events/sub-second-slacks", "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood "
+         "(index 0 kept); five within 0.95 s (index 2)", "4.7", ss,
+         note="five roots within 0.95 s cannot lie in five 0.703125 s leaves: they lie 2-1-2, the pairs cancel in their leaves, "
+              "and index 2 is the only candidate (see the slot report)")
+    case("predict-current-events/new-year-slack", "2012-01-01: a slack missed at T is inserted at T (bin 1); a doubled one keeps L (bin 2)",
+         "4.7", [current_events("OTC-P-0021", "2011-12-31T18:00:00Z", "2012-01-01T06:00:00Z", bin_number=1),
+                 current_events("OTC-P-0021", "2011-12-31T18:00:00Z", "2012-01-01T06:00:00Z", bin_number=2)])
+    # ------------------------------------------------------------------ subordinate tides
+    W2 = (D + "00:00:00Z", "2010-03-03T00:00:00Z")
+    case("predict-subordinate/tide-ratio", "R, differing offsets: NOAA's event method", "4.8", [sub_tide("extremes", "OTC-P-0030", *W2)])
+    case("predict-subordinate/tide-additive", "A, differing offsets", "4.8", [sub_tide("extremes", "OTC-P-0031", *W2)])
+    case("predict-subordinate/tide-missing-offsets", "an absent time offset is 0, an absent height offset the identity", "4.8 step 3",
+         [sub_tide("extremes", "OTC-P-0032", *W2)])
+    case("predict-subordinate/tide-order-swap", "shifted events that swap order are ordered by time", "4.8 step 4",
+         [sub_tide("extremes", "OTC-P-0033", *W2)])
+    case("predict-subordinate/tide-fractional-offset", "+12.5 and -7.25 min give whole-second times, floor(t + 0.5)", "4.8 step 3",
+         [sub_tide("extremes", "OTC-P-0034", *W2)])
+    xo = lambda sid: error("heights", "extremes_only", message={"$contains": "offsets differ"}, station_id=sid,
+                           start=W2[0], stop="2010-03-01T06:00:00Z")
+    case("predict-subordinate/series", "heights at a station with differing offsets: extremes_only", "4.8a, 5.4",
+         [xo("OTC-P-0031"), error("heights_at", "extremes_only", station_id="OTC-P-0031", times=[W2[0]])])
+    case("predict-subordinate/reference-no-chart-datum", "the reference's noaa set has no chart datum: datum_unavailable", "4.8 step 2",
+         [error("extremes", "datum_unavailable", station_id="OTC-P-0045", start=W2[0], stop=W2[1])])
+    case("predict-subordinate/current", "a subordinate current station: events by offsets; currents is extremes_only", "4.9",
+         [sub_current_events("OTC-P-0050", *W2),
+          error("currents", "extremes_only", station_id="OTC-P-0050", start=W2[0], stop="2010-03-01T06:00:00Z")])
+    case("predict-subordinate/current-null-adjustment", "a null adjustment or ratio drops that event type (omitted_event_types)", "4.9 step 4",
+         [sub_current_events("OTC-P-0051", *W2)])
+    case("predict-subordinate/folded-ratio", "equal offsets, R 0.9, +37 min: heights by folding, method folded_offsets", "4.8a",
+         [sub_tide("heights", "OTC-P-0035", W2[0], "2010-03-02T00:00:00Z")])
+    case("predict-subordinate/folded-additive", "equal offsets, A +0.15 m, -12 min", "4.8a",
+         [sub_tide("heights", "OTC-P-0036", W2[0], "2010-03-02T00:00:00Z")])
+    case("predict-subordinate/folded-extremes", "the folded station's extremes (equal to the event method's away from New Year)", "4.8a",
+         [sub_tide("extremes", "OTC-P-0035", *W2)],
+         note="the case harness also runs subordinate_extremes_strict on the same window: times within 1 s, heights within 1e-5 m")
+    case("predict-subordinate/folded-new-year", "a window across 2013-01-01 with +40 min: the folded curve uses year Y(t)'s tables", "4.8a",
+         [sub_tide("heights", "OTC-P-0037", "2012-12-31T22:00:00Z", "2013-01-01T02:00:00Z")])
+    case("predict-subordinate/differing-offsets-series", "differing offsets: heights fails with extremes_only (the offsets differ); extremes works",
+         "4.8a", [xo("OTC-P-0030"), sub_tide("extremes", "OTC-P-0030", W2[0], "2010-03-02T00:00:00Z")])
+    zr = lambda op, sid, sub: error(op, "invalid_argument", station_id=sid, start=W2[0], stop="2010-03-02T00:00:00Z",
+                                    strict={"entry": "folded_heights" if sub == "fold" else "subordinate_extremes_strict",
+                                            "args": dict({"ref_constituents": {"$set": "OTC-P-0001/noaa"}, "chart_datum_term": 1.12,
+                                                          "offsets": {"$offsets": sid}, "datum_shift": 0.0, "astro": ASTRO_A},
+                                                         **({"times": [W2[0]]} if sub == "fold" else {"start": W2[0], "stop": "2010-03-02T00:00:00Z"}))})
+    case("predict-subordinate/zero-ratio", "R ratio 0 and -0.5, equal and differing offsets: heights and extremes are invalid_argument",
+         "4.8 step 3", [zr(op, sid, kind) for sid, kind in (("OTC-P-0038", "fold"), ("OTC-P-0039", "fold"),
+                                                            ("OTC-P-0040", "event"), ("OTC-P-0041", "event"))
+                        for op in ("heights", "extremes")])
+    xt = lambda op, sid: error(op, "invalid_argument", message={"$contains": "X"}, station_id=sid, start=W2[0], stop="2010-03-02T00:00:00Z")
+    case("predict-subordinate/unknown-adjusted-type", "height_adjusted_type X (read as other): invalid_argument naming X, equal and "
+         "differing offsets; with a failing reference too, still invalid_argument (the type check comes first)", "4.8 step 6",
+         [xt(op, sid) for sid in ("OTC-P-0035", "OTC-P-0030", "OTC-P-0049") for op in ("heights", "extremes")],
+         root="predict-bad/unknown-adjusted-type",
+         note="OTC-P-0049's reference has no noaa set (reference_unavailable without the X); see the slot report on 'missing reference'")
+    case("predict-subordinate/order-ratio-before-extremes-only", "differing offsets and an R ratio of 0: heights is invalid_argument, "
+         "not extremes_only", "4.8 step 6", [zr("heights", "OTC-P-0040", "event")])
+    case("predict-reference-set-file-order", "the reference set is the first usable noaa water-level set in file order (the flagged one), "
+         "not the recommended gesla-fit set, the no_constants set or the later ok set", "4.8 step 1",
+         [sub_tide("extremes", "OTC-P-0043", *W2, expect={"set_id": "OTC-P-0042/noaa-b-flagged"})])
+    # ------------------------------------------------------------------ local time
+    LH = "local_time_unavailable"
+    ny = (P_BASIC, "2021-03-13T12:00:00Z", "2021-03-15T00:00:00Z", "America/New_York")
+    case("predict-local/station-zone", "to_local() on extremes at America/New_York, Europe/Oslo and Australia/Lord_Howe stations, across "
+         "a daylight-saving change", "4.1",
+         [to_local(extremes(*ny[:3]), zone=ny[3]),
+          to_local(extremes("OTC-P-0002", "2022-10-29T12:00:00Z", "2022-10-31T00:00:00Z"), zone="Europe/Oslo"),
+          to_local(extremes("OTC-P-0003", "2023-04-01T00:00:00Z", "2023-04-02T12:00:00Z"), zone="Australia/Lord_Howe")],
+         requires=("predict", "localtime"))
+    case("predict-local/named-zone", "to_local(Asia/Kolkata) and to_local(Pacific/Chatham) (+5:30; +13:45 and +12:45)", "4.1",
+         [to_local(extremes(B, "2024-01-10T00:00:00Z", "2024-01-11T00:00:00Z"), "Asia/Kolkata", "Asia/Kolkata"),
+          to_local(extremes(B, "2024-04-06T00:00:00Z", "2024-04-07T12:00:00Z"), "Pacific/Chatham", "Pacific/Chatham")],
+         requires=("predict", "localtime"))
+    small = extremes(B, "2024-01-10T00:00:00Z", "2024-01-10T12:00:00Z")
+    uz = lambda z: {"op": "to_local", "args": {"of": {"op": small["op"], "args": small["args"]}, "tz": z},
+                    "expect": {"error": "unknown_time_zone", "error_fields": {"zone": z}}, "strict": None}
+    case("predict-local/unknown-zone", "unknown_time_zone for Mars/Olympus, XYZ3, posix/, right/, posixrules, localtime and Factory", "4.1",
+         [uz(z) for z in ("Mars/Olympus", "XYZ3", "posix/Europe/Oslo", "right/Europe/Oslo", "posixrules", "localtime", "Factory")]
+         + [to_local(extremes("OTC-P-0002", "2024-01-10T00:00:00Z", "2024-01-10T12:00:00Z"), "Europe/Oslo", "Europe/Oslo")],
+         requires=("predict", "localtime"),
+         note="the last step: Europe/Oslo, a link to Europe/Berlin in tzdata 2026e, is accepted (in C a symbolic link)")
+    case("predict-local/missing-dependency", "without the optional dependency, to_local is local_time_unavailable", "4.1, 5.4",
+         [to_local(small, zone="America/New_York", expect_if_missing={"localtime": {"error": LH}})],
+         requires=("predict", "localtime_module"))
+    case("predict-local/missing-tzdir", "C: TZDIR set to a path that does not exist: local_time_unavailable naming the directory", "4.1",
+         [{"driver": "restart_runner", "env": {"TZDIR": "${tmp}/no-such-zoneinfo"}},
+          dict(to_local(small, zone="America/New_York"), expect={"error": LH, "error_message": {"$contains": "no-such-zoneinfo"}},
+               strict=None, local=None)],
+         requires=("predict", "localtime", "tzdir_env"))
+    case("predict-local/not-built", "C without the local-time module: not_built", "4.1, 5.1",
+         [to_local(small, zone="America/New_York", expect_if_missing={"localtime_module": {"error": "not_built"}})])
+    fmt_utc = heights(B, "2022-06-01T22:00:00Z", "2022-06-02T02:00:00Z", 3600)
+    fmt_osl = heights("OTC-P-0002", "2023-03-25T22:00:00Z", "2023-03-26T03:00:00Z", 3600)
+    case("predict-local/format", "UTC ends in +00:00, not Z; local midnight is hour 00, not 24 (Europe/Oslo across its spring change)", "4.1",
+         [to_local(fmt_utc, "UTC", "UTC", local_items=[
+             {"time": "2022-06-01T22:00:00Z", "local_time": "2022-06-01T22:00:00+00:00", "utc_offset_s": 0},
+             {"time": "2022-06-01T23:00:00Z", "local_time": "2022-06-01T23:00:00+00:00", "utc_offset_s": 0},
+             {"time": "2022-06-02T00:00:00Z", "local_time": "2022-06-02T00:00:00+00:00", "utc_offset_s": 0},
+             {"time": "2022-06-02T01:00:00Z", "local_time": "2022-06-02T01:00:00+00:00", "utc_offset_s": 0}]),
+          to_local(fmt_osl, None, "Europe/Oslo", local_items=[
+              {"time": "2023-03-25T22:00:00Z", "local_time": "2023-03-25T23:00:00+01:00", "utc_offset_s": 3600},
+              {"time": "2023-03-25T23:00:00Z", "local_time": "2023-03-26T00:00:00+01:00", "utc_offset_s": 3600},
+              {"time": "2023-03-26T00:00:00Z", "local_time": "2023-03-26T01:00:00+01:00", "utc_offset_s": 3600},
+              {"time": "2023-03-26T01:00:00Z", "local_time": "2023-03-26T03:00:00+02:00", "utc_offset_s": 7200},
+              {"time": "2023-03-26T02:00:00Z", "local_time": "2023-03-26T04:00:00+02:00", "utc_offset_s": 7200}])],
+         requires=("predict", "localtime"))
+    # ------------------------------------------------------------------ datums (the datums spec's DT8 cases)
+    def level(cs, key):
+        d = cs["datum"]
+        b = d["basis"][key]
+        cd = d.get("chart_datum")
+        ctl = b.get("control") or {}
+        return {"key": key, "value_m": d["named"][key],
+                "above_chart_m": d["named"][key] - d["named"][cd] if cd else None,
+                "kind": b["kind"], "method": b["method"], "source_name": b.get("source_name"), "epoch": b.get("epoch"),
+                "data_span": b.get("data_span"), "control_station_id": ctl.get("station_id"), "control_set_id": ctl.get("set_id"),
+                "control_source_id": ctl.get("source_id"), "uncertainty_m": b.get("uncertainty_m"),
+                "uncertainty_basis": b.get("uncertainty_basis"), "flags": b.get("flags", [])}
+
+    def group(cs):
+        d = cs.get("datum") or {}
+        return {"set_id": cs["set_id"], "zero": d.get("zero"), "zero_name": d.get("zero_name"), "chart_datum": d.get("chart_datum"),
+                "msl_offset_m": d.get("msl_offset_m"), "levels": [level(cs, k) for k in sorted(d.get("named", {}))]}
+
+    def ranges(cs):
+        d = cs["datum"]
+
+        def rng(a, b):
+            ba, bb = d["basis"].get(a), d["basis"].get(b)
+            if not ba or not bb or ba["kind"] != bb["kind"] or ba.get("epoch") != bb.get("epoch"):
+                return None
+            return d["named"][a] - d["named"][b]
+        return {"mn": rng("mhw", "mlw"), "gt": rng("mhhw", "mllw"), "dhq": rng("mhhw", "mhw"), "dlq": rng("mlw", "mllw")}
+
+    bset = P.set("OTC-P-0001/noaa")
+    case("predict-datums/list", "datums(): the recommended set's levels in key order, with their basis", "datums spec 7.1",
+         [{"op": "datums", "args": {"station_id": B}, "expect": group(bset), "strict": None}])
+    case("predict-datums/all-sets", "datums(all_sets: true): one group per set, in file order", "datums spec 7.1",
+         [{"op": "datums", "args": {"station_id": B, "all_sets": True},
+           "expect": {"groups": [group(cs) for cs in P.st[B]["constant_sets"]]}, "strict": None}])
+    case("predict-datums/ranges", "ranges(): MN, GT, DHQ, DLQ from levels of the same kind and epoch", "datums spec 7.1",
+         [{"op": "ranges", "args": {"station_id": B}, "expect": ranges(bset), "strict": None}])
+    case("predict-datums/ranges-mixed-kinds", "a range from levels of different kinds or epochs is refused (null)", "datums spec 7.1",
+         [{"op": "ranges", "args": {"station_id": "OTC-P-0054"}, "expect": ranges(P.set("OTC-P-0054/noaa")), "strict": None}])
+    sdat = P.st["OTC-P-0035"]["subordinate_offsets"]["datum"]
+    case("predict-datum/subordinate-named", "datum mhhw at a folded subordinate: above chart + named[chart_datum] - named[mhhw]; "
+         "datums() returns subordinate_offsets.datum", "4.8 step 5; datums spec 7.1",
+         [sub_tide("heights_at", "OTC-P-0035", None, datum="mhhw", times=["2010-03-01T03:00:00Z"],
+                   expect={"datum": "mhhw", "datum_name": "mhhw", "datum_kind": "published"}),
+          error("heights_at", "datum_unavailable", station_id="OTC-P-0035", times=["2010-03-01T03:00:00Z"], datum="lat"),
+          {"op": "datums", "args": {"station_id": "OTC-P-0035"}, "strict": None,
+           "expect": {"set_id": None, "zero": None, "zero_name": None, "chart_datum": "mllw", "msl_offset_m": None,
+                      "levels": [dict(level({"set_id": None, "datum": sdat}, k)) for k in sorted(sdat["named"])]}}])
+    case("predict-datum/subordinate-reference-wrong-source", "the reference has only a gesla-fit set (with an observed mllw): "
+         "reference_unavailable", "4.8 step 1; datums spec DT8",
+         [error("extremes", "reference_unavailable", fields={"reference_station_id": "OTC-P-0048"}, station_id="OTC-P-0049",
+                start=W2[0], stop=W2[1])])
+    case("predict-datum/subordinate-unpublished-chart", "the reference's noaa set has a computed (not published) chart datum: "
+         "datum_unavailable", "4.8 step 2; datums spec DT8",
+         [error("extremes", "datum_unavailable", station_id="OTC-P-0047", start=W2[0], stop=W2[1])])
+    # ------------------------------------------------------------------ astro tables
+    ta = P.doc["astro_tables"][0]
+
+    def eq_arg(name, at):
+        t = _t(at)
+        y = datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).year
+        i = y - ta["first_year"]
+        r = ta["constituents"][name]
+        x = r["v0u_deg"][i] + r["speed_deg_per_hour"] * ((t - _t(f"{y}-01-01T00:00:00Z")) / 3600.0)
+        x = x - 360.0 * math.floor(x / 360.0)
+        return 0.0 if x == 360.0 else x
+
+    def nf(name, at):
+        y = int(at[:4])
+        return ta["constituents"][name]["f"][y - ta["first_year"]]
+
+    ast = []
+    tbl = lambda t: {"astro_table_id": t["astro_table_id"], "v0_model": t["v0_model"], "tables_sha256": t["tables_sha256"],
+                     "generator": t["generator"], "first_year": t["first_year"], "last_year": t["last_year"]}
+    ast.append({"op": "astro_table", "args": {}, "expect": {"astro_table": tbl(ta)}, "strict": None})
+    ast.append({"op": "astro_table", "args": {"id": ASTRO_B}, "expect": {"astro_table": tbl(P.doc["astro_tables"][1])}, "strict": None})
+    ast.append({"op": "astro_table", "args": {"id": "no-such-table"}, "expect": {"astro_table": None}, "strict": None})
+    for at in ("2000-01-01T00:00:00Z", "2015-06-01T12:34:56Z", "2030-12-31T23:59:59Z"):
+        for name in ("M2", "K1"):
+            ast.append({"op": "astro_equilibrium_argument", "args": {"name": name, "at": at},
+                        "expect": {"value": eq_arg(name, at)}, "strict": None})
+            ast.append({"op": "astro_node_factor", "args": {"name": name, "at": at}, "expect": {"value": nf(name, at)}, "strict": None})
+    for y in (2000, 2015, 2030):
+        ast.append({"op": "astro_equilibrium_for_year", "args": {"name": "M2", "year": y},
+                    "expect": {"value": ta["constituents"]["M2"]["v0u_deg"][y - 2000]}, "strict": None})
+        ast.append({"op": "astro_node_factor_for_year", "args": {"name": "M2", "year": y},
+                    "expect": {"value": ta["constituents"]["M2"]["f"][y - 2000]}, "strict": None})
+    ast.append({"op": "astro_valid_range", "args": {}, "expect": {"first_year": 2000, "last_year": 2030}, "strict": None})
+    ast.append(error("astro_equilibrium_argument", "unsupported_constituent", fields={"constituent": "ZZ9"}, name="ZZ9",
+                     at="2015-06-01T00:00:00Z"))
+    for op, a in (("astro_equilibrium_argument", {"at": "1999-12-31T23:59:59Z"}), ("astro_node_factor", {"at": "2031-01-01T00:00:00Z"}),
+                  ("astro_equilibrium_for_year", {"year": 1999}), ("astro_node_factor_for_year", {"year": 2031})):
+        ast.append(error(op, "time_out_of_range", fields=oor, name="M2", **a))
+    case("predict-astro-values", "every Astro function inside the range and at its edges; no row: unsupported_constituent; "
+         "out of range: time_out_of_range", "5.2", ast, note="the values are the table's, by the formulas of 5.2 (hand-written)")
+    neg = lambda op, **kw: error(op, "invalid_argument", message={"$all": [{"$contains": ASTRO_A}, {"$contains": "M2"}]},
+                                 strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0005/noaa"},
+                                                                             "times": [D + "00:00:00Z"], "datum_term": 0.0, "astro": ASTRO_A}}
+                                 if op != "astro_table" else None, **kw)
+    case("predict-astro-negative-speed/used-row", "M2's row speed is negative: heights, extremes, current_events and astro_table are "
+         "invalid_argument naming the table and the row", "4.2a",
+         [neg("heights", station_id="OTC-P-0005", start=D + "00:00:00Z", stop=D + "01:00:00Z"),
+          neg("extremes", station_id="OTC-P-0005", start=D + "00:00:00Z", stop=D + "12:00:00Z"),
+          neg("current_events", station_id="OTC-P-0016", start=D + "00:00:00Z", stop=D + "12:00:00Z", bin_number=1),
+          neg("astro_table")], root="predict-bad/astro-negative-speed")
+    case("predict-astro-negative-speed/unused-row", "a negative speed on a row that no set uses: heights on a set without it still fails",
+         "4.2a", [error("heights", "invalid_argument", message={"$all": [{"$contains": ASTRO_A}, {"$contains": "MN4"}]},
+                        station_id="OTC-P-0005", start=D + "00:00:00Z", stop=D + "01:00:00Z",
+                        strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0005/noaa"},
+                                                                    "times": [D + "00:00:00Z"], "datum_term": 0.0, "astro": ASTRO_A}})],
+         root="predict-bad/astro-negative-speed-unused")
+    case("predict-astro-negative-speed/short-v0u", "a v0u_deg array one entry short: invalid_argument", "4.2a",
+         [error("heights", "invalid_argument", message={"$contains": ASTRO_A}, station_id="OTC-P-0005", start=D + "00:00:00Z",
+                stop=D + "01:00:00Z", strict={"entry": "predict_strict", "args": {"constituents": {"$set": "OTC-P-0005/noaa"},
+                                                                                  "times": [D + "00:00:00Z"], "datum_term": 0.0,
+                                                                                  "astro": ASTRO_A}})],
+         root="predict-bad/astro-short-v0u")
+    # ------------------------------------------------------------------ metadata
+    ALG = {"release": PREDICT_D, "algorithm": "otc-predict-1"}
+    m_h = heights(B, D + "00:00:00Z", D + "01:00:00Z", datum="chart")
+    m_h["expect"] = dict(station_id=B, timezone="America/New_York", method="harmonic", set_id="OTC-P-0001/noaa",
+                         convention_id=CONV_G, astro_table_id=ASTRO_A, reference_station_id=None, reference_bin=None,
+                         datum="chart", datum_name="mllw", datum_kind="published", datum_uncertainty_m=0.01, bin_number=None,
+                         omitted_event_types=None, **ALG)
+    m_f = sub_tide("heights", "OTC-P-0035", D + "00:00:00Z", D + "01:00:00Z")
+    m_f["expect"] = dict(station_id="OTC-P-0035", timezone="America/New_York", method="folded_offsets", set_id="OTC-P-0001/noaa",
+                         convention_id=CONV_G, astro_table_id=ASTRO_A, reference_station_id=B, reference_bin=None, datum=None,
+                         datum_name="mllw", bin_number=None, omitted_event_types=None, **ALG)
+    m_c = currents("OTC-P-0016", D + "00:00:00Z", D + "01:00:00Z")
+    m_c["expect"] = dict(station_id="OTC-P-0016", method="harmonic", set_id="OTC-P-0016/noaa", convention_id=CONV_G,
+                         astro_table_id=ASTRO_A, reference_station_id=None, reference_bin=None, datum=None, datum_name=None,
+                         datum_kind=None, datum_uncertainty_m=None, bin_number=2, omitted_event_types=None, **ALG)
+    m_s = sub_current_events("OTC-P-0051", D + "00:00:00Z", "2010-03-02T00:00:00Z")
+    m_s["expect"].update(station_id="OTC-P-0051", convention_id=CONV_G, astro_table_id=ASTRO_A, datum=None, datum_name=None, **ALG)
+    case("predict-metadata", "every result field of 5.3: harmonic heights, folded heights, currents and subordinate current events", "5.3",
+         [m_h, m_f, m_c, m_s])
+    # ------------------------------------------------------------------ not built (C without otc_predict)
+    nb = {"predict": {"error": "not_built"}}
+    for fn, st in (("otc_heights", heights(B, D + "00:00:00Z", D + "01:00:00Z")),
+                   ("otc_heights_at", heights_at(B, [D + "00:00:00Z"])),
+                   ("otc_extremes", extremes(B, D + "00:00:00Z", D + "12:00:00Z")),
+                   ("otc_currents", currents("OTC-P-0016", D + "00:00:00Z", D + "01:00:00Z")),
+                   ("otc_current_events", current_events("OTC-P-0016", D + "00:00:00Z", D + "12:00:00Z")),
+                   ("otc_astro_table", ast[0]), ("otc_astro_equilibrium_argument", ast[3]), ("otc_astro_node_factor", ast[4]),
+                   ("otc_astro_equilibrium_for_year", next(a for a in ast if a["op"] == "astro_equilibrium_for_year")),
+                   ("otc_astro_node_factor_for_year", next(a for a in ast if a["op"] == "astro_node_factor_for_year")),
+                   ("otc_astro_valid_range", next(a for a in ast if a["op"] == "astro_valid_range"))):
+        case(f"not-built/{fn}", f"C built without otc_predict: {fn} returns not_built", "5.1",
+             [dict(st, expect_if_missing=nb)], requires=())
+    # ------------------------------------------------------------------ commercial_only (knc-predict)
+    K9 = ("2099-03-01T00:00:00Z", "2099-03-03T00:00:00Z")
+    without = {"op": "open", "matrix_open": {"commercial_only": None}, "strict": None}
+    case("predict-commercial-only/effective-set", "heights at OTC-T-0181 use the effective set w-ok; without the option, x-nc", "4.2 step 1",
+         [heights("OTC-T-0181", *K9, R=K, set_id=None, expect={"set_id": "OTC-T-0181/w-ok"}) | {"strict": {
+             "entry": "predict_strict", "args": {"constituents": {"$set": "OTC-T-0181/w-ok"}, "times": _series(*K9, 600),
+                                                 "datum_term": 0.0, "astro": ASTRO}}},
+          without, heights("OTC-T-0181", *K9, R=K, expect={"set_id": "OTC-T-0181/x-nc"})],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/explicit-nc-set", "set_id OTC-T-0181/x-nc with the option is invalid_argument naming commercial_only; "
+         "without it, it predicts", "4.2 step 1",
+         [error("heights", "invalid_argument", message={"$contains": "commercial_only"}, station_id="OTC-T-0181", start=K9[0],
+                stop=K9[1], set_id="OTC-T-0181/x-nc"),
+          without, heights("OTC-T-0181", *K9, R=K, set_id="OTC-T-0181/x-nc")],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/no-constants", "heights at OTC-T-0183 is no_constants naming commercial_only", "4.2 step 2",
+         [error("heights", "no_constants", message={"$contains": "commercial_only"}, station_id="OTC-T-0183", start=K9[0], stop=K9[1])],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/offsets-usable", "extremes at OTC-T-0186 and OTC-T-0190 predict by folded offsets from OTC-T-0185/a-noaa",
+         "4.2, 4.8a", [sub_tide("extremes", "OTC-T-0186", *K9, R=K), sub_tide("extremes", "OTC-T-0190", *K9, R=K)],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/offsets-nc-licence", "extremes at OTC-T-0187 (offsets licence nc-test-2) is reference_unavailable",
+         "4.2, 4.8", [error("extremes", "reference_unavailable", message={"$contains": "nc-test-2"},
+                            fields={"reference_station_id": "OTC-T-0185"}, station_id="OTC-T-0187", start=K9[0], stop=K9[1])],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/reference-set-nc", "extremes at OTC-T-0188: the reference set is x-nc (first noaa set in file order), "
+         "so reference_unavailable naming nc-test; without the option it predicts from x-nc", "4.2, 4.8 step 1",
+         [error("extremes", "reference_unavailable", message={"$contains": "nc-test"}, fields={"reference_station_id": "OTC-T-0181"},
+                station_id="OTC-T-0188", start=K9[0], stop=K9[1]),
+          without, sub_tide("extremes", "OTC-T-0188", *K9, R=K, expect={"set_id": "OTC-T-0181/x-nc"})],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/own-set-wins", "heights at OTC-T-0189 use its own set a-ok; its offsets are not used", "4.2",
+         [heights("OTC-T-0189", *K9, R=K, expect={"set_id": "OTC-T-0189/a-ok"})],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/current-offsets-nc", "current_events at OTC-T-0191 (entry licence nc-test) is reference_unavailable; "
+         "without the option it predicts from OTC-T-0181/z-current", "4.9 step 1",
+         [error("current_events", "reference_unavailable", message={"$contains": "nc-test"},
+                fields={"reference_station_id": "OTC-T-0181"}, station_id="OTC-T-0191", start=K9[0], stop=K9[1], bin_number=1),
+          without, sub_current_events("OTC-T-0191", *K9, bin_number=1, R=K)],
+         root="knc-predict", open_args={"commercial_only": True})
+    case("predict-commercial-only/current-offsets-usable", "current_events at OTC-T-0192 predict by offsets from OTC-T-0181/z-current",
+         "4.9", [sub_current_events("OTC-T-0192", *K9, bin_number=1, R=K)],
+         root="knc-predict", open_args={"commercial_only": True})
+    for c in cases:
+        if c["root"] == "knc-predict":
+            c["release"] = KNC_D
+    return {"calls_version": 1,
+            "description": "Every prediction case of the prediction spec (revision 27) section 6.5 as calls on the fixture roots, "
+                           "with the hand-written expectations. Generated by conformance/tools/build_fixtures.py; do not edit. "
+                           "Steps with \"strict\" take their numbers from the reference engine's strict mode (KP1-H writes "
+                           "predict_expected.json); K2b-pin merges both into conformance/cases/predict-*.json.",
+            "interface": CALLS_INTERFACE, "cases": cases}
+
+
+def _window_edges(R):
+    """extremes-window-edges: a window from a reported event time to 1 s after another. The reported times are
+    floor(r + 0.5) of the basic station's extremes on 2010-03-10, found by a sign scan at 1 s refined by bisection to
+    1e-6 s (an event whose r is within 0.1 s of a half second is skipped, so the rounding is not in doubt)."""
+    cs = R.set("OTC-P-0001/noaa")
+    tab = next(t for t in R.doc["astro_tables"] if t["astro_table_id"] == ASTRO_A)
+    y0 = _t("2010-01-01T00:00:00Z")
+
+    def dh(t):
+        d = (t - y0) / 3600.0
+        out = 0.0
+        for c in cs["constituents"]:
+            r = tab["constituents"][c["name"]]
+            x = r["speed_deg_per_hour"] * d + r["v0u_deg"][10] - c["phase_deg"]
+            out -= r["f"][10] * c["amplitude_m"] * r["speed_deg_per_hour"] * math.pi / 180 * math.sin(
+                (x - 360.0 * math.floor(x / 360.0)) * math.pi / 180)
+        return out
+    t0 = _t("2010-03-10T00:00:00Z")
+    roots, prev = [], dh(t0)
+    for k in range(1, 86400):
+        v = dh(t0 + k)
+        if (prev > 0) != (v > 0):
+            a, b = t0 + k - 1, t0 + k
+            while b - a > 1e-6:
+                m = (a + b) / 2
+                if (dh(m) > 0) == (prev > 0):
+                    a = m
+                else:
+                    b = m
+            r = (a + b) / 2
+            if abs(r - math.floor(r) - 0.5) > 0.1:
+                roots.append(math.floor(r + 0.5))
+        prev = v
+    return _iso(roots[0]), _iso(roots[1] + 1), f"events at {_iso(roots[0])} and {_iso(roots[1])}"
+
+
+CALLS_INTERFACE = {
+    "case": "{id, title, spec, root, release, requires, steps, runners?, open_args?, note?}. root is a fixture root (fixtures.json); "
+            "requires are runner features (K2: predict, localtime_module, localtime, tzdir_env); runners, when present, are the only "
+            "profiles that run the case (Python-only and not-C cases: there is no feature for them); open_args are matrix.open_args.",
+    "step": "{op, args, expect?, expect_if_missing?, strict, local?, swap_of?} or a driver step ({driver: restart_runner, env}) or "
+            "{op: open, matrix_open} (open the case's root again with open_args changed; null removes one). expect holds the "
+            "hand-written keys; the numeric items come from strict. An expect with error and a non-null strict is a modelled "
+            "refusal: the case harness checks that the strict mode raises the same code.",
+    "times": "ISO 8601 UTC strings YYYY-MM-DDTHH:MM:SS(.fff)Z; a naive datetime has no Z (Python only). Result times are whole "
+             "seconds YYYY-MM-DDTHH:MM:SSZ.",
+    "ops": {
+        "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id"],
+        "heights_at": ["station_id", "times", "datum", "set_id"],
+        "extremes": ["station_id", "start", "stop", "datum", "set_id"],
+        "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id"],
+        "current_events": ["station_id", "start", "stop", "bin_number", "set_id"],
+        "datums": ["station_id", "set_id", "all_sets"], "ranges": ["station_id", "set_id"],
+        "astro_table": ["id"], "astro_equilibrium_argument": ["id", "name", "at"], "astro_node_factor": ["id", "name", "at"],
+        "astro_equilibrium_for_year": ["id", "name", "year"], "astro_node_factor_for_year": ["id", "name", "year"],
+        "astro_valid_range": ["id"],
+        "to_local": ["of", "tz"],
+    },
+    "results": {
+        "heights, heights_at": "{items: [{time, height_m}], station_id, timezone, method, set_id, convention_id, astro_table_id, "
+                               "reference_station_id, reference_bin, datum, datum_name, datum_kind, datum_uncertainty_m, bin_number, "
+                               "omitted_event_types, release, algorithm} (spec 5.3; a field that does not apply is null)",
+        "extremes": "as heights, items [{time, type (high|low), height_m}]",
+        "currents": "as heights, items [{time, velocity_major_ms, velocity_minor_ms, speed_ms, direction_deg}]",
+        "current_events": "as heights, items [{time, type, velocity_ms, direction_deg}]",
+        "to_local": "the inner result with tz and tz_version, and local_time and utc_offset_s on every item. step.local.zone is the "
+                    "zone K2b-pin uses to add them to the strict items; step.local.check lists values they must equal",
+        "datums": "{set_id, zero, zero_name, chart_datum, msl_offset_m, levels: [{key, value_m, above_chart_m, kind, method, "
+                  "source_name, epoch, data_span, control_station_id, control_set_id, control_source_id, uncertainty_m, "
+                  "uncertainty_basis, flags}] in key order}; with all_sets: {groups: [that, per set, in file order]}",
+        "ranges": "{mn, gt, dhq, dlq}, each null unless both levels have the same kind and epoch",
+        "astro_table": "{astro_table: {astro_table_id, v0_model, tables_sha256, generator, first_year, last_year} or null}",
+        "astro_*": "{value} (degrees or a node factor); astro_valid_range {first_year, last_year}. An astro op without id uses "
+                   "release.astro_table() with no id (C: otc_astro_table, then the function on that handle)",
+    },
+    "strict": {
+        "entries": "webcaltides lib/harmonics_strict.rb (237446c) Engine methods: predict_strict(constituents, times, datum_term:), "
+                   "extremes_strict(constituents, start, stop, datum_term:), currents_strict(bin, times), current_events_strict(bin, "
+                   "start, stop), subordinate_extremes_strict(ref_constituents, chart_datum_term, offsets, start, stop, datum_shift:), "
+                   "subordinate_current_events_strict(ref_bin, offset, start, stop); and two compositions: folded_heights = "
+                   "subordinate_folded_strict(ref_constituents, chart_datum_term, offsets, datum_shift:) then predict_strict on its "
+                   "constituents and datum_term at times; folded_extremes = the same then extremes_strict over start, stop.",
+        "references": "{$set: set_id} is that set's constituents; {$bin: [set_id, bin]} that bin object; {$offsets: station_id} "
+                      "the station's subordinate_offsets; {$current_offset: [station_id, bin]} that current_offsets entry; astro is "
+                      "the astro_tables entry with that id, passed as astro: Strict::AstroTable.from_h(entry). All in the case's root.",
+        "crosscheck": "scan_5s (extremes: h'; current events: W' and W), scan_5s_peaks (W' only), scan_5s_slacks (W only): the "
+                      "5 s brute-force count of spec 6.1 that must equal the event count",
+    },
+    "matchers": "as the conformance cases, plus {$len: n} (an array of n items) and {$from_step: i} (equal to the same field of "
+                "step i's result); K2b-pin resolves both",
+}
 
 
 # --------------------------------------------------------------------------- reference reader (check only)
@@ -2690,6 +3516,10 @@ def check(schema_dir=None):
         diffs = compare_trees(Path(tmp), FIXTURES)
     print(f"{'PASS' if not diffs else 'FAIL'}  regeneration is byte-identical")
     problems += diffs
+    calls_ok = PREDICT_CALLS.exists() and PREDICT_CALLS.read_bytes() == dumps_pretty(predict_calls())
+    print(f"{'PASS' if calls_ok else 'FAIL'}  {PREDICT_CALLS.name} is current")
+    if not calls_ok:
+        problems.append(f"{PREDICT_CALLS.name}: missing or differs from a fresh generation")
     manifest = json.loads((FIXTURES / "fixtures.json").read_bytes())
     for fx in manifest["fixtures"]:
         root = FIXTURES / fx["root"]
@@ -2798,7 +3628,8 @@ def main():
                 os.replace(old / name, FIXTURES / name)
             print(f"could not write the fixtures; the old ones are back under {FIXTURES}", file=sys.stderr)
             raise
-    print(f"wrote fixtures under {FIXTURES}")
+    PREDICT_CALLS.write_bytes(dumps_pretty(predict_calls()))
+    print(f"wrote fixtures under {FIXTURES} and {PREDICT_CALLS}")
     return 0
 
 
