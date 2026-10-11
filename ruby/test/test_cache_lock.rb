@@ -5,10 +5,6 @@ class CacheLockTest < Minitest::Test
     include TestSupport
     OTC = OpenTideConstants
 
-    def posix_only
-        skip "needs POSIX permissions" if Gem.win_platform? || Process.uid.zero?
-    end
-
     def quick_cache(log = nil)
         OTC::Cache.new(tmpdir, logger: log, lock_stale_s: 0.2, lock_poll_s: 0.05)
     end
@@ -238,24 +234,28 @@ class CacheLockTest < Minitest::Test
         # the second waiter starts once the first holds the lock, so it meets a
         # young lock (two waiters that read the crashed lock's age at the same
         # instant can still both remove it; spec §5.4 accepts that)
-        waiters = 2.times.map do |i|
-            first_in.pop.tap { |x| first_in << x } if i == 1
-            Thread.new do
+        waiters = []
+        2.times do |i|
+            # every wait is bounded: a waiter that raises before it pushes fails the test, it does not hang it
+            (pop_within(first_in, 10) or flunk("the first waiter never took the lock")).tap { |x| first_in << x } if i == 1
+            waiters << Thread.new do
                 cache.with_lock(dir) do
                     am_first = mutex.synchronize { f = first; first = false; f }
                     if am_first
                         first_in << true
                         # the other waiter has waited past the stale time; it must not take this young lock
-                        overlap << !second_in.pop(timeout: 1.0).nil?
+                        overlap << !pop_within(second_in, 1.0).nil?
                     else
                         second_in << true
                     end
                 end
             end
         end
-        waiters.each { |t| t.join(10) }
+        waiters.each { |t| t.join(10) or flunk("a waiter is still waiting after 10 s") }
         assert_equal [false], overlap, "two waiters held the lock at the same time"
         assert_equal 1, second_in.size, "the second waiter never took the lock"
+    ensure
+        (waiters || []).each { |t| t.kill if t.alive? }
     end
 
     # R2-011/R2-013: prune takes the lock without waiting and applies the age
