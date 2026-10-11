@@ -22,13 +22,19 @@ module TestSupport
     # A one-thread HTTP/1.1 server (HTTPS when ssl_context is given). The
     # handler gets the request path and headers and returns [status,
     # headers, body]. Every request is recorded. An exception in the handler
-    # (or in the server code) is recorded in errors, and teardown fails the
-    # test with it: a handler that crashes must not look like a network
-    # failure. A client that goes away (a socket or TLS error) is not an error.
+    # (any exception, an Errno too) or in the accept loop is recorded in
+    # errors, and teardown fails the test with it: a handler that crashes
+    # must not look like a network failure. A client that goes away (a
+    # socket or TLS error while the request is read or the response is
+    # written, or a failed TLS handshake) is not an error.
     class Server
         attr_reader :requests, :headers, :errors
 
         CLIENT_GONE = [IOError, SystemCallError, OpenSSL::SSL::SSLError].freeze
+        # What accept raises for one client that went away during the TCP or
+        # TLS handshake. Any other accept error (EMFILE, say) comes back on
+        # every retry, so it is recorded and the loop stops.
+        HANDSHAKE_GONE = [OpenSSL::SSL::SSLError, Errno::ECONNABORTED, Errno::ECONNRESET, Errno::EPIPE, EOFError].freeze
 
         def initialize(ssl_context: nil, &handler)
             @handler = handler
@@ -63,14 +69,16 @@ module TestSupport
             loop do
                 sock = begin
                     @server.accept
-                rescue *CLIENT_GONE
-                    raise if @tcp.closed?
+                rescue *HANDSHAKE_GONE
+                    break if @tcp.closed?
                     next # a failed TLS handshake
+                rescue Exception => e # rubocop:disable Lint/RescueException
+                    break if @tcp.closed?
+                    @errors << e
+                    break
                 end
                 begin
                     handle(sock)
-                rescue *CLIENT_GONE
-                    nil
                 rescue Exception => e # rubocop:disable Lint/RescueException
                     @errors << e
                 ensure
@@ -79,14 +87,17 @@ module TestSupport
             end
         end
 
+        # Only the socket reads and writes treat CLIENT_GONE as a client that
+        # went away; the handler runs outside that rescue.
         def handle(sock)
-            line = sock.gets or return
-            _, path, = line.split(" ")
-            headers = {}
-            while (h = sock.gets) && h != "\r\n"
-                k, v = h.split(":", 2)
-                headers[k.strip.downcase] = v.to_s.strip
+            request = begin
+                read_request(sock)
+            rescue *CLIENT_GONE
+                nil
             end
+            return unless request
+
+            path, headers = request
             @requests << path
             @headers << headers
             status, out_headers, body = @handler.call(path, headers)
@@ -94,24 +105,51 @@ module TestSupport
             head = +"HTTP/1.1 #{status} X\r\nConnection: close\r\n"
             out_headers = { "Content-Length" => body.bytesize.to_s }.merge(out_headers || {})
             out_headers.each { |k, v| Array(v).each { |x| head << "#{k}: #{x}\r\n" } unless v.nil? }
-            sock.write(head + "\r\n")
-            sock.write(body) unless status == 304
+            begin
+                sock.write(head + "\r\n")
+                sock.write(body) unless status == 304
+            rescue *CLIENT_GONE
+                nil
+            end
+        end
+
+        def read_request(sock)
+            line = sock.gets or return nil
+            _, path, = line.split(" ")
+            headers = {}
+            while (h = sock.gets) && h != "\r\n"
+                k, v = h.split(":", 2)
+                headers[k.strip.downcase] = v.to_s.strip
+            end
+            [path, headers]
         end
     end
 
     # Serves files from a fixture root (or any directory), with an ETag (the
     # quoted SHA-256 of the body) and a 304 for a matching If-None-Match.
     # overrides maps a path suffix to [status, headers, body], or to a lambda
-    # that returns one.
+    # that returns one. The query is cut off first, for the overrides and
+    # the files alike. A file is served only at /<its name>: a request for
+    # any other path (a lost, doubled or extra directory in the client's URL
+    # join) is a 404 and is recorded as an error, so the test fails. A
+    # request in absolute form (the server used as a proxy) is read by its
+    # path.
     def self.file_server(dir, overrides = {})
-        Server.new do |path, headers|
-            hit = overrides.find { |suffix, _| path.end_with?(suffix) }
-            if hit
+        s = Server.new do |raw_path, headers|
+            path = raw_path.to_s.split("?", 2).first.to_s
+            path = path.sub(%r{\Ahttps?://[^/]*}, "") if path.match?(%r{\Ahttps?://})
+            name = path[%r{\A/([^/]+)\z}, 1]
+            hit = name && overrides.find { |suffix, _| path.end_with?(suffix) }
+            if name.nil? || name.start_with?(".")
+                s.errors << RuntimeError.new("the client asked for #{raw_path.inspect}, which is not /<a file name> " \
+                                             "of the served root")
+                [404, {}, "not found"]
+            elsif hit
                 v = hit[1]
                 next v unless v.respond_to?(:call)
                 v.arity == 2 ? v.call(path, headers) : v.call(path)
             else
-                f = File.join(dir, File.basename(path.split("?").first))
+                f = File.join(dir, name)
                 if File.file?(f)
                     body = File.binread(f)
                     etag = "\"#{Digest::SHA256.hexdigest(body)}\""
@@ -121,6 +159,7 @@ module TestSupport
                 end
             end
         end
+        s
     end
 
     # A TLS server on 127.0.0.1 with a self-signed certificate; returns
@@ -149,6 +188,25 @@ module TestSupport
         [s.port, ca, -> { s.stop }]
     end
 
+    # A test that needs file permissions to hold (a read-only directory that
+    # stops a delete, an unreadable file) skips on Windows and as root, where
+    # they do not.
+    def posix_only
+        skip "needs POSIX permissions" if Gem.win_platform? || Process.uid.zero?
+    end
+
+    # Pops from queue, waiting at most seconds; nil when nothing came.
+    # Queue#pop(timeout:) needs Ruby 3.2, and the gem supports 3.0.
+    def pop_within(queue, seconds)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
+        loop do
+            return queue.pop(true)
+        rescue ThreadError # empty
+            return nil if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+            sleep 0.01
+        end
+    end
+
     def tmpdir
         @tmpdirs ||= []
         d = Dir.mktmpdir("otc-rb-test")
@@ -158,9 +216,16 @@ module TestSupport
 
     # Stops the servers, then fails the test if a handler raised. A temporary
     # directory that cannot be removed is reported, not left in silence.
+    # Every server is stopped and every directory removed even when one step
+    # fails, and super always runs.
     def teardown
         servers = @servers || []
-        servers.each(&:stop)
+        errors = []
+        servers.each do |s|
+            s.stop
+        rescue StandardError => e
+            errors << e
+        end
         (@tmpdirs || []).each do |d|
             begin
                 FileUtils.chmod_R("u+rwx", d) if File.exist?(d)
@@ -170,12 +235,13 @@ module TestSupport
             FileUtils.rm_rf(d)
             warn "teardown: cannot remove the temporary directory #{d}" if File.exist?(d)
         end
-        errors = servers.flat_map { |s| Array.new(s.errors.size) { s.errors.pop } }
+        errors.concat(servers.flat_map { |s| Array.new(s.errors.size) { s.errors.pop } })
         unless errors.empty?
             e = errors.first
             msg = e.message.lines.first.to_s.strip[0, 200]
             flunk "the test server's handler raised #{e.class}: #{msg}\n#{Array(e.backtrace).first(5).join("\n")}"
         end
+    ensure
         super
     end
 
@@ -193,6 +259,7 @@ module TestSupport
     # parsed document) as OTC_<d>.<ext> (json or jsonl, with its .meta.json)
     # in a new directory, with no .sha256. Returns the path.
     def release_file(ext = "json", d = "20991231.2")
+        raise ArgumentError, "release_file writes json or jsonl, not #{ext.inspect}" unless %w[json jsonl].include?(ext)
         doc = JSON.parse(File.read(fixture("good", "OTC_#{d}.json")))
         yield doc
         dir = tmpdir
