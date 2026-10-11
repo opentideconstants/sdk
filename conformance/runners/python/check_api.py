@@ -368,10 +368,32 @@ API_MUTATIONS = [
 ]
 
 
+# The pending name each pending mutation needs: once a port has removed it from pending_port.python (the SDK has the
+# name now), that mutation does not apply and is skipped.
+NEEDS_PENDING = {
+    "pending-op-on-release": ("members", "Release.heights"), "pending-op-on-client": ("members", "Release.extremes"),
+    "pending-object": ("objects", "AstroTable"), "pending-enum": ("enums", "extreme_type"),
+    "pending-error-class": ("errors", "unsupported_convention"), "pending-error-code": ("errors", "no_constants"),
+    "pending-member-dropped": ("members", "Release.heights"), "pending-forwarded-dropped": ("members", "Release.extremes"),
+    "pending-object-dropped": ("objects", "AstroTable"), "pending-enum-dropped": ("enums", "extreme_type"),
+    "pending-error-dropped": ("errors", "no_constants"),
+}
+
+
+def applicable(name, api):
+    kind, pname = NEEDS_PENDING.get(name, (None, None))
+    return kind is None or pname in api.get("pending_port", {}).get("python", {}).get(kind, [])
+
+
 def self_test(otc, api):
+    """The failures of the self-test, and the number of mutations that do not apply (their name is ported)."""
     base, _ = check(otc, api)
     failures = []
+    skipped = 0
     for name, mutate, expect in API_MUTATIONS:
+        if not applicable(name, api):
+            skipped += 1
+            continue
         try:
             got, _ = check(otc, mutate(api))
         except Exception as e:  # a crash is a failure of the checker
@@ -381,6 +403,9 @@ def self_test(otc, api):
         if not any(expect in p for p in new):
             failures.append(f"{name}: not caught (wanted a problem with {expect!r}; new problems {new})")
     for name, apply, expect in MUTATIONS:
+        if not applicable(name, api):
+            skipped += 1
+            continue
         undo = apply(otc)
         try:
             got, _ = check(otc, api)
@@ -395,7 +420,7 @@ def self_test(otc, api):
     after, _ = check(otc, api)
     if after != base:
         failures.append(f"a mutation was not undone: {sorted(set(after) ^ set(base))}")
-    return failures
+    return failures, skipped
 
 
 def main():
@@ -414,11 +439,12 @@ def main():
     print(f"API manifest check (suite {api['suite_version']}): {n_names} public names, {len(problems)} problems")
     rc = 1 if problems else 0
     if not a.no_self_test:
-        failures = self_test(otc, api)
+        failures, skipped = self_test(otc, api)
         for f in failures:
             print("SELF-TEST", f)
-        n = len(MUTATIONS) + len(API_MUTATIONS)
-        print(f"self-test: {n - len(failures)} of {n} mutations caught")
+        n = len(MUTATIONS) + len(API_MUTATIONS) - skipped
+        print(f"self-test: {n - len(failures)} of {n} mutations caught"
+              + (f" ({skipped} not applicable: their name is no longer pending)" if skipped else ""))
         rc = rc or (1 if failures else 0)
     return rc
 

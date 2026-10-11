@@ -293,9 +293,22 @@ const API_MUTATIONS = [
     ["pending-unknown-key", (p) => { p.functions = []; }, "pending_port.typescript: unknown key(s)"],
 ];
 
+// The pending name each pending mutation needs: once a port has removed it from pending_port.typescript (the SDK
+// has the name now), that mutation does not apply and is skipped.
+const NEEDS_PENDING = {
+    "pending-op": ["members", "Release.heights"], "pending-op-on-client": ["members", "Release.current_events"],
+    "pending-error-class": ["errors", "unsupported_convention"], "pending-object": ["objects", "AstroTable"],
+    "pending-enum": ["enums", "extreme_type"], "pending-member-dropped": ["members", "Release.heights"],
+    "pending-forwarded-dropped": ["members", "Release.extremes"], "pending-object-dropped": ["objects", "AstroTable"],
+    "pending-enum-dropped": ["enums", "extreme_type"], "pending-error-dropped": ["errors", "no_constants"],
+};
+const applicable = (name) => !NEEDS_PENDING[name] || (API.pending_port?.typescript?.[NEEDS_PENDING[name][0]] ?? []).includes(NEEDS_PENDING[name][1]);
+const skipped = [];
+
 function selfTest(baseProblems) {
     const out = [];
     for (const [name, mutate, expect] of API_MUTATIONS) {
+        if (!applicable(name)) { skipped.push(name); continue; }
         try {
             const got = check(distDir, null, pendingMutation(mutate)).problems;
             const fresh = got.filter((p) => !baseProblems.includes(p));
@@ -305,6 +318,7 @@ function selfTest(baseProblems) {
         }
     }
     for (const [name, edits, expect] of MUTATIONS) {
+        if (!applicable(name)) { skipped.push(name); continue; }
         const dir = mkdtempSync(join(tmpdir(), "otc-check-api-"));
         try {
             cpSync(distDir, dir, { recursive: true });
@@ -342,8 +356,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (!process.argv.includes("--no-self-test")) {
         const bad = selfTest(problems);
         for (const b of bad) console.error(`SELF-TEST ${b}`);
-        const n = MUTATIONS.length + API_MUTATIONS.length;
-        console.log(`self-test: ${n - bad.length} of ${n} mutations caught`);
+        const n = MUTATIONS.length + API_MUTATIONS.length - skipped.length;
+        const note = skipped.length ? ` (${skipped.length} not applicable: their name is no longer pending)` : "";
+        console.log(`self-test: ${n - bad.length} of ${n} mutations caught${note}`);
         if (bad.length) rc = 1;
     }
     process.exit(rc);

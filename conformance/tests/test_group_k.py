@@ -202,3 +202,46 @@ def test_every_prediction_error_is_in_api_json():
         e = codes[code]
         assert e["fields"] == fields and e["c"] == "OTC_E_" + code.upper(), code
         assert e["class"] == "".join(p.capitalize() for p in code.split("_")) + "Error", code
+
+
+# --- the C API check (c/tools/check_manifest.py) with pending names; it reads only the header, so it runs here
+
+def _c_check():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("check_manifest", CONF.parent / "c" / "tools" / "check_manifest.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod, (CONF.parent / "c" / "include" / "opentideconstants.h").read_text(encoding="utf-8")
+
+
+def test_c_check_passes_with_every_prediction_name_pending():
+    cm, header = _c_check()
+    assert cm.check(API, header)[0] == []
+
+
+def test_c_check_allows_a_pending_status_declared_early():
+    """CR D24: a port may fix a pending error's status number early; the check and its self-test still pass."""
+    cm, header = _c_check()
+    early = header.replace("OTC_E_READER_TOO_OLD = 19", "OTC_E_NO_CONSTANTS = 20,\n    OTC_E_READER_TOO_OLD = 19", 1)
+    assert early != header and cm.check(API, early)[0] == []
+    assert cm.self_test(API, early) == ([], 0)
+
+
+@pytest.mark.parametrize("decl,name", [("OTC_API otc_status otc_heights(void);", "otc_heights"),
+                                       ("OTC_API otc_status otc_tz_open(void);", "otc_tz_open"),
+                                       ("typedef struct otc_predict_opts { size_t struct_size; } otc_predict_opts;",
+                                        "otc_predict_opts")])
+def test_c_check_refuses_a_pending_name_declared(decl, name):
+    cm, header = _c_check()
+    bad = header.replace("OTC_API void otc_close(", decl + "\nOTC_API void otc_close(", 1)
+    assert any(p.startswith(f"{name}  (pending for C") for p in cm.check(API, bad)[0])
+
+
+def test_c_self_test_skips_the_mutations_of_a_ported_name():
+    cm, header = _c_check()
+    ported = json.loads(json.dumps(API))
+    ported["pending_port"]["c"] = {"objects": [], "members": [], "enums": [], "errors": [], "c_structs": []}
+    problems, _ = cm.check(ported, header)
+    assert any("otc_heights  (Release.heights: no OTC_API function)" in p for p in problems)   # the header lacks it
+    failures, skipped = cm.self_test(ported, header)
+    assert skipped == len(cm.NEEDS_PENDING) and not any("crashed" in f for f in failures), failures

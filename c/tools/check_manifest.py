@@ -549,7 +549,9 @@ MUTATIONS = [
      "otc_height_t  (type of HeightPoint: no typedef)"),
     ("pending-enum-dropped", None, _api(lambda a: a["pending_port"]["c"]["enums"].remove("extreme_type")),
      "OTC_EXTREME_TYPE_HIGH  (enum extreme_type: no enum value)"),
-    ("pending-error-dropped", None, _api(lambda a: a["pending_port"]["c"]["errors"].remove("no_constants")),
+    # a port may declare a pending status early (CR D24): the mutation removes it from the header too
+    ("pending-error-dropped", lambda t: re.sub(r"^\s*OTC_E_NO_CONSTANTS\b[^,\n]*,?[ \t]*(/\*.*?\*/)?[ \t]*\n", "", t, flags=re.M),
+     _api(lambda a: a["pending_port"]["c"]["errors"].remove("no_constants")),
      "OTC_E_NO_CONSTANTS  (error no_constants: no otc_status value)"),
     ("pending-error-dropped-status-present-ok", None, _api(lambda a: a["pending_port"]["c"]["errors"].remove(
         "unsupported_convention")), None),
@@ -637,10 +639,31 @@ MUTATIONS = [
 ]
 
 
+# The pending name each pending mutation needs: once a port has removed it from pending_port.c (the header has the
+# name now), that mutation does not apply and is skipped.
+NEEDS_PENDING = {
+    "pending-function-declared": ("members", "Release.heights"), "line-comment-opens-no-block": ("members", "Release.heights"),
+    "string-opens-no-block": ("members", "Release.heights"), "pending-object-function-declared": ("objects", "AstroTable"),
+    "pending-result-function-declared": ("objects", "HeightSeries"), "pending-object-type-declared": ("objects", "HeightPoint"),
+    "pending-struct-declared": ("c_structs", "otc_predict_opts"), "pending-enum-value-declared": ("enums", "extreme_type"),
+    "pending-status-declared-ok": ("errors", "no_constants"), "pending-member-dropped": ("members", "Release.heights"),
+    "pending-object-dropped": ("objects", "HeightPoint"), "pending-enum-dropped": ("enums", "extreme_type"),
+    "pending-error-dropped": ("errors", "no_constants"),
+    "pending-error-dropped-status-present-ok": ("errors", "unsupported_convention"),
+    "pending-struct-dropped": ("c_structs", "otc_predict_opts"),
+}
+
+
 def self_test(api, header):
+    """The failures of the self-test, and the number of mutations that do not apply (their name is ported)."""
     base, _ = check(api, header)
     failures = []
+    skipped = 0
     for name, hmut, amut, expect in MUTATIONS:
+        kind, pname = NEEDS_PENDING.get(name, (None, None))
+        if kind and pname not in api.get("pending_port", {}).get("c", {}).get(kind, []):
+            skipped += 1
+            continue
         try:
             got, _ = check(amut(api) if amut else api, hmut(header) if hmut else header)
         except Exception as e:  # a crash is a failure of the checker
@@ -651,7 +674,7 @@ def self_test(api, header):
             failures.append(f"{name}: false failure {new}")
         elif expect is not None and not any(expect in p for p in new):
             failures.append(f"{name}: not caught (wanted a problem with {expect!r}; new problems {new})")
-    return failures
+    return failures, skipped
 
 
 def main(argv):
@@ -672,14 +695,16 @@ def main(argv):
     else:
         print("C header declares every name the API manifest implies, and no extra enum value or pending name")
     if not a.no_self_test:
-        failures = self_test(api, header)
+        failures, skipped = self_test(api, header)
+        n = len(MUTATIONS) - skipped
+        note = f" ({skipped} not applicable: their name is no longer pending)" if skipped else ""
         if failures:
-            print(f"self-test FAILED: {len(failures)} of {len(MUTATIONS)} mutation(s):")
+            print(f"self-test FAILED: {len(failures)} of {n} mutation(s){note}:")
             for f in failures:
                 print("  " + f)
             rc = 1
         else:
-            print(f"self-test: all {len(MUTATIONS)} mutations caught")
+            print(f"self-test: all {n} mutations caught{note}")
     return rc
 
 

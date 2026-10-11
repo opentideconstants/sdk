@@ -450,14 +450,35 @@ API_MUTATIONS = [
     ["pending-unknown-key", -> { pending_mutation { |p| p["functions"] = [] } }, "pending_port.ruby: unknown key(s)"],
 ].freeze
 
+# The pending name each pending mutation needs: once a port has removed it
+# from pending_port.ruby (the gem has the name now), that mutation does not
+# apply and is skipped.
+NEEDS_PENDING = {
+    "pending-op-on-release" => %w[members Release.heights], "pending-op-on-client" => %w[members Release.extremes],
+    "pending-object" => %w[objects AstroTable], "pending-enum" => %w[enums extreme_type],
+    "pending-error-class" => %w[errors unsupported_convention], "pending-error-code" => %w[errors no_constants],
+    "pending-member-dropped" => %w[members Release.heights], "pending-forwarded-dropped" => %w[members Release.extremes],
+    "pending-object-dropped" => %w[objects AstroTable], "pending-enum-dropped" => %w[enums extreme_type],
+    "pending-error-dropped" => %w[errors no_constants],
+}.freeze
+
+def applicable?(name)
+    kind, pname = NEEDS_PENDING[name]
+    kind.nil? || Array(MANIFEST.dig("pending_port", "ruby", kind)).include?(pname)
+end
+
+SKIPPED = []
+
 def self_test
     base = run_checks
     out = []
     API_MUTATIONS.each do |name, mutate, expect|
+        next SKIPPED << name unless applicable?(name)
         new = run_checks(mutate.call) - base
         out << "#{name}: not caught (wanted a problem with #{expect.inspect}; new problems #{new.inspect})" unless new.any? { |p| p.include?(expect) }
     end
     MUTATIONS.each do |name, apply, expect|
+        next SKIPPED << name unless applicable?(name.split(" ").first)
         undo = apply.call
         got = begin
             run_checks
@@ -486,8 +507,9 @@ rc = failures.empty? ? 0 : 1
 unless ARGV.include?("--no-self-test")
     bad = self_test
     bad.each { |f| warn "SELF-TEST #{f}" }
-    n = MUTATIONS.size + API_MUTATIONS.size
-    puts "self-test: #{n - bad.size} of #{n} mutations caught"
+    n = MUTATIONS.size + API_MUTATIONS.size - SKIPPED.size
+    note = SKIPPED.empty? ? "" : " (#{SKIPPED.size} not applicable: their name is no longer pending)"
+    puts "self-test: #{n - bad.size} of #{n} mutations caught#{note}"
     rc = 1 unless bad.empty?
 end
 exit rc
