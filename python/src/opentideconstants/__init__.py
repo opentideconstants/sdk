@@ -7,6 +7,10 @@
         if st is not None and st.recommended_set is not None:
             m2 = st.recommended_set.constituent("M2")   # None when the set has no M2
 
+Import the names you use. ``from opentideconstants import *`` replaces the built-in FileExistsError in your
+module with this package's FileExistsError (an error the API names, spec §4.8), so ``except FileExistsError``
+no longer catches the OS error of ``os.mkdir`` or ``open(path, "x")``.
+
 See https://opentideconstants.org. Code licence: MIT. Data licence: CC BY 4.0.
 """
 from ._client import DEFAULT_BASE_URL, OpenTideConstants, __version__

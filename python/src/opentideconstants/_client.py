@@ -220,7 +220,7 @@ class OpenTideConstants:
         check_http_url("base_url", base)  # at construction, never retried (CR D19)
         self._base_url = base if base.endswith("/") else base + "/"
         root = cache_dir if cache_dir is not None else default_root()
-        self._cache = Cache(Path(root))
+        self._cache = Cache(Path(root), log=self._log)
         self._on_network_error = on_network_error
         self._auto_update = auto_update
         self._update_interval = float(update_interval if update_interval is not None else 86_400)
@@ -679,8 +679,10 @@ class OpenTideConstants:
         except BaseException:
             try:
                 tmp.unlink()
-            except OSError:
+            except FileNotFoundError:
                 pass
+            except OSError as e:  # a leftover temporary file is logged, never silent (R3-224)
+                self._log.warning("cannot remove %s: %s", tmp, e)
             raise
 
     def _download_to_cache(self, datestamp: str, mode: str, info: Optional[ReleaseInfo]) -> Release:
@@ -755,8 +757,10 @@ class OpenTideConstants:
                 for _, tmp in wanted:
                     try:
                         Path(tmp).unlink()
-                    except OSError:
+                    except FileNotFoundError:
                         pass
+                    except OSError as e:  # R3-224
+                        self._log.warning("cannot remove %s: %s", tmp, e)
             self._log.info("downloaded and verified %s", datestamp)
             # the files table of .verified (spec §5.4, CR3 DR100): a row only for a file that is present and
             # verified in the release directory, with its real size and lowercase SHA-256, and never one for the
@@ -1173,8 +1177,10 @@ class OpenTideConstants:
             for tmp, _ in staged:
                 try:
                     tmp.unlink()
-                except OSError:
+                except FileNotFoundError:
                     pass
+                except OSError as e:  # R3-224
+                    self._log.warning("cannot remove %s: %s", tmp, e)
 
     # ------------------------------------------------------------------ forwarded queries (spec §4.4)
 

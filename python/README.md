@@ -38,7 +38,9 @@ together: a `.jsonl` needs its `OTC_20261008.meta.json` next to it, and `OTC_202
 the SDK check the file (`loaded_from` is `file`; without it, `file_unverified`). Low memory: `mode="stream"`.
 
 Every error the SDK raises is a subclass of `OpenTideConstantsError` and has a stable `.code`. A lookup that
-finds nothing returns `None` instead of raising, so check the result before you use it.
+finds nothing returns `None` instead of raising, so check the result before you use it. Import the names you
+use: `from opentideconstants import *` replaces the built-in FileExistsError in your module with the SDK's
+`FileExistsError`, so `except FileExistsError` no longer catches the OS error of `os.mkdir` or `open(path, "x")`.
 
 The SDK passes the shared conformance suite in `conformance/` (see `conformance/README.md`):
 

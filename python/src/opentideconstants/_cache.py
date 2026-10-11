@@ -4,6 +4,7 @@ from __future__ import annotations
 import calendar
 import datetime
 import json
+import logging
 import os
 import re
 import secrets
@@ -16,6 +17,8 @@ from pathlib import Path
 
 from ._errors import CacheError, InvalidReleaseError
 from ._release import integral
+
+_log = logging.getLogger("opentideconstants")
 
 LAYOUT = "v1"
 # spec §4.2 (CR D18): the counter has at most 9 digits. \Z, not $: $ also matches before a trailing newline.
@@ -72,8 +75,10 @@ def atomic_write(path: Path, data: bytes) -> None:
     except BaseException:
         try:
             tmp.unlink()
-        except OSError:
+        except FileNotFoundError:
             pass
+        except OSError as e:  # a leftover temporary file is logged, never silent (R3-224)
+            _log.warning("cannot remove %s: %s", tmp, e)
         raise
 
 
@@ -90,9 +95,10 @@ def ensure_dir(path: Path) -> Path:
 class Cache:
     """<root>/v1/{pointer,releases}."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, log: logging.Logger | None = None):
         self.root = Path(root)
         self.base = self.root / LAYOUT
+        self._log = log or _log
 
     def pointer_dir(self, create=False) -> Path:
         p = self.base / "pointer"
@@ -158,8 +164,8 @@ class Cache:
         except OSError as e:
             try:
                 os.rmdir(d / ".lock")
-            except OSError:
-                pass
+            except OSError as x:  # a lock left behind costs the next process a 120 s wait (R3-224)
+                self._log.warning("cannot remove %s: %s", d / ".lock", x)
             raise CacheError(f"cannot remove the cached release {d}: {e}") from e
         try:
             shutil.rmtree(d)
@@ -213,10 +219,13 @@ class Cache:
 
     def drop_pointer(self, name: str) -> None:
         for n in (name + ".etag", name):
+            p = self.pointer_dir() / n
             try:
-                (self.pointer_dir() / n).unlink()
-            except OSError:
+                p.unlink()
+            except (FileNotFoundError, NotADirectoryError):
                 pass
+            except OSError as e:  # the broken copy stays: say why (R3-224)
+                self._log.warning("cannot remove %s: %s", p, e)
 
 
 @contextmanager
@@ -323,8 +332,8 @@ def _release_lock(lock: Path, token: str) -> None:
     try:
         (lock / "owner.json").unlink()
         os.rmdir(lock)
-    except OSError:
-        pass  # a lock left behind only costs a 120 s wait (spec §5.4)
+    except OSError as e:  # a lock left behind only costs a 120 s wait (spec §5.4), but it is logged (R3-224)
+        _log.warning("cannot remove %s: %s", lock, e)
 
 
 def try_lock(directory: Path) -> bool:
