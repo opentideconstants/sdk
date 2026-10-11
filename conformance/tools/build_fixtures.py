@@ -85,7 +85,7 @@ NEXT_MAJOR = "2.0"
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
 GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "values-nul", "fold", "aliases", "chain", "knc", "nogz",
-             "bad", "fixtures.json"]
+             "bad", "predict", "predict-bad", "fixtures.json"]
 
 BASE = "20991231"
 SECOND = "20991231.2"
@@ -1464,6 +1464,490 @@ def knc_doc():
             "constituents": good["constituents"], "astro_tables": good["astro_tables"], "stations": stations}
 
 
+# --------------------------------------------------------------------------- prediction fixtures (K2b-fixtures)
+#
+# Prediction spec revision 27, section 6.5: the prediction cases use their own fixture release, root "predict", with
+# a made-up astro table A for 2000-2030 and a second one, B, for 2020-2100 used only by the large-amplitude cases;
+# the bad prediction fixtures (root "predict-bad/<name>") are copies of it with one change each. Every number here is synthetic. The designed stations (close
+# roots, New Year) are confirmed by conformance/tests/test_build_fixtures_predict.py, which scans h' (or W) at
+# 0.01 s around each designed event with the fixture's own table. No transcendental function is used to build a
+# table, so the files are byte-identical on every platform.
+
+PREDICT_D = "20991231.7"
+PRED_TABLE = "otc-test-predict-1"             # constituent_table_version of the prediction release
+ASTRO_A, ASTRO_A_YEARS = "otc-test-predict-a", (2000, 2030)
+ASTRO_B, ASTRO_B_YEARS = "otc-test-predict-b", (2020, 2100)
+CONV_G = "predict-greenwich-v1"              # table A
+CONV_LOCAL = "predict-local-utc1-v1"         # table A, phases referred to UTC+1 before conversion (local-phase-convention)
+CONV_TAMURA = "predict-tamura-v1"            # v0_model tamura_iho2006 (unsupported-convention)
+CONV_LARGE = "predict-large-v1"              # table B (the large-amplitude cases)
+
+
+def _tri(x):
+    """A triangle wave of period 1 and range [-1, 1]: a made-up stand-in for the nodal cycle, with no sin or cos."""
+    x = x - math.floor(x)
+    return 4 * x - 1 if x < 0.5 else 3 - 4 * x
+
+
+def _hours_in(year):
+    return 8784 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 8760
+
+
+def predict_astro_rows(first, last, rows, jumps=None, fjumps=None):
+    """Made-up rows {name: {speed_deg_per_hour, v0u_deg, f}} for first..last. rows: {name: (speed, V0+u of first,
+    u amplitude, f amplitude, cycle phase)}. V0+u runs on continuously from one 1 January to the next (speed times
+    the hours of the year) plus a made-up u; jumps {(name, year): degrees} adds a step at 1 January of that year (the
+    New Year cases); fjumps {(name, year): df} adds df to f from that year on. Rounded like a TCD (0.01, 0.0001)."""
+    jumps, fjumps = jumps or {}, fjumps or {}
+    out = {}
+    for name, (speed, a0, u_amp, f_amp, ph) in rows.items():
+        raw = [a0]
+        for y in range(first, last):
+            du = u_amp * (_tri((y + 1 - 2000) / 18.61 + ph) - _tri((y - 2000) / 18.61 + ph))
+            raw.append(raw[-1] + speed * _hours_in(y) + du + jumps.get((name, y + 1), 0.0))
+        extra, f = 0.0, []
+        for y in range(first, last + 1):
+            extra += fjumps.get((name, y), 0.0)
+            f.append(round(1.0 + f_amp * _tri((y - 2000) / 18.61 + 0.25 + ph) + extra, 4))
+        out[name] = {"speed_deg_per_hour": speed,
+                     "v0u_deg": [round(x - 360.0 * math.floor(x / 360.0), 2) % 360.0 for x in raw], "f": f}
+    return out
+
+
+# Table A rows: (speed, V0+u in 2000, u amplitude, f amplitude, cycle phase). MN4 is in no set (astro-negative-speed's
+# unused row). The XR* rows are fast made-up constituents for the close-root designs; their f is 1.
+PRED_ROWS_A = {
+    "M2": (28.9841042, 120.0, 0.5, 0.03, 0.0), "S2": (30.0, 0.0, 0.0, 0.0, 0.0),
+    "N2": (28.4397295, 210.0, 0.5, 0.03, 0.1), "K1": (15.0410686, 15.0, 1.0, 0.08, 0.3),
+    "O1": (13.9430356, 270.0, 1.0, 0.12, 0.3), "M4": (57.9682084, 240.0, 1.0, 0.06, 0.0),
+    "MN4": (57.4238337, 330.0, 1.0, 0.06, 0.1),
+    "XRA": (1800.0, 0.0, 0.0, 0.0, 0.0), "XRB": (4580.0, 0.0, 0.0, 0.0, 0.0), "XRC": (690.0, 0.0, 0.0, 0.0, 0.0),
+    "XRD": (64800.0, 0.0, 0.0, 0.0, 0.0), "XRE": (900000.0, 0.0, 0.0, 0.0, 0.0),
+    "XRF": (1000000.0, 0.0, 0.0, 0.0, 0.0), "XRG": (2090000.0, 0.0, 0.0, 0.0, 0.0),
+}
+# The table jumps of the New Year cases (spec 6.5): K1 and O1 +5 degrees at 2010 (extremes-new-year-missed), the
+# opposite at 2011 (extremes-new-year-doubled), +5 again at 2012 (a slack missed at T) with M2 -3 (a slack doubled);
+# M2's f steps by 0.03 at 2013, so the folded curve's year rule shows (subordinate-folded-new-year).
+PRED_JUMPS_A = {("K1", 2010): 5.0, ("O1", 2010): 5.0, ("K1", 2011): -4.05, ("O1", 2011): -4.05,
+                ("K1", 2012): 5.0, ("O1", 2012): 5.0, ("M2", 2012): -3.0}
+PRED_FJUMPS_A = {("M2", 2013): 0.03}
+PRED_ROWS_B = {"M2": (28.9841042, 75.0, 0.5, 0.03, 0.0), "K1": (15.0410686, 300.0, 1.0, 0.08, 0.3)}
+PRED_DOODSON = {"M2": "255 555", "S2": "273 555", "N2": "245 655", "K1": "165 555", "O1": "145 555", "M4": "455 555",
+                "MN4": "445 655"}
+
+
+def predict_tables():
+    a = {"astro_table_id": ASTRO_A, "v0_model": "schureman_tcd", "tables_sha256": sha(ASTRO_A.encode()),
+         "generator": "synthetic test values (not congen output)", "first_year": ASTRO_A_YEARS[0],
+         "last_year": ASTRO_A_YEARS[1],
+         "constituents": predict_astro_rows(*ASTRO_A_YEARS, PRED_ROWS_A, PRED_JUMPS_A, PRED_FJUMPS_A)}
+    b = {"astro_table_id": ASTRO_B, "v0_model": "schureman_tcd", "tables_sha256": sha(ASTRO_B.encode()),
+         "generator": "synthetic test values (not congen output)", "first_year": ASTRO_B_YEARS[0],
+         "last_year": ASTRO_B_YEARS[1], "constituents": predict_astro_rows(*ASTRO_B_YEARS, PRED_ROWS_B)}
+    return [a, b]
+
+
+def _pspeed(name):
+    return PRED_ROWS_A[name][0]
+
+
+def pc(name, amp, phase):
+    """A water-level constituent of the prediction release (only the required fields)."""
+    return {"name": name, "speed_deg_per_hour": _pspeed(name), "amplitude_m": amp, "phase_deg": phase}
+
+
+def pcc(name, major, major_phase, minor=0.0, minor_phase=0.0):
+    """A current constituent of the prediction release."""
+    return {"name": name, "speed_deg_per_hour": _pspeed(name), "major_amplitude_ms": major,
+            "major_phase_deg": major_phase, "minor_amplitude_ms": minor, "minor_phase_deg": minor_phase}
+
+
+def pbin(n, constituents, azimuth=0.0, flood=None, ebb=None, mean_major=None, mean_minor=None, depth=3.0):
+    b = {"bin": n, "depth_m": depth, "depth_type": "below_surface", "azimuth_deg": azimuth, "constituents": constituents}
+    if flood is not None:
+        b["mean_flood_dir_deg"] = flood
+    if ebb is not None:
+        b["mean_ebb_dir_deg"] = ebb
+    if mean_major is not None:
+        b["mean_major_ms"] = mean_major
+    if mean_minor is not None:
+        b["mean_minor_ms"] = mean_minor
+    return b
+
+
+def published(epoch=None, **extra):
+    b = {"kind": "published", "method": "source"}
+    if epoch is not None:
+        b["epoch"] = epoch
+    b.update(extra)
+    return b
+
+
+NTDE = {"start": "1983-01-01", "end": "2001-12-31", "name": "NTDE 1983-2001"}
+FIRST_REDUCTION = {"kind": "observed", "method": "first_reduction",
+                   "epoch": {"start": "2015-01-01", "end": "2016-12-31"},
+                   "data_span": {"start": "2015-01-01", "end": "2016-12-31", "months": 24},
+                   "uncertainty_m": 0.03, "uncertainty_basis": "calibrated", "flags": ["no_qualified_control"]}
+
+
+def pgauge(sid, suffix, constituents, **kw):
+    """A gauge set (gesla-fit) of the prediction release: as gauge_set, under the prediction convention."""
+    return dict(gauge_set(sid, suffix, constituents, **kw), convention_id=CONV_G)
+
+
+def pset(sid, suffix, constituents, *, source="noaa", source_type="official", convention=CONV_G, licence="noaa",
+         quantity="water_level", **extra):
+    return cset(sid, suffix, source, source_type, convention, licence, constituents, quantity=quantity, **extra)
+
+
+def pstation(sid, name, sets, *, tz="America/New_York", recommended: "str | None" = "first", lat=None, type_="reference", **extra):
+    """A station of the prediction release. recommended: "first" (its first set), a set_id, or None: no recommended
+    set (a subordinate with offsets only, or a reference station whose every set is no_constants; schema rule 6)."""
+    n = int(sid[-4:])
+    rec = sets[0]["set_id"] if recommended == "first" and sets else recommended
+    st = active(sid, name, "USA", lat if lat is not None else round(20.0 + n * 0.01, 4), -70.0, tz, sets,
+                type_=type_, recommended=rec, **extra)
+    if rec is None:
+        st["recommended_set_id"] = None
+    return st
+
+
+def offsets(ref, high_min, low_min, high, low, type_="R", licence="noaa", **extra):
+    o = {"reference_station_id": ref, "height_adjusted_type": type_, "licence_id": licence}
+    for k, v in (("time_offset_high_min", high_min), ("time_offset_low_min", low_min), ("height_offset_high", high),
+                 ("height_offset_low", low)):
+        if v is not None:
+            o[k] = v
+    o.update(extra)
+    return o
+
+
+def subordinate(sid, name, offs, tz="America/New_York"):
+    return pstation(sid, name, [], tz=tz, recommended=None, type_="subordinate", subordinate_offsets=offs)
+
+
+def current_offset(n, ref, ref_bin, **adj):
+    o = {"bin": n, "depth_m": 4.0, "depth_type": "below_surface", "reference_station_id": ref, "reference_bin": ref_bin,
+         "mean_flood_dir_deg": 45.0, "mean_ebb_dir_deg": 225.0, "time_adj_max_flood_min": 25.0,
+         "time_adj_slack_before_ebb_min": -10.0, "time_adj_max_ebb_min": 30.0, "time_adj_slack_before_flood_min": 5.5,
+         "flood_amp_ratio": 0.8, "ebb_amp_ratio": 1.1, "licence_id": "noaa"}
+    o.update(adj)
+    return o
+
+
+# The designed stations' constants (conformance/tests/test_build_fixtures_predict.py confirms each design).
+DESIGN = {
+    # extremes-single-constituent: M2 alone, 116 extremes from 2010-03-01 to 2010-03-31
+    "single": [("M2", 1.0, 20.903277)],
+    # extremes-year-boundary-step: a high 200 s before 2010-01-01, found in the old year's last step
+    "year-step": [("M2", 1.0, 333.740149)],
+    # extremes-new-year-missed (2010) and extremes-new-year-doubled (2011): K1 and O1
+    "new-year": [("K1", 0.8, 352.2128), ("O1", 0.6, 265.731)],
+    # extremes-close-high-low: a high and a low 3 min apart in one 6-minute step (2010-04-15 12:00)
+    "close-high-low": [("M2", 1.0, 320.346098), ("XRA", 0.00450158158, 0.0)],
+    # extremes-close-high-low-high: three extremes in one step (2010-05-03 06:00)
+    "close-high-low-high": [("M2", 1.0, 56.066985), ("XRB", 8.77107e-05, 280.476111)],
+    # extremes-double-high: two highs 20 min apart, the low between (2010-05-20 18:03)
+    "double-high": [("M2", 1.0, 349.390749), ("XRC", 0.00386443, 33.215833)],
+    # extremes-sub-second: a high and a low 0.8 s apart on a rising tide (2010-06-07 03:02:21)
+    "sub-pair": [("M2", 1.0, 352.105766), ("XRD", 0.00017824434, 295.987498)],
+    # a high, a low and a high within 0.9 s, the second high higher (2010-06-20 09:01:10)
+    "sub-triple-higher": [("M2", 1.0, 51.88102), ("XRE", 2.06493e-09, 194.125035)],
+    # the same with equal heights above the zero (msl_offset_m 1.0; datum zero) (2010-07-03 09:01:10)
+    "sub-triple-equal": [("M2", 1e-06, 94.92153), ("XRE", 2.06493e-15, 206.625023)],
+}
+DESIGN_BINS = {
+    # current-events-close-slacks: a weak flood whose W reaches 1.77e-5 m/s, slacks 2 min apart (2010-07-20 12:02:53)
+    "close-slacks": ([("M2", 0.5, 128.214673)], -0.497732308964),
+    # current-events-sub-second-slacks: two slacks 0.6 s apart (2010-07-30 12:01:10)
+    "slack-pair": ([("M2", 0.5, 243.570917)], -0.497749999557724),
+    # three slacks within 0.9 s, flood-ebb-flood (2010-08-09 06:01:10)
+    "slack-triple": ([("M2", 0.5, 275.853715), ("XRF", 3.60671e-05, 338.472197)], None),
+    # five slacks within 0.95 s (2010-08-19 06:01:10)
+    "slack-five": ([("M2", 0.5, 32.038739), ("XRG", 3.28573e-05, 314.668053)], None),
+    # current-events-new-year-slack: missed at 2012-01-01 (K1, O1), doubled (M2)
+    "ny-slack-missed": ([("K1", 0.6, 107.276412), ("O1", 0.4, 57.840927)], None),
+    "ny-slack-doubled": ([("M2", 0.8, 265.250366)], None),
+}
+
+
+# The windows of the designed cases (and the centres of the sub-second ones), shared with
+# conformance/tests/test_build_fixtures_predict.py, which confirms each design over them.
+PW = {
+    "single": ("2010-03-01T00:00:00Z", "2010-03-31T00:00:00Z"),
+    "large-m2": ("2099-12-20T00:00:00Z", "2099-12-25T00:00:00Z"),
+    "large-k1": ("2025-12-22T00:00:00Z", "2025-12-23T00:00:00Z"),
+    "close-high-low": ("2010-04-15T12:00:00Z", "2010-04-15T12:06:00Z"),
+    "close-high-low-high": ("2010-05-03T06:00:00Z", "2010-05-03T06:06:00Z"),
+    "double-high": ("2010-05-20T17:03:00Z", "2010-05-20T19:03:00Z"),
+    "sub-second-pair": ("2010-06-07T03:02:11Z", "2010-06-07T03:02:31Z", "2010-06-07T03:02:21.44375Z"),
+    "sub-second-triple-higher": ("2010-06-20T09:01:00Z", "2010-06-20T09:01:20Z", "2010-06-20T09:01:10.6665Z"),
+    "sub-second-triple-equal": ("2010-07-03T09:01:00Z", "2010-07-03T09:01:20Z", "2010-07-03T09:01:10.6665Z"),
+    "close-slacks": ("2010-07-20T12:00:00Z", "2010-07-20T12:06:00Z"),
+    # the centres of current-events-sub-second-slacks, bins 2, 3 and 4 of OTC-P-0020 (each window is centre +- 10 s)
+    "sub-second-slacks": ("2010-07-30T12:01:10.3625Z", "2010-08-09T06:01:10.6625Z", "2010-08-19T06:01:10.6645Z"),
+    "current-events-weak": ("2010-03-01T00:00:00Z", "2010-03-03T00:00:00Z"),
+    "currents": ("2010-03-01T00:00:00Z", "2010-03-02T00:00:00Z"),
+}
+
+
+def _design(key):
+    return [pc(n, a, p) for n, a, p in DESIGN[key]]
+
+
+def _design_bin(n, key):
+    terms, mean = DESIGN_BINS[key]
+    return pbin(n, [pcc(name, a, p) for name, a, p in terms], azimuth=0.0, flood=0.0, ebb=180.0, mean_major=mean)
+
+
+P_BASIC = "OTC-P-0001"
+
+
+def predict_stations():
+    S = []
+    basic_consts = [pc("M2", 0.9, 101.25), pc("S2", 0.25, 130.5), pc("N2", 0.18, 85.0), pc("K1", 0.35, 210.75),
+                    pc("O1", 0.25, 195.0), pc("M4", 0.04, 20.0)]
+    basic_datum = {"msl_offset_m": 1.12, "zero": "chart_datum", "zero_name": "MLLW", "chart_datum": "mllw",
+                   "named": {"mhhw": 2.31, "mhw": 2.05, "msl": 1.12, "mtl": 1.1, "mlw": 0.15, "mllw": 0.0, "lat": -0.38,
+                             "otc_lat": -0.41},
+                   "basis": {"mhhw": published(NTDE), "mhw": published(NTDE), "msl": published(NTDE),
+                             "mtl": published(NTDE), "mlw": published(NTDE),
+                             "mllw": published(NTDE, uncertainty_m=0.01, uncertainty_basis="source",
+                                               control={"source_id": "9990001"}),
+                             "lat": published(),
+                             "otc_lat": {"kind": "computed", "method": "harmonic_extremes",
+                                         "epoch": {"start": "2020-01-01", "end": "2038-12-31", "name": "OTC LAT 2020-2038"},
+                                         "uncertainty_m": 0.02, "uncertainty_basis": "calibrated"}}}
+    S.append(pstation(P_BASIC, "Prediction Basic", [
+        pset(P_BASIC, "noaa", basic_consts, datum=basic_datum),
+        pgauge(P_BASIC, "gesla-fit", [pc("M2", 0.88, 102.0), pc("K1", 0.34, 211.5)], datum={"msl_offset_m": 3.4, "zero": "gauge_zero"})]))
+    oslo = [pc("M2", 0.6, 300.0), pc("S2", 0.2, 340.0), pc("K1", 0.1, 120.0), pc("O1", 0.05, 80.0)]
+    S.append(pstation("OTC-P-0002", "Prediction Oslo", [pset("OTC-P-0002", "noaa", oslo)], tz="Europe/Oslo"))
+    S.append(pstation("OTC-P-0003", "Prediction Lord Howe", [pset("OTC-P-0003", "noaa", oslo)], tz="Australia/Lord_Howe"))
+    lp = [pc("M2", 0.7, 45.5), pc("S2", 0.2, 80.25), pc("K1", 0.15, 300.0)]
+    S.append(pstation("OTC-P-0004", "Prediction Local Phase", [
+        pset("OTC-P-0004", "kartverket", lp, source="kartverket", convention=CONV_LOCAL, licence="kartverket"),
+        pset("OTC-P-0004", "greenwich", lp)], tz="Europe/Oslo"))
+    S.append(pstation("OTC-P-0005", "Prediction Single M2", [pset("OTC-P-0005", "noaa", _design("single"))]))
+    S.append(pstation("OTC-P-0006", "Prediction Year Step", [pset("OTC-P-0006", "noaa", _design("year-step"))]))
+    S.append(pstation("OTC-P-0007", "Prediction New Year", [pset("OTC-P-0007", "noaa", _design("new-year"))]))
+    S.append(pstation("OTC-P-0008", "Prediction Close High Low", [pset("OTC-P-0008", "noaa", _design("close-high-low"))]))
+    S.append(pstation("OTC-P-0009", "Prediction Close Triple", [pset("OTC-P-0009", "noaa", _design("close-high-low-high"))]))
+    S.append(pstation("OTC-P-0010", "Prediction Double High", [pset("OTC-P-0010", "noaa", _design("double-high"))]))
+    S.append(pstation("OTC-P-0011", "Prediction Sub Second", [
+        pset("OTC-P-0011", "pair", _design("sub-pair")),
+        pset("OTC-P-0011", "triple-higher", _design("sub-triple-higher")),
+        pset("OTC-P-0011", "triple-equal", _design("sub-triple-equal"), datum={"msl_offset_m": 1.0, "zero": "unknown"})]))
+    S.append(pstation("OTC-P-0012", "Prediction Large Amplitude", [
+        pset("OTC-P-0012", "m2-5m", [{"name": "M2", "speed_deg_per_hour": 28.9841042, "amplitude_m": 5.0, "phase_deg": 17.5}],
+             convention=CONV_LARGE),
+        pset("OTC-P-0012", "m2-7m5", [{"name": "M2", "speed_deg_per_hour": 28.9841042, "amplitude_m": 7.5, "phase_deg": 17.5}],
+             convention=CONV_LARGE),
+        pset("OTC-P-0012", "k1-40m", [{"name": "K1", "speed_deg_per_hour": 15.0410686, "amplitude_m": 40.0, "phase_deg": 233.0}],
+             convention=CONV_LARGE)]))
+    big = lambda name, speed, amp, ph: {"name": name, "speed_deg_per_hour": speed, "major_amplitude_ms": amp,
+                                        "major_phase_deg": ph, "minor_amplitude_ms": 0.0, "minor_phase_deg": 0.0}
+    S.append(pstation("OTC-P-0013", "Prediction Large Amplitude Current", [
+        pset("OTC-P-0013", "noaa", [], quantity="current", convention=CONV_LARGE,
+             current_bins=[pbin(1, [big("M2", 28.9841042, 5.0, 17.5)]), pbin(2, [big("M2", 28.9841042, 7.5, 17.5)]),
+                           pbin(3, [big("K1", 15.0410686, 40.0, 233.0)])])]))
+    S.append(pstation("OTC-P-0014", "Prediction No Constants", [
+        pgauge("OTC-P-0014", "gesla-fit", [], qc_status="no_constants", no_constants_reason="fit_unusable",
+                  good_hours=9000.0,
+                  record_issues=[{"issue": "datum_step", "start": "2009-06-01T00:00:00Z", "reason": "a 0.4 m datum step",
+                                  "values": {"step_m": 0.4}}],
+                  qc_flags=[{"flag": "broken_record", "reason": "no segment gives a usable fit", "values": {"step_m": 0.4}}])],
+        recommended=None))
+    S.append(pstation("OTC-P-0015", "Prediction Tamura", [pset("OTC-P-0015", "noaa", [pc("M2", 0.5, 10.0)],
+                                                                convention=CONV_TAMURA)]))
+    basic_bin = lambda n, k: pbin(n, [pcc("M2", round(0.9 * k, 4), 320.0, round(0.05 * k, 4), 50.0),
+                                      pcc("S2", round(0.25 * k, 4), 345.0, round(0.02 * k, 4), 80.0),
+                                      pcc("K1", round(0.15 * k, 4), 25.0, round(0.01 * k, 4), 110.0),
+                                      pcc("O1", round(0.1 * k, 4), 10.0, round(0.005 * k, 4), 95.0)],
+                                  azimuth=40.0, flood=40.0, ebb=220.0, mean_major=0.1, mean_minor=-0.02, depth=3.0 * n)
+    S.append(pstation("OTC-P-0016", "Prediction Current", [
+        pset("OTC-P-0016", "noaa", [], quantity="current", current_bins=[basic_bin(1, 1.0), basic_bin(2, 0.8), basic_bin(3, 0.6)])],
+        default_current_bin=2))
+    S.append(pstation("OTC-P-0017", "Prediction Current Shapes", [
+        pset("OTC-P-0017", "noaa", [], quantity="current", current_bins=[
+            pbin(1, [pcc("M2", 0.5, 100.0, 0.08, 10.0)], azimuth=70.0, flood=70.0, ebb=250.0, mean_major=0.35, mean_minor=0.12),
+            pbin(2, [pcc("M2", 0.6, 200.0, 0.3, 290.0), pcc("K1", 0.2, 40.0, 0.1, 130.0)], azimuth=120.0, flood=120.0, ebb=300.0),
+            pbin(3, [pcc("M2", 0.7, 60.0, 0.1, 150.0)], azimuth=30.0, flood=210.0, ebb=30.0),
+            pbin(4, [pcc("M2", 0.0, 0.0, 0.0, 0.0)], azimuth=0.0),
+            pbin(5, [pcc("M2", 0.2, 75.0)], azimuth=180.0, flood=0.0, ebb=180.0, mean_major=-0.5)])]))
+    S.append(pstation("OTC-P-0018", "Prediction Current Lowest Bin", [
+        pset("OTC-P-0018", "noaa", [], quantity="current", current_bins=[
+            pbin(3, [pcc("M2", 0.4, 10.0, 0.02, 100.0)], azimuth=90.0, flood=90.0, ebb=270.0),
+            pbin(1, [pcc("M2", 0.3, 50.0, 0.01, 140.0)], azimuth=90.0, flood=90.0, ebb=270.0)])]))
+    S.append(pstation("OTC-P-0019", "Prediction Weak Current", [
+        pset("OTC-P-0019", "noaa", [], quantity="current", current_bins=[
+            pbin(1, [pcc("M2", 0.4, 30.0, 0.02, 120.0), pcc("K1", 0.3, 120.0, 0.01, 290.0)], azimuth=0.0, flood=0.0, ebb=180.0,
+                 mean_major=-0.3)])]))
+    S.append(pstation("OTC-P-0020", "Prediction Slacks", [
+        pset("OTC-P-0020", "noaa", [], quantity="current", current_bins=[
+            _design_bin(1, "close-slacks"), _design_bin(2, "slack-pair"), _design_bin(3, "slack-triple"),
+            _design_bin(4, "slack-five")])]))
+    S.append(pstation("OTC-P-0021", "Prediction New Year Slacks", [
+        pset("OTC-P-0021", "noaa", [], quantity="current", current_bins=[
+            _design_bin(1, "ny-slack-missed"), _design_bin(2, "ny-slack-doubled")])]))
+    # subordinate tide stations by NOAA's event method (differing offsets), reference OTC-P-0001
+    S.append(subordinate("OTC-P-0030", "Sub Ratio", offsets(P_BASIC, 12, 20, 1.05, 0.98)))
+    S.append(subordinate("OTC-P-0031", "Sub Additive", offsets(P_BASIC, -5, 4, 0.12, -0.05, "A")))
+    S.append(subordinate("OTC-P-0032", "Sub Missing Offsets", offsets(P_BASIC, 15, None, None, 0.9)))
+    S.append(subordinate("OTC-P-0033", "Sub Order Swap", offsets(P_BASIC, 250, -150, 1.0, 1.0)))
+    S.append(subordinate("OTC-P-0034", "Sub Fractional", offsets(P_BASIC, 12.5, -7.25, 1.0, 1.0)))
+    # folded (equal offsets)
+    sub_datum = {"chart_datum": "mllw", "named": {"mhhw": 1.9, "mhw": 1.7, "msl": 0.95, "mllw": 0.0},
+                 "basis": {k: published() for k in ("mhhw", "mhw", "msl", "mllw")}}
+    S.append(subordinate("OTC-P-0035", "Folded Ratio", offsets(P_BASIC, 37, 37, 0.9, 0.9, datum=sub_datum)))
+    S.append(subordinate("OTC-P-0036", "Folded Additive", offsets(P_BASIC, -12, -12, 0.15, 0.15, "A")))
+    S.append(subordinate("OTC-P-0037", "Folded New Year", offsets(P_BASIC, 40, 40, 1.1, 1.1)))
+    S.append(subordinate("OTC-P-0038", "Zero Ratio Folded", offsets(P_BASIC, 30, 30, 0, 0)))
+    S.append(subordinate("OTC-P-0039", "Negative Ratio Folded", offsets(P_BASIC, 30, 30, -0.5, -0.5)))
+    S.append(subordinate("OTC-P-0040", "Zero Ratio Differing", offsets(P_BASIC, 10, 20, 0, 0.9)))
+    S.append(subordinate("OTC-P-0041", "Negative Ratio Differing", offsets(P_BASIC, 10, 20, -0.5, 0.9)))
+    # reference-set-file-order: gesla-fit (recommended), noaa no_constants, noaa flagged, noaa ok
+    chart = lambda msl: {"msl_offset_m": msl, "zero": "chart_datum", "zero_name": "MLLW", "chart_datum": "mllw",
+                         "named": {"mllw": 0.0, "mhw": round(msl + 0.8, 4)},
+                         "basis": {"mllw": published(NTDE), "mhw": published(NTDE)}}
+    S.append(pstation("OTC-P-0042", "Reference Order", [
+        pgauge("OTC-P-0042", "gesla-fit", [pc("M2", 0.8, 70.0), pc("K1", 0.2, 150.0)]),
+        pset("OTC-P-0042", "noaa-a-noc", [], qc_status="no_constants", no_constants_reason="fit_unusable",
+             qc_flags=[{"flag": "broken_record", "reason": "test: no usable constants"}],
+             record_issues=[{"issue": "spikes", "reason": "test: spikes"}]),
+        pset("OTC-P-0042", "noaa-b-flagged", [pc("M2", 0.81, 71.0), pc("K1", 0.21, 151.0)], qc_status="flagged",
+             qc_flags=[{"flag": "sibling_disagreement", "reason": "test: disagrees with a nearby station"}],
+             datum=chart(0.95)),
+        pset("OTC-P-0042", "noaa-c-ok", [pc("M2", 0.82, 72.0), pc("K1", 0.22, 152.0)], datum=chart(0.97))]))
+    S.append(subordinate("OTC-P-0043", "Sub Reference Order", offsets("OTC-P-0042", 10, 25, 1.02, 0.97)))
+    S.append(pstation("OTC-P-0044", "Reference No Chart", [
+        pset("OTC-P-0044", "noaa", [pc("M2", 0.6, 30.0)], datum={"msl_offset_m": 0.9, "named": {"mhhw": 1.8},
+                                                               "basis": {"mhhw": published(NTDE)}})]))
+    S.append(subordinate("OTC-P-0045", "Sub No Chart", offsets("OTC-P-0044", 10, 25, 1.02, 0.97)))
+    S.append(pstation("OTC-P-0046", "Reference Computed Chart", [
+        pset("OTC-P-0046", "noaa", [pc("M2", 0.6, 30.0)],
+             datum={"msl_offset_m": 1.0, "zero": "chart_datum", "chart_datum": "lat", "named": {"lat": 0.0},
+                    "basis": {"lat": {"kind": "computed", "method": "harmonic_extremes",
+                                      "epoch": {"start": "2020-01-01", "end": "2038-12-31", "name": "OTC LAT 2020-2038"},
+                                      "uncertainty_m": 0.02, "uncertainty_basis": "calibrated"}}})]))
+    S.append(subordinate("OTC-P-0047", "Sub Computed Chart", offsets("OTC-P-0046", 10, 25, 1.02, 0.97)))
+    S.append(pstation("OTC-P-0048", "Reference Gauge Only", [
+        pgauge("OTC-P-0048", "gesla-fit", [pc("M2", 0.6, 30.0)],
+                  datum={"msl_offset_m": 2.0, "zero": "gauge_zero", "chart_datum": "mllw", "named": {"mllw": 1.05},
+                         "basis": {"mllw": dict(FIRST_REDUCTION)}})]))
+    S.append(subordinate("OTC-P-0049", "Sub Wrong Source", offsets("OTC-P-0048", 10, 25, 1.02, 0.97)))
+    # subordinate current stations, reference OTC-P-0016 bin 1
+    S.append(pstation("OTC-P-0050", "Sub Current", [], recommended=None, type_="subordinate",
+                      current_offsets=[current_offset(1, "OTC-P-0016", 1)]))
+    S.append(pstation("OTC-P-0051", "Sub Current Null", [], recommended=None, type_="subordinate",
+                      current_offsets=[current_offset(1, "OTC-P-0016", 1, time_adj_slack_before_ebb_min=None,
+                                                      ebb_amp_ratio=None)]))
+    # datums
+    S.append(pstation("OTC-P-0052", "Prediction Vertical Zero", [
+        pset("OTC-P-0052", "rws", [pc("M2", 0.8, 60.0), pc("M4", 0.1, 200.0)], source="rws",
+             datum={"msl_offset_m": 0.08, "zero": "vertical_datum", "zero_name": "NAP", "named": {"nap": 0.0, "mhw": 1.02},
+                    "basis": {"nap": published(), "mhw": published()}})], tz="Europe/Amsterdam"))
+    du = [pc("M2", 0.5, 120.0)]
+    S.append(pstation("OTC-P-0053", "Prediction Datum Unavailable", [
+        pset("OTC-P-0053", "no-datum", du),
+        pset("OTC-P-0053", "no-msl", du, datum={"chart_datum": "mllw", "named": {"mllw": -0.9}, "basis": {"mllw": published()}}),
+        pset("OTC-P-0053", "no-chart", du, datum={"msl_offset_m": 0.9, "named": {"mhw": 1.6}, "basis": {"mhw": published()}})]))
+    S.append(pstation("OTC-P-0054", "Prediction Mixed Kinds", [
+        pset("OTC-P-0054", "noaa", [pc("M2", 0.7, 40.0)],
+             datum={"msl_offset_m": 1.0, "zero": "chart_datum", "zero_name": "MLLW", "chart_datum": "mllw",
+                    "named": {"mhhw": 2.0, "mhw": 1.8, "mlw": 0.25, "mllw": 0.0},
+                    "basis": {"mhhw": published(NTDE), "mhw": published(NTDE), "mlw": dict(FIRST_REDUCTION),
+                              "mllw": dict(FIRST_REDUCTION)}})]))
+    return S
+
+
+def predict_doc():
+    tables = predict_tables()
+    names = sorted({n for t in tables for n in t["constituents"]})
+    sp = {**{n: PRED_ROWS_A[n][0] for n in PRED_ROWS_A}}
+    table = [dict({"constituent_table_version": PRED_TABLE, "name": n, "speed_deg_per_hour": sp[n]},
+                  **({"doodson": PRED_DOODSON[n]} if n in PRED_DOODSON else {})) for n in names]
+    conventions = [
+        {"convention_id": CONV_G, "phase_reference": "greenwich_utc", "v0_model": "schureman_tcd",
+         "nodal_handling": "f_u_at_prediction", "constituent_table_version": PRED_TABLE,
+         "tables_sha256": sha(ASTRO_A.encode()), "astro_table_id": ASTRO_A},
+        {"convention_id": CONV_LOCAL, "phase_reference": "local", "utc_offset_hours": 1, "v0_model": "schureman_tcd",
+         "nodal_handling": "f_u_at_prediction", "constituent_table_version": PRED_TABLE, "astro_table_id": ASTRO_A},
+        {"convention_id": CONV_TAMURA, "phase_reference": "greenwich_utc", "v0_model": "tamura_iho2006",
+         "nodal_handling": "f_u_at_prediction", "constituent_table_version": PRED_TABLE, "astro_table_id": ASTRO_A},
+        {"convention_id": CONV_LARGE, "phase_reference": "greenwich_utc", "v0_model": "schureman_tcd",
+         "nodal_handling": "f_u_at_prediction", "constituent_table_version": PRED_TABLE,
+         "tables_sha256": sha(ASTRO_B.encode()), "astro_table_id": ASTRO_B},
+    ]
+    licences = [
+        {"licence_id": "noaa", "spdx": "LicenseRef-PublicDomain-USGov", "provider": "Example Ocean Service",
+         "attribution": "Synthetic test data in the style of a public-domain US agency.", "commercial_use": True},
+        {"licence_id": "kartverket", "spdx": "CC-BY-4.0", "provider": "Example Mapping Authority",
+         "attribution": "Synthetic test data, Example Mapping Authority.", "commercial_use": True},
+        {"licence_id": "gesla-derived", "spdx": "CC-BY-4.0", "provider": "Example Gauge Agency via GESLA",
+         "attribution": "Contains synthetic test data in the style of GESLA-4.", "commercial_use": True},
+    ]
+    stations = predict_stations()
+    stations.sort(key=lambda s: s["station_id"])
+    return {"format_version": FORMAT,
+            "release": {"datestamp": PREDICT_D, "created": "2099-12-31T00:00:00Z", "min_reader_version": FORMAT,
+                        "fit_min_good_hours": 360, "concept_doi": None,
+                        "source_versions": {"gesla": "4.1", "kartverket": "20991231", "noaa": "20991231"}},
+            "conventions": conventions, "licences": licences, "constituents": table, "astro_tables": tables,
+            "stations": stations}
+
+
+def _pred_change(change):
+    """A copy of the prediction release with one change (a JSON round trip: the builders share objects)."""
+    def make():
+        doc = json.loads(json.dumps(predict_doc()))
+        change(doc)
+        return [doc]
+    return make
+
+
+def _pred_table(doc, tid):
+    return next(t for t in doc["astro_tables"] if t["astro_table_id"] == tid)
+
+
+def _no_astro_table(doc):
+    doc["astro_tables"] = [t for t in doc["astro_tables"] if t["astro_table_id"] != ASTRO_A]
+    next(c for c in doc["conventions"] if c["convention_id"] == CONV_LOCAL).pop("astro_table_id")
+
+
+def _unknown_adjusted_type(doc):
+    doc["format_version"] = "1.1"   # min_reader_version stays 1.0: a value from a newer minor, read as other (SDK spec 7.3)
+    doc["future_top_level"] = {"note": "added by format 1.1 (test)"}
+    doc["release"]["future_release_field"] = "1.1 release field"
+    for sid in ("OTC-P-0035", "OTC-P-0030", "OTC-P-0049"):
+        _station(doc, sid)["subordinate_offsets"]["height_adjusted_type"] = "X"
+
+
+# The bad prediction fixtures (spec 6.5): (name, defect, docs). Each is the prediction release with one change. An
+# SDK loads each (it reads astro_tables and the constants only when it predicts, and it is a tolerant reader of range
+# faults, spec 4.2a, 6.1); the reference reader loads it with that tolerance listed.
+PREDICT_BAD = [
+    ("no-astro-table", f"table {ASTRO_A} is not in astro_tables, so {CONV_G} names a table that is absent, and "
+     f"{CONV_LOCAL} has no astro_table_id (schema-invalid; it loads, and fails when it predicts: no_astro_table)",
+     _pred_change(_no_astro_table)),
+    ("unsupported-constituent", f"table {ASTRO_A} has no M4 row; OTC-P-0001/noaa uses M4",
+     _pred_change(lambda d: _pred_table(d, ASTRO_A)["constituents"].pop("M4"))),
+    ("astro-negative-speed", f"table {ASTRO_A}'s M2 row has speed_deg_per_hour -28.9841042",
+     _pred_change(lambda d: _pred_table(d, ASTRO_A)["constituents"]["M2"].update(speed_deg_per_hour=-28.9841042))),
+    ("astro-negative-speed-unused", f"table {ASTRO_A}'s MN4 row, which no set uses, has speed_deg_per_hour -57.4238337",
+     _pred_change(lambda d: _pred_table(d, ASTRO_A)["constituents"]["MN4"].update(speed_deg_per_hour=-57.4238337))),
+    ("astro-short-v0u", f"table {ASTRO_A}'s M2 row has a v0u_deg array one entry short (30 values for 31 years)",
+     _pred_change(lambda d: _pred_table(d, ASTRO_A)["constituents"]["M2"]["v0u_deg"].pop())),
+    ("extremes-negative-amplitude", "OTC-P-0005's M2 amplitude_m is -1.0 (below the schema's minimum 0)",
+     _pred_change(lambda d: _set_of(d, "OTC-P-0005")["constituents"][0].update(amplitude_m=-1.0))),
+    ("unknown-adjusted-type", "format 1.1: height_adjusted_type X (read as other) at OTC-P-0035 (equal offsets), "
+     "OTC-P-0030 (differing offsets) and OTC-P-0049 (whose reference has no noaa set)",
+     _pred_change(_unknown_adjusted_type)),
+]
+
+
+
+
 def no_gz(files, sums, entry, reuse):
     """The release publishes .json, .jsonl and .meta.json, and no .json.gz (valid: PK11 B2-6)."""
     files = {n: b for n, b in files.items() if not n.endswith(".json.gz")}
@@ -1510,6 +1994,10 @@ ROOTS = [
      {"releases": [KNC_D], "latest": KNC_D, "expect": "load", "defect": None,
       "note": "non-commercial licences and ten stations whose sets are in recommendation-rank order, for the "
               "non-commercial notice and commercial_only (K-NC DR104 to DR106)"}),
+    ("predict", lambda: [predict_doc()], {}, (),
+     {"releases": [PREDICT_D], "latest": PREDICT_D, "expect": "load", "defect": None,
+      "note": "the prediction release (prediction spec 6.5): astro tables A (2000-2030) and B (2020-2100), the stations "
+              "of the prediction cases, including the designed close-root and New Year stations"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
@@ -1533,6 +2021,10 @@ def build(out, reuse):
     write_root(out / "nogz", [release_doc(SECOND)], reuse_root=(reuse / "nogz") if reuse else None, tamper=no_gz)
     manifest["fixtures"].append({"root": "nogz", "releases": [SECOND], "latest": SECOND, "expect": "load", "defect": None,
                                  "note": "the release publishes no .json.gz"})
+    for name, defect, docs in PREDICT_BAD:
+        write_root(out / "predict-bad" / name, docs(), reuse_root=(reuse / "predict-bad" / name) if reuse else None)
+        manifest["fixtures"].append({"root": f"predict-bad/{name}", "releases": [PREDICT_D], "latest": PREDICT_D,
+                                     "expect": "load", "defect": defect})
     for name, expect, defect, docs, tamper, *extra in BAD:
         write_root(out / "bad" / name, docs(), reuse_root=(reuse / "bad" / name) if reuse else None, tamper=tamper)
         manifest["fixtures"].append({"root": f"bad/{name}", "releases": [BASE], "latest": BASE,
@@ -1908,6 +2400,74 @@ def tolerate_values(doc):
     return doc, notes
 
 
+def tolerate_prediction(doc, meta, lines):
+    """What an SDK does not check when it loads a release, because it reads astro_tables and the constants only when
+    it predicts (prediction spec 4.2 steps 5 and 6, 4.2a; 6.1: the SDKs are tolerant readers of range faults): a
+    convention whose astro table is absent or not named, an astro-table row with a negative speed or an array of the
+    wrong length, a constituent with no table row, and a negative amplitude. Each is put right in a copy, so that it is
+    the only defect, and listed (the bad prediction fixtures, root predict-bad). Returns (doc, meta, lines, notes)."""
+    notes = []
+    doc = copy.deepcopy(doc)
+    tables = doc.get("astro_tables") if isinstance(doc.get("astro_tables"), list) else []
+    by_id = {t.get("astro_table_id"): t for t in tables if isinstance(t, dict)}
+    convs = [c for c in doc.get("conventions") or () if isinstance(c, dict)]
+    for c in convs:
+        if c.get("nodal_handling") == "f_u_at_prediction" and c.get("astro_table_id") not in by_id:
+            notes.append(f"convention {c.get('convention_id')}: astro table {c.get('astro_table_id')!r} is absent "
+                         "(found when it predicts: no_astro_table)")
+            c["nodal_handling"] = "none"
+            c.pop("astro_table_id", None)
+    for t in by_id.values():
+        rows = t.get("constituents") if isinstance(t.get("constituents"), dict) else {}
+        first, last = t.get("first_year"), t.get("last_year")
+        n = last - first + 1 if isinstance(first, int) and isinstance(last, int) else None
+        for name, row in rows.items():
+            if not isinstance(row, dict):
+                continue
+            sp = row.get("speed_deg_per_hour")
+            if isinstance(sp, (int, float)) and not isinstance(sp, bool) and sp < 0:
+                notes.append(f"astro table {t.get('astro_table_id')}: {name} speed {sp} is negative (found when it predicts)")
+                row["speed_deg_per_hour"] = -sp
+            for key in ("v0u_deg", "f"):
+                arr = row.get(key)
+                if n is not None and isinstance(arr, list) and arr and len(arr) != n:
+                    notes.append(f"astro table {t.get('astro_table_id')}: {name} has {len(arr)} {key} values for {n} years "
+                                 "(found when it predicts)")
+                    row[key] = (arr + [arr[-1]] * n)[:n]
+    conv_table = {c.get("convention_id"): by_id.get(c.get("astro_table_id")) for c in convs}
+    speeds = {c.get("name"): c.get("speed_deg_per_hour") for c in doc.get("constituents") or () if isinstance(c, dict)}
+
+    def fix_station(st, note):
+        for cs in sets_of(st):
+            table = conv_table.get(cs.get("convention_id"))
+            for c in cs.get("constituents") if isinstance(cs.get("constituents"), list) else ():
+                if not isinstance(c, dict):
+                    continue
+                amp = c.get("amplitude_m")
+                if isinstance(amp, (int, float)) and not isinstance(amp, bool) and amp < 0:
+                    if note:
+                        notes.append(f"{cs.get('set_id')}: {c.get('name')} amplitude_m {amp} is negative (a range fault an SDK reads)")
+                    c["amplitude_m"] = -amp
+                rows = table.get("constituents") if table and isinstance(table.get("constituents"), dict) else None
+                if rows is not None and c.get("name") not in rows and isinstance(speeds.get(c.get("name")), (int, float)):
+                    if note:
+                        notes.append(f"{cs.get('set_id')}: {c.get('name')} has no row in astro table "
+                                     f"{table.get('astro_table_id')} (found when it predicts: unsupported_constituent)")
+                    k = table["last_year"] - table["first_year"] + 1
+                    rows[c["name"]] = {"speed_deg_per_hour": speeds[c["name"]], "v0u_deg": [0.0] * k, "f": [1.0] * k}
+        return st
+
+    for st in doc.get("stations") or ():
+        if isinstance(st, dict):
+            fix_station(st, True)
+    lines = [fix_station(copy.deepcopy(l), False) if isinstance(l, dict) else l for l in lines]
+    if notes and isinstance(meta, dict):
+        meta = dict(meta, conventions=doc["conventions"])
+        if "astro_tables" in doc:
+            meta["astro_tables"] = doc["astro_tables"]
+    return doc, meta, lines, notes
+
+
 def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     """Validate a release against the schema of its format. A format with no schema of its own is read
     tolerantly (spec 7.3) against the newest schema below it: the unknown fields are dropped (they stay in raw).
@@ -1921,6 +2481,8 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
     if allow_missing_build:   # the general read rules of the SDKs: each is put right in a copy, and listed
         doc, tolerated = tolerate_values(doc)
         lines = [tolerate_values({"stations": [l]})[0]["stations"][0] if isinstance(l, dict) else l for l in lines]
+        doc, meta, lines, notes = tolerate_prediction(doc, meta, lines)
+        tolerated += notes
     # Spec 4.6: a set with no provenance.build is malformed, but the SDK loads it (build null).
     # only a provenance object without build: a set with no provenance at all is left to the schema (invalid_release)
     missing = [cs["set_id"] for st in doc["stations"] for cs in sets_of(st)
@@ -1968,6 +2530,11 @@ def validate_release(doc, meta, lines, schemas, allow_missing_build=False):
             if st.get("status") == "active" and st.get("type") not in known_type:
                 dropped.append(f"{st['station_id']}: type {st.get('type')!r} (read as other)")
                 st["type"] = "subordinate" if "subordinate_offsets" in st else "reference"
+            off = st.get("subordinate_offsets")
+            known_adj = schema["$defs"]["subordinate_offsets"]["properties"]["height_adjusted_type"]["enum"]
+            if isinstance(off, dict) and off.get("height_adjusted_type") not in known_adj:
+                dropped.append(f"{st['station_id']}: height_adjusted_type {off.get('height_adjusted_type')!r} (read as other)")
+                off["height_adjusted_type"] = known_adj[0]
             for cs in st.get("constant_sets", []):
                 if cs.get("quantity") is not None and cs["quantity"] not in set_enums["quantity"]["enum"]:
                     dropped.append(f"{cs['set_id']}: quantity {cs['quantity']!r} (read as other)")
@@ -2140,9 +2707,12 @@ def check(schema_dir=None):
             except Fail as e:
                 errs.append(f"{d}: does not load: {e}")   # also reported above; never skipped in silence
                 continue
-            if not fx["root"].startswith("bad/") and got["unknown_fields"]:
-                # A root outside bad/ must be plain format 1.0: nothing read tolerantly.
+            if not fx["root"].startswith(("bad/", "predict-bad/")) and got["unknown_fields"]:
+                # A root outside bad/ and predict-bad/ must be plain format 1.0: nothing read tolerantly.
                 errs.append(f"{d}: a root outside bad/ read tolerantly: {', '.join(got['unknown_fields'])}")
+            if fx["root"].startswith("predict-bad/") and not got["unknown_fields"]:
+                # each bad prediction fixture has a defect that only prediction finds: the reader must have tolerated it
+                errs.append(f"{d}: a bad prediction fixture read with no tolerance: its defect is not there")
             if version_key(got["format_version"]) > READER_FORMAT:
                 # A release in a higher minor must carry fields this reader does not know, at several levels: only
                 # schema paths count ($.-prefixed), not the other tolerances (a qc_status read as other, a missing build).

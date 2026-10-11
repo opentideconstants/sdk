@@ -137,3 +137,21 @@ Roots for the cross-SDK value rules of review round 1 (each loads):
 | `chain/` | release `20991231.2`: subordinate stations with offsets only one, two and three links from their reference station `OTC-T-0171`, each link with its own offsets licence (`harbour-c` has the provider of `harbour-a`); `OTC-T-0175`, a subordinate with its own recommended set on that chain; `OTC-T-0176`, whose reference station is `OTC-T-0175`, where the attribution walk stops (CR2 DR1) |
 | `knc/` | release `20991231.2` (the release object, conventions and tables of `good/`'s): seven licences, two of them non-commercial (`nc-test`, `nc-test-2`, one provider) and one commercial with `restriction` and `terms_url` (`c-terms`); ten stations `OTC-T-0181` to `OTC-T-0190` whose sets are in recommendation-rank order, for the non-commercial notice and `commercial_only` (K-NC DR104 to DR106; SDK spec 7.1) |
 | `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |
+
+## The prediction fixtures (`predict/`, `predict-bad/`; prediction spec 6.5)
+
+`predict/` holds release `20991231.7`, format 1.0 under the pinned schema, for the prediction cases. It has two made-up astro tables: `otc-test-predict-a` for 2000 to 2030 (conventions `predict-greenwich-v1`, `predict-local-utc1-v1` with phases referred to UTC+1, and `predict-tamura-v1` with `v0_model` `tamura_iho2006`) and `otc-test-predict-b` for 2020 to 2100 (`predict-large-v1`, the large-amplitude cases only). V0+u runs on continuously from one 1 January to the next, with a made-up u and f, except the jumps the New Year cases need: K1 and O1 +5 degrees at 2010, -4.05 at 2011 and +5 at 2012, M2 -3 at 2012, and M2's f +0.03 from 2013. The rows `XRA` to `XRG` are fast made-up constituents for the close-root designs; `MN4` is in no set. The tables are built with no sine or cosine, so the files are the same on every platform.
+
+The stations `OTC-P-0001` to `OTC-P-0054` cover every case: the basic station (six constituents, NOAA-style published datums with an `otc_lat`), stations in `Europe/Oslo` and `Australia/Lord_Howe`, the designed stations (`OTC-P-0005` to `OTC-P-0011`: M2 alone; a high 200 s before 2010; the K1/O1 New Year station; a high and a low 3 min apart in one step; three extremes in one step; two highs 20 min apart; the sub-second pair and triples), the large amplitudes (`OTC-P-0012` sets, `OTC-P-0013` bins), currents (`OTC-P-0016` to `OTC-P-0021`, including the designed slack bins), subordinate tide stations by the event method and by folding (`OTC-P-0030` to `OTC-P-0049`, with zero and negative ratios and the reference stations of the error cases) and subordinate current stations (`OTC-P-0050`, `OTC-P-0051`), and the datum cases (`OTC-P-0052` to `OTC-P-0054`). `conformance/tests/test_build_fixtures_predict.py` scans h' (or W) at 0.01 s around each designed event, with the release's own table, and checks the stated design.
+
+Each `predict-bad/<name>/` is `predict/` with one change. An SDK loads each, because it reads `astro_tables` and the constants only when it predicts and is a tolerant reader of range faults; the reference reader loads each with that tolerance listed (`tolerate_prediction`), and a root outside `bad/` and `predict-bad/` must need none.
+
+| Root | Change | Found when |
+|---|---|---|
+| `predict-bad/no-astro-table/` | table A is not in `astro_tables`, and `predict-local-utc1-v1` has no `astro_table_id` (schema-invalid) | predicting: `no_astro_table` |
+| `predict-bad/unsupported-constituent/` | table A has no M4 row | predicting: `unsupported_constituent` |
+| `predict-bad/astro-negative-speed/` | table A's M2 speed is -28.9841042 | first use of the table: `invalid_argument` |
+| `predict-bad/astro-negative-speed-unused/` | table A's MN4 speed (a row no set uses) is negative | first use of the table: `invalid_argument` |
+| `predict-bad/astro-short-v0u/` | table A's M2 `v0u_deg` is one entry short | first use of the table: `invalid_argument` |
+| `predict-bad/extremes-negative-amplitude/` | `OTC-P-0005`'s M2 amplitude is -1.0 | it predicts (highs and lows swapped) |
+| `predict-bad/unknown-adjusted-type/` | format 1.1: `height_adjusted_type` `X` (read as `other`) at `OTC-P-0030`, `0035` and `0049` | predicting: `invalid_argument` naming `X` |
