@@ -142,6 +142,16 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.2",
+   "note": "knc plus the additions of the commercial_only prediction cases (prediction spec 6.5): chart datums on OTC-T-0185/a-noaa and OTC-T-0181/x-nc, equal offsets at OTC-T-0186/0187/0188/0190, subordinate current stations OTC-T-0191 and OTC-T-0192. Never opened in the same cache as knc (same release)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "knc-predict"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"

@@ -138,19 +138,22 @@ def isolated(roots, chosen, t0, t1, f, gap=1.0):
 
 # --------------------------------------------------------------------------- roots, hashes, one change each
 
+# knc's files at SDK 2eeb589 (K2b-fixtures' base): knc-predict is a new root, so knc keeps its hashes (spec 6.5).
+KNC_SHA256 = "OTC_20991231.2.sha256"
 
 
 def test_prediction_roots_in_manifest():
     manifest = json.loads((FIX / "fixtures.json").read_bytes())
     roots = {f["root"]: f for f in manifest["fixtures"]}
     assert roots["predict"]["releases"] == [bf.PREDICT_D] and roots["predict"]["expect"] == "load"
+    assert roots["knc-predict"]["releases"] == ["20991231.2"] and roots["knc-predict"]["expect"] == "load"
     for name in ("no-astro-table", "unsupported-constituent", "astro-negative-speed", "astro-negative-speed-unused",
                  "astro-short-v0u", "extremes-negative-amplitude", "unknown-adjusted-type"):
         assert roots[f"predict-bad/{name}"]["expect"] == "load", name
 
 
 @pytest.mark.parametrize("root,release,tolerated", [
-    ("predict", bf.PREDICT_D, False),
+    ("predict", bf.PREDICT_D, False), ("knc-predict", "20991231.2", False),
     *[(f"predict-bad/{n}", bf.PREDICT_D, True) for n, _, _ in bf.PREDICT_BAD]])
 def test_prediction_roots_load_in_the_reference_reader(root, release, tolerated):
     got = bf.open_release(FIX / root, release, bf.load_schemas(bf.VENDORED_SCHEMAS))
@@ -163,6 +166,9 @@ def test_predict_release_validates_strictly():
     d = bf.predict_doc()
     assert [e.message for e in bf.validator(schemas["1.0"]).iter_errors(d)] == []
     assert bf.cross_ref_errors(d) == [] and bf.time_range_errors(d) == []
+    k = bf.knc_predict_doc()
+    assert [e.message for e in bf.validator(schemas["1.0"]).iter_errors(k)] == []
+    assert bf.cross_ref_errors(k) == []
 
 
 @pytest.mark.parametrize("name", [n for n, _, _ in bf.PREDICT_BAD if n != "unknown-adjusted-type"])
@@ -175,6 +181,13 @@ def test_bad_prediction_fixture_is_invalid_without_the_tolerance(name):
     assert errs, name
     if name == "no-astro-table":
         assert [e.message for e in bf.validator(schemas["1.0"]).iter_errors(d)], "no-astro-table must fail validation"
+
+
+def test_knc_keeps_its_hashes():
+    """knc's .sha256 list at the base (2eeb589): the committed one is unchanged, and knc_doc still makes it."""
+    committed = (FIX / "knc" / KNC_SHA256).read_bytes()
+    assert hashlib.sha256(committed).hexdigest() == "fe1de2692dffd5afb5c3387aa089ef9fcc1e159528bb5b8f02310834c6b5cea4"
+    assert committed == bf.sha256_list(bf.release_files(bf.knc_doc(), FIX / "knc"))
 
 
 def diff_paths(a, b, path=""):
@@ -194,6 +207,36 @@ def diff_paths(a, b, path=""):
 
 def station_index(d, sid):
     return next(i for i, s in enumerate(d["stations"]) if s["station_id"] == sid)
+
+
+def test_knc_predict_is_knc_plus_the_additions():
+    knc = json.loads((FIX / "knc" / "OTC_20991231.2.json").read_bytes())
+    kp = json.loads((FIX / "knc-predict" / "OTC_20991231.2.json").read_bytes())
+    assert [s["station_id"] for s in kp["stations"]] == [s["station_id"] for s in knc["stations"]] + ["OTC-T-0191", "OTC-T-0192"]
+    kp_same = dict(kp, stations=kp["stations"][:-2])
+    i = {sid: station_index(knc, sid) for sid in ("OTC-T-0181", "OTC-T-0185", "OTC-T-0186", "OTC-T-0187", "OTC-T-0188",
+                                                  "OTC-T-0190")}
+    expected = {f"/stations/{i['OTC-T-0181']}/constant_sets/0/datum", f"/stations/{i['OTC-T-0185']}/constant_sets/0/datum"}
+    for sid in ("OTC-T-0186", "OTC-T-0187", "OTC-T-0188", "OTC-T-0190"):
+        for k in ("time_offset_high_min", "height_offset_high", "height_offset_low"):   # knc's low time offset is 20 already
+            expected.add(f"/stations/{i[sid]}/subordinate_offsets/{k}")
+    assert set(diff_paths(knc, kp_same)) == expected
+    for sid in ("OTC-T-0186", "OTC-T-0187", "OTC-T-0188", "OTC-T-0190"):
+        o = kp["stations"][i[sid]]["subordinate_offsets"]
+        assert (o["time_offset_high_min"], o["time_offset_low_min"], o["height_offset_high"], o["height_offset_low"],
+                o["height_adjusted_type"]) == (20, 20, 0.9, 0.9, "R")
+        assert o["licence_id"] == knc["stations"][i[sid]]["subordinate_offsets"]["licence_id"]
+    for sid in ("OTC-T-0181", "OTC-T-0185"):
+        d = kp["stations"][i[sid]]["constant_sets"][0]["datum"]
+        assert d["chart_datum"] == "mllw" and d["basis"]["mllw"]["kind"] == "published"
+    for st, licence in zip(kp["stations"][-2:], ("nc-test", "noaa")):
+        assert st["type"] == "subordinate" and st["constant_sets"] == [] and "subordinate_offsets" not in st
+        (co,) = st["current_offsets"]
+        assert (co["bin"], co["reference_station_id"], co["reference_bin"], co["licence_id"]) == (1, "OTC-T-0181", 1, licence)
+        assert all(co[k] is not None for k in ("time_adj_max_flood_min", "time_adj_slack_before_ebb_min", "time_adj_max_ebb_min",
+                                               "time_adj_slack_before_flood_min", "flood_amp_ratio", "ebb_amp_ratio"))
+    z = next(c for c in kp["stations"][i["OTC-T-0181"]]["constant_sets"] if c["set_id"] == "OTC-T-0181/z-current")
+    assert [b["bin"] for b in z["current_bins"]] == [1]
 
 
 BAD_PATHS = {

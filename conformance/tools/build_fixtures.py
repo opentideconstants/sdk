@@ -85,7 +85,7 @@ NEXT_MAJOR = "2.0"
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 VENDORED_SCHEMAS = Path(__file__).resolve().parent.parent / "schemas"   # the pinned schemas, kept in the repository
 GENERATED = ["good", "order", "v1", "reader", "major", "values", "values-kept-reason", "values-source-name", "values-nul", "fold", "aliases", "chain", "knc", "nogz",
-             "bad", "predict", "predict-bad", "fixtures.json"]
+             "bad", "predict", "predict-bad", "knc-predict", "fixtures.json"]
 
 BASE = "20991231"
 SECOND = "20991231.2"
@@ -1468,7 +1468,8 @@ def knc_doc():
 #
 # Prediction spec revision 27, section 6.5: the prediction cases use their own fixture release, root "predict", with
 # a made-up astro table A for 2000-2030 and a second one, B, for 2020-2100 used only by the large-amplitude cases;
-# the bad prediction fixtures (root "predict-bad/<name>") are copies of it with one change each. Every number here is synthetic. The designed stations (close
+# the bad prediction fixtures (root "predict-bad/<name>") are copies of it with one change each; "knc-predict" is knc
+# with the additions of the commercial_only cases. Every number here is synthetic. The designed stations (close
 # roots, New Year) are confirmed by conformance/tests/test_build_fixtures_predict.py, which scans h' (or W) at
 # 0.01 s around each designed event with the fixture's own table. No transcendental function is used to build a
 # table, so the files are byte-identical on every platform.
@@ -1946,6 +1947,34 @@ PREDICT_BAD = [
 ]
 
 
+KNC_PREDICT_CHART = {"msl_offset_m": 1.0, "zero": "chart_datum", "zero_name": "MLLW", "chart_datum": "mllw",
+                     "named": {"mllw": 0.0}, "basis": {"mllw": {"kind": "published", "method": "source"}}}
+
+
+def knc_predict_doc():
+    """knc (release 20991231.2, the same licences, stations and set order) with the additions of spec 6.5's
+    commercial_only prediction cases only: a published mllw chart datum on OTC-T-0185/a-noaa and OTC-T-0181/x-nc;
+    equal offsets (R, k = 0.9, +20 min) at OTC-T-0186, 0187, 0188 and 0190; and two subordinate current stations
+    OTC-T-0191 (entry licence nc-test) and OTC-T-0192 (noaa), bin 1 on OTC-T-0181 bin 1. knc keeps its hashes."""
+    doc = json.loads(json.dumps(knc_doc()))
+    _set_of(doc, "OTC-T-0185")["datum"] = copy.deepcopy(KNC_PREDICT_CHART)
+    _set_of(doc, "OTC-T-0181")["datum"] = copy.deepcopy(KNC_PREDICT_CHART)
+    for sid in ("OTC-T-0186", "OTC-T-0187", "OTC-T-0188", "OTC-T-0190"):
+        _station(doc, sid)["subordinate_offsets"].update(time_offset_high_min=20, time_offset_low_min=20,
+                                                         height_offset_high=0.9, height_offset_low=0.9)
+    for n, licence in ((191, "nc-test"), (192, "noaa")):
+        sid = f"OTC-T-{n:04d}"
+        st = active(sid, f"KNC {n:04d}", "USA", round(30.0 + (n - 180) * 0.1, 4), -120.0, "America/Los_Angeles", [],
+                    type_="subordinate")
+        st["current_offsets"] = [{"bin": 1, "depth_m": 4.0, "depth_type": "below_surface",
+                                  "reference_station_id": "OTC-T-0181", "reference_bin": 1,
+                                  "mean_flood_dir_deg": 45.0, "mean_ebb_dir_deg": 225.0,
+                                  "time_adj_max_flood_min": 15.0, "time_adj_slack_before_ebb_min": -8.0,
+                                  "time_adj_max_ebb_min": 20.0, "time_adj_slack_before_flood_min": 6.0,
+                                  "flood_amp_ratio": 0.9, "ebb_amp_ratio": 1.05, "licence_id": licence}]
+        doc["stations"].append(st)
+    doc["stations"].sort(key=lambda s: s["station_id"])
+    return doc
 
 
 def no_gz(files, sums, entry, reuse):
@@ -1998,6 +2027,11 @@ ROOTS = [
      {"releases": [PREDICT_D], "latest": PREDICT_D, "expect": "load", "defect": None,
       "note": "the prediction release (prediction spec 6.5): astro tables A (2000-2030) and B (2020-2100), the stations "
               "of the prediction cases, including the designed close-root and New Year stations"}),
+    ("knc-predict", lambda: [knc_predict_doc()], {}, (),
+     {"releases": [KNC_D], "latest": KNC_D, "expect": "load", "defect": None,
+      "note": "knc plus the additions of the commercial_only prediction cases (prediction spec 6.5): chart datums on "
+              "OTC-T-0185/a-noaa and OTC-T-0181/x-nc, equal offsets at OTC-T-0186/0187/0188/0190, subordinate current "
+              "stations OTC-T-0191 and OTC-T-0192. Never opened in the same cache as knc (same release)"}),
     ("major", lambda: [small_doc(BASE), small_doc(MAJOR_OK), versioned(small_doc(MAJOR_NEW), NEXT_MAJOR)], {}, (),
      {"releases": [MAJOR_NEW, MAJOR_OK, BASE], "latest": MAJOR_NEW, "latest_readable": MAJOR_OK,
       "expect": "load", "expect_by_release": {MAJOR_NEW: {"error": "unsupported_format"}}, "defect": None,
