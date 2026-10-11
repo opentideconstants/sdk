@@ -45,7 +45,7 @@ class DownloadTest < Minitest::Test
     end
 
     # R9: the paths come in a fixed order: the data files as the formats list
-    # them, then OTC_{D}.sha256.
+    # them, OTC_{D}.meta.json (for jsonl), then OTC_{D}.sha256.
     def test_paths_written_in_order
         srv = serve
         c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream)
@@ -65,19 +65,28 @@ class DownloadTest < Minitest::Test
         %w[OTC_latest-f1.json OTC_latest.json].each { |n| over[n] = [200, { "Content-Type" => "text/html" }, "<html>portal</html>"] }
     end
 
-    def names
-        %W[OTC_#{D}.jsonl OTC_#{D}.meta.json OTC_#{D}.sha256]
+    def names(d = D)
+        %W[OTC_#{d}.jsonl OTC_#{d}.meta.json OTC_#{d}.sha256]
     end
 
+    # Only the older release is cached, and the server's latest (and its
+    # index) name the newer one: the files written can only come from the
+    # newest cached release, and the fallback is logged.
     def test_latest_with_a_network_error_writes_the_newest_cached_release
+        older = "20991231"
         over = {}
         srv = serve(File.join(FIXTURES, "good"), over)
-        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir)
+        log = Log.new
+        c = OTC.new(release: older, base_url: srv.url("/"), cache_dir: tmpdir, logger: log)
+        assert_equal [older], c.cached_releases, "the premise: only the older release is cached"
         captive_portal(over)
         to = File.join(tmpdir, "bundle")
         paths = c.download(to: to)
-        assert_equal names, paths.map { |p| File.basename(p) }.sort
-        names.each { |n| assert_equal File.binread(fixture("good", n)), File.binread(File.join(to, n)) }
+        assert_equal names(older), paths.map { |p| File.basename(p) }.sort
+        names(older).each { |n| assert_equal File.binread(fixture("good", n)), File.binread(File.join(to, n)) }
+        warn_line = log.lines.find { |lvl, m| lvl == :warn && m.include?("writing the cached release #{older}") }
+        refute_nil warn_line, "the fallback to the cache was not logged: #{log.lines.inspect}"
+        assert_includes warn_line[1], "OTC_latest", "the warning does not name the network failure"
     ensure
         c&.close
     end
@@ -99,7 +108,10 @@ class DownloadTest < Minitest::Test
         srv = serve(File.join(FIXTURES, "good"), over)
         c = OTC.new(file: fixture("good", "OTC_#{D}.jsonl"), base_url: srv.url("/"), cache_dir: tmpdir)
         captive_portal(over)
-        assert_raises(OTC::NetworkError) { c.download(to: File.join(tmpdir, "bundle")) }
+        to = File.join(tmpdir, "bundle")
+        err = assert_raises(OTC::NetworkError) { c.download(to: to) }
+        assert_includes err.message, "OTC_latest", "not the pointer failure"
+        assert(!File.exist?(to) || Dir.empty?(to), "files were written: #{File.exist?(to) && Dir.children(to)}")
     ensure
         c&.close
     end
@@ -108,9 +120,9 @@ class DownloadTest < Minitest::Test
 
     # Downloads D into a new folder, then changes the .jsonl and the
     # .meta.json there. Returns [client, folder, {name => changed bytes}].
-    def changed_bundle
+    def changed_bundle(logger: nil)
         srv = serve
-        c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir)
+        c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir, logger: logger)
         to = tmpdir
         c.download(D, to: to)
         before = names.first(2).to_h do |n|
@@ -141,10 +153,18 @@ class DownloadTest < Minitest::Test
 
     def test_a_rename_that_fails_restores_every_original
         c, to, before = changed_bundle
-        meta = "OTC_#{D}.meta.json"
-        e = failing_renames(->(s, d) { new_file_into(s, d, meta) }) do
+        jsonl, meta = "OTC_#{D}.jsonl", "OTC_#{D}.meta.json"
+        placed = []
+        failing = lambda do |s, d|
+            placed << d if new_file_into(s, d, jsonl)
+            new_file_into(s, d, meta)
+        end
+        e = failing_renames(failing) do
             assert_raises(OTC::FileError) { c.download(D, to: to, overwrite: true) }
         end
+        # The premise: the .jsonl was renamed into place before the .meta.json
+        # rename failed, so a placed file is what gets restored.
+        assert_equal [jsonl], placed, "the .jsonl was not placed before the .meta.json failed"
         assert_equal File.join(to, meta), e.path
         before.each { |n, bytes| assert_equal bytes, File.binread(File.join(to, n)), "#{n} was not restored" }
         assert_equal names, Dir.children(to).sort
@@ -152,15 +172,44 @@ class DownloadTest < Minitest::Test
         c&.close
     end
 
+    # A new file renamed into a slot that had no file before is removed again
+    # when a later rename fails.
+    def test_a_rename_that_fails_removes_a_new_file_from_an_empty_slot
+        c, to, = changed_bundle
+        jsonl, meta = "OTC_#{D}.jsonl", "OTC_#{D}.meta.json"
+        File.delete(File.join(to, jsonl)) # no original in the .jsonl slot
+        placed = []
+        failing = lambda do |s, d|
+            placed << d if new_file_into(s, d, jsonl)
+            new_file_into(s, d, meta)
+        end
+        failing_renames(failing) do
+            assert_raises(OTC::FileError) { c.download(D, to: to, overwrite: true) }
+        end
+        assert_equal [jsonl], placed, "the .jsonl was not placed before the .meta.json failed"
+        refute File.exist?(File.join(to, jsonl)), "the new .jsonl was left in the slot that was empty"
+        assert_equal names.reject { |n| n == jsonl }, Dir.children(to).sort
+    ensure
+        c&.close
+    end
+
     def test_a_restore_that_fails_too_lists_the_paths_that_changed
-        c, to, before = changed_bundle
+        log = Log.new
+        c, to, before = changed_bundle(logger: log)
         jsonl, meta = "OTC_#{D}.jsonl", "OTC_#{D}.meta.json"
         failing = ->(s, d) { new_file_into(s, d, meta) || (d == jsonl && s.start_with?(".tmp-bak-")) }
         e = failing_renames(failing) do
             assert_raises(OTC::FileError) { c.download(D, to: to, overwrite: true) }
         end
         assert_includes e.message, File.join(to, jsonl)
+        assert_includes e.message, ".tmp-bak-", "the message does not say where the original is"
         assert_equal before[meta], File.binread(File.join(to, meta))
+        # The caller's original .jsonl is not lost: it is in the one .tmp-bak- file next to it.
+        baks = Dir.children(to).select { |n| n.start_with?(".tmp-bak-") }
+        assert_equal 1, baks.size, "expected one .tmp-bak- file, got #{Dir.children(to).sort}"
+        assert_equal before[jsonl], File.binread(File.join(to, baks.first)), "the original .jsonl is not in #{baks.first}"
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("cannot restore #{File.join(to, jsonl)}") },
+               "the failed restore was not logged: #{log.lines.inspect}")
     ensure
         c&.close
     end
