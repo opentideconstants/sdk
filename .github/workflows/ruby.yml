@@ -63,6 +63,10 @@ jobs:
         working-directory: ruby
         run: |
           gem build opentideconstants.gemspec
+          # spec 7.4: the gem ships supported-formats.json, the same bytes (as python.yml, typescript.yml, c.yml)
+          rm -rf "$RUNNER_TEMP/unpacked"
+          gem unpack opentideconstants-*.gem --target "$RUNNER_TEMP/unpacked"
+          cmp supported-formats.json "$RUNNER_TEMP"/unpacked/opentideconstants-*/supported-formats.json
           gems="$RUNNER_TEMP/gems"
           gem install --local --no-document --install-dir "$gems" opentideconstants-*.gem
           echo "GEM_HOME=$gems" >> "$GITHUB_ENV"
