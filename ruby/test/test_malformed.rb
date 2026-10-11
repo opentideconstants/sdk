@@ -89,9 +89,11 @@ class MalformedDataTest < Minitest::Test
     def test_invalid_utf8_name
         PATHS.each do |ext, mode|
             path = release_file(ext) { |d| station_in(d, "OTC-T-0001")["name"] = "MARK" }
-            File.binwrite(path, File.binread(path).sub("MARK", "M\xFFK".b)) if ext == "json"
-            File.binwrite(path, File.binread(path).sub("MARK", "M\xFFK".b)) if ext == "jsonl"
-            assert_raises(OTC::InvalidReleaseError, "#{ext} #{mode}") { OTC.new(file: path, mode: mode).close }
+            bytes = File.binread(path)
+            File.binwrite(path, bytes.sub("MARK", "M\xFFK".b))
+            refute_equal bytes, File.binread(path), "#{ext}: the name was not corrupted"
+            err = assert_raises(OTC::InvalidReleaseError, "#{ext} #{mode}") { OTC.new(file: path, mode: mode).close }
+            assert_equal "invalid_release", err.code
         end
     end
 end
