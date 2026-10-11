@@ -1864,7 +1864,8 @@ static char *rel_file(fctx *c, const char *ds, const char *suffix)
 }
 
 /* A files row of .verified: an object whose sha256 and url are strings or null
- * and whose size is a non-negative integer or null (CR2 R2-088). */
+ * and whose size is a non-negative integer (CR2 R2-088); a null or absent size
+ * makes the .verified malformed (spec 5.4, CR3 spec review 2 B10 and 3 C4). */
 static int verified_row_ok(const cJSON *row)
 {
     const cJSON *sha, *url, *size;
@@ -1874,9 +1875,8 @@ static int verified_row_ok(const cJSON *row)
     size = otc__jget(row, "size");
     if (sha && !cJSON_IsString(sha) && !cJSON_IsNull(sha)) return 0;
     if (url && !cJSON_IsString(url) && !cJSON_IsNull(url)) return 0;
-    return !size || cJSON_IsNull(size) ||
-           (cJSON_IsNumber(size) && size->valuedouble >= 0 && size->valuedouble < 9007199254740992.0 &&
-            size->valuedouble == (double)(int64_t)size->valuedouble);
+    return cJSON_IsNumber(size) && size->valuedouble >= 0 && size->valuedouble < 9007199254740992.0 &&
+           size->valuedouble == (double)(int64_t)size->valuedouble;
 }
 
 /* A release's .verified record: OTC_OK with *out NULL when it is missing or not a
@@ -2150,6 +2150,9 @@ static otc_status check_cached_sizes(fctx *c, const char *ds)
 /* ------------------------------------------------------------- stream index */
 
 static cJSON *str_or_null(const char *s) { return s ? cJSON_CreateString(s) : cJSON_CreateNull(); }
+
+/* An ASCII letter in lowercase (a SHA-256 hex digit in .verified is lowercase, CR3 DR100); no locale. */
+static char hex_lower(char ch) { return (ch >= 'A' && ch <= 'Z') ? (char)(ch - 'A' + 'a') : ch; }
 
 /* Adds item to o under key; on any failure (item or o NULL, no memory for the key) the item is
  * deleted and *ok cleared, so a record is either whole or not written. */
@@ -2441,35 +2444,56 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         ver = cJSON_CreateObject();
         files = cJSON_CreateObject();
         if (!ver || !files) ok = 0;
+        /* a row only for each file that is present and verified in the release directory, with its
+         * real size and lowercase SHA-256, and never one for OTC_{D}.sha256 (spec 5.4, CR3 DR100):
+         * the old rows while their files are there (an earlier open, or a file kept above), then
+         * the data files of this open */
         if (old && cJSON_IsObject(otc__jget(old, "files"))) {
             const cJSON *f;
-            cJSON_ArrayForEach(f, otc__jget(old, "files")) jput(files, f->string, otc__json_dup(f), &ok);
+            cJSON_ArrayForEach(f, otc__jget(old, "files")) {
+                char *p;
+                cJSON *o;
+                if (!ok) break;
+                if (!f->string || !strcmp(f->string, sha_name) || !otc__jstr(f, "sha256")) continue;
+                p = path2(dir, f->string);
+                if (!p) { ok = 0; break; }
+                if (fs_kind(p) == 2) {
+                    o = otc__json_dup(f);
+                    if (o && cJSON_IsString(otc__jget(o, "sha256"))) {
+                        char *h = cJSON_GetStringValue(otc__jget(o, "sha256"));
+                        for (; *h; h++) *h = hex_lower(*h);
+                    }
+                    jput(files, f->string, o, &ok);
+                }
+                free(p);
+            }
         }
-        /* the rows of OTC_{D}.sha256 always (a pointer that lists no files still gives a checked
-         * release.files, spec 4.3.1), then the pointer's own rows, which carry the urls */
-        for (i = 0; ok && i < n_rows; i++) {
-            char *p = path2(dir, names[i]), *u = url_resolve(c->base_url, names[i]);
-            int64_t size = p ? otc__path_size(p) : -1;
-            const cJSON *prev = otc__jget(otc__jget(files, names[i]), "size");
-            cJSON *o = cJSON_CreateObject();
-            if (!p || !u) ok = 0;
-            jput(o, "sha256", cJSON_CreateString(digests[i]), &ok);
-            jput(o, "size", size >= 0 ? cJSON_CreateNumber((double)size)
-                            : cJSON_IsNumber(prev) ? cJSON_CreateNumber(prev->valuedouble) : cJSON_CreateNull(), &ok);
-            jput(o, "url", info ? cJSON_CreateNull() : str_or_null(u), &ok);
-            cJSON_DeleteItemFromObjectCaseSensitive(files, names[i]);
-            jput(files, names[i], o, &ok);
+        for (i = 0; ok && want_all[i]; i++) {
+            char name[NAME_CAP], *p, *u, low[65];
+            const char *row;
+            const otc_file_info *pf;
+            int64_t size;
+            size_t k;
+            cJSON *o;
+            if (i == 2 && !(c->formats & OTC_FORMAT_JSON)) continue;
+            snprintf(name, sizeof name, "OTC_%s%s", ds, want_all[i]);
+            row = row_of(names, digests, n_rows, name);
+            for (k = 0; row && row[k] && k < 64; k++) low[k] = hex_lower(row[k]);
+            low[k] = '\0';
+            pf = info_file(info, name);
+            p = path2(dir, name);
+            u = (pf && pf->url) ? otc__strdup(pf->url) : info ? NULL : url_resolve(c->base_url, name);
+            size = p ? otc__path_size(p) : -1;
+            /* the url: the pointer's, or base_url's for a pinned download (spec 4.3.1: the true value or null) */
+            if (!p || (!u && ((pf && pf->url) || !info)) || !row || size < 0) ok = 0;
+            o = cJSON_CreateObject();
+            jput(o, "sha256", cJSON_CreateString(low), &ok);
+            jput(o, "size", cJSON_CreateNumber((double)size), &ok);
+            jput(o, "url", str_or_null(u), &ok);
+            cJSON_DeleteItemFromObjectCaseSensitive(files, name);
+            jput(files, name, o, &ok);
             free(p);
             free(u);
-        }
-        for (i = 0; ok && info && i < info->n_files; i++) {
-            const otc_file_info *f = &info->files[i];
-            cJSON *o = cJSON_CreateObject();
-            jput(o, "sha256", str_or_null(f->sha256), &ok);
-            jput(o, "size", f->size >= 0 ? cJSON_CreateNumber((double)f->size) : cJSON_CreateNull(), &ok);
-            jput(o, "url", str_or_null(f->url), &ok);
-            cJSON_DeleteItemFromObjectCaseSensitive(files, f->name);
-            jput(files, f->name, o, &ok);
         }
         jput(ver, "files", files, &ok);   /* ver owns files now (or it is deleted) */
         utc_now(now);
@@ -2667,14 +2691,43 @@ static otc_status ensure_cached(fctx *c, const char *ds, const otc_release_info 
  * cache (spec 5.2). *last_status / last_msg hold the network error behind
  * cache_after_error.
  */
+/* A copy of the pointer entry's files (sorted by name, as parsed): release.files after a download
+ * of latest (spec 4.3.1), also when the entry lists none (*out is then an empty array, not NULL). */
+static otc_status copy_file_infos(fctx *c, const otc_release_info *info, otc_file_info **out, size_t *n_out)
+{
+    size_t i;
+    otc_file_info *arr;
+    *out = NULL;
+    *n_out = 0;
+    arr = (otc_file_info *)calloc(info->n_files + 1, sizeof *arr);
+    if (!arr) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    for (i = 0; i < info->n_files; i++) {
+        const otc_file_info *f = &info->files[i];
+        arr[i].name = otc__strdup(f->name);
+        arr[i].url = f->url ? otc__strdup(f->url) : NULL;
+        arr[i].sha256 = f->sha256 ? otc__strdup(f->sha256) : NULL;
+        arr[i].size = f->size;
+        if (!arr[i].name || (f->url && !arr[i].url) || (f->sha256 && !arr[i].sha256)) {
+            free_file_infos(arr, i + 1);
+            return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+        }
+    }
+    *out = arr;
+    *n_out = info->n_files;
+    return OTC_OK;
+}
+
 static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_loaded_from *lf, char **ds_out,
-                          otc_status *last_status, char *last_msg, size_t last_len)
+                          otc_status *last_status, char *last_msg, size_t last_len, otc_file_info **pfiles,
+                          size_t *n_pfiles)
 {
     otc_status st;
     otc_release_info *info = NULL;
     *rel = NULL;
     *ds_out = NULL;
     *last_status = OTC_OK;
+    *pfiles = NULL;
+    *n_pfiles = 0;
     if (release && strcmp(release, "latest") != 0) {
         if (!valid_datestamp(release))
             return fail(c, OTC_E_INVALID_ARGUMENT, NULL, "release must be 'latest' or a datestamp, not '%s'", release);
@@ -2710,6 +2763,11 @@ static otc_status resolve(fctx *c, const char *release, otc_release **rel, otc_l
     if (st == OTC_OK) {
         *ds_out = otc__strdup(info->datestamp);
         st = *ds_out ? ensure_cached(c, info->datestamp, info, rel, lf) : fail(c, OTC_E_NOMEM, NULL, "out of memory");
+        /* a download of latest lists the pointer entry in release.files, not .verified (spec 4.3.1, CR3 DR100) */
+        if (st == OTC_OK && *lf == OTC_LOADED_FROM_DOWNLOAD && (st = copy_file_infos(c, info, pfiles, n_pfiles)) != OTC_OK) {
+            otc_close(*rel);
+            *rel = NULL;
+        }
         otc_release_info_free(info);
     }
     if (st == OTC_E_NETWORK && !c->raise) {
@@ -2753,11 +2811,14 @@ static otc_status fetch_path(const otc_fetch_options *opts, const char *release,
     otc_loaded_from lf;
     char *ds = NULL, msg[512], *p;
     otc_status st, last;
+    otc_file_info *pfiles = NULL;
+    size_t n_pfiles = 0;
     if (path && len) path[0] = '\0';   /* a failed call leaves no path and no size behind */
     if (needed) *needed = 0;
     st = ctx_init(&c, opts);
-    if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
+    if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg, &pfiles, &n_pfiles);
     otc_close(rel);
+    free_file_infos(pfiles, n_pfiles);
     if (st == OTC_OK) {
         p = rel_file(&c, ds, ".jsonl");
         st = p ? copy_path(&c, p, path, len, needed) : fail(&c, OTC_E_NOMEM, NULL, "out of memory");
@@ -2809,6 +2870,8 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     otc_loaded_from lf = OTC_LOADED_FROM_UNSET;
     char *ds = NULL, msg[512];
     otc_status last = OTC_OK, st;
+    otc_file_info *pfiles = NULL;
+    size_t n_pfiles = 0;
     otc_error *oerr = (oopts && oopts->struct_size >= OTC__OPEN_OPTIONS_MIN) ? otc__err_usable(oopts->error) : NULL;
     if (out) *out = NULL;
     st = ctx_init(&c, fopts);
@@ -2817,11 +2880,18 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     if (st == OTC_OK && oopts && oopts->struct_size < OTC__OPEN_OPTIONS_MIN)
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
     if (st == OTC_OK) c.oo = oopts;   /* require_checksum and log_fn apply to the open of the cached file (C25) */
-    if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg);
+    if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg, &pfiles, &n_pfiles);
     if (st == OTC_OK) {
         otc_file_info *files = NULL;
         size_t n = 0;
-        st = files_from_verified(&c, ds, &files, &n);
+        /* release.files: the pointer entry after a download of latest, else .verified (spec 4.3.1) */
+        if (pfiles) {
+            files = pfiles;
+            n = n_pfiles;
+            pfiles = NULL;
+        } else {
+            st = files_from_verified(&c, ds, &files, &n);
+        }
         if (st == OTC_OK) {
             cJSON *v = NULL;
             int nomem = read_verified_st(&c, ds, &v) == OTC_E_NOMEM;
@@ -2854,6 +2924,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
             rel = NULL;
         }
     }
+    free_file_infos(pfiles, n_pfiles);
     otc_close(rel);
     if (oerr && oerr != c.err) *oerr = *c.err;
     free(ds);
