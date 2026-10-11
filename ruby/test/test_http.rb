@@ -81,7 +81,8 @@ class HttpTest < Minitest::Test
         body = File.binread(fixture("good", "OTC_#{D}.sha256"))
         srv = serve(File.join(FIXTURES, "good"), "OTC_#{D}.sha256" => [200, { "Content-Length" => [body.bytesize.to_s, (body.bytesize + 50).to_s] }, body])
         http = OTC::HTTP.new(sleeper: ->(_s) {})
-        assert_raises(OTC::NetworkError) { http.get(srv.url("/OTC_#{D}.sha256")) }
+        err = assert_raises(OTC::NetworkError) { http.get(srv.url("/OTC_#{D}.sha256")) }
+        assert_includes err.message, "Content-Length", "not the conflicting-length error"
     end
 
     # R75: a Retry-After given as an HTTP date is honoured.

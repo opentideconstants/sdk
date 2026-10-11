@@ -6,10 +6,6 @@ class ErrorClassTest < Minitest::Test
     OTC = OpenTideConstants
     D = "20991231.2".freeze
 
-    def posix_only
-        skip "needs POSIX permissions" if Gem.win_platform? || Process.uid.zero?
-    end
-
     # R2 + R6/R92: download() problems in the caller's folder are io
     # (FileError), and not retried: a file in the way (found when the
     # existing files are checked), a folder where the temporary file cannot
@@ -21,13 +17,17 @@ class ErrorClassTest < Minitest::Test
         c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream)
         to = tmpdir
         Dir.mkdir(File.join(to, "OTC_#{D}.jsonl")) # a directory where a file goes
+        asked = srv.requests.size
         err = assert_raises(OTC::FileError) { c.download(D, to: to, overwrite: true) }
         assert_equal "io", err.code
+        assert_equal File.join(to, "OTC_#{D}.jsonl"), err.path
+        assert_equal asked, srv.requests.size, "the files in the way were not checked first"
         to2 = tmpdir
         FileUtils.chmod(0o555, to2)
         err = assert_raises(OTC::FileError) { c.download(D, to: to2, formats: [:json]) }
         assert_equal "io", err.code
         assert_includes err.message, "Permission denied"
+        assert_operator srv.requests.size - asked, :<=, 1, "a folder that cannot be written was retried"
 
         # The disk fills up after the first chunk of OTC_D.json is written.
         to3 = tmpdir
@@ -110,6 +110,7 @@ class ErrorClassTest < Minitest::Test
         # The client's error comes from a failed handshake, so when it is
         # raised, every connection it made has been counted.
         connections = Queue.new
+        server_errors = Queue.new
         t = Thread.new do
             loop do
                 sock = tls.accept
@@ -123,12 +124,18 @@ class ErrorClassTest < Minitest::Test
                     sock.close
                 end
             end
+        rescue IOError
+            nil # the listener was closed in the ensure
+        rescue Exception => e # rubocop:disable Lint/RescueException
+            server_errors << e # not a client refusal: it must fail the test, not look like a network failure
         end
         log = Log.new
         err = assert_raises(OTC::NetworkError) do
             OTC.new(base_url: "https://127.0.0.1:#{port}/", cache_dir: tmpdir, on_network_error: :raise, logger: log)
         end
         assert_match(/certificate/i, err.message)
+        assert_includes err.message, "ca_file", "the message does not say what to check"
+        assert server_errors.empty?, "the test's TLS server raised: #{server_errors.empty? ? '' : server_errors.pop.inspect}"
         assert_equal 1, connections.size, "a certificate failure was retried"
         refute(log.lines.any? { |_, m| m.include?("retry") }, "a certificate failure was retried")
     ensure
@@ -147,7 +154,8 @@ class ErrorClassTest < Minitest::Test
             ENV["HOME"] = ""
             ENV.delete("XDG_CACHE_HOME")
             ENV.delete("OPENTIDECONSTANTS_CACHE_DIR")
-            assert_raises(OTC::CacheError) { OTC::Cache.default_root }
+            err = assert_raises(OTC::CacheError) { OTC::Cache.default_root }
+            assert_includes err.message, "home directory"
         ensure
             keys.each { |k| ENV[k] = old[k] }
         end
@@ -161,7 +169,8 @@ class ErrorClassTest < Minitest::Test
         cache = tmpdir
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache).close
         FileUtils.chmod(0o000, File.join(cache, "v1", "releases", D, ".verified"))
-        assert_raises(OTC::CacheError) { OTC.new(release: D, cache_dir: cache, offline: true) }
+        err = assert_raises(OTC::CacheError) { OTC.new(release: D, cache_dir: cache, offline: true) }
+        assert_includes err.message, ".verified"
     end
 
     # R2-091: a releases directory that cannot be listed is a cache error,
@@ -173,7 +182,8 @@ class ErrorClassTest < Minitest::Test
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache).close
         rels = File.join(cache, "v1", "releases")
         FileUtils.chmod(0o000, rels)
-        assert_raises(OTC::CacheError) { OTC.new(cache_dir: cache, offline: true) }
+        err = assert_raises(OTC::CacheError) { OTC.new(cache_dir: cache, offline: true) }
+        assert_includes err.message, rels
     ensure
         FileUtils.chmod(0o755, rels) if rels
     end
