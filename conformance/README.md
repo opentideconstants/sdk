@@ -4,7 +4,7 @@ The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pa
 
 | Path | What it is |
 |---|---|
-| `api.json` | The API manifest: every public name, by its snake_case name (§7.1). |
+| `api.json` | The API manifest: every public name, by its snake_case name (§7.1). `pending_port` lists, per language, the prediction names (prediction spec §5) that SDK does not have yet: its API check requires them to be absent, and every other name to be present. A port removes its language's names, and its profiles' `PENDING_FEATURES` in `driver.py`, in the change that adds them. |
 | `name_fold.json` | The shared fold table for name search (§4.4.1). |
 | `fixtures/` | Synthetic fixture releases, good and bad (CC0). See `fixtures/README.md`. |
 | `schemas/` | Copies of the pinned format 1.0 and index 1.0 schemas (site repository commit and SHA-256 in `tools/build_fixtures.py`), so `build_fixtures.py --check` runs with no network (D25). |
@@ -34,7 +34,9 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 **The null runner** (`runners/null/runner.py`) answers every step with an empty result. It must fail every case. That is the RED proof of phase step S2. It fails each case at its first compared step, which is usually the open step. **The almost-right runner** (`runners/almost/runner.py`) answers `open` correctly for the open variants and every other op with an empty result; run with `--all-steps`, it shows that the later runner steps and the driver steps fail an SDK that opens and then does nothing. Every case must fail against it too.
 
-**Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`, and `python` and `typescript` also `https_proxy`; `typescript-browser` `fetch`, `json`, `eager` and `stream`; `c` must claim `fs`, `stream` and `require_checksum`, `c-fetch` also `fetch` and `https_proxy`. A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
+**Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`, and `python` and `typescript` also `https_proxy`; `typescript-browser` `fetch`, `json`, `eager` and `stream`; `c` must claim `fs`, `stream` and `require_checksum`, `c-fetch` also `fetch` and `https_proxy`. With prediction (prediction spec §6.5), `python`, `ruby`, `typescript` and `typescript-browser` also claim `predict`, `localtime_module` and `localtime`, and `c` and `c-fetch` those three and `tzdir_env` (the CI runs with the optional local-time dependency installed, and C on Linux and macOS). Four more profiles: `python-no-tz` (Python without `tzdata` on an image with no system database) and `ruby-no-tz` (Ruby without `tzinfo`), each the base features plus `predict` and `localtime_module`; `c-no-localtime` (C built with `-DOTC_WITH_LOCALTIME=OFF`, and C on Windows), the features of `c` plus `predict`; `c-no-predict` (C built with `-DOTC_WITH_PREDICT=OFF`), the features of `c` without any of the four. TypeScript has no profile without `localtime` (`Intl` is built in). A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
+
+**Pending features.** `PENDING_FEATURES` in `driver.py` lists, per profile, the profile features its SDK does not have yet (today the prediction features of every profile, the driver's side of `api.json` `pending_port`). A pending feature is not required, and a runner that claims one fails the handshake (exit 2), so the port that adds it removes the entry in the same change, as it removes an `expected-failures.json` entry that passes.
 
 ## Expected failures
 
@@ -75,6 +77,10 @@ A runner is a small program in the SDK's own language. It may call **only the pu
 | `stream` | It has stream mode. |
 | `https_proxy` | It reaches a proxy over TLS (an `https://` proxy). Not Ruby: `Net::HTTP` speaks plain HTTP to every proxy, so Ruby refuses an `https://` proxy (CR2 DR39). |
 | `require_checksum` | Its `open` takes `require_checksum` (a missing `OTC_{D}.sha256` is `checksum_mismatch`). C only: the `otc_open_options` field, for `otc_open_file` and for the open of the cached file in `otc_fetch_open` (CR2 DR34). |
+| `predict` | Prediction is built (prediction spec §5): the prediction and astro ops. C only without `-DOTC_WITH_PREDICT=OFF`; a C build without it answers `not_built`. |
+| `localtime_module` | The local-time module is built (`to_local`; C `otc_tz_*`). C only without `-DOTC_WITH_LOCALTIME=OFF` and not on Windows (there `not_built`). |
+| `localtime` | Zone rules are usable at run time: Python has the system database or `tzdata`, Ruby has `tzinfo` (and `tzinfo-data` where the system has no database), C can read its zone directory. Without it, `to_local` is `local_time_unavailable`. |
+| `tzdir_env` | C only: `otc_tz_open` reads the environment variable `TZDIR` (prediction spec §4.1). |
 
 The driver skips a case whose `requires` names a feature that the runner lacks. A step's `expect_if_missing` gives the expectation when the runner lacks a feature; the case ends after that step. So C without `otc_fetch` must return `not_built`, and TypeScript in a browser must fail `download` with `unsupported`.
 
@@ -106,7 +112,9 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 - Values are passed through with their JSON type, so a case can pass a wrong type (for example `country: 5`) to test `invalid_argument`. C, where the type cannot be wrong, reports `invalid_argument` for such a step without calling the SDK.
 - Ops that take `station_id` (and `set_id`, `name`) look the objects up through the public API first (`station(id)`, `station.constant_set(set_id)`, `set.constituent(name)`) and then call the operation on them. If the lookup finds nothing, the runner replies with `null` as the op's value, also for an op whose value is a list (`subordinates_of`, `station_validation`, `constant_sets`, `constituents`, `set_validation`): an empty list would hide a lookup that fails.
 - `reference_station` and `subordinates_of` (CR2 DR24): `station_id: null` is passed to the SDK as nil / None / null (C: `NULL`), not looked up; with `station_on` (the name of a held release) the runner looks the station up in that release and passes it to this one (a foreign Station). The lookup-fails-gives-null rule above applies only to a plain lookup.
-- Times in arguments do not occur in suite 1.0.
+- Times in arguments (`start`, `stop`, `times`, `at`; prediction only) are RFC 3339 strings in UTC, `YYYY-MM-DDTHH:MM:SS[.fff]Z`. The runner passes each as its language's instant (prediction spec §4.1): Python an aware `datetime` in UTC, Ruby a `Time`, TypeScript a `Date`, C `int64_t` seconds (C instants are whole seconds, so a fraction is only in cases that C does not run). A string with no zone designator (`2010-01-01T00:00:00`) is passed by the Python runner as a naive `datetime` (case `heights-naive-datetime`, Python only).
+- Prediction ops take `station_id` and look the station up first, as above (the lookup-fails-gives-null rule applies). The astro ops (`equilibrium_argument`, `node_factor`, `equilibrium_for_year`, `node_factor_for_year`, `valid_range`) first call `release.astro_table(id)` (C `otc_astro_table`; `id` absent = no id) and then the function on the table they got; if `astro_table` gives none, the reply is `null` as the op's value. In C, when `otc_astro_table` returns `not_built`, the runner calls the function with a NULL handle and reports the function's status (prediction spec §6.5 `not-built/<function>`).
+- `to_local` converts the result of the case's most recent prediction step (`heights`, `heights_at`, `extremes`, `currents`, `current_events`); a `to_local` step with no earlier prediction step is a runner failure. `tz` absent = no argument (the SDK's default, `"station"`). C opens the zone with `otc_tz_open` (the station's `timezone` from `otc_station_timezone` for `"station"`), converts each `t` with `otc_tz_local`, reads `tz_version` with `otc_tz_version` (null for `OTC_E_NOT_FOUND`) and closes it.
 - `open` with `file` and any of `release` (other than `latest`), `offline: true` or `on_network_error` (other than `use_cache`) is `invalid_argument` (spec §4.2, CR D31). C has no client object (`otc_open_file` takes no fetch options), so the C runner applies this rule itself.
 
 ## Operations
@@ -157,8 +165,22 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `newer_format_major` | | `client.newer_format_major` (set by `check_for_update`) | `{newer_format_major}` (an integer or null) |
 | `set_validation` | `station_id`, `set_id` | `set.validation` | `{validation: [Validation]}` by `window` |
 | `raw` | `object` (`station`, `tombstone`, `set`, `constituent`, `convention`, `licence`) and its ids | the object's `raw` | `{raw}` |
+| `heights` | `station_id`, `start`, `stop`, `step_s`, `datum`, `set_id` | R `heights(station, …)` (C `otc_heights`) | `{prediction: Prediction}` |
+| `heights_at` | `station_id`, `times`, `datum`, `set_id` | R `heights_at` (C `otc_heights_at`) | `{prediction: Prediction}` |
+| `extremes` | `station_id`, `start`, `stop`, `datum`, `set_id` | R `extremes` (C `otc_extremes`) | `{prediction: Prediction}` |
+| `currents` | `station_id`, `start`, `stop`, `step_s`, `bin_number`, `set_id` | R `currents` (C `otc_currents`) | `{prediction: Prediction}` |
+| `current_events` | `station_id`, `start`, `stop`, `bin_number`, `set_id` | R `current_events` (C `otc_current_events`) | `{prediction: Prediction}` |
+| `to_local` | `tz` | `to_local(tz)` on the last prediction result (C `otc_tz_open`, `otc_tz_local`, `otc_tz_version`, `otc_tz_close`) | `{prediction: Prediction}`, with `local_time` and `utc_offset_s` on every item and `tz`, `tz_version` set |
+| `datums` | `station_id`, `set_id`, `all_sets` | R `datums` (C `otc_datums`) | `{datums: DatumInfo or [DatumInfo]}` |
+| `ranges` | `station_id`, `set_id` | R `ranges` (C: from `otc_datums`) | `{ranges: Ranges}` |
+| `astro_table` | `id` | `release.astro_table(id)` (C `otc_astro_table`) | `{astro_table: {first_year, last_year} or null}` (from `valid_range`) |
+| `equilibrium_argument`, `node_factor` | `id`, `name`, `at` | the table's function (C `otc_astro_*`) | `{value}` (degrees, or the node factor) |
+| `equilibrium_for_year`, `node_factor_for_year` | `id`, `name`, `year` | the table's function | `{value}` |
+| `valid_range` | `id` | the table's `valid_range` (C `otc_astro_valid_range`) | `{first_year, last_year}` |
 
 Filters are `country`, `type`, `kind`, `source`, `source_type` (§4.4).
+
+The ops from `heights` on need the feature `predict` (`to_local` also `localtime_module` and `localtime`), except `datums` and `ranges`; `--check-cases` requires a case that uses one to name the feature in `requires` or cover it with an `expect_if_missing` (prediction spec §6.5: `not-built/<function>` cases cover `predict` with `{"error": "not_built"}`).
 
 ## Result encodings
 
@@ -180,6 +202,11 @@ Every object is a JSON object with exactly these keys (the driver fails extra or
 | FileInfo | `name`, `url`, `size`, `sha256` |
 | ReleaseInfo | `datestamp`, `format_version`, `concept_doi`, `zenodo_version_doi`, `content_sha256`, `files` ([FileInfo] sorted by `name`) |
 | Stats | `{type: {value: n}, kind: {…}, country: {…}, source: {…}, qc_status: {…}}`; `type`, `kind` and `country` count active stations, `source` and `qc_status` count constant sets; zero counts are left out |
+| Prediction | `station_id`, `timezone`, `method`, `set_id`, `convention_id`, `astro_table_id`, `reference_station_id`, `reference_bin`, `datum`, `datum_name`, `datum_kind`, `datum_uncertainty_m`, `bin_number`, `omitted_event_types`, `tz`, `tz_version`, `release`, `algorithm`, `items` (prediction spec §5.3; every key in every kind, null where the kind has no such field; C from `otc_prediction_info`) |
+| Prediction item | `time` (a time, as above: whole seconds), `local_time`, `utc_offset_s` (null before `to_local`), and by kind: `height_m` (heights); `type`, `height_m` (extremes); `velocity_major_ms`, `velocity_minor_ms`, `speed_ms`, `direction_deg` (currents); `type`, `velocity_ms`, `direction_deg` (current events). C `NAN` is null |
+| DatumInfo | `set_id`, `zero`, `zero_name`, `chart_datum`, `msl_offset_m`, `levels` ([DatumLevel] in key order) |
+| DatumLevel | `key`, `value_m`, `above_chart_m`, `kind`, `method`, `source_name`, `epoch` (`{start, end, name}` or null), `data_span` (`{start, end, months}` or null), `control_station_id`, `control_set_id`, `control_source_id`, `uncertainty_m`, `uncertainty_basis`, `flags` (`[]` if none) |
+| Ranges | `mn`, `gt`, `dhq`, `dlq` (each null when the levels do not give it) |
 
 `FileInfo.url` is absolute: the SDK resolves the pointer's `url` against the URL of the pointer it read (RFC 3986), so with `base_url` `http://127.0.0.1:P/good/` the url of `OTC_20991231.2.json` is `http://127.0.0.1:P/good/OTC_20991231.2.json`.
 
