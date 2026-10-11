@@ -245,3 +245,69 @@ def test_c_self_test_skips_the_mutations_of_a_ported_name():
     assert any("otc_heights  (Release.heights: no OTC_API function)" in p for p in problems)   # the header lacks it
     failures, skipped = cm.self_test(ported, header)
     assert skipped == len(cm.NEEDS_PENDING) and not any("crashed" in f for f in failures), failures
+
+
+# --- the case-level runners filter (prediction spec 6.5: Python-only and not-C cases)
+
+def test_runners_filter_is_linted(tmp_path):
+    step = {"op": "station_count", "expect": {"count": 1}}
+    assert lint(tmp_path, [{"id": "a", "runners": ["python"], "steps": [step]}]).returncode == 0
+    for bad, msg in ((["pythn"], "unknown runner 'pythn'"), ([], "runners must be a non-empty list"),
+                     ("python", "runners must be a non-empty list")):
+        r = lint(tmp_path, [{"id": "a", "runners": bad, "steps": [step]}])
+        assert r.returncode == 2 and msg in r.stdout + r.stderr, (bad, r.stdout[-400:], r.stderr[-400:])
+
+
+@pytest.mark.parametrize("hello_runner,profile,runs", [("python", "python", True), ("ruby", "ruby", False),
+                                                        ("python", "python-no-tz", True), ("c", "c", False),
+                                                        ("null", "none", True)])
+def test_runners_filter_skips_other_runners(tmp_path, hello_runner, profile, runs):
+    cases = write_cases(tmp_path, [{"id": "a", "runners": ["python"], "steps": [{"op": "station_count",
+                                                                                 "expect": {"count": 1}}]}])
+    feats = {"python": ["fs", "fetch", "json", "eager", "stream", "https_proxy"], "ruby": ["fs", "fetch", "json", "eager", "stream"],
+             "c": ["fs", "stream", "require_checksum"], "null": []}[hello_runner]
+    hello = json.dumps({"hello": {"runner": hello_runner, "features": feats}})
+    r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--profile", profile,
+                   "--no-expected-failures", env={"FAKE_HELLO": hello})
+    if runs:   # it runs, and fails on the fake runner's empty reply
+        assert r.returncode == 1 and "1 failed" in r.stdout, r.stdout[-300:]
+    else:
+        assert r.returncode == 1 and "1 skipped" in r.stdout and "no case ran" in r.stdout, r.stdout[-300:]
+
+
+def test_runners_filter_not_on_cross_cases(tmp_path):
+    r = run_driver("--check-cases", "--cases", str(write_cases(tmp_path, [{"id": "a", "runners": ["python"],
+               "roles": {"w": ["fs"], "r": ["fs"]}, "steps": [{"op": "station_count", "as": "w", "expect": {"count": 1}}]}])))
+    assert r.returncode == 2 and "cannot have runners" in r.stdout, r.stdout[-400:]
+
+
+# --- localtime implies localtime_module
+
+def test_localtime_covers_localtime_module(tmp_path):
+    to_local = {"op": "to_local", "args": {}, "expect": {"x": 1}}
+    r = lint(tmp_path, [{"id": "p", "requires": REQ + ["localtime"], "steps": [OPEN, to_local]}])
+    assert r.returncode == 0, r.stdout[-600:]
+    eim = dict(to_local, expect_if_missing={"localtime": {"error": "local_time_unavailable"}})
+    r = lint(tmp_path, [{"id": "p", "requires": REQ, "steps": [OPEN, eim]}])
+    assert r.returncode == 0, r.stdout[-600:]
+    # localtime_module alone does not cover localtime
+    r = lint(tmp_path, [{"id": "p", "requires": REQ + ["localtime_module"], "steps": [OPEN, to_local]}])
+    assert r.returncode == 2 and "uses 'localtime'" in r.stdout, r.stdout[-600:]
+
+
+def test_every_profile_with_localtime_has_localtime_module():
+    for name, feats in driver.PROFILES.items():
+        assert "localtime" not in feats or "localtime_module" in feats, name
+
+
+def test_a_runner_claiming_localtime_without_the_module_fails_the_handshake():
+    p = driver.profile_problem("none", ["fs", "localtime"])
+    assert p and "localtime without localtime_module" in p
+
+
+# --- tz is the resolved zone (prediction spec 5.3)
+
+def test_tz_is_the_resolved_zone_name():
+    for o in ("HeightSeries", "ExtremeList", "CurrentSeries", "CurrentEventList"):
+        m = [x for x in API["objects"][o]["members"] if x["name"] == "tz"][0]
+        assert 'never the literal "station"' in m["note"] and "otc_station_timezone" in m["c"], o

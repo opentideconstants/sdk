@@ -59,6 +59,26 @@ LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 # Prediction (prediction spec 6.5): predict (prediction is built), localtime_module (the local-time module is built),
 # localtime (zone rules are usable at run time); tzdir_env (C only: otc_tz_open reads TZDIR).
 PREDICT_FEATURES = ["predict", "localtime_module", "localtime"]
+# A feature that implies another: zone rules are usable only when the local-time module is built, so a case or an
+# expect_if_missing that names localtime also covers localtime_module, and a runner may not claim one without the other.
+IMPLIED = {"localtime": {"localtime_module"}}
+# Runners the case-level runners filter never skips: the RED runners, which must fail every case (README "null runner").
+RED_RUNNERS = {"null", "almost"}
+
+
+def with_implied(features):
+    """The features and every feature they imply (IMPLIED)."""
+    out = set(features)
+    for f in list(out):
+        out |= IMPLIED.get(f, set())
+    return out
+
+
+def runner_skips(case, runner, profile):
+    """Whether a case's runners filter (a list of runner or profile names) leaves this runner out. The RED runners
+    (null, almost) run every case."""
+    names = case.get("runners")
+    return names is not None and runner not in RED_RUNNERS and runner not in names and profile not in names
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
@@ -171,6 +191,9 @@ def profile_problem(profile, features):
     lacking = sorted(set(PROFILES[profile]) - pending - set(features))
     if lacking:
         return f"(profile {profile}) does not claim the required features {lacking}; it claims {sorted(features)}"
+    unmet = sorted(f"{f} without {g}" for f in set(features) for g in IMPLIED.get(f, set()) if g not in features)
+    if unmet:
+        return f"(profile {profile}) claims {', '.join(unmet)}, which it implies"
     early = sorted(pending & set(features))
     if early:
         return (f"(profile {profile}) claims {early}, which driver.py PENDING_FEATURES lists as pending for {profile}: "
@@ -555,6 +578,9 @@ def structure_problems(c):
             out.append(f"{cid}: {k} must be a list of strings")
     if "roles" in c and not (isinstance(c["roles"], dict) and all(isinstance(v, list) for v in c["roles"].values())):
         out.append(f"{cid}: roles must be an object of feature lists")
+    if "runners" in c and not (isinstance(c["runners"], list) and c["runners"]
+                               and all(isinstance(r, str) for r in c["runners"])):
+        out.append(f"{cid}: runners must be a non-empty list of runner names")
     return out
 
 
@@ -650,14 +676,14 @@ def requires_problems(c):
     """K55/K56: every feature a runner step uses must be in the case's requires (for its role), or be covered by an
     expect_if_missing of that step or an earlier one (a runner without the feature stops there)."""
     out = []
-    base = set(c.get("requires", []))
+    base = with_implied(c.get("requires", []))
     roles = c.get("roles") or {"main": []}
-    covered = {r: base | set(f) for r, f in roles.items()}
+    covered = {r: base | with_implied(f) for r, f in roles.items()}
     for i, st in enumerate(c.get("steps", [])):
         if "op" not in st or "matrix_open" in st:   # a matrix_open step becomes the variant's open (expand)
             continue
         who = st.get("as", "main") if c.get("roles") else "main"
-        eim = set(st.get("expect_if_missing") or {})
+        eim = with_implied(st.get("expect_if_missing") or {})
         for role in ([who] if isinstance(who, str) else who):
             if role not in covered:
                 continue
@@ -827,6 +853,11 @@ def check_cases(cases):
                     problems.append(f"{where}: unknown feature {f!r}")
         for exp in [c.get("open_expect")] if isinstance(c.get("open_expect"), dict) else []:
             problems += [f"{cid} open_expect: {p}" for p in tolerance_problems(exp)]
+        for r in c.get("runners") or []:
+            if r not in XF_RUNNERS - {"cross"}:
+                problems.append(f"{cid}: runners names an unknown runner {r!r} (one of {sorted(XF_RUNNERS - {'cross'})})")
+        if c.get("runners") is not None and c.get("roles"):
+            problems.append(f"{cid}: a cross-SDK case (roles) cannot have runners")
         if compared == 0 and not c.get("matrix"):
             problems.append(f"{cid}: no runner step with an expectation")
         for f in c.get("requires", []):
@@ -1609,6 +1640,12 @@ def main():
     try:
         for c in cases:
             missing = [] if a.cross else [f for f in c.get("requires", []) if f not in features]
+            if not a.cross and not missing and runner_skips(c, hello.get("runner"), profile):
+                counts["SKIP"] += 1
+                report.append({"id": c["id"], "status": "SKIP", "runners": c["runners"]})
+                if a.verbose:
+                    print(f"SKIP  {c['id']}  (runners {c['runners']} leave out {hello.get('runner')}, profile {profile})")
+                continue
             if missing:
                 counts["SKIP"] += 1
                 report.append({"id": c["id"], "status": "SKIP", "missing_features": missing})

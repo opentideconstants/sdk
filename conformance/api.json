@@ -3283,8 +3283,8 @@
      "kind": "field",
      "type": "string",
      "nullable": true,
-     "c": "(C: the zone passed to otc_tz_open)",
-     "note": "after to_local: the zone used"
+     "c": "(C: the zone name the caller opened with otc_tz_open: for \"station\", the station's timezone from otc_station_timezone)",
+     "note": "after to_local: the zone name used (prediction spec 5.3), resolved: for tz \"station\" (the default) the station's IANA timezone, never the literal \"station\""
     },
     {
      "name": "tz_version",
@@ -3451,8 +3451,8 @@
      "kind": "field",
      "type": "string",
      "nullable": true,
-     "c": "(C: the zone passed to otc_tz_open)",
-     "note": "after to_local: the zone used"
+     "c": "(C: the zone name the caller opened with otc_tz_open: for \"station\", the station's timezone from otc_station_timezone)",
+     "note": "after to_local: the zone name used (prediction spec 5.3), resolved: for tz \"station\" (the default) the station's IANA timezone, never the literal \"station\""
     },
     {
      "name": "tz_version",
@@ -3627,8 +3627,8 @@
      "kind": "field",
      "type": "string",
      "nullable": true,
-     "c": "(C: the zone passed to otc_tz_open)",
-     "note": "after to_local: the zone used"
+     "c": "(C: the zone name the caller opened with otc_tz_open: for \"station\", the station's timezone from otc_station_timezone)",
+     "note": "after to_local: the zone name used (prediction spec 5.3), resolved: for tz \"station\" (the default) the station's IANA timezone, never the literal \"station\""
     },
     {
      "name": "tz_version",
@@ -3812,8 +3812,8 @@
      "kind": "field",
      "type": "string",
      "nullable": true,
-     "c": "(C: the zone passed to otc_tz_open)",
-     "note": "after to_local: the zone used"
+     "c": "(C: the zone name the caller opened with otc_tz_open: for \"station\", the station's timezone from otc_station_timezone)",
+     "note": "after to_local: the zone name used (prediction spec 5.3), resolved: for tz \"station\" (the default) the station's IANA timezone, never the literal \"station\""
     },
     {
      "name": "tz_version",
