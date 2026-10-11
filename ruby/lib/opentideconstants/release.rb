@@ -415,6 +415,13 @@ class OpenTideConstants
                 what = expected ? "SHA-256 mismatch" : "not listed in OTC_#{@datestamp}.sha256"
                 raise ChecksumError.new("#{File.basename(path)}: #{what}", file: path, expected: expected, actual: actual)
             end
+            # A .json.gz: its decompressed bytes against the .json row, as at
+            # open (spec §5.3, CR3 DR77).
+            @checks.each_key do |path|
+                next unless path.end_with?(".json.gz")
+                Reader.need_rows!(path, [path], rows, "OTC_#{@datestamp}.sha256")
+                Reader.check_json_bytes!(path, Reader.gunzip(path), rows[File.basename(path).delete_suffix(".gz")])
+            end
             true
         end
 

@@ -70,27 +70,48 @@ class OpenTideConstants
             sha_path = File.join(File.dirname(path), "#{prefix}.sha256")
             if File.file?(sha_path)
                 rows = parse_sha256(read_text(sha_path), File.basename(sha_path))
-                checks = {}
-                read.each do |p|
-                    name = File.basename(p)
-                    expected = rows[name]
-                    if expected.nil?
-                        raise ChecksumError.new("#{name} is not listed in #{File.basename(sha_path)}", file: p,
-                                                expected: nil, actual: Release.sha256_file(p))
-                    end
-                    checks[p] = expected
-                end
+                # Every release file the open reads needs a row, checked
+                # before any file is hashed (spec §5.3, CR3 DR73); a
+                # .json.gz also needs the .json row that its decompressed
+                # bytes are checked against (CR3 DR77).
+                need_rows!(path, read, rows, File.basename(sha_path))
+                checks = read.to_h { |p| [p, rows[File.basename(p)]] }
                 files = rows.keys.sort.map do |name|
                     local = File.join(File.dirname(path), name)
                     FileInfo.new(name: name, url: nil, size: File.file?(local) ? File.size(local) : nil, sha256: rows[name])
                 end
+                json_sha256 = ext == "json.gz" ? rows["#{prefix}.json"] : nil
                 [load(path, mode: mode, files: files, checks: checks, verify: true, logger: logger,
-                      commercial_only: commercial_only), :file]
+                      commercial_only: commercial_only, json_sha256: json_sha256), :file]
             else
                 files = read.map { |p| FileInfo.new(name: File.basename(p), url: nil, size: File.size(p), sha256: nil) }
                 [load(path, mode: mode, files: files, checks: {}, logger: logger, commercial_only: commercial_only),
                  :file_unverified]
             end
+        end
+
+        # Raises ChecksumError "not listed" for the first release file that a
+        # local open of path (or verify on it) reads and that rows lacks: the
+        # files read, and for a .json.gz also the .json (spec §5.3, CR3 DR73,
+        # DR77). The file named is the one missing.
+        def need_rows!(path, read, rows, sha_name)
+            names = read.map { |p| File.basename(p) }
+            names << File.basename(path).delete_suffix(".gz") if path.end_with?(".json.gz")
+            names.each do |name|
+                next if rows.key?(name)
+                raise ChecksumError.new("#{name} is not listed in #{sha_name}", file: File.join(File.dirname(path), name),
+                                        expected: nil, actual: nil)
+            end
+        end
+
+        # Raises ChecksumError unless the decompressed bytes of a .json.gz
+        # (gz_path) have the SHA-256 of its .json row (spec §5.3, CR3 DR77).
+        def check_json_bytes!(gz_path, text, expected)
+            actual = Digest::SHA256.hexdigest(text.b)
+            return if actual == expected
+            json_path = gz_path.delete_suffix(".gz")
+            raise ChecksumError.new("#{File.basename(json_path)} (decompressed from #{File.basename(gz_path)}): SHA-256 mismatch",
+                                    file: json_path, expected: expected, actual: actual)
         end
 
         # Raises ChecksumError unless the SHA-256 of bytes (read from path) is expected.
@@ -106,8 +127,10 @@ class OpenTideConstants
         # after its hash is never used.
         # logger: where a station with an unknown status is reported (CR2 DR8).
         # commercial_only: the open option of spec §4.2 (K-NC DR106).
+        # json_sha256: for a .json.gz, the .json row that the decompressed
+        # bytes must match (spec §5.3, CR3 DR77).
         def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
-                 on_bad_index: nil, logger: nil, commercial_only: false)
+                 on_bad_index: nil, logger: nil, commercial_only: false, json_sha256: nil)
             _, _, ext = parse_name(path)
             expect = ->(p) { verify ? checks[p] : nil }
             case ext
@@ -116,7 +139,9 @@ class OpenTideConstants
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger,
                                     commercial_only: commercial_only)
             when "json.gz"
-                doc = parse_json(gunzip(path, expect.call(path)))
+                text = gunzip(path, expect.call(path))
+                check_json_bytes!(path, text, json_sha256) if json_sha256
+                doc = parse_json(text)
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger,
                                     commercial_only: commercial_only)
             when "jsonl"
