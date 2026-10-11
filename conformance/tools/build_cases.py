@@ -1049,6 +1049,7 @@ def group_load():
                      drv("corrupt", path=f"${{tmp}}/rel/OTC_{d}.jsonl", offset=100),
                      step("verify", err("checksum_mismatch", file={"$contains": f"OTC_{d}.jsonl"}, expected=sha256_rows("good", d)[f"OTC_{d}.jsonl"], actual={"$regex": "^[0-9a-f]{64}$"}))],
                     requires=["fs"]))
+    out += local_row_cases()
     for bad in ["2099123", "20991231.1", "20991231.0", "20991231.01", "20991231.", "209912310", "latest2", "2099-12-31"]:
         out.append(case(f"load/invalid-datestamp-{bad}", f"release={bad!r} does not match the datestamp pattern: invalid_argument", "4.2",
                         [net(step("open", err("invalid_argument"), release=bad, base_url=f"{SRV}/good/", cache_dir="${cache}"))],
@@ -1089,6 +1090,59 @@ def group_load():
                     requires=["fs", "require_checksum"]))
     out.append(case("load/valid-datestamp-not-found", "release 20991231.10 matches the pattern but does not exist: release_not_found", "4.2, 4.8",
                     [net(step("open", err("release_not_found"), release="20991231.10", base_url=f"{SRV}/good/", cache_dir="${cache}"))], requires=["fs"]))
+    return out
+
+
+def local_row_cases():
+    """The .sha256 rows of a local open (spec 5.3). CR3 DR73 (orchestrator decision 2026-10-09): whenever an
+    OTC_{D}.sha256 is next to the file, every release file the open reads needs a row; a missing row is
+    checksum_mismatch "not listed", with file naming it, as for a network open (CR3 DR61). CR3 DR77 (orchestrator
+    decision 2026-10-09): a local .json.gz needs the .json.gz row and the .json row, and its decompressed bytes are
+    checked against the .json row, at open and in verify."""
+    out = []
+    G = f"{FIX}/good"
+    d = "20991231.2"
+    rows = sha256_rows("good", d)
+
+    def sha(drop=(), **swap):
+        r = {n: h for n, h in rows.items() if n not in drop}
+        r.update({n: h for n, h in swap.items() if n in r})
+        return "".join(f"{h}  {n}\n" for n, h in sorted(r.items()))
+
+    def not_listed(name):
+        # the name ends the path: OTC_{D}.json must not match OTC_{D}.json.gz
+        return {**err("checksum_mismatch", file={"$regex": re.escape(name) + "$"}), "error_message": {"$contains": "not listed"}}
+
+    J, GZ, JL, M = (f"OTC_{d}{e}" for e in (".json", ".json.gz", ".jsonl", ".meta.json"))
+    # CR3 DR73: each release file that the open reads, missing from the .sha256 next to it
+    for opened, copy, missing, req in [(J, [J], J, ["json"]), (GZ, [GZ], GZ, ["json"]),
+                                       (JL, [JL, M], JL, []), (JL, [JL, M], M, [])]:
+        kind = missing.replace(f"OTC_{d}", "").replace(".", "-")
+        out.append(case(f"load/file-sha256-no-row{opened.replace(f'OTC_{d}', '').replace('.', '-')}{'' if missing == opened else kind}",
+                        f"the .sha256 next to the {opened.replace(f'OTC_{d}', '')} file has no {missing} row: checksum_mismatch \"not listed\", file {missing} (CR3 DR73)", "5.3, 4.8",
+                        [drv("copy", files=[f"{G}/{n}" for n in copy], to="${tmp}/rel"),
+                         drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(drop=[missing])),
+                         step("open", not_listed(missing), file=f"${{tmp}}/rel/{opened}")], requires=["fs"] + req))
+    # CR3 DR77: the reviewer's fixture (the .json.gz row, no .json row) and a .json row that the decompressed bytes
+    # do not match
+    out.append(case("load/file-json-gz-no-json-row", "bad/sha256-no-json-row opened as .json.gz (.json.gz listed, .json not): checksum_mismatch \"not listed\", file OTC_{D}.json (CR3 DR77)", "5.3, 4.8",
+                    [step("open", not_listed("OTC_20991231.json"), file=f"{FIX}/bad/sha256-no-json-row/OTC_20991231.json.gz")],
+                    requires=["fs", "json"]))
+    other = rows[JL]
+    out.append(case("load/file-json-gz-json-row-mismatch", "a .json.gz whose own row matches but whose decompressed bytes do not match the .json row: checksum_mismatch, file OTC_{D}.json (CR3 DR77)", "5.3, 4.8",
+                    [drv("copy", files=[f"{G}/{GZ}"], to="${tmp}/rel"),
+                     drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(**{J: other})),
+                     step("open", err("checksum_mismatch", file={"$regex": re.escape(J) + "$"}, expected=other, actual=rows[J]), file=f"${{tmp}}/rel/{GZ}")],
+                    requires=["fs", "json"]))
+    out.append(case("load/verify-file-json-gz", "verify on a local .json.gz checks the .json.gz and the decompressed bytes against the .json row: no .json row is \"not listed\", another .json row is checksum_mismatch (CR3 DR77)", "4.3, 5.3",
+                    [drv("copy", files=[f"{G}/{GZ}", f"{G}/OTC_{d}.sha256"], to="${tmp}/rel"),
+                     step("open", {"loaded_from": "file", "datestamp": d}, file=f"${{tmp}}/rel/{GZ}"),
+                     step("verify", {"verified": True}),
+                     drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(drop=[J])),
+                     step("verify", not_listed(J)),
+                     drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(**{J: other})),
+                     step("verify", err("checksum_mismatch", file={"$regex": re.escape(J) + "$"}, expected=other, actual=rows[J]))],
+                    requires=["fs", "json"]))
     return out
 
 

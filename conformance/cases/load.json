@@ -600,6 +600,305 @@
    ]
   },
   {
+   "id": "load/file-sha256-no-row-json",
+   "title": "the .sha256 next to the .json file has no OTC_20991231.2.json row: checksum_mismatch \"not listed\", file OTC_20991231.2.json (CR3 DR73)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs",
+    "json"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.json"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.json$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/file-sha256-no-row-json-gz",
+   "title": "the .sha256 next to the .json.gz file has no OTC_20991231.2.json.gz row: checksum_mismatch \"not listed\", file OTC_20991231.2.json.gz (CR3 DR73)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs",
+    "json"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json.gz"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.json.gz"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.json\\.gz$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/file-sha256-no-row-jsonl",
+   "title": "the .sha256 next to the .jsonl file has no OTC_20991231.2.jsonl row: checksum_mismatch \"not listed\", file OTC_20991231.2.jsonl (CR3 DR73)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.jsonl$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/file-sha256-no-row-jsonl-meta-json",
+   "title": "the .sha256 next to the .jsonl file has no OTC_20991231.2.meta.json row: checksum_mismatch \"not listed\", file OTC_20991231.2.meta.json (CR3 DR73)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.jsonl",
+      "${fixtures}/good/OTC_20991231.2.meta.json"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.jsonl"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.meta\\.json$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/file-json-gz-no-json-row",
+   "title": "bad/sha256-no-json-row opened as .json.gz (.json.gz listed, .json not): checksum_mismatch \"not listed\", file OTC_{D}.json (CR3 DR77)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs",
+    "json"
+   ],
+   "steps": [
+    {
+     "op": "open",
+     "args": {
+      "file": "${fixtures}/bad/sha256-no-json-row/OTC_20991231.json.gz"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.json$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/file-json-gz-json-row-mismatch",
+   "title": "a .json.gz whose own row matches but whose decompressed bytes do not match the .json row: checksum_mismatch, file OTC_{D}.json (CR3 DR77)",
+   "spec": "5.3, 4.8",
+   "requires": [
+    "fs",
+    "json"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json.gz"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.json.gz"
+     },
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.json$"
+       },
+       "expected": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+       "actual": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "load/verify-file-json-gz",
+   "title": "verify on a local .json.gz checks the .json.gz and the decompressed bytes against the .json row: no .json row is \"not listed\", another .json row is checksum_mismatch (CR3 DR77)",
+   "spec": "4.3, 5.3",
+   "requires": [
+    "fs",
+    "json"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json.gz",
+      "${fixtures}/good/OTC_20991231.2.sha256"
+     ],
+     "to": "${tmp}/rel"
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/rel/OTC_20991231.2.json.gz"
+     },
+     "expect": {
+      "loaded_from": "file",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "verified": true
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.json$"
+       }
+      },
+      "error_message": {
+       "$contains": "not listed"
+      }
+     }
+    },
+    {
+     "driver": "write",
+     "path": "${tmp}/rel/OTC_20991231.2.sha256",
+     "text": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.json\n2f760e0b8b22d8fa8879c19a93157752280b4f0c02ca9a432c0646ff882f6955  OTC_20991231.2.json.gz\n84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0  OTC_20991231.2.jsonl\nf1ceca5d49337f6228594b5d26ec4a0c7b60807d9c774c51784bf5d8ffa41350  OTC_20991231.2.meta.json\n"
+    },
+    {
+     "op": "verify",
+     "expect": {
+      "error": "checksum_mismatch",
+      "error_fields": {
+       "file": {
+        "$regex": "OTC_20991231\\.2\\.json$"
+       },
+       "expected": "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0",
+       "actual": "c5f783e44d9de259d1e2a88734668de19399f53b9b5693db86fdd6101d8744cd"
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "load/invalid-datestamp-2099123",
    "title": "release='2099123' does not match the datestamp pattern: invalid_argument",
    "spec": "4.2",
