@@ -213,4 +213,22 @@ class DownloadTest < Minitest::Test
     ensure
         c&.close
     end
+
+    # R3-228: the download doc comment says what download writes (spec
+    # §4.3.2): OTC_{D}.meta.json always, whatever the formats, not only for jsonl.
+    def test_download_doc_comment_says_meta_json_is_always_written
+        src = File.read(File.join(ROOT, "ruby", "lib", "opentideconstants", "client.rb"))
+        doc = src[/((?:^ *#.*\n)+) *def download\(/, 1]
+        refute_nil doc, "no doc comment above def download"
+        text = doc.gsub(/^ *# ?/, "").tr("\n", " ")
+        refute_match(/meta\.json for jsonl/, text)
+        assert_match(/always OTC_\{D\}\.meta\.json and OTC_\{D\}\.sha256/, text)
+        # Positive control: what the comment says is what download writes, for a format with no .jsonl.
+        srv = serve
+        c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir)
+        names = c.download(D, to: tmpdir, formats: [:json]).map { |p| File.basename(p) }
+        assert_equal %W[OTC_#{D}.json OTC_#{D}.meta.json OTC_#{D}.sha256], names
+    ensure
+        c&.close
+    end
 end

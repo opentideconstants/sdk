@@ -87,4 +87,34 @@ class StreamIndexTest < Minitest::Test
             end
         end
     end
+
+    # R3-226 (release.rb): a stream line that cannot be parsed is
+    # invalid_release with the reason (the JSON error, the unpaired
+    # surrogate), not only "is not a station line".
+    def test_a_line_that_does_not_parse_gives_the_reason
+        {
+            "JSON" => ->(b) { b[0] = "X" },
+            "unpaired surrogate" => ->(b) { i = b.index('"name":"') + 8; b[i, 6] = "\\ud800" }
+        }.each do |what, tamper|
+            srv = serve
+            cache = tmpdir
+            c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+            path = File.join(cache, "v1", "releases", D, "OTC_#{D}.jsonl")
+            bytes = File.binread(path)
+            assert bytes.start_with?('{"aliases":{"gesla":["test-gesla-0001a"'), "OTC-T-0001 is the first line"
+            tampered = bytes.dup
+            tamper.call(tampered)
+            assert_equal bytes.bytesize, tampered.bytesize
+            File.open(path, "r+b") { |f| f.write(tampered) } # the same file the release holds open
+            err = assert_raises(OTC::InvalidReleaseError, what) { c.station("OTC-T-0001") }
+            assert_includes err.message, "is not a station line: ", what
+            if what == "JSON"
+                assert_match(/unexpected|expected/i, err.message.split("is not a station line: ", 2).last, what)
+            else
+                assert_includes err.message, "unpaired surrogate (\\ud800)", what
+            end
+        ensure
+            c&.close
+        end
+    end
 end

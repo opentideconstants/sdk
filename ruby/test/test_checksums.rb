@@ -197,4 +197,37 @@ class ChecksumSwapTest < Minitest::Test
             assert_equal want, got, "#{ext}: loaded the bytes that replaced the hashed file"
         end
     end
+
+    # R3-227: a downloaded file that fails its check says which check
+    # failed: its size against the pointer's, or its SHA-256 against the
+    # .sha256 row (and a missing row says so, not "mismatch").
+    def test_download_check_says_which_check_failed
+        jsonl = "OTC_#{D}.jsonl"
+        good = File.binread(fixture("good", jsonl))
+        want = Digest::SHA256.hexdigest(good)
+        ptr = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json")))
+        ptr["files"].find { |f| f["name"] == jsonl }["size"] = good.bytesize + 1
+        srv = serve(File.join(FIXTURES, "good"), "OTC_latest-f1.json" => [200, {}, JSON.generate(ptr)])
+        err = assert_raises(OTC::ChecksumError) { OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream) }
+        assert_includes err.message, "#{jsonl}: size #{good.bytesize}, expected #{good.bytesize + 1}"
+        refute_includes err.message, "SHA-256"
+
+        bad = good.dup
+        bad[-2] = bad[-2] == "}" ? "]" : "}"
+        srv = serve(File.join(FIXTURES, "good"), jsonl => [200, {}, bad])
+        err = assert_raises(OTC::ChecksumError) { OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream) }
+        assert_includes err.message, "#{jsonl}: SHA-256 #{Digest::SHA256.hexdigest(bad)}, expected #{want}"
+        refute_includes err.message, "size"
+
+        srv = serve
+        c = OTC.new(file: fixture("good", jsonl))
+        dir = tmpdir
+        err = assert_raises(OTC::ChecksumError) do
+            OTC::Downloader.fetch_checked(c, srv.url("/#{jsonl}"), dir, File.join(dir, jsonl), jsonl, nil, nil)
+        end
+        assert_includes err.message, "#{jsonl}: no expected SHA-256"
+        refute_includes err.message, "mismatch"
+    ensure
+        c&.close
+    end
 end

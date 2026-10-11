@@ -1648,3 +1648,165 @@ class CommercialOnlyTest(unittest.TestCase):
             self.assertEqual(c.station("OTC-T-0181").recommended_set.set_id, "OTC-T-0181/w-ok")
         with otc.OpenTideConstants(file=f, commercial_only=False) as c:
             self.assertEqual(c.station("OTC-T-0181").recommended_set.set_id, "OTC-T-0181/x-nc")
+
+
+class StarImportDocTest(unittest.TestCase):
+    """R3-223: FileExistsError must stay in __all__ (spec §4.8 names it; §7.1 checks __all__), so a star import
+    replaces the built-in FileExistsError; the module docstring and the README say so."""
+
+    def test_star_import_hazard_is_documented(self):
+        import builtins
+        ns = {}
+        exec("from opentideconstants import *", ns)  # noqa: S102 - the behaviour the docs describe
+        self.assertIs(ns["FileExistsError"], otc.FileExistsError)
+        self.assertIsNot(otc.FileExistsError, builtins.FileExistsError)
+        self.assertFalse(issubclass(otc.FileExistsError, builtins.FileExistsError))
+        readme = (ROOT / "python" / "README.md").read_text(encoding="utf-8")
+        for where, text in (("module docstring", otc.__doc__), ("README", readme)):
+            flat = " ".join(text.split())
+            self.assertIn("from opentideconstants import *", flat, where)
+            self.assertIn("replaces the built-in FileExistsError", flat, where)
+
+
+class CleanupFailureLogTest(unittest.TestCase):
+    """R3-224: a cleanup that fails (a temporary file, a cached pointer, a lock) is logged with its path; only a
+    file that is already gone is silent."""
+
+    D = "20991231.2"
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.cache = self.root / "cache"
+
+    def tearDown(self):
+        for p in self.root.rglob("*"):
+            if p.is_dir():
+                p.chmod(0o755)
+        self.tmp.cleanup()
+
+    @staticmethod
+    def _undeletable_tmp():
+        """Path.unlink fails (EACCES) for every .tmp- file, as on a folder that lost its write permission."""
+        from unittest import mock
+        real = Path.unlink
+
+        def unlink(self, *a, **kw):
+            if self.name.startswith(".tmp-"):
+                raise PermissionError(13, "injected", str(self))
+            return real(self, *a, **kw)
+        return mock.patch.object(Path, "unlink", unlink)
+
+    def _assert_every_tmp_logged(self, where, logs):
+        left = sorted(str(p) for p in where.rglob(".tmp-*"))
+        self.assertTrue(left, "no temporary file was left, so nothing is tested")
+        text = "\n".join(logs.output)
+        for p in left:
+            self.assertIn(p, text, f"the leftover {p} is not in the log")
+
+    @unittest.skipIf(os.name == "nt", "a read-only folder does not stop a delete on Windows")
+    def test_drop_pointer_logs_a_pointer_it_cannot_remove(self):
+        import logging
+        from opentideconstants._cache import Cache
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            pdir = self.cache / "v1" / "pointer"
+            (pdir / "OTC_latest-f1.json").write_text("not json")
+            (pdir / "OTC_latest-f1.json.etag").write_text('"e1"')  # the cached pointer is read only with its ETag
+            pdir.chmod(0o555)  # the broken pointer cannot be removed
+            log = logging.getLogger("otc-test-r3-224")
+            with self.assertLogs(log, "WARNING") as logs:
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), logger=log).close()
+        finally:
+            srv.close()
+        self.assertTrue(any("cannot remove" in m and str(pdir / "OTC_latest-f1.json") in m for m in logs.output),
+                        logs.output)
+        pdir.chmod(0o755)
+        with self.assertNoLogs("opentideconstants", "DEBUG"):  # a file that is already gone is silent
+            Cache(self.cache).drop_pointer("OTC_latest.json")
+
+    def test_fetch_file_logs_a_temporary_file_it_cannot_remove(self):
+        jsonl = f"/OTC_{self.D}.jsonl"
+        bad = bytearray((GOOD / jsonl[1:]).read_bytes())
+        bad[-2] = ord("]") if bad[-2] == ord("}") else ord("}")
+        srv = _Server(script={jsonl: (200, {}, bytes(bad))})
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs, self._undeletable_tmp(), \
+                    self.assertRaises(otc.ChecksumError):
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream")
+        finally:
+            srv.close()
+        self._assert_every_tmp_logged(self.cache, logs)
+
+    def test_download_to_cache_logs_the_temporary_files_it_cannot_remove(self):
+        # the .jsonl is fetched and checked; then the .meta.json fails, so the .jsonl's temporary file is cleaned up
+        meta = f"/OTC_{self.D}.meta.json"
+        srv = _Server(script={meta: (200, {}, b"{}")})
+        try:
+            with self.assertLogs("opentideconstants", "WARNING") as logs, self._undeletable_tmp(), \
+                    self.assertRaises(otc.ChecksumError):
+                otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream")
+        finally:
+            srv.close()
+        self.assertEqual(len(list(self.cache.rglob(".tmp-*"))), 2)  # the .jsonl's and the .meta.json's
+        self._assert_every_tmp_logged(self.cache, logs)
+
+    def test_download_logs_the_temporary_files_it_cannot_remove(self):
+        out = self.root / "out"
+        meta = "/OTC_20991231.meta.json"
+        srv = _Server(script={meta: (200, {}, b"{}")})
+        try:
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as c:
+                with self.assertLogs("opentideconstants", "WARNING") as logs, self._undeletable_tmp(), \
+                        self.assertRaises(otc.ChecksumError):
+                    c.download("20991231", to=str(out), formats=["jsonl"])
+        finally:
+            srv.close()
+        self.assertGreaterEqual(len(list(out.rglob(".tmp-*"))), 2)
+        self._assert_every_tmp_logged(out, logs)
+
+    def test_atomic_write_logs_a_temporary_file_it_cannot_remove(self):
+        from unittest import mock
+        from opentideconstants._cache import Cache
+        real = os.replace
+
+        def replace(src, dst):
+            if Path(dst).name == "OTC_latest-f1.json":
+                raise PermissionError(13, "injected", str(dst))
+            return real(src, dst)
+        with self.assertLogs("opentideconstants", "WARNING") as logs, self._undeletable_tmp(), \
+                mock.patch("os.replace", replace), self.assertRaises(otc.CacheError):
+            Cache(self.cache).write_pointer("OTC_latest-f1.json", b"{}", None)
+        self._assert_every_tmp_logged(self.cache, logs)
+
+    def test_remove_release_logs_a_lock_it_cannot_remove(self):
+        from unittest import mock
+        from opentideconstants._cache import Cache
+        d = self.cache / "v1" / "releases" / self.D
+        (d / ".verified").mkdir(parents=True)  # a directory: unlink fails with an error other than "not found"
+        (d / ".verified" / "x").write_text("y")
+        real = os.rmdir
+
+        def rmdir(p, *a, **kw):
+            if Path(p).name == ".lock":
+                raise PermissionError(13, "injected", str(p))
+            return real(p, *a, **kw)
+        with self.assertLogs("opentideconstants", "WARNING") as logs, mock.patch("os.rmdir", rmdir), \
+                self.assertRaises(otc.CacheError):
+            Cache(self.cache).remove_release(self.D)
+        self.assertTrue((d / ".lock").is_dir())
+        self.assertTrue(any("cannot remove" in m and str(d / ".lock") in m for m in logs.output), logs.output)
+
+    @unittest.skipIf(os.name == "nt", "a read-only folder does not stop a delete on Windows")
+    def test_release_lock_logs_a_lock_it_cannot_remove(self):
+        from opentideconstants._cache import lock_dir
+        d = self.cache / "r"
+        d.mkdir(parents=True)
+        with self.assertLogs("opentideconstants", "WARNING") as logs:
+            with lock_dir(d, "test") as held:
+                self.assertTrue(held)
+                (d / ".lock").chmod(0o555)  # owner.json cannot be removed
+        self.assertTrue((d / ".lock" / "owner.json").exists())
+        self.assertTrue(any("cannot remove" in m and str(d / ".lock") in m for m in logs.output), logs.output)

@@ -182,4 +182,29 @@ class LifecycleTest < Minitest::Test
         t&.kill
         c&.close
     end
+
+    # R3-221 (spec §5.6: at most one check per update_interval): queries that
+    # start together after the interval run one automatic update, so one
+    # pointer request, not one per query.
+    def test_concurrent_queries_run_one_automatic_update
+        pointer = File.binread(fixture("good", "OTC_latest-f1.json"))
+        slow = lambda do |_path|
+            sleep 0.3 # every query thread passes the interval check while the first update runs
+            [200, {}, pointer]
+        end
+        srv = serve(File.join(FIXTURES, "good"), "OTC_latest-f1.json" => slow)
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, auto_update: true, update_interval: 3600)
+        c.instance_variable_set(:@last_check, c.send(:monotonic) - 7200) # the interval has passed
+        asked = srv.requests.count { |r| r.end_with?("/OTC_latest-f1.json") }
+        go = Queue.new
+        threads = Array.new(6) { Thread.new { go.pop; c.station("OTC-T-0001") } }
+        threads.size.times { go << true }
+        threads.each { |t| assert t.join(30), "a query did not finish within 30 s" }
+        threads.each { |t| assert_equal "OTC-T-0001", t.value.station_id }
+        assert_equal 1, srv.requests.count { |r| r.end_with?("/OTC_latest-f1.json") } - asked,
+                     "pointer requests for one interval"
+    ensure
+        threads&.each(&:kill)
+        c&.close
+    end
 end
