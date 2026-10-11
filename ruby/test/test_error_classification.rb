@@ -96,9 +96,11 @@ class ErrorClassificationTest < Minitest::Test
     # R2-103: when a bad cached copy cannot be deleted, download still
     # fetches the file instead of failing with the CacheError.
     def test_download_fetches_when_a_bad_cached_copy_cannot_be_deleted
+        posix_only # as root or on Windows the read-only directory does not stop the delete
         s = serve
         cache = tmpdir
-        c = OTC.new(release: D, base_url: s.url, cache_dir: cache, mode: :stream)
+        log = Log.new
+        c = OTC.new(release: D, base_url: s.url, cache_dir: cache, mode: :stream, logger: log)
         dir = File.join(cache, "v1", "releases", D)
         jl = File.join(dir, "OTC_#{D}.jsonl")
         bytes = File.binread(jl)
@@ -110,6 +112,10 @@ class ErrorClassificationTest < Minitest::Test
         assert_includes paths, File.join(to, "OTC_#{D}.jsonl")
         assert_equal Digest::SHA256.file(fixture("good", "OTC_#{D}.jsonl")).hexdigest,
                      Digest::SHA256.file(File.join(to, "OTC_#{D}.jsonl")).hexdigest
+        # The delete did fail (the bad copy is still cached), and download said so and fetched anyway.
+        assert_equal bytes, File.binread(jl), "the bad cached copy was deleted: the CacheError path did not run"
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("downloading OTC_#{D}.jsonl anyway") },
+               "the failed delete was not logged: #{log.lines.inspect}")
     ensure
         File.chmod(0o755, dir) if dir && File.directory?(dir)
         c&.close
@@ -121,7 +127,8 @@ class ErrorClassificationTest < Minitest::Test
         s = serve
         cache = tmpdir
         c = OTC.new(release: D, base_url: s.url, cache_dir: cache, mode: :stream)
-        other = OTC.new(release: "20991231", base_url: s.url, cache_dir: cache, mode: :stream).release
+        oc = OTC.new(release: "20991231", base_url: s.url, cache_dir: cache, mode: :stream)
+        other = oc.release
         c.instance_variable_get(:@loaded)[other] = true # a release this client loaded before an update
         ios = [c.release, other].map { |r| r.instance_variable_get(:@io) }
         def (ios[0]).close
@@ -132,6 +139,12 @@ class ErrorClassificationTest < Minitest::Test
         assert_kind_of IOError, err.cause
         assert ios.all?(&:closed?), "a release was left open"
         assert_nil c.close, "a second close did something"
+    ensure
+        [c, oc].each do |x|
+            x&.close
+        rescue OTC::FileError, IOError
+            nil # the injected close failure, when the test stopped before its own close
+        end
     end
 
     # R2-105: Net::HTTP cannot speak TLS to a proxy; an https:// proxy is
@@ -150,7 +163,10 @@ class ErrorClassificationTest < Minitest::Test
         port, ca, stop = tls_server { |_p, _h| [200, {}, "x"] }
         waits = []
         http = OTC::HTTP.new(ca_file: ca, sleeper: ->(w) { waits << w })
-        assert_raises(OTC::NetworkError) { http.get("https://localhost:#{port}/x") }
+        # Control: the certificate (for 127.0.0.1) is trusted through ca_file, so the only defect below is the name.
+        assert_equal 200, http.get("https://127.0.0.1:#{port}/x").status
+        err = assert_raises(OTC::NetworkError) { http.get("https://localhost:#{port}/x") }
+        assert_match(/hostname/i, err.message, "not the hostname mismatch")
         assert_empty waits, "a hostname mismatch was retried"
     ensure
         stop&.call
