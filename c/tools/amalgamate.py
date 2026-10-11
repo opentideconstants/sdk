@@ -8,9 +8,13 @@
 writes <out>/opentideconstants.h (the public header) and <out>/opentideconstants.c
 (the library, the fold table, the vendored SHA-256 and cJSON, with cJSON and
 SHA-256 renamed to otc__*), plus <out>/supported-formats.json (spec 7.4: it
-ships in every C release artifact, so the bundle carries it too). Copy both files into a project and compile them
+ships in every C release artifact, so the bundle carries it too). Copy
+opentideconstants.h and opentideconstants.c into a project and compile them
 with any C99 compiler: cc -std=c99 -c opentideconstants.c (link with -lm, and
 -pthread on an old glibc).
+
+Every file is read and written as UTF-8 bytes with LF line ends, whatever the
+locale or the OS (R3-314).
 """
 import argparse
 import re
@@ -59,20 +63,40 @@ PRELUDE = """/*
 #ifndef CJSON_HIDE_SYMBOLS
 #define CJSON_HIDE_SYMBOLS
 #endif
-#define OTC_AMALGAMATION 1
 #include "opentideconstants.h"
 """
+
+
+FETCH_ONLY = "src/otc_fetch.c"   # the otc_fetch module (libcurl) is not in the bundle; the stub is
+
+
+def read(path):
+    return path.read_bytes().decode("utf-8")
+
+
+def write(path, text):
+    path.write_bytes(text.encode("utf-8"))
+
+
+def cmake_sources():
+    """Every source that c/CMakeLists.txt adds to OTC_SOURCES: the set(OTC_SOURCES ...) and every
+    list(APPEND OTC_SOURCES ...), in any branch (R3-308). A # comment is not a source."""
+    text = "\n".join(line.split("#", 1)[0] for line in read(C / "CMakeLists.txt").splitlines())
+    calls = re.findall(r"\b(?:set\(\s*OTC_SOURCES|list\(\s*APPEND\s+OTC_SOURCES)\b([^)]*)\)", text)
+    if not re.search(r"\bset\(\s*OTC_SOURCES\b", text):
+        sys.exit("amalgamate: no set(OTC_SOURCES ...) in c/CMakeLists.txt")
+    return {f for c in calls for f in c.split()}
 
 
 def check_parts_match_cmake():
     """PARTS is the CMake library without otc_fetch (C88): the same sources, the vendor
     wrappers counted as the files they include. A source added to one and not the
-    other stops the tool."""
-    text = (C / "CMakeLists.txt").read_text()
-    m = re.search(r"set\(OTC_SOURCES(.*?)\)", text, re.S)
-    if not m:
-        sys.exit("amalgamate: no set(OTC_SOURCES ...) in c/CMakeLists.txt")
-    cmake = set(m.group(1).split()) | {"src/otc_fetch_stub.c"}
+    other stops the tool, also one added with list(APPEND OTC_SOURCES ...)."""
+    cmake = cmake_sources()
+    if FETCH_ONLY not in cmake:
+        sys.exit(f"amalgamate: c/CMakeLists.txt does not add {FETCH_ONLY} to OTC_SOURCES; "
+                 "the fetch-only source this tool leaves out has moved")
+    cmake.discard(FETCH_ONLY)
     wrapped = {"src/otc_vendor_cjson.c": "vendor/cjson/cJSON.c", "src/otc_vendor_sha256.c": "vendor/sha256/sha-256.c"}
     cmake = {wrapped.get(f, f) for f in cmake}
     parts = {p for p in PARTS if p.endswith(".c")}
@@ -81,34 +105,63 @@ def check_parts_match_cmake():
                  f"only in PARTS {sorted(parts - cmake)}")
 
 
+def header_version(header):
+    """OTC_VERSION, and the check that OTC_VERSION_MAJOR/MINOR/PATCH say the same (R3-318)."""
+    m = re.search(r'^#define OTC_VERSION "(\d+)\.(\d+)\.(\d+)"', header, re.M)
+    if not m:
+        sys.exit('amalgamate: no #define OTC_VERSION "X.Y.Z" in include/opentideconstants.h')
+    for part, want in zip(("MAJOR", "MINOR", "PATCH"), m.groups()):
+        p = re.search(rf"^#define OTC_VERSION_{part} (\d+)\s*$", header, re.M)
+        if not p or int(p.group(1)) != int(want):
+            sys.exit(f"amalgamate: include/opentideconstants.h: OTC_VERSION_{part} is "
+                     f"{p.group(1) if p else 'not defined'}, but OTC_VERSION is \"{'.'.join(m.groups())}\"")
+    return ".".join(m.groups())
+
+
+def cjson_version():
+    text = read(C / "vendor/cjson/cJSON.h")
+    parts = []
+    for part in ("MAJOR", "MINOR", "PATCH"):
+        p = re.search(rf"^#define CJSON_VERSION_{part} (\d+)\s*$", text, re.M)
+        if not p:
+            sys.exit(f"amalgamate: no #define CJSON_VERSION_{part} in vendor/cjson/cJSON.h")
+        parts.append(p.group(1))
+    return ".".join(parts)
+
+
 def main():
-    check_parts_match_cmake()
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Build the single-file amalgamation (SDK spec 6.4).")
     ap.add_argument("--out", default=str(C / "dist"))
     a = ap.parse_args()
+    check_parts_match_cmake()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    header = (C / "include/opentideconstants.h").read_text()
-    version = re.search(r'#define OTC_VERSION "([^"]+)"', header).group(1)
-    cjson = re.search(r"#define CJSON_VERSION_MAJOR (\d+)\s+#define CJSON_VERSION_MINOR (\d+)\s+#define CJSON_VERSION_PATCH (\d+)",
-                      (C / "vendor/cjson/cJSON.h").read_text())
-    chunks = [PRELUDE.format(version=version, cjson=".".join(cjson.groups()))]
-    # a local include is dropped only when the file it names is in the bundle already
-    # (a part, or the public header of the prelude); any other one is an error (C81)
-    inlined = {Path(p).name for p in PARTS} | {"opentideconstants.h"}
+    header = read(C / "include/opentideconstants.h")
+    chunks = [PRELUDE.format(version=header_version(header), cjson=cjson_version())]
+    # A local include is dropped only when the file it names is in the bundle already, above
+    # it: the public header of the prelude, or a part that comes earlier. An include of a
+    # later part is an error, because its contents would come after the code that needs
+    # them (R3-309); any other local include is an error too (C81).
+    names = [Path(p).name for p in PARTS]
+    emitted = {"opentideconstants.h"}
     for part in PARTS:
         lines = []
-        for n, line in enumerate((C / part).read_text().splitlines(), 1):
+        for n, line in enumerate(read(C / part).splitlines(), 1):
             m = LOCAL_INCLUDE.match(line)
-            if m and Path(m.group(1)).name in inlined:
+            name = Path(m.group(1)).name if m else None
+            if m and name in emitted:
                 lines.append(f"/* #include \"{m.group(1)}\" (inlined) */")
+            elif m and name in names:
+                sys.exit(f"amalgamate: {part}:{n}: {line.strip()} includes a part that comes later in PARTS; "
+                         "move it before this one")
             elif m or ANY_LOCAL_INCLUDE.match(line):
                 sys.exit(f"amalgamate: {part}:{n}: {line.strip()} names a file that is not in the amalgamation")
             else:
                 lines.append(line)
+        emitted.add(Path(part).name)
         chunks.append(f"\n/* ======================================== {part} */\n" + "\n".join(lines) + "\n")
-    (out / "opentideconstants.c").write_text("".join(chunks))
-    (out / "opentideconstants.h").write_text(header)
+    write(out / "opentideconstants.c", "".join(chunks))
+    write(out / "opentideconstants.h", header)
     (out / "supported-formats.json").write_bytes((C / "supported-formats.json").read_bytes())
     print(f"wrote {out / 'opentideconstants.c'}, {out / 'opentideconstants.h'} and {out / 'supported-formats.json'}")
 
