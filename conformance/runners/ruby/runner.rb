@@ -107,16 +107,18 @@ class Runner
     def dispatch(op, args, target)
         case op
         when "open"
-            @client&.close
-            @client = nil
+            # Drop the old client first: if its close fails, the next steps
+            # must not run against it (they would report "release is closed").
+            old, @client = @client, nil
+            old&.close
             opts = {}
             args.each { |k, v| opts[k.to_sym] = v }
             @client = OpenTideConstants.new(**opts)
             { "loaded_from" => s(@client.loaded_from), "datestamp" => @client.release.datestamp,
               "format_version" => @client.release.format_version }
         when "close"
-            @client&.close
-            @client = nil
+            old, @client = @client, nil
+            old&.close
             {}
         when "hold_release"
             @held[args["name"]] = @client.release
