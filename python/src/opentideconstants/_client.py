@@ -758,18 +758,20 @@ class OpenTideConstants:
                     except OSError:
                         pass
             self._log.info("downloaded and verified %s", datestamp)
-            # the files table of .verified (spec §4.3.1): the pointer's values, or the .sha256 rows
+            # the files table of .verified (spec §5.4, CR3 DR100): a row only for a file that is present and
+            # verified in the release directory, with its real size and lowercase SHA-256, and never one for the
+            # .sha256 file. The rows of an earlier open in the other mode stay while their files are there.
             old = self._cache.read_verified(datestamp) or {"files": {}}
-            files = dict(old.get("files") or {})
-            # every row of the .sha256 file, then the pointer's values over them (they agree: _check_pointer)
-            for n, sha in rows.items():
-                prev = files.get(n) or {}
-                files[n] = {"sha256": sha, "size": written.get(n, prev.get("size")), "url": prev.get("url")}
+            files = {n: dict(f, sha256=f["sha256"].lower()) for n, f in (old.get("files") or {}).items()
+                     if n != f"{base}.sha256" and f.get("sha256") is not None and (d / n).is_file()}
+            for n, size in written.items():
+                files[n] = {"sha256": rows[n], "size": size,
+                            "url": ptr[n].url if n in ptr else (files.get(n) or {}).get("url")}
+            # release.files (spec §4.3.1): the pointer entry for latest, else exactly the .verified rows
             if info is not None:
-                for f in info.files:
-                    files[f.name] = {"sha256": f.sha256 or (files.get(f.name) or {}).get("sha256"),
-                                     "size": f.size if f.size is not None else written.get(f.name), "url": f.url}
-            files_infos = [FileInfo(n, f.get("url"), f.get("size"), f.get("sha256")) for n, f in sorted(files.items())]
+                files_infos = sorted(info.files, key=lambda f: f.name)
+            else:
+                files_infos = [FileInfo(n, f.get("url"), f.get("size"), f.get("sha256")) for n, f in sorted(files.items())]
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"),

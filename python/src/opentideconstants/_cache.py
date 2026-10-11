@@ -124,11 +124,11 @@ class Cache:
         if not isinstance(doc, dict) or not isinstance(doc.get("files"), dict):
             return None
         for rec in doc["files"].values():
+            # a null or absent size makes .verified malformed (spec 5.4, CR3 spec review 2 B10 and 3 C4)
             if not isinstance(rec, dict) or not _opt(rec.get("sha256"), str) or not _opt(rec.get("url"), str) \
-                    or (rec.get("size") is not None and integral(rec.get("size")) is None):
+                    or integral(rec.get("size")) is None:
                 return None
-            if rec.get("size") is not None:
-                rec["size"] = integral(rec["size"])  # 1024.0 is the integer 1024 (CR2 DR10)
+            rec["size"] = integral(rec["size"])  # 1024.0 is the integer 1024 (CR2 DR10)
         for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp"):
             if not _opt(doc.get(k), str):
                 return None
