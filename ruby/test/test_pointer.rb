@@ -64,10 +64,12 @@ class PointerEntryTest < Minitest::Test
         # no releases list is the wrong shape: a network error (CR2 DR13); a bad entry is invalid_release
         [{}, { "releases" => "x" }].each do |doc|
             over["OTC_index.json"] = [200, {}, JSON.generate(doc)]
-            assert_raises(OTC::NetworkError, doc.inspect) { c.releases }
+            err = assert_raises(OTC::NetworkError, doc.inspect) { c.releases }
+            assert_equal "network", err.code
         end
         over["OTC_index.json"] = [200, {}, JSON.generate({ "releases" => [5] })]
-        assert_raises(OTC::InvalidReleaseError) { c.releases }
+        err = assert_raises(OTC::InvalidReleaseError) { c.releases }
+        assert_equal "invalid_release", err.code
     ensure
         c&.close
     end
@@ -90,5 +92,17 @@ class PointerEntryTest < Minitest::Test
         refute "20991231.01".match?(OTC::DATESTAMP_RE)
         refute "20991231.1".match?(OTC::DATESTAMP_RE)
         refute "20991231\n".match?(OTC::DATESTAMP_RE)
+    end
+
+    # R60: latest skips a release this gem cannot read, as opening latest does
+    # (spec §4.3 latest, §5.2 step 2a, CR D23).
+    def test_latest_skips_an_unreadable_release
+        srv = serve(File.join(FIXTURES, "reader"))
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir)
+        # 20991231.4 needs a reader for format 1.99; .3 is the newest this gem reads.
+        assert_equal "20991231.3", c.release.datestamp
+        assert_equal "20991231.3", c.latest.datestamp
+    ensure
+        c&.close
     end
 end

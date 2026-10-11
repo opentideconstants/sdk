@@ -20,11 +20,12 @@ class ReadmeTest < Minitest::Test
         ENV["OPENTIDECONSTANTS_BASE_URL"] = srv.url("/")
         ENV["OPENTIDECONSTANTS_CACHE_DIR"] = cache
         out = StringIO.new
+        saved = $stdout
         $stdout = out
         Object.new.instance_eval(code)
         out.string
     ensure
-        $stdout = STDOUT
+        $stdout = saved if saved
         %w[OPENTIDECONSTANTS_BASE_URL OPENTIDECONSTANTS_CACHE_DIR].each { |k| ENV[k] = old[k] }
     end
 
@@ -36,17 +37,10 @@ class ReadmeTest < Minitest::Test
         out = blocks.map { |b| run_block(b, srv, cache, dir) }.join
         assert_match(/M2 [0-9.]+ m/, out)
         assert_includes out, "Tidal constants: OpenTideConstants 20991231.2"
-        assert File.file?(File.join(dir, "tides", "OTC_20991231.2.jsonl"))
-    end
-
-    # R60: latest skips a release this gem cannot read, as opening latest does
-    # (spec §4.3 latest, §5.2 step 2a, CR D23).
-    def test_latest_skips_an_unreadable_release
-        srv = serve(File.join(FIXTURES, "reader"))
-        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir)
-        # 20991231.4 needs a reader for format 1.99; .3 is the newest this gem reads.
-        assert_equal "20991231.3", c.release.datestamp
-        assert_equal "20991231.3", c.latest.datestamp
+        # Block 3's claim: the file open after download is loaded_from :file, so the .sha256 is next to it.
+        %w[jsonl meta.json sha256].each { |x| assert File.file?(File.join(dir, "tides", "OTC_20991231.2.#{x}")), x }
+        c = OTC.new(file: File.join(dir, "tides", "OTC_20991231.2.jsonl"))
+        assert_equal :file, c.loaded_from
     ensure
         c&.close
     end

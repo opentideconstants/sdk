@@ -86,7 +86,7 @@ class PointerCacheTest < Minitest::Test
         log = Log.new
         c = OTC.new(base_url: srv.url("/"), cache_dir: cache, logger: log)
         assert_equal "20991231.2", c.latest.datestamp
-        assert(log.lines.any? { |lvl, m| lvl == :warn && m.include?("OTC_latest-f1.json") })
+        assert(log.lines.any? { |lvl, m| lvl == :warn && m.match?(/cannot cache OTC_latest-f1\.json/) }, log.lines.inspect)
     ensure
         c&.close
     end
@@ -113,11 +113,13 @@ class PointerCacheTest < Minitest::Test
         path = File.join(cache.pointer_dir, "OTC_index.json")
         paused = Queue.new
         b_state = Queue.new # :waiting (on the lock) or :done
+        wait_b = -> { pop_within(b_state, 5) } # the test's helper; inside write_atomic self is the cache
         cache.define_singleton_method(:write_atomic) do |p, bytes|
             if Thread.current[:writer] == "a" && p.end_with?(".etag")
                 paused << true
-                state = b_state.pop # never empty: b either waits on the lock or finishes
-                Thread.current[:b_state] = state
+                # b either waits on the lock or finishes; bounded, so a change in how Cache waits fails, not hangs
+                state = wait_b.call
+                Thread.current[:b_state] = state || :never_reached_the_lock_wait
             end
             super(p, bytes)
         end
@@ -140,7 +142,7 @@ class PointerCacheTest < Minitest::Test
         assert a.alive? && !paused.empty?, "writer a did not stop between its body and its ETag"
         b = write.call("b")
         [a, b].each { |t| t.join(10) or flunk("a writer did not finish") }
-        assert_equal :waiting, a[:b_state], "writer b did not wait for the lock"
+        assert_equal :waiting, a[:b_state], "writer b did not wait for the lock (does Cache still call #sleep?)"
         assert_equal ["b", "b"], [JSON.parse(File.read(path))["t"], File.read("#{path}.etag").delete('"')]
     end
 
