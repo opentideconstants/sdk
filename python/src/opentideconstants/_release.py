@@ -17,8 +17,8 @@ from types import MappingProxyType
 from typing import Iterator, List, Optional, Sequence, Tuple
 
 from . import _enums as E
-from ._errors import (FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError, StationNotFoundError,
-                      StationRemovedError, UnsupportedFormatError)
+from ._errors import (ChecksumError, FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError,
+                      StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, _is_finite, build_station,
                       freeze, parse_time)
@@ -938,9 +938,11 @@ def _validate_refs(d, conventions, licences):
 
 
 def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None,
-                  index_sha256: Optional[str] = None, commercial_only: bool = False) -> Release:
+                  index_sha256: Optional[str] = None, commercial_only: bool = False,
+                  json_sha256: Optional[str] = None) -> Release:
     """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json). commercial_only: the
-    open option of spec §4.2 (K-NC DR106)."""
+    open option of spec §4.2 (K-NC DR106). json_sha256: for a .json.gz, the OTC_{D}.json row that the decompressed
+    bytes must match (spec §5.3, CR3 DR77)."""
     name = path.name
     if name.endswith(".jsonl"):
         meta = _json(_read_bytes(meta_path_for(path)), str(meta_path_for(path)))
@@ -962,6 +964,8 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
             data = gzip.decompress(data)
         except (OSError, EOFError, zlib.error) as e:
             raise InvalidReleaseError(f"{path}: not gzip: {e}") from e
+        if json_sha256 is not None:
+            check_json_sha256(path, data, json_sha256)
     doc = _json(data, str(path))
     _check_meta(doc, str(path))
     stations = doc.get("stations")
@@ -997,6 +1001,15 @@ def _eager(meta, docs, files, commercial_only=False) -> Release:
                 stations[sid] = build_station(d, conv, lic, kinds.get(sid), eff[sid])
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs,
                    commercial_only=commercial_only)
+
+
+def check_json_sha256(gz_path: Path, data: bytes, expected: str) -> None:
+    """The decompressed bytes of an OTC_{D}.json.gz against the OTC_{D}.json row (spec §5.3, CR3 DR77)."""
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != expected:
+        name = gz_path.name[:-len(".gz")]
+        raise ChecksumError(f"{name} (decompressed from {gz_path.name}): SHA-256 {actual} does not match {expected}",
+                            file=str(gz_path.with_name(name)), expected=expected, actual=actual)
 
 
 def file_sha256(path: Path) -> str:

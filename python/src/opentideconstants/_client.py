@@ -26,8 +26,8 @@ from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, Inv
                       ReaderTooOldError, ReleaseNotFoundError, UnsupportedFormatError, redact_credentials)
 from ._http import TIMEOUT_MAX_S, TIMEOUT_MIN_S, Http, check_http_url
 from ._models import FileInfo, Nearby, ReleaseInfo, Station, Tombstone, UpdateResult
-from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, _read_bytes, file_sha256,
-                       load_document, meta_path_for, readable, version_key)
+from ._release import (SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release, _read_bytes, check_json_sha256,
+                       file_sha256, load_document, meta_path_for, readable, version_key)
 
 __version__ = "0.1.0"
 SDK = f"opentideconstants-python/{__version__}"
@@ -75,6 +75,19 @@ def _parse_sha256(data: bytes, what: str = ".sha256"):
             raise InvalidReleaseError(f"{what}: {name} is listed twice")
         rows[name] = m.group(1).lower()
     return rows
+
+
+def _need_rows(path: Path, opened, rows, sha_name: str) -> None:
+    """A local open, and verify on it, needs a row for every release file it reads, checked before any file is
+    hashed (spec §5.3, CR3 DR73); a .json.gz also needs the OTC_{D}.json row (CR3 DR77). A missing row is
+    checksum_mismatch "not listed", with file naming it."""
+    names = [p.name for p in opened]
+    if path.name.endswith(".json.gz"):
+        names.append(path.name[:-len(".gz")])
+    for n in names:
+        if n not in rows:
+            raise ChecksumError(f"{n} is not listed in {sha_name}", file=str(path.with_name(n)), expected=None,
+                                actual=None)
 
 
 def _split_file_name(name: str):
@@ -311,17 +324,23 @@ class OpenTideConstants:
             if not p.exists():
                 raise FileError(f"cannot open {p}: no such file", path=str(p))
         sha_path = path.with_name(f"OTC_{d}.sha256")
+        json_sha256 = None
         if sha_path.exists():
             rows = _parse_sha256(_read_bytes(sha_path), sha_path.name)
+            # every release file the open reads needs a row, before anything is hashed or loaded (spec §5.3, CR3
+            # DR73), and a .json.gz also the .json row that its decompressed bytes are checked against (CR3 DR77)
+            _need_rows(path, opened, rows, sha_path.name)
             for p in opened:
                 self._check_file(p, rows.get(p.name))
+            if ext == ".json.gz":
+                json_sha256 = rows[f"OTC_{d}.json"]
             files = [FileInfo(n, None, (path.parent / n).stat().st_size if (path.parent / n).exists() else None, rows[n])
                      for n in sorted(rows)]
             lf = "file"
         else:
             files = [FileInfo(p.name, None, p.stat().st_size, None) for p in sorted(opened, key=lambda p: p.name)]
             lf = "file_unverified"
-        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only)
+        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only, json_sha256=json_sha256)
         rel._opened = tuple(opened)
         self._set(rel, lf)
 
@@ -971,10 +990,21 @@ class OpenTideConstants:
                     raise ChecksumError(f"{sha_path.name}: SHA-256 {actual}, but the cached pointer lists {expected}",
                                         file=str(sha_path), expected=expected, actual=actual)
         rows = _parse_sha256(sha_body, sha_path.name)
+        local = self._loaded_from in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED)
         for p in opened:
             if not p.is_file():
                 raise FileError(f"cannot read {p}: no such file", path=str(p))
+        if local:
+            _need_rows(first, opened, rows, sha_path.name)   # spec §5.3, CR3 DR73 and DR77
+        for p in opened:
             self._check_file(p, rows.get(p.name))
+        if local and first.name.endswith(".json.gz"):
+            # the decompressed bytes against the .json row, as at open (CR3 DR77)
+            try:
+                data = gzip.decompress(_read_bytes(first))
+            except (OSError, EOFError, zlib.error) as e:
+                raise InvalidReleaseError(f"{first}: not gzip: {e}") from e
+            check_json_sha256(first, data, rows[first.name[:-len(".gz")]])
         self._log.info("verified %s", ds)
         return True
 
