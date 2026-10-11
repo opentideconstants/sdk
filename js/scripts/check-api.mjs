@@ -8,8 +8,13 @@
 // an error class declares exactly its manifest fields (cause is Error's own). A declaration file with a
 // type error (an unresolved type) fails, because the checks below would read such a type as any.
 //
-// After the check the script runs its own mutation self-test: each mutation of the declaration files must
-// be caught.
+// A name in api.json pending_port.typescript (prediction spec 5, not ported to TypeScript yet) is not required
+// and must not be exposed: no pending object, no pending member on its object (nor on the client, for a member
+// forwarded to it), no pending enum type, no pending error class (and its code is not in ErrorCode). Every
+// pending name must be a manifest name that applies to TypeScript.
+//
+// After the check the script runs its own mutation self-test: each mutation of the declaration files, or of the
+// manifest's pending list, must be caught.
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,24 +22,56 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const root = new URL("..", import.meta.url);
-const api = JSON.parse(readFileSync(new URL("../conformance/api.json", root), "utf8"));
+const API = JSON.parse(readFileSync(new URL("../conformance/api.json", root), "utf8"));
 const distDir = fileURLToPath(new URL("dist", root));
 
 const camel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
 const pascal = (s) => camel(s).replace(/^./, (c) => c.toUpperCase());
 const forTs = (m) => !m.languages || m.languages.includes("typescript");
 const tsName = (m) => (m.kind === "field" ? m.name : camel(m.name));
-const filterNames = api.filters.map((f) => camel(f.name));
+const filterNames = API.filters.map((f) => camel(f.name));
 const FILTER_OPS = new Set(["stations", "iter_stations", "search", "near", "nearest"]);
 
-/** The problems of the declarations in dir/index.d.ts (and the runtime module, if given). */
-function check(dir, runtime) {
+/** The names pending_port.typescript lists, and a problem for each that is not a manifest name for TypeScript. */
+function pendingNames(api, fail) {
+    const pend = api.pending_port?.typescript;
+    const out = { objects: new Set(), members: new Set(), enums: new Set(), errors: new Set() };
+    if (!pend || typeof pend !== "object") { fail("api.json has no pending_port.typescript"); return out; }
+    const unknown = Object.keys(pend).filter((k) => !(k in out));
+    if (unknown.length) fail(`pending_port.typescript: unknown key(s) ${JSON.stringify(unknown.sort())}`);
+    for (const o of pend.objects ?? []) {
+        if (!api.objects[o]) fail(`pending_port.typescript: object ${o} is not a manifest object`);
+        out.objects.add(o);
+    }
+    for (const qn of pend.members ?? []) {
+        const [obj, name] = [qn.slice(0, qn.indexOf(".")), qn.slice(qn.indexOf(".") + 1)];
+        const m = qn.includes(".") ? api.objects[obj]?.members.find((x) => x.name === name) : undefined;
+        if (!m || !forTs(m)) fail(`pending_port.typescript: member ${qn} is not a manifest member for TypeScript`);
+        out.members.add(qn);
+    }
+    for (const e of pend.enums ?? []) {
+        if (!api.enums[e]) fail(`pending_port.typescript: enum ${e} is not a manifest enum`);
+        out.enums.add(e);
+    }
+    for (const c of pend.errors ?? []) {
+        if (!api.errors.some((e) => e.code === c && e.class && e.languages.includes("typescript"))) {
+            fail(`pending_port.typescript: error ${c} is not a manifest error with a TypeScript class`);
+        }
+        out.errors.add(c);
+    }
+    return out;
+}
+
+/** The problems of the declarations in dir/index.d.ts (and the runtime module, if given; and the manifest api). */
+function check(dir, runtime, api = API) {
     const dts = join(dir, "index.d.ts");
     const program = ts.createProgram([dts], { strict: true, skipLibCheck: false, noEmit: true, types: ["node"] });
     const checker = program.getTypeChecker();
     const problems = [];
     const fail = (msg) => problems.push(msg);
     let checked = 0;
+    const pend = pendingNames(api, fail);
+    const enumAlias = (name) => (api.objects[pascal(name)] ? `${pascal(name)}Name` : pascal(name));
 
     // an unresolved type would read as any below, so a type error in the declarations is a failure
     for (const d of ts.getPreEmitDiagnostics(program)) {
@@ -95,10 +132,13 @@ function check(dir, runtime) {
     }
 
     for (const [objName, obj] of Object.entries(api.objects)) {
-        const members = obj.members.filter(forTs);
+        if (pend.objects.has(objName)) continue;
+        const members = obj.members.filter((m) => forTs(m) && !pend.members.has(`${objName}.${m.name}`));
         const expected = new Map(members.map((m) => [tsName(m), m]));
         if (objName === "Client") {
-            for (const m of api.objects.Release.members) if (m.forwarded_to_client && forTs(m)) expected.set(tsName(m), m);
+            for (const m of api.objects.Release.members) {
+                if (m.forwarded_to_client && forTs(m) && !pend.members.has(`Release.${m.name}`)) expected.set(tsName(m), m);
+            }
         }
         const sym = exportsByName.get(objName === "Client" ? "OpenTideConstants" : objName);
         if (!sym) { fail(`${objName}: not exported`); continue; }
@@ -138,7 +178,7 @@ function check(dir, runtime) {
     // errors: every class is exported, extends the base class directly, and declares exactly its fields
     const base = api.error_base_class.typescript;
     if (!exportsByName.has(base)) fail(`error base class ${base} is not exported`);
-    const errorClasses = api.errors.filter((e) => e.class && e.languages.includes("typescript"));
+    const errorClasses = api.errors.filter((e) => e.class && e.languages.includes("typescript") && !pend.errors.has(e.code));
     for (const e of errorClasses) {
         const sym = exportsByName.get(e.class);
         if (!sym) { fail(`error ${e.code}: class ${e.class} is not exported`); continue; }
@@ -165,7 +205,8 @@ function check(dir, runtime) {
 
     // enums: string-literal union type aliases
     for (const [name, values] of Object.entries(api.enums)) {
-        const alias = api.objects[pascal(name)] ? `${pascal(name)}Name` : pascal(name);
+        if (pend.enums.has(name)) continue;
+        const alias = enumAlias(name);
         const sym = exportsByName.get(alias);
         if (!sym) { fail(`enum ${name}: type ${alias} is not exported`); continue; }
         const t = checker.getDeclaredTypeOfSymbol(resolve(sym));
@@ -181,16 +222,23 @@ function check(dir, runtime) {
         if (runtime && JSON.stringify(runtime[name]) !== JSON.stringify(c.value)) fail(`constant ${name} is ${JSON.stringify(runtime[name])}, expected ${JSON.stringify(c.value)}`);
         checked++;
     }
-    // reserved phase 2 names must not be exposed yet: no reserved object, no reserved operation on any
-    // exported class or interface, no reserved error class
-    for (const op of api.reserved_phase2.operations) {
-        if (op.object !== "Client" && exportsByName.has(op.object)) fail(`phase 2 object ${op.object} is exposed`);
-        if (exportsByName.has(camel(op.name))) fail(`phase 2 name ${camel(op.name)} is exported`);
-        for (const [name, sym] of exportsByName) {
-            if (publicMembers(resolve(sym))?.has(camel(op.name))) fail(`phase 2 name ${name}.${camel(op.name)} is exposed`);
+    // pending names (pending_port.typescript) must not be exposed yet
+    for (const o of pend.objects) if (exportsByName.has(o)) fail(`pending object ${o} is exported (pending_port.typescript)`);
+    for (const qn of pend.members) {
+        const [obj, name] = [qn.slice(0, qn.indexOf(".")), qn.slice(qn.indexOf(".") + 1)];
+        const m = api.objects[obj]?.members.find((x) => x.name === name);
+        if (!m) continue;
+        const owners = [obj === "Client" ? "OpenTideConstants" : obj];
+        if (obj === "Release" && m.forwarded_to_client) owners.push("OpenTideConstants");
+        for (const owner of owners) {
+            const sym = exportsByName.get(owner);
+            if (sym && publicMembers(resolve(sym))?.has(tsName(m))) fail(`pending name ${owner}.${tsName(m)} is exposed (pending_port.typescript)`);
         }
     }
-    for (const e of api.reserved_phase2.errors ?? []) if (exportsByName.has(e.class)) fail(`phase 2 error class ${e.class} is exported`);
+    for (const e of pend.enums) if (exportsByName.has(enumAlias(e))) fail(`pending enum type ${enumAlias(e)} is exported (pending_port.typescript)`);
+    for (const e of api.errors) {
+        if (pend.errors.has(e.code) && e.class && exportsByName.has(e.class)) fail(`pending error class ${e.class} is exported (pending_port.typescript)`);
+    }
     return { problems, checked };
 }
 
@@ -210,19 +258,52 @@ const MUTATIONS = [
         "Client.close: 1 parameters, expected 0"],
     ["extra-option", [sub("types.d.ts", "export interface PruneOptions {", "export interface PruneOptions {\n    dryRun?: boolean;")],
         "Client.prune: options have extra dryRun"],
-    ["reserved-op", [sub("release.d.ts", "export declare class Release {", "export declare class Release {\n    heights(): void;")],
-        "phase 2 name Release.heights is exposed"],
-    ["reserved-error-class", [
+    ["pending-op", [sub("release.d.ts", "export declare class Release {", "export declare class Release {\n    heights(): void;")],
+        "pending name Release.heights is exposed"],
+    ["pending-op-on-client", [sub("client.d.ts", "close(): void;", "close(): void;\n    currentEvents(): void;")],
+        "pending name OpenTideConstants.currentEvents is exposed"],
+    ["pending-error-class", [
         sub("errors.d.ts", "export declare class FileExistsError", "export declare class UnsupportedConventionError extends OpenTideConstantsError {\n}\nexport declare class FileExistsError"),
         sub("index.d.ts", "CacheError, FileExistsError,", "CacheError, UnsupportedConventionError, FileExistsError,")],
-        "phase 2 error class UnsupportedConventionError is exported"],
+        "pending error class UnsupportedConventionError is exported"],
+    ["pending-object", [sub("index.d.ts", "export {", "export declare class AstroTable {\n}\nexport {")], "pending object AstroTable is exported"],
+    ["pending-enum", [sub("index.d.ts", "export {", "export type ExtremeType = \"high\" | \"low\";\nexport {")],
+        "pending enum type ExtremeType is exported"],
     ["enum-extra-value", [sub("types.d.ts", "\"webcaltides\" | \"linz\"", "\"webcaltides\" | \"foo\" | \"linz\"")], "enum AliasSystem"],
     ["no-SUPPORTED_FORMAT_VERSION", [sub("index.d.ts", "SUPPORTED_FORMAT_VERSION, ", "")], "constant SUPPORTED_FORMAT_VERSION is not exported"],
     ["filter-dropped", [sub("types.d.ts", "sourceType?: SourceType | null;", "sourceKind?: SourceType | null;")], "options miss sourceType"],
 ];
 
+const pendingMutation = (fn) => {
+    const a = structuredClone(API);
+    fn(a.pending_port.typescript);
+    return a;
+};
+const without = (list, x) => { const i = list.indexOf(x); if (i < 0) throw new Error(`no ${x} in the pending list`); list.splice(i, 1); };
+const API_MUTATIONS = [
+    // [name, manifest mutation, a substring of the problem it must cause]
+    ["pending-member-dropped", (p) => without(p.members, "Release.heights"), "Release: missing heights"],
+    ["pending-forwarded-dropped", (p) => without(p.members, "Release.extremes"), "Client: missing extremes"],
+    ["pending-object-dropped", (p) => without(p.objects, "AstroTable"), "AstroTable: not exported"],
+    ["pending-enum-dropped", (p) => without(p.enums, "extreme_type"), "enum extreme_type: type ExtremeType is not exported"],
+    ["pending-error-dropped", (p) => without(p.errors, "no_constants"), "error no_constants: class NoConstantsError is not exported"],
+    ["pending-unknown-member", (p) => p.members.push("Release.frobnicate"), "pending_port.typescript: member Release.frobnicate"],
+    ["pending-unknown-object", (p) => p.objects.push("Astro"), "pending_port.typescript: object Astro"],
+    ["pending-unknown-error", (p) => p.errors.push("not_found"), "pending_port.typescript: error not_found"],
+    ["pending-unknown-key", (p) => { p.functions = []; }, "pending_port.typescript: unknown key(s)"],
+];
+
 function selfTest(baseProblems) {
     const out = [];
+    for (const [name, mutate, expect] of API_MUTATIONS) {
+        try {
+            const got = check(distDir, null, pendingMutation(mutate)).problems;
+            const fresh = got.filter((p) => !baseProblems.includes(p));
+            if (!fresh.some((p) => p.includes(expect))) out.push(`${name}: not caught (wanted a problem with ${JSON.stringify(expect)}; new problems ${JSON.stringify(fresh)})`);
+        } catch (e) {
+            out.push(`${name}: the mutation or the check failed: ${e.message}`);
+        }
+    }
     for (const [name, edits, expect] of MUTATIONS) {
         const dir = mkdtempSync(join(tmpdir(), "otc-check-api-"));
         try {
@@ -245,7 +326,7 @@ function selfTest(baseProblems) {
     return out;
 }
 
-export { MUTATIONS };
+export { API_MUTATIONS, MUTATIONS };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     const runtime = await import(new URL("dist/index.js", root).href);
@@ -256,12 +337,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         for (const p of problems) console.error(`  - ${p}`);
         rc = 1;
     } else {
-        console.log(`API manifest check OK: ${checked} names compared with conformance/api.json (suite ${api.suite_version})`);
+        console.log(`API manifest check OK: ${checked} names compared with conformance/api.json (suite ${API.suite_version})`);
     }
     if (!process.argv.includes("--no-self-test")) {
         const bad = selfTest(problems);
         for (const b of bad) console.error(`SELF-TEST ${b}`);
-        console.log(`self-test: ${MUTATIONS.length - bad.length} of ${MUTATIONS.length} mutations caught`);
+        const n = MUTATIONS.length + API_MUTATIONS.length;
+        console.log(`self-test: ${n - bad.length} of ${n} mutations caught`);
         if (bad.length) rc = 1;
     }
     process.exit(rc);

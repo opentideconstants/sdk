@@ -4,7 +4,7 @@
 """Check the C public header against the API manifest (conformance/api.json).
 
     uv run c/tools/check_manifest.py      exit 0 when the header declares every C name the manifest implies,
-                                          declares no extra enum value or status, and no phase 2 name
+                                          declares no extra enum value or status, and no pending name
 
 Rules (api.json "naming.c"): an operation's c names its function(s) (a slash separates several, and each
 must be declared); c "f(p)" names the parameter p of the function f; c "(C: T.m)" names the member m of
@@ -14,10 +14,16 @@ T_<singular>_count and T_<singular>_at, or a struct member when c_struct is true
 with no c, or a member of an object with no C type, is an error unless its languages leave out c. Enum
 values are OTC_<ENUM>_<VALUE> plus OTC_<ENUM>_OTHER (and an optional OTC_<ENUM>_UNSET), and the C enum
 has no other value. Error codes map to the otc_status values in errors[].c, and otc_status has no other
-value than OTC_OK and the phase 2 errors. Every filter is a member of otc_filter. Every constant with a c
+value than OTC_OK and the pending errors. Every filter is a member of otc_filter. Every constant with a c
 is declared, and so is every name in constants.c_only. Every client_options.c_only option is a member of
-each options struct its note names. No reserved_phase2 operation is declared (the phase 2 errors may be,
-CR D24). A C type T may be declared as T or T_t.
+each options struct its note names. Every c_structs struct is a typedef with its members, and its init
+function is declared. A C type T may be declared as T or T_t.
+
+Names in pending_port.c (prediction spec 5, not ported to C yet) are not required and must not be declared:
+a pending object's C type and the C functions its members name, a pending member's C function(s), a pending
+enum's values and a pending c_structs struct. Exception (CR D24): a pending error's otc_status value may be
+declared or not, so that its number can be fixed early (OTC_E_UNSUPPORTED_CONVENTION = 18). Every pending
+name must be a manifest name that applies to C.
 
 A name counts as declared only by a declaration of its kind: a function by an OTC_API prototype or a
 function-like #define, a constant by #define or an enum value, a type by a typedef. A token in a comment
@@ -38,7 +44,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FILTER_STRUCT = "otc_filter"
-REQUIRED_KEYS = ("objects", "enums", "errors", "constants", "filters", "client_options", "reserved_phase2")
+REQUIRED_KEYS = ("objects", "enums", "errors", "constants", "filters", "client_options", "c_structs", "pending_port")
+PENDING_KEYS = ("objects", "members", "enums", "errors", "c_structs")
 
 
 def strip_comments(text):
@@ -242,6 +249,41 @@ def check(api, header):
         langs = item.get("languages")
         return langs is None or "c" in langs
 
+    def c_functions(c):
+        """The C function names a member's c gives (none for a note or a struct member)."""
+        if not c or c.startswith("(") or "{object}" in c:
+            return []
+        return [re.sub(r"\(\w+\)$", "", fn) for fn in c.split("/")]
+
+    # pending names (pending_port.c): each must be a manifest name that applies to C
+    pend = api["pending_port"].get("c")
+    if not isinstance(pend, dict):
+        problems.append("api.json has no pending_port.c")
+        pend = {}
+    unknown = sorted(set(pend) - set(PENDING_KEYS))
+    if unknown:
+        problems.append(f"pending_port.c: unknown key(s) {unknown}")
+    pend_objects = set(pend.get("objects", []))
+    for o in sorted(pend_objects - set(api["objects"])):
+        problems.append(f"pending_port.c: object {o} is not a manifest object")
+    pend_members = set()
+    for qn in pend.get("members", []):
+        oname, _, name = qn.partition(".")
+        ms = [m for m in api["objects"].get(oname, {}).get("members", []) if m.get("name") == name]
+        if not ms or not for_c(ms[0]):
+            problems.append(f"pending_port.c: member {qn} is not a manifest member for C")
+        pend_members.add((oname, name))
+    pend_enums = set(pend.get("enums", []))
+    for e in sorted(pend_enums - set(api["enums"])):
+        problems.append(f"pending_port.c: enum {e} is not a manifest enum")
+    pend_errors = set(pend.get("errors", []))
+    c_codes = {e.get("code") for e in api["errors"] if for_c(e) and e.get("c")}
+    for c in sorted(pend_errors - c_codes):
+        problems.append(f"pending_port.c: error {c} is not a manifest error with a C status")
+    pend_structs = set(pend.get("c_structs", []))
+    for st in sorted(pend_structs - (set(api["c_structs"]) - {"note"})):
+        problems.append(f"pending_port.c: c_structs {st} is not a manifest c_structs name")
+
     def need_param(fn, param, where):
         if fn not in h.functions:
             problems.append(f"{fn}  ({where}: no OTC_API function)")
@@ -250,6 +292,8 @@ def check(api, header):
 
     # objects
     for oname, obj in api["objects"].items():
+        if oname in pend_objects:
+            continue
         ctype = obj.get("c")
         if ctype:
             need_type(ctype, f"type of {oname}")
@@ -258,7 +302,7 @@ def check(api, header):
                 problems.append(f"{oname}: member #{i} has no name  (api.json entry {m})")
                 continue
             where = f"{oname}.{m['name']}"
-            if not for_c(m):
+            if not for_c(m) or (oname, m["name"]) in pend_members:
                 continue
             c = m.get("c")
             if c and "{object}" in c:
@@ -322,6 +366,8 @@ def check(api, header):
 
     # enums: exactly the manifest's values, plus OTHER and an optional UNSET
     for ename, values in api["enums"].items():
+        if ename in pend_enums:
+            continue
         prefix = "OTC_" + upper(ename) + "_"
         want = {prefix + upper(v) for v in list(values) + ["other"]}
         for v in sorted(want):
@@ -336,8 +382,13 @@ def check(api, header):
 
     # errors: otc_status values
     status_values = set()
+    pending_statuses = set()
     for e in api["errors"]:
         if not for_c(e):
+            continue
+        if e.get("code") in pend_errors:
+            if e.get("c"):
+                pending_statuses.add(e["c"])   # CR D24: may be declared, or not
             continue
         c = e.get("c")
         if not c:
@@ -346,11 +397,10 @@ def check(api, header):
         status_values.add(c)
         if c not in h.enum_values:
             problems.append(f"{c}  (error {e.get('code')}: no otc_status value)")
-    reserved_errors = {e.get("c") for e in api["reserved_phase2"].get("errors", []) if e.get("c")}
     status_block = h.enum_of("OTC_OK")[1]
     if not status_block:
         problems.append("OTC_OK  (otc_status: no enum value)")
-    extra = sorted(set(status_block) - status_values - reserved_errors - {"OTC_OK"})
+    extra = sorted(set(status_block) - status_values - pending_statuses - {"OTC_OK"})
     if extra:
         problems.append(f"otc_status: extra value(s) {extra}")
 
@@ -380,16 +430,44 @@ def check(api, header):
         for s in structs:
             need_member(s, opt.get("name"), "client option, C only")
 
-    # phase 2 operations must not be declared yet; each names its C function(s), and a c "f(p)" names f
-    for op in api["reserved_phase2"].get("operations", []):
-        if not op.get("c"):
-            problems.append(f"reserved_phase2 operation {op.get('object')}.{op.get('name')}: no c, so nothing "
-                            "checks that it is not declared")
+    # C structs no manifest object maps (c_structs): a typedef with its members, and its init function
+    for sname, spec in api["c_structs"].items():
+        if sname == "note" or sname in pend_structs:
             continue
-        for fn in op["c"].split("/"):
-            fn = re.sub(r"\(\w+\)$", "", fn)
-            if fn and h.declared(fn):
-                problems.append(f"{fn}  (reserved for phase 2: must not be declared yet)")
+        need_type(sname, f"c_structs {sname}")
+        for mem in spec.get("members", []):
+            need_member(sname, mem, f"c_structs {sname}")
+        if spec.get("init"):
+            need_function(spec["init"], f"c_structs {sname} init")
+
+    # pending names must not be declared yet (a pending error's status may be, CR D24)
+    def absent(name, why):
+        if name and h.declared(name):
+            problems.append(f"{name}  (pending for C: {why}, must not be declared yet)")
+
+    for oname in sorted(pend_objects):
+        obj = api["objects"].get(oname, {})
+        if obj.get("c"):
+            absent(obj["c"], f"type of {oname}")
+            absent(obj["c"] + "_t", f"type of {oname}")
+        for m in obj.get("members", []):
+            if for_c(m):
+                for fn in c_functions(m.get("c")):
+                    absent(fn, f"{oname}.{m.get('name')}")
+    for oname, name in sorted(pend_members):
+        for m in api["objects"].get(oname, {}).get("members", []):
+            if m.get("name") == name:
+                if not c_functions(m.get("c")):
+                    problems.append(f"pending_port.c: member {oname}.{name} has no C function, so nothing checks "
+                                    f"that it is not declared")
+                for fn in c_functions(m.get("c")):
+                    absent(fn, f"{oname}.{name}")
+    for ename in sorted(pend_enums):
+        prefix = "OTC_" + upper(ename) + "_"
+        for v in sorted(v for v in h.enum_values if v.startswith(prefix)):
+            problems.append(f"{v}  (pending for C: enum {ename}, must not be declared yet)")
+    for sname in sorted(pend_structs):
+        absent(sname, f"c_structs {sname}")
 
     return problems, notes
 
@@ -450,8 +528,42 @@ def _add_member(obj, member):
 
 MUTATIONS = [
     # (name, header mutation or None, manifest mutation or None, expected substring, or None = no new problem)
-    ("reserved-phase2-declared", _sub("OTC_API void otc_close(", "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
-     None, "otc_heights  (reserved"),
+    ("pending-function-declared", _sub("OTC_API void otc_close(", "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
+     None, "otc_heights  (pending"),
+    ("pending-object-function-declared", _sub("OTC_API void otc_close(", "OTC_API otc_status otc_astro_node_factor(void);\n"
+                                              "OTC_API void otc_close("), None, "otc_astro_node_factor  (pending"),
+    ("pending-result-function-declared", _sub("OTC_API void otc_close(", "OTC_API otc_status otc_tz_open(void);\n"
+                                              "OTC_API void otc_close("), None, "otc_tz_open  (pending"),
+    ("pending-object-type-declared", _sub("OTC_API void otc_close(", "typedef struct otc_height_t { int64_t t; } otc_height_t;\n"
+                                          "OTC_API void otc_close("), None, "otc_height_t  (pending"),
+    ("pending-struct-declared", _sub("OTC_API void otc_close(", "typedef struct otc_predict_opts { size_t struct_size; } "
+                                     "otc_predict_opts;\nOTC_API void otc_close("), None, "otc_predict_opts  (pending"),
+    ("pending-enum-value-declared", _sub("OTC_API void otc_close(", "typedef enum { OTC_EXTREME_TYPE_HIGH, "
+                                         "OTC_EXTREME_TYPE_OTHER } otc_extreme_type_t;\nOTC_API void otc_close("), None,
+     "OTC_EXTREME_TYPE_HIGH  (pending"),
+    ("pending-status-declared-ok", _sub("OTC_E_READER_TOO_OLD = 19", "OTC_E_READER_TOO_OLD = 19,\n    OTC_E_NO_CONSTANTS = 20"),
+     None, None),
+    ("pending-member-dropped", None, _api(lambda a: a["pending_port"]["c"]["members"].remove("Release.heights")),
+     "otc_heights  (Release.heights: no OTC_API function)"),
+    ("pending-object-dropped", None, _api(lambda a: a["pending_port"]["c"]["objects"].remove("HeightPoint")),
+     "otc_height_t  (type of HeightPoint: no typedef)"),
+    ("pending-enum-dropped", None, _api(lambda a: a["pending_port"]["c"]["enums"].remove("extreme_type")),
+     "OTC_EXTREME_TYPE_HIGH  (enum extreme_type: no enum value)"),
+    ("pending-error-dropped", None, _api(lambda a: a["pending_port"]["c"]["errors"].remove("no_constants")),
+     "OTC_E_NO_CONSTANTS  (error no_constants: no otc_status value)"),
+    ("pending-error-dropped-status-present-ok", None, _api(lambda a: a["pending_port"]["c"]["errors"].remove(
+        "unsupported_convention")), None),
+    ("pending-struct-dropped", None, _api(lambda a: a["pending_port"]["c"]["c_structs"].remove("otc_predict_opts")),
+     "otc_predict_opts  (c_structs otc_predict_opts: no typedef)"),
+    ("pending-unknown-member", None, _api(lambda a: a["pending_port"]["c"]["members"].append("Release.frobnicate")),
+     "pending_port.c: member Release.frobnicate is not a manifest member for C"),
+    ("pending-member-not-for-c", None, _api(lambda a: a["pending_port"]["c"]["members"].append("Release.ranges")),
+     "pending_port.c: member Release.ranges is not a manifest member for C"),
+    ("pending-unknown-error", None, _api(lambda a: a["pending_port"]["c"]["errors"].append("unsupported")),
+     "pending_port.c: error unsupported"),
+    ("pending-unknown-key", None, _api(lambda a: a["pending_port"]["c"].__setitem__("functions", [])),
+     "pending_port.c: unknown key(s)"),
+    ("no-pending_port", None, _api(lambda a: a.pop("pending_port")), "api.json has no pending_port"),
     ("no-OTC_FORMAT_VERSION", _drop_line(r"^#define OTC_FORMAT_VERSION .*$"), None, "OTC_FORMAT_VERSION  (constant"),
     ("new-constant-c", None, _api(lambda a: a["constants"].__setitem__("X", {"value": 1, "c": "OTC_X_MISSING"})),
      "OTC_X_MISSING"),
@@ -508,10 +620,10 @@ MUTATIONS = [
     # comments and #if 0 (R3-310, R3-312), enum values without the prefix (R3-311)
     ("line-comment-opens-no-block", _then(_sub("OTC_API void otc_close(", "// see data/*.json\n"
                                                 "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
-                                           _append("/* end */\n")), None, "otc_heights  (reserved"),
+                                           _append("/* end */\n")), None, "otc_heights  (pending"),
     ("string-opens-no-block", _then(_sub("OTC_API void otc_close(", '#define OTC_ZZ_URL "a/*b"\n'
                                           "OTC_API otc_status otc_heights(void);\nOTC_API void otc_close("),
-                                     _append("/* end */\n")), None, "otc_heights  (reserved"),
+                                     _append("/* end */\n")), None, "otc_heights  (pending"),
     ("unprefixed-extra-enum-value", _sub("OTC_ALIAS_SYSTEM_OTHER", "BOGUS_EXTRA, OTC_ALIAS_SYSTEM_OTHER"), None,
      "extra value(s) ['BOGUS_EXTRA']"),
     ("prototype-only-in-if-0", _wrap(r"^OTC_API void otc_close\(.*$", "#if 0\n", "\n#endif"), None,
@@ -558,7 +670,7 @@ def main(argv):
             print("  " + m)
         rc = 1
     else:
-        print("C header declares every name the API manifest implies, and no extra enum value or phase 2 name")
+        print("C header declares every name the API manifest implies, and no extra enum value or pending name")
     if not a.no_self_test:
         failures = self_test(api, header)
         if failures:

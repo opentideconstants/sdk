@@ -1,5 +1,5 @@
 {
- "description": "OpenTideConstants SDK API manifest (SDK spec section 4). Every public operation, attribute, argument, default, enum value and error code, by its snake_case name. Each SDK's CI turns the names into its own form by the naming rules below and compares them with its public surface; a missing or an extra name fails CI.",
+ "description": "OpenTideConstants SDK API manifest (SDK spec section 4). Every public operation, attribute, argument, default, enum value and error code, by its snake_case name. Each SDK's CI turns the names into its own form by the naming rules below and compares them with its public surface; a missing or an extra name fails CI. Names in pending_port are not built yet in that language and must be absent.",
  "suite_version": "1.0",
  "supported_format_majors": [
   1
@@ -1092,6 +1092,476 @@
      "c": "otc_attribution",
      "forwarded_to_client": true,
      "note": "exact text, byte for byte (spec 4.6): Tidal constants: OpenTideConstants {datestamp}, doi:{concept_doi}, CC BY 4.0. Sources: {provider}: {attribution}; ... (the release URL replaces doi:{concept_doi} when concept_doi is null; never the version DOI); for a subordinate station it follows subordinate_offsets.reference_station_id through at most 16 links (with a seen-set), adding every subordinate_offsets.licence_id on the path and the licence of the first recommended set it reaches, a loop or missing station ending the walk with no error; a station id or Station that is unknown, removed or from another release is invalid_argument (C OTC_E_INVALID_ARGUMENT), never skipped; a licence whose provider is null prints {attribution} alone, with no '{provider}: ' prefix, and is never merged with another entry; an empty stations list gives the same text as none (every licence in the release)"
+    },
+    {
+     "name": "heights",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "start",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "prediction spec 4.1: Ruby Time, Python aware datetime (naive is invalid_argument), TypeScript Date, C int64_t seconds since the Unix epoch; floored to the whole second; the window is [start, stop)"
+      },
+      {
+       "name": "stop",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "as start; start > stop is invalid_argument; start == stop is empty"
+      },
+      {
+       "name": "step_s",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": 600,
+       "note": "seconds, a positive integer by the per-language argument rule of SDK spec 4.3 (Python int not bool, TypeScript Number.isSafeInteger, C int64_t); otherwise invalid_argument"
+      },
+      {
+       "name": "datum",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "values": [
+        "mean_level",
+        "zero",
+        "chart"
+       ],
+       "note": "mean_level, zero, chart, or a key of datum.named (prediction spec 4.5); null = the method's default; a value of the wrong type is invalid_argument"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      }
+     ],
+     "returns": "HeightSeries",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "no_constants",
+      "quantity_mismatch",
+      "unsupported_convention",
+      "no_astro_table",
+      "unsupported_constituent",
+      "time_out_of_range",
+      "datum_unavailable",
+      "reference_unavailable",
+      "not_built",
+      "extremes_only"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_heights",
+     "forwarded_to_client": true,
+     "typescript_async": true,
+     "note": "prediction spec 5.2; loaded on first use (5.1); C takes const otc_predict_opts * (otc_predict_opts_init: step_s, datum, set_id, bin_number, info) and the SDK spec 6.4 out/cap/count arrays; C built without otc_predict returns OTC_E_NOT_BUILT whatever its arguments (a NULL handle included); items at start, start + step_s, ... before stop; extremes_only at a station predicted by the event method (4.8a)"
+    },
+    {
+     "name": "heights_at",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "times",
+       "type": "instant[]",
+       "required": true,
+       "positional": true,
+       "note": "each floored to the whole second; one item per instant, in the given order, repeats kept; C const int64_t *times and n, out holds n items"
+      },
+      {
+       "name": "datum",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "values": [
+        "mean_level",
+        "zero",
+        "chart"
+       ],
+       "note": "mean_level, zero, chart, or a key of datum.named (prediction spec 4.5); null = the method's default; a value of the wrong type is invalid_argument"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      }
+     ],
+     "returns": "HeightSeries",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "no_constants",
+      "quantity_mismatch",
+      "unsupported_convention",
+      "no_astro_table",
+      "unsupported_constituent",
+      "time_out_of_range",
+      "datum_unavailable",
+      "reference_unavailable",
+      "not_built",
+      "extremes_only"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_heights_at",
+     "forwarded_to_client": true,
+     "typescript_async": true,
+     "note": "prediction spec 5.2; loaded on first use (5.1); C takes const otc_predict_opts * (otc_predict_opts_init: step_s, datum, set_id, bin_number, info) and the SDK spec 6.4 out/cap/count arrays; C built without otc_predict returns OTC_E_NOT_BUILT whatever its arguments (a NULL handle included)"
+    },
+    {
+     "name": "extremes",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "start",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "prediction spec 4.1: Ruby Time, Python aware datetime (naive is invalid_argument), TypeScript Date, C int64_t seconds since the Unix epoch; floored to the whole second; the window is [start, stop)"
+      },
+      {
+       "name": "stop",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "as start; start > stop is invalid_argument; start == stop is empty"
+      },
+      {
+       "name": "datum",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "values": [
+        "mean_level",
+        "zero",
+        "chart"
+       ],
+       "note": "mean_level, zero, chart, or a key of datum.named (prediction spec 4.5); null = the method's default; a value of the wrong type is invalid_argument"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      }
+     ],
+     "returns": "ExtremeList",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "no_constants",
+      "quantity_mismatch",
+      "unsupported_convention",
+      "no_astro_table",
+      "unsupported_constituent",
+      "time_out_of_range",
+      "datum_unavailable",
+      "reference_unavailable",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_extremes",
+     "forwarded_to_client": true,
+     "typescript_async": true,
+     "note": "prediction spec 5.2; loaded on first use (5.1); C takes const otc_predict_opts * (otc_predict_opts_init: step_s, datum, set_id, bin_number, info) and the SDK spec 6.4 out/cap/count arrays; C built without otc_predict returns OTC_E_NOT_BUILT whatever its arguments (a NULL handle included); high and low water (4.6, 4.8, 4.8a)"
+    },
+    {
+     "name": "currents",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "start",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "prediction spec 4.1: Ruby Time, Python aware datetime (naive is invalid_argument), TypeScript Date, C int64_t seconds since the Unix epoch; floored to the whole second; the window is [start, stop)"
+      },
+      {
+       "name": "stop",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "as start; start > stop is invalid_argument; start == stop is empty"
+      },
+      {
+       "name": "step_s",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": 600,
+       "note": "seconds, a positive integer by the per-language argument rule of SDK spec 4.3 (Python int not bool, TypeScript Number.isSafeInteger, C int64_t); otherwise invalid_argument"
+      },
+      {
+       "name": "bin_number",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a current bin's bin number, 1 to 2^53 - 1 (9007199254740991); null = the default bin (prediction spec 4.7); outside C 0 or less is invalid_argument; C int64_t, where 0 = the default and a negative value is invalid_argument; above 2^53 - 1 is invalid_argument in every SDK"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      }
+     ],
+     "returns": "CurrentSeries",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "no_constants",
+      "quantity_mismatch",
+      "unsupported_convention",
+      "no_astro_table",
+      "unsupported_constituent",
+      "time_out_of_range",
+      "bin_not_found",
+      "reference_unavailable",
+      "not_built",
+      "extremes_only"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_currents",
+     "forwarded_to_client": true,
+     "typescript_async": true,
+     "note": "prediction spec 5.2; loaded on first use (5.1); C takes const otc_predict_opts * (otc_predict_opts_init: step_s, datum, set_id, bin_number, info) and the SDK spec 6.4 out/cap/count arrays; C built without otc_predict returns OTC_E_NOT_BUILT whatever its arguments (a NULL handle included); extremes_only at any subordinate current station"
+    },
+    {
+     "name": "current_events",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "start",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "prediction spec 4.1: Ruby Time, Python aware datetime (naive is invalid_argument), TypeScript Date, C int64_t seconds since the Unix epoch; floored to the whole second; the window is [start, stop)"
+      },
+      {
+       "name": "stop",
+       "type": "instant",
+       "required": true,
+       "positional": false,
+       "note": "as start; start > stop is invalid_argument; start == stop is empty"
+      },
+      {
+       "name": "bin_number",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a current bin's bin number, 1 to 2^53 - 1 (9007199254740991); null = the default bin (prediction spec 4.7); outside C 0 or less is invalid_argument; C int64_t, where 0 = the default and a negative value is invalid_argument; above 2^53 - 1 is invalid_argument in every SDK"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      }
+     ],
+     "returns": "CurrentEventList",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "no_constants",
+      "quantity_mismatch",
+      "unsupported_convention",
+      "no_astro_table",
+      "unsupported_constituent",
+      "time_out_of_range",
+      "bin_not_found",
+      "reference_unavailable",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_current_events",
+     "forwarded_to_client": true,
+     "typescript_async": true,
+     "note": "prediction spec 5.2; loaded on first use (5.1); C takes const otc_predict_opts * (otc_predict_opts_init: step_s, datum, set_id, bin_number, info) and the SDK spec 6.4 out/cap/count arrays; C built without otc_predict returns OTC_E_NOT_BUILT whatever its arguments (a NULL handle included); max_flood, max_ebb and the slacks (4.7, 4.9)"
+    },
+    {
+     "name": "datums",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = the recommended set"
+      },
+      {
+       "name": "all_sets",
+       "type": "boolean",
+       "required": false,
+       "positional": false,
+       "default": false,
+       "note": "one DatumInfo per set; C: none (otc_datums per set)"
+      }
+     ],
+     "returns": "DatumInfo|DatumInfo[]",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "reference_unavailable",
+      "datum_unavailable"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_datums",
+     "forwarded_to_client": true,
+     "note": "datums spec 7.1: the chosen set's levels with their basis, plus the set's zero, zero_name, chart_datum and msl_offset_m; for a subordinate station predicted by offsets, subordinate_offsets.datum; all_sets true: one group per set; C: otc_datums(rel, st, set_id, &info, out, cap, &count) fills otc_datum_level items in key order"
+    },
+    {
+     "name": "ranges",
+     "kind": "method",
+     "args": [
+      {
+       "name": "station",
+       "type": "Station|string",
+       "required": true,
+       "positional": true,
+       "note": "a Station, or an OTC station id (prediction spec 5.2)"
+      },
+      {
+       "name": "set_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "null = the recommended set"
+      }
+     ],
+     "returns": "Ranges",
+     "errors": [
+      "invalid_argument",
+      "invalid_release",
+      "reference_unavailable",
+      "datum_unavailable"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ],
+     "forwarded_to_client": true,
+     "note": "datums spec 7.1: MN, GT, DHQ, DLQ from levels of the same kind and epoch only, else null for that range; C: through otc_datums"
+    },
+    {
+     "name": "astro_table",
+     "kind": "method",
+     "args": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": false,
+       "positional": true,
+       "default": null,
+       "note": "an astro_table_id; null = the table named by the release's first convention that names one"
+      }
+     ],
+     "returns": "AstroTable|null",
+     "errors": [
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_table",
+     "typescript_async": true,
+     "note": "prediction spec 5.2: null when the release has none (C OTC_E_NOT_FOUND); runs the table check of 4.2a, so a table that fails it (a negative row speed, a malformed table) is invalid_argument naming the table and the row; C reads the table from .meta.json on first use and keeps it until otc_close"
     }
    ]
   },
@@ -2274,6 +2744,1338 @@
      "note": "counts every listed set, no_constants under its own key"
     }
    ]
+  },
+  "AstroTable": {
+   "description": "One astronomical table of the release (format 1.0 astro_tables; prediction spec 4.2a, 5.2).",
+   "members": [
+    {
+     "name": "equilibrium_argument",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": true,
+       "note": "an OTC constituent name; a name with no row (or a row with no speed) is unsupported_constituent"
+      },
+      {
+       "name": "at",
+       "type": "instant",
+       "required": true,
+       "positional": true,
+       "note": "floored to the whole second; outside first_year to last_year (the year of the instant, 4.3) is time_out_of_range"
+      }
+     ],
+     "returns": "number",
+     "errors": [
+      "unsupported_constituent",
+      "time_out_of_range",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_equilibrium_argument",
+     "note": "V0+u in degrees at the instant: A + omega * delta, reduced to [0, 360) by the 4.4 rule"
+    },
+    {
+     "name": "node_factor",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": true,
+       "note": "an OTC constituent name; a name with no row (or a row with no speed) is unsupported_constituent"
+      },
+      {
+       "name": "at",
+       "type": "instant",
+       "required": true,
+       "positional": true,
+       "note": "floored to the whole second; outside first_year to last_year (the year of the instant, 4.3) is time_out_of_range"
+      }
+     ],
+     "returns": "number",
+     "errors": [
+      "unsupported_constituent",
+      "time_out_of_range",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_node_factor",
+     "note": "f at the instant"
+    },
+    {
+     "name": "equilibrium_for_year",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": true,
+       "note": "an OTC constituent name; a name with no row (or a row with no speed) is unsupported_constituent"
+      },
+      {
+       "name": "year",
+       "type": "integer",
+       "required": true,
+       "positional": true,
+       "note": "outside first_year to last_year is time_out_of_range"
+      }
+     ],
+     "returns": "number",
+     "errors": [
+      "unsupported_constituent",
+      "time_out_of_range",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_equilibrium_for_year",
+     "note": "the table's v0u_deg entry for the year (tcd gem parity)"
+    },
+    {
+     "name": "node_factor_for_year",
+     "kind": "method",
+     "args": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "positional": true,
+       "note": "an OTC constituent name; a name with no row (or a row with no speed) is unsupported_constituent"
+      },
+      {
+       "name": "year",
+       "type": "integer",
+       "required": true,
+       "positional": true,
+       "note": "outside first_year to last_year is time_out_of_range"
+      }
+     ],
+     "returns": "number",
+     "errors": [
+      "unsupported_constituent",
+      "time_out_of_range",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_node_factor_for_year",
+     "note": "the table's f entry for the year (tcd gem parity)"
+    },
+    {
+     "name": "valid_range",
+     "kind": "attribute",
+     "returns": "[integer, integer]",
+     "errors": [],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_astro_valid_range",
+     "note": "first and last year; C otc_astro_valid_range(tab, &first, &last)"
+    }
+   ]
+  },
+  "HeightPoint": {
+   "description": "One item of a HeightSeries.",
+   "c": "otc_height_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "time",
+     "kind": "field",
+     "type": "instant",
+     "nullable": false,
+     "c": "(C: otc_height_t.t)",
+     "note": "a whole second, in the input type of the language (prediction spec 4.1)"
+    },
+    {
+     "name": "height_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "local_time",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_local_t.local_time)",
+     "note": "after to_local: YYYY-MM-DDTHH:MM:SS+HH:MM in the zone (prediction spec 4.1), never Z; null before"
+    },
+    {
+     "name": "utc_offset_s",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_local_t.utc_offset_s)",
+     "note": "after to_local: the zone's offset from UTC in seconds at that instant; null before"
+    },
+    {
+     "name": "local_datetime",
+     "kind": "method",
+     "args": [],
+     "returns": "datetime|null",
+     "errors": [],
+     "languages": [
+      "python"
+     ],
+     "note": "an aware datetime in the to_local zone; None before to_local"
+    },
+    {
+     "name": "local_time_object",
+     "kind": "attribute",
+     "returns": "Time|null",
+     "errors": [],
+     "languages": [
+      "ruby"
+     ],
+     "note": "a Time with the to_local offset; nil before to_local"
+    }
+   ]
+  },
+  "Extreme": {
+   "description": "One high or low water of an ExtremeList.",
+   "c": "otc_extreme_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "time",
+     "kind": "field",
+     "type": "instant",
+     "nullable": false,
+     "c": "(C: otc_extreme_t.t)",
+     "note": "a whole second, in the input type of the language (prediction spec 4.1)"
+    },
+    {
+     "name": "type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "extreme_type"
+    },
+    {
+     "name": "height_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "local_time",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_local_t.local_time)",
+     "note": "after to_local: YYYY-MM-DDTHH:MM:SS+HH:MM in the zone (prediction spec 4.1), never Z; null before"
+    },
+    {
+     "name": "utc_offset_s",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_local_t.utc_offset_s)",
+     "note": "after to_local: the zone's offset from UTC in seconds at that instant; null before"
+    },
+    {
+     "name": "local_datetime",
+     "kind": "method",
+     "args": [],
+     "returns": "datetime|null",
+     "errors": [],
+     "languages": [
+      "python"
+     ],
+     "note": "an aware datetime in the to_local zone; None before to_local"
+    },
+    {
+     "name": "local_time_object",
+     "kind": "attribute",
+     "returns": "Time|null",
+     "errors": [],
+     "languages": [
+      "ruby"
+     ],
+     "note": "a Time with the to_local offset; nil before to_local"
+    }
+   ]
+  },
+  "CurrentPoint": {
+   "description": "One item of a CurrentSeries.",
+   "c": "otc_current_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "time",
+     "kind": "field",
+     "type": "instant",
+     "nullable": false,
+     "c": "(C: otc_current_t.t)",
+     "note": "a whole second, in the input type of the language (prediction spec 4.1)"
+    },
+    {
+     "name": "velocity_major_ms",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "velocity_minor_ms",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "speed_ms",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "direction_deg",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "null when the speed is zero (C NAN); 0.0, never 360.0, toward north"
+    },
+    {
+     "name": "local_time",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_local_t.local_time)",
+     "note": "after to_local: YYYY-MM-DDTHH:MM:SS+HH:MM in the zone (prediction spec 4.1), never Z; null before"
+    },
+    {
+     "name": "utc_offset_s",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_local_t.utc_offset_s)",
+     "note": "after to_local: the zone's offset from UTC in seconds at that instant; null before"
+    },
+    {
+     "name": "local_datetime",
+     "kind": "method",
+     "args": [],
+     "returns": "datetime|null",
+     "errors": [],
+     "languages": [
+      "python"
+     ],
+     "note": "an aware datetime in the to_local zone; None before to_local"
+    },
+    {
+     "name": "local_time_object",
+     "kind": "attribute",
+     "returns": "Time|null",
+     "errors": [],
+     "languages": [
+      "ruby"
+     ],
+     "note": "a Time with the to_local offset; nil before to_local"
+    }
+   ]
+  },
+  "CurrentEvent": {
+   "description": "One event of a CurrentEventList.",
+   "c": "otc_current_event_t",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "time",
+     "kind": "field",
+     "type": "instant",
+     "nullable": false,
+     "c": "(C: otc_current_event_t.t)",
+     "note": "a whole second, in the input type of the language (prediction spec 4.1)"
+    },
+    {
+     "name": "type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "current_event_type"
+    },
+    {
+     "name": "velocity_ms",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "direction_deg",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "null when the speed is zero (C NAN)"
+    },
+    {
+     "name": "local_time",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_local_t.local_time)",
+     "note": "after to_local: YYYY-MM-DDTHH:MM:SS+HH:MM in the zone (prediction spec 4.1), never Z; null before"
+    },
+    {
+     "name": "utc_offset_s",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_local_t.utc_offset_s)",
+     "note": "after to_local: the zone's offset from UTC in seconds at that instant; null before"
+    },
+    {
+     "name": "local_datetime",
+     "kind": "method",
+     "args": [],
+     "returns": "datetime|null",
+     "errors": [],
+     "languages": [
+      "python"
+     ],
+     "note": "an aware datetime in the to_local zone; None before to_local"
+    },
+    {
+     "name": "local_time_object",
+     "kind": "attribute",
+     "returns": "Time|null",
+     "errors": [],
+     "languages": [
+      "ruby"
+     ],
+     "note": "a Time with the to_local offset; nil before to_local"
+    }
+   ]
+  },
+  "HeightSeries": {
+   "description": "The result of heights and heights_at (prediction spec 5.3).",
+   "members": [
+    {
+     "name": "items",
+     "kind": "field",
+     "type": "HeightPoint[]",
+     "nullable": false,
+     "c": "(the out array of otc_heights and otc_heights_at)"
+    },
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.station_id)"
+    },
+    {
+     "name": "timezone",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.timezone)",
+     "note": "the station's IANA zone, for display"
+    },
+    {
+     "name": "method",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.method)",
+     "enum": "prediction_method"
+    },
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.set_id)"
+    },
+    {
+     "name": "convention_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.convention_id)"
+    },
+    {
+     "name": "astro_table_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.astro_table_id)"
+    },
+    {
+     "name": "reference_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_station_id)",
+     "note": "offsets and folded_offsets only"
+    },
+    {
+     "name": "reference_bin",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_bin)",
+     "note": "currents by offsets only; null for tides"
+    },
+    {
+     "name": "datum",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum)",
+     "note": "the argument; null for currents"
+    },
+    {
+     "name": "datum_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_name)",
+     "note": "what datum resolved to (chart -> mllw); null for currents"
+    },
+    {
+     "name": "datum_kind",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_kind)",
+     "note": "the resolved level's basis.kind; null for mean_level or no basis"
+    },
+    {
+     "name": "datum_uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_uncertainty_m)",
+     "note": "the resolved level's uncertainty_m, or null"
+    },
+    {
+     "name": "tz",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: the zone passed to otc_tz_open)",
+     "note": "after to_local: the zone used"
+    },
+    {
+     "name": "tz_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "otc_tz_version",
+     "note": "after to_local: the time-zone database version used, or null (prediction spec 4.1)"
+    },
+    {
+     "name": "release",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.release)",
+     "note": "the release datestamp"
+    },
+    {
+     "name": "algorithm",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.algorithm)",
+     "note": "\"otc-predict-1\""
+    },
+    {
+     "name": "to_local",
+     "kind": "method",
+     "args": [
+      {
+       "name": "tz",
+       "type": "string",
+       "required": false,
+       "positional": true,
+       "default": "station",
+       "values": [
+        "station"
+       ],
+       "note": "\"station\" (the station's timezone) or an IANA zone name"
+      }
+     ],
+     "returns": "HeightSeries",
+     "errors": [
+      "local_time_unavailable",
+      "unknown_time_zone",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_tz_open/otc_tz_local/otc_tz_close",
+     "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    }
+   ]
+  },
+  "ExtremeList": {
+   "description": "The result of extremes (prediction spec 5.3).",
+   "members": [
+    {
+     "name": "items",
+     "kind": "field",
+     "type": "Extreme[]",
+     "nullable": false,
+     "c": "(the out array of otc_extremes)"
+    },
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.station_id)"
+    },
+    {
+     "name": "timezone",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.timezone)",
+     "note": "the station's IANA zone, for display"
+    },
+    {
+     "name": "method",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.method)",
+     "enum": "prediction_method"
+    },
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.set_id)"
+    },
+    {
+     "name": "convention_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.convention_id)"
+    },
+    {
+     "name": "astro_table_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.astro_table_id)"
+    },
+    {
+     "name": "reference_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_station_id)",
+     "note": "offsets and folded_offsets only"
+    },
+    {
+     "name": "reference_bin",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_bin)",
+     "note": "currents by offsets only; null for tides"
+    },
+    {
+     "name": "datum",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum)",
+     "note": "the argument; null for currents"
+    },
+    {
+     "name": "datum_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_name)",
+     "note": "what datum resolved to (chart -> mllw); null for currents"
+    },
+    {
+     "name": "datum_kind",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_kind)",
+     "note": "the resolved level's basis.kind; null for mean_level or no basis"
+    },
+    {
+     "name": "datum_uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_uncertainty_m)",
+     "note": "the resolved level's uncertainty_m, or null"
+    },
+    {
+     "name": "tz",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: the zone passed to otc_tz_open)",
+     "note": "after to_local: the zone used"
+    },
+    {
+     "name": "tz_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "otc_tz_version",
+     "note": "after to_local: the time-zone database version used, or null (prediction spec 4.1)"
+    },
+    {
+     "name": "release",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.release)",
+     "note": "the release datestamp"
+    },
+    {
+     "name": "algorithm",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.algorithm)",
+     "note": "\"otc-predict-1\""
+    },
+    {
+     "name": "to_local",
+     "kind": "method",
+     "args": [
+      {
+       "name": "tz",
+       "type": "string",
+       "required": false,
+       "positional": true,
+       "default": "station",
+       "values": [
+        "station"
+       ],
+       "note": "\"station\" (the station's timezone) or an IANA zone name"
+      }
+     ],
+     "returns": "ExtremeList",
+     "errors": [
+      "local_time_unavailable",
+      "unknown_time_zone",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_tz_open/otc_tz_local/otc_tz_close",
+     "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    }
+   ]
+  },
+  "CurrentSeries": {
+   "description": "The result of currents (prediction spec 5.3).",
+   "members": [
+    {
+     "name": "items",
+     "kind": "field",
+     "type": "CurrentPoint[]",
+     "nullable": false,
+     "c": "(the out array of otc_currents)"
+    },
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.station_id)"
+    },
+    {
+     "name": "timezone",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.timezone)",
+     "note": "the station's IANA zone, for display"
+    },
+    {
+     "name": "method",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.method)",
+     "enum": "prediction_method"
+    },
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.set_id)"
+    },
+    {
+     "name": "convention_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.convention_id)"
+    },
+    {
+     "name": "astro_table_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.astro_table_id)"
+    },
+    {
+     "name": "reference_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_station_id)",
+     "note": "offsets and folded_offsets only"
+    },
+    {
+     "name": "reference_bin",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_bin)",
+     "note": "currents by offsets only; null for tides"
+    },
+    {
+     "name": "datum",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum)",
+     "note": "the argument; null for currents"
+    },
+    {
+     "name": "datum_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_name)",
+     "note": "what datum resolved to (chart -> mllw); null for currents"
+    },
+    {
+     "name": "datum_kind",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_kind)",
+     "note": "the resolved level's basis.kind; null for mean_level or no basis"
+    },
+    {
+     "name": "datum_uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_uncertainty_m)",
+     "note": "the resolved level's uncertainty_m, or null"
+    },
+    {
+     "name": "bin_number",
+     "kind": "field",
+     "type": "integer",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.bin_number)",
+     "note": "the bin predicted"
+    },
+    {
+     "name": "tz",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: the zone passed to otc_tz_open)",
+     "note": "after to_local: the zone used"
+    },
+    {
+     "name": "tz_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "otc_tz_version",
+     "note": "after to_local: the time-zone database version used, or null (prediction spec 4.1)"
+    },
+    {
+     "name": "release",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.release)",
+     "note": "the release datestamp"
+    },
+    {
+     "name": "algorithm",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.algorithm)",
+     "note": "\"otc-predict-1\""
+    },
+    {
+     "name": "to_local",
+     "kind": "method",
+     "args": [
+      {
+       "name": "tz",
+       "type": "string",
+       "required": false,
+       "positional": true,
+       "default": "station",
+       "values": [
+        "station"
+       ],
+       "note": "\"station\" (the station's timezone) or an IANA zone name"
+      }
+     ],
+     "returns": "CurrentSeries",
+     "errors": [
+      "local_time_unavailable",
+      "unknown_time_zone",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_tz_open/otc_tz_local/otc_tz_close",
+     "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    }
+   ]
+  },
+  "CurrentEventList": {
+   "description": "The result of current_events (prediction spec 5.3).",
+   "members": [
+    {
+     "name": "items",
+     "kind": "field",
+     "type": "CurrentEvent[]",
+     "nullable": false,
+     "c": "(the out array of otc_current_events)"
+    },
+    {
+     "name": "station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.station_id)"
+    },
+    {
+     "name": "timezone",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.timezone)",
+     "note": "the station's IANA zone, for display"
+    },
+    {
+     "name": "method",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.method)",
+     "enum": "prediction_method"
+    },
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.set_id)"
+    },
+    {
+     "name": "convention_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.convention_id)"
+    },
+    {
+     "name": "astro_table_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.astro_table_id)"
+    },
+    {
+     "name": "reference_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_station_id)",
+     "note": "offsets and folded_offsets only"
+    },
+    {
+     "name": "reference_bin",
+     "kind": "field",
+     "type": "integer",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.reference_bin)",
+     "note": "currents by offsets only; null for tides"
+    },
+    {
+     "name": "datum",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum)",
+     "note": "the argument; null for currents"
+    },
+    {
+     "name": "datum_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_name)",
+     "note": "what datum resolved to (chart -> mllw); null for currents"
+    },
+    {
+     "name": "datum_kind",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_kind)",
+     "note": "the resolved level's basis.kind; null for mean_level or no basis"
+    },
+    {
+     "name": "datum_uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.datum_uncertainty_m)",
+     "note": "the resolved level's uncertainty_m, or null"
+    },
+    {
+     "name": "bin_number",
+     "kind": "field",
+     "type": "integer",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.bin_number)",
+     "note": "the bin predicted"
+    },
+    {
+     "name": "omitted_event_types",
+     "kind": "field",
+     "type": "enum[]",
+     "nullable": true,
+     "c": "(C: otc_prediction_info.omitted_event_types)",
+     "note": "subordinate current stations only: the event types dropped because a time adjustment or ratio is null (prediction spec 4.9)",
+     "enum": "current_event_type"
+    },
+    {
+     "name": "tz",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "(C: the zone passed to otc_tz_open)",
+     "note": "after to_local: the zone used"
+    },
+    {
+     "name": "tz_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "c": "otc_tz_version",
+     "note": "after to_local: the time-zone database version used, or null (prediction spec 4.1)"
+    },
+    {
+     "name": "release",
+     "kind": "field",
+     "type": "datestamp",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.release)",
+     "note": "the release datestamp"
+    },
+    {
+     "name": "algorithm",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "c": "(C: otc_prediction_info.algorithm)",
+     "note": "\"otc-predict-1\""
+    },
+    {
+     "name": "to_local",
+     "kind": "method",
+     "args": [
+      {
+       "name": "tz",
+       "type": "string",
+       "required": false,
+       "positional": true,
+       "default": "station",
+       "values": [
+        "station"
+       ],
+       "note": "\"station\" (the station's timezone) or an IANA zone name"
+      }
+     ],
+     "returns": "CurrentEventList",
+     "errors": [
+      "local_time_unavailable",
+      "unknown_time_zone",
+      "invalid_argument",
+      "not_built"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "c"
+     ],
+     "c": "otc_tz_open/otc_tz_local/otc_tz_close",
+     "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    }
+   ]
+  },
+  "DatumInfo": {
+   "description": "One constant set's datum levels (datums spec 7.1).",
+   "c": "otc_datum_info",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "note": "the set used; null for subordinate offsets"
+    },
+    {
+     "name": "zero",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "zero_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "chart_datum",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "msl_offset_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "C has_msl_offset and msl_offset_m"
+    },
+    {
+     "name": "levels",
+     "kind": "field",
+     "type": "DatumLevel[]",
+     "nullable": false,
+     "c": "(the out array of otc_datums)",
+     "note": "in key order"
+    }
+   ]
+  },
+  "DatumLevel": {
+   "description": "One datum level with its basis (datums spec 7.1).",
+   "c": "otc_datum_level",
+   "c_struct": true,
+   "members": [
+    {
+     "name": "key",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "value_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "note": "above the set's zero"
+    },
+    {
+     "name": "above_chart_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "when the set has a chart datum; C has_above_chart"
+    },
+    {
+     "name": "kind",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "values": [
+      "published",
+      "computed",
+      "observed"
+     ]
+    },
+    {
+     "name": "method",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "source_name",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "epoch",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "c": "(C: otc_datum_level.epoch_start)",
+     "note": "{start, end, name}; C epoch_start, epoch_end, epoch_name"
+    },
+    {
+     "name": "data_span",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "c": "(C: otc_datum_level.data_start)",
+     "note": "{start, end, months}; C data_start, data_end, data_months (-1 when absent)"
+    },
+    {
+     "name": "control_station_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "control_set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "control_source_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "uncertainty_m",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "note": "C has_uncertainty"
+    },
+    {
+     "name": "uncertainty_basis",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "flags",
+     "kind": "field",
+     "type": "string[]",
+     "nullable": false,
+     "note": "C uint32_t: bit i = the i-th flag of the schema's flags enum"
+    }
+   ]
+  },
+  "Ranges": {
+   "description": "Tidal ranges from levels of the same kind and epoch (datums spec 7.1); C has none (otc_datums).",
+   "members": [
+    {
+     "name": "mn",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ],
+     "note": "MN in metres, or null"
+    },
+    {
+     "name": "gt",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ],
+     "note": "GT in metres, or null"
+    },
+    {
+     "name": "dhq",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ],
+     "note": "DHQ in metres, or null"
+    },
+    {
+     "name": "dlq",
+     "kind": "field",
+     "type": "number",
+     "nullable": true,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ],
+     "note": "DLQ in metres, or null"
+    }
+   ]
   }
  },
  "enums": {
@@ -2396,6 +4198,21 @@
   ],
   "match": [
    "exact"
+  ],
+  "extreme_type": [
+   "high",
+   "low"
+  ],
+  "current_event_type": [
+   "max_flood",
+   "max_ebb",
+   "slack_before_flood",
+   "slack_before_ebb"
+  ],
+  "prediction_method": [
+   "harmonic",
+   "folded_offsets",
+   "offsets"
   ]
  },
  "errors": [
@@ -2611,8 +4428,175 @@
    "code": "invalid_argument",
    "class": "InvalidArgumentError",
    "c": "OTC_E_INVALID_ARGUMENT",
-   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution; also a timeout outside 0.001 to 1e6 seconds, a user_agent that is not a string or has a control character, and a null, unknown or foreign station in reference_station or subordinates_of",
+   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution; also a timeout outside 0.001 to 1e6 seconds, a user_agent that is not a string or has a control character, and a null, unknown or foreign station in reference_station or subordinates_of; prediction (spec 5.4): start > stop, step_s <= 0 or not an integer, a bin_number that is not an integer or (outside C) is 0 or less, in C a negative bin_number, in every SDK a bin_number above 2^53 - 1, a naive datetime, a datum of the wrong type, a subordinate R height ratio of 0 or less (4.8 step 3), a set_id that names no set of the station, with commercial_only a set_id whose licence is non-commercial (the message names commercial_only), a height_adjusted_type other than R or A (the message names the value), and an astro table that fails the table check of 4.2a (a negative row speed or a malformed table; the message names the table and the row)",
    "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "no_constants",
+   "class": "NoConstantsError",
+   "c": "OTC_E_NO_CONSTANTS",
+   "when": "prediction: the set's qc_status is not ok or flagged (prediction spec 4.2 step 2), or the station has no usable recommended set (with commercial_only: no effective recommended set) and no offsets; when commercial_only removed the recommended set, the message names commercial_only",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "quantity_mismatch",
+   "class": "QuantityMismatchError",
+   "c": "OTC_E_QUANTITY_MISMATCH",
+   "when": "heights on a current set, or currents on a water-level set",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "unsupported_convention",
+   "class": "UnsupportedConventionError",
+   "c": "OTC_E_UNSUPPORTED_CONVENTION",
+   "when": "the convention's v0_model or nodal_handling is not implemented (prediction spec 4.2); its C status number 18 is fixed since phase 1 (CR D24)",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "no_astro_table",
+   "class": "NoAstroTableError",
+   "c": "OTC_E_NO_ASTRO_TABLE",
+   "when": "the convention's astro_table_id names no table in the release, or the convention has no astro_table_id; message: release {datestamp} has no astro table \"{id}\" for convention \"{convention_id}\". Format 1.0 requires astro_tables when a convention uses f_u_at_prediction (since the schema revision of site PR #45); this file was written before that revision or is invalid. ({id} is \"\" when the convention has none)",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "unsupported_constituent",
+   "class": "UnsupportedConstituentError",
+   "c": "OTC_E_UNSUPPORTED_CONSTITUENT",
+   "when": "a constituent of the set has no astro table row (or a name with no row in an Astro function)",
+   "fields": [
+    "constituent"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "time_out_of_range",
+   "class": "TimeOutOfRangeError",
+   "c": "OTC_E_TIME_OUT_OF_RANGE",
+   "when": "an instant outside the table's years, including the padding of prediction spec 4.6, 4.8 and 4.9; never for an empty window (4.1)",
+   "fields": [
+    "first_year",
+    "last_year"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "datum_unavailable",
+   "class": "DatumUnavailableError",
+   "c": "OTC_E_DATUM_UNAVAILABLE",
+   "when": "the requested datum needs a value the set does not give (prediction spec 4.5); or, at a subordinate station, the reference has a usable set from the offsets' source but that set has no published chart datum or lacks the requested datum (4.8 step 2)",
+   "fields": [
+    "missing"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "bin_not_found",
+   "class": "BinNotFoundError",
+   "c": "OTC_E_BIN_NOT_FOUND",
+   "when": "the bin is not in the set or in the offsets",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "extremes_only",
+   "class": "ExtremesOnlyError",
+   "c": "OTC_E_EXTREMES_ONLY",
+   "when": "a series (heights, heights_at, currents) at a station predicted by the event method: a subordinate tide station whose high and low offsets differ (prediction spec 4.8a), or any subordinate current station; at a tide station it comes after every other check of 4.8 step 6",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "local_time_unavailable",
+   "class": "LocalTimeUnavailableError",
+   "c": "OTC_E_LOCAL_TIME_UNAVAILABLE",
+   "when": "to_local or otc_tz_open cannot get zone rules at run time: Python has no system database and no tzdata; Ruby has no tzinfo (or no tzinfo-data where the system has no database); C has local time compiled in but the zone directory otc_tz_open resolves (TZDIR, else /usr/share/zoneinfo) cannot be read; TypeScript's Intl has no time-zone support; the message names what to install (C: the directory it tried)",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "unknown_time_zone",
+   "class": "UnknownTimeZoneError",
+   "c": "OTC_E_UNKNOWN_TIME_ZONE",
+   "when": "the zone name is not in the database in use, or the shared name rules of prediction spec 4.1 reject it; in C also a name that fails the IANA name pattern or has no TZif file in the resolved directory",
+   "fields": [
+    "zone"
+   ],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
+  },
+  {
+   "code": "reference_unavailable",
+   "class": "ReferenceUnavailableError",
+   "c": "OTC_E_REFERENCE_UNAVAILABLE",
+   "when": "the reference is missing or removed, or has no reference set (no usable set from the offsets' source, 4.8 step 1; no usable current set with the reference bin, 4.9 step 1), or, with commercial_only, the offsets' licence or the reference set's licence is non-commercial (the message names the licence)",
+   "fields": [
+    "reference_station_id"
+   ],
    "languages": [
     "ruby",
     "python",
@@ -2644,7 +4628,7 @@
    "code": "not_built",
    "class": null,
    "c": "OTC_E_NOT_BUILT",
-   "when": "C only: an otc_fetch_* or otc_predict_* call in a build without that module",
+   "when": "C only: an otc_fetch_* call in a build without otc_fetch; a prediction call (otc_heights, otc_heights_at, otc_extremes, otc_currents, otc_current_events, every otc_astro_* call) in a build with -DOTC_WITH_PREDICT=OFF, whatever its arguments; an otc_tz_* call in a build without local time (-DOTC_WITH_LOCALTIME=OFF, Windows)",
    "fields": [],
    "languages": [
     "c"
@@ -2691,63 +4675,212 @@
   "OPENTIDECONSTANTS_OFFLINE": "offline (1, true, yes or on, case-insensitive and trimmed; it wins over an explicit offline false)",
   "OPENTIDECONSTANTS_BASE_URL": "base_url"
  },
- "reserved_phase2": {
-  "note": "Names reserved for the phase 2 prediction module (spec 4.9). Not built in phase 1: an SDK must not expose the operations yet, and Ruby, Python and TypeScript must not define the error class until phase 2. Exception (CR D24): C may define the otc_status value OTC_E_UNSUPPORTED_CONVENTION now, so that its number stays fixed in the ABI; no phase 1 function returns it.",
-  "operations": [
-   {
-    "object": "Client",
-    "name": "heights",
-    "args": [
-     "station",
-     "from",
-     "to",
-     "step_s",
-     "datum"
-    ],
-    "c": "otc_heights"
-   },
-   {
-    "object": "Client",
-    "name": "extremes",
-    "args": [
-     "station",
-     "from",
-     "to"
-    ],
-    "c": "otc_extremes"
-   },
-   {
-    "object": "Astro",
-    "name": "node_factor",
-    "c": "otc_astro_node_factor"
-   },
-   {
-    "object": "Astro",
-    "name": "equilibrium_argument",
-    "c": "otc_astro_equilibrium_argument"
-   },
-   {
-    "object": "Astro",
-    "name": "node_factor_for_year",
-    "c": "otc_astro_node_factor_for_year"
-   },
-   {
-    "object": "Astro",
-    "name": "equilibrium_for_year",
-    "c": "otc_astro_equilibrium_for_year"
-   },
-   {
-    "object": "Astro",
-    "name": "valid_range",
-    "c": "otc_astro_valid_range"
-   }
-  ],
-  "errors": [
-   {
-    "code": "unsupported_convention",
-    "class": "UnsupportedConventionError",
-    "c": "OTC_E_UNSUPPORTED_CONVENTION"
-   }
-  ]
+ "c_structs": {
+  "note": "C structs of the prediction API that no manifest object maps (prediction spec 5.2): each must be a typedef with these members, and init names its initialiser. A struct pending for C must not be declared yet.",
+  "otc_predict_opts": {
+   "init": "otc_predict_opts_init",
+   "members": [
+    "struct_size",
+    "step_s",
+    "datum",
+    "set_id",
+    "bin_number",
+    "info"
+   ],
+   "note": "step_s int64_t (600), datum const char * (NULL = default), set_id const char * (NULL = recommended), bin_number int64_t (0 = default), otc_prediction_info *info (NULL = not wanted); defined also without otc_predict, so callers compile"
+  },
+  "otc_local_t": {
+   "members": [
+    "t",
+    "utc_offset_s",
+    "local_time"
+   ],
+   "note": "int64_t t; int32_t utc_offset_s; char local_time[32]; filled by otc_tz_local"
+  }
+ },
+ "pending_port": {
+  "note": "Prediction (prediction spec 5) names an SDK does not have yet, per language. Each API check treats a pending name as absent and fails if it is present; a name that is not pending must be present. A port removes its language's names in the change that adds them. Every pending name must be a manifest name that applies to the language (an object, an Object.member, an enum, an error code, and for C a c_structs name). Exception (CR D24): for C a pending error's otc_status value may be present or absent, so that its number can be fixed early (OTC_E_UNSUPPORTED_CONVENTION = 18); a pending C function, type, struct or enum value must be absent.",
+  "ruby": {
+   "objects": [
+    "AstroTable",
+    "HeightSeries",
+    "ExtremeList",
+    "CurrentSeries",
+    "CurrentEventList",
+    "HeightPoint",
+    "Extreme",
+    "CurrentPoint",
+    "CurrentEvent",
+    "DatumInfo",
+    "DatumLevel",
+    "Ranges"
+   ],
+   "members": [
+    "Release.heights",
+    "Release.heights_at",
+    "Release.extremes",
+    "Release.currents",
+    "Release.current_events",
+    "Release.datums",
+    "Release.astro_table",
+    "Release.ranges"
+   ],
+   "enums": [
+    "extreme_type",
+    "current_event_type",
+    "prediction_method"
+   ],
+   "errors": [
+    "no_constants",
+    "quantity_mismatch",
+    "unsupported_convention",
+    "no_astro_table",
+    "unsupported_constituent",
+    "time_out_of_range",
+    "datum_unavailable",
+    "bin_not_found",
+    "extremes_only",
+    "local_time_unavailable",
+    "unknown_time_zone",
+    "reference_unavailable"
+   ]
+  },
+  "python": {
+   "objects": [
+    "AstroTable",
+    "HeightSeries",
+    "ExtremeList",
+    "CurrentSeries",
+    "CurrentEventList",
+    "HeightPoint",
+    "Extreme",
+    "CurrentPoint",
+    "CurrentEvent",
+    "DatumInfo",
+    "DatumLevel",
+    "Ranges"
+   ],
+   "members": [
+    "Release.heights",
+    "Release.heights_at",
+    "Release.extremes",
+    "Release.currents",
+    "Release.current_events",
+    "Release.datums",
+    "Release.astro_table",
+    "Release.ranges"
+   ],
+   "enums": [
+    "extreme_type",
+    "current_event_type",
+    "prediction_method"
+   ],
+   "errors": [
+    "no_constants",
+    "quantity_mismatch",
+    "unsupported_convention",
+    "no_astro_table",
+    "unsupported_constituent",
+    "time_out_of_range",
+    "datum_unavailable",
+    "bin_not_found",
+    "extremes_only",
+    "local_time_unavailable",
+    "unknown_time_zone",
+    "reference_unavailable"
+   ]
+  },
+  "typescript": {
+   "objects": [
+    "AstroTable",
+    "HeightSeries",
+    "ExtremeList",
+    "CurrentSeries",
+    "CurrentEventList",
+    "HeightPoint",
+    "Extreme",
+    "CurrentPoint",
+    "CurrentEvent",
+    "DatumInfo",
+    "DatumLevel",
+    "Ranges"
+   ],
+   "members": [
+    "Release.heights",
+    "Release.heights_at",
+    "Release.extremes",
+    "Release.currents",
+    "Release.current_events",
+    "Release.datums",
+    "Release.astro_table",
+    "Release.ranges"
+   ],
+   "enums": [
+    "extreme_type",
+    "current_event_type",
+    "prediction_method"
+   ],
+   "errors": [
+    "no_constants",
+    "quantity_mismatch",
+    "unsupported_convention",
+    "no_astro_table",
+    "unsupported_constituent",
+    "time_out_of_range",
+    "datum_unavailable",
+    "bin_not_found",
+    "extremes_only",
+    "local_time_unavailable",
+    "unknown_time_zone",
+    "reference_unavailable"
+   ]
+  },
+  "c": {
+   "objects": [
+    "AstroTable",
+    "HeightSeries",
+    "ExtremeList",
+    "CurrentSeries",
+    "CurrentEventList",
+    "HeightPoint",
+    "Extreme",
+    "CurrentPoint",
+    "CurrentEvent",
+    "DatumInfo",
+    "DatumLevel"
+   ],
+   "members": [
+    "Release.heights",
+    "Release.heights_at",
+    "Release.extremes",
+    "Release.currents",
+    "Release.current_events",
+    "Release.datums",
+    "Release.astro_table"
+   ],
+   "enums": [
+    "extreme_type",
+    "current_event_type",
+    "prediction_method"
+   ],
+   "errors": [
+    "no_constants",
+    "quantity_mismatch",
+    "unsupported_convention",
+    "no_astro_table",
+    "unsupported_constituent",
+    "time_out_of_range",
+    "datum_unavailable",
+    "bin_not_found",
+    "extremes_only",
+    "local_time_unavailable",
+    "unknown_time_zone",
+    "reference_unavailable"
+   ],
+   "c_structs": [
+    "otc_predict_opts",
+    "otc_local_t"
+   ]
+  }
  }
 }

@@ -1,9 +1,15 @@
 # The Ruby API surface check (SDK spec §7.1): turns every name in
 # conformance/api.json into its Ruby form by the manifest's naming rules and
 # compares it with the gem's public surface. A missing or an extra name fails,
-# and so does a wrong default, a phase 2 name, or a manifest enum the check
+# and so does a wrong default, a pending name, or a manifest enum the check
 # cannot find in the gem. The check never stops at the first problem: a
 # missing method, class or CODE is reported, and the rest is still checked.
+#
+# A name in api.json pending_port.ruby (prediction spec 5, not ported to Ruby
+# yet) is not required and must not exist: no pending object's class, no
+# pending member on its object (nor on the client, for a member forwarded to
+# it), no pending enum in ENUMS, no pending error class or CODE. Every pending
+# name must be a manifest name that applies to Ruby.
 #
 #     ruby conformance/runners/ruby/check_api.rb [--no-self-test]
 #
@@ -93,14 +99,42 @@ def defaults_of(klass, meth)
     meth.parameters.select { |t, _| %i[opt key].include?(t) }.to_h { |_, n| [n.to_s, b.local_variable_get(n)] }
 end
 
-def run_checks
+# The names pending_port.ruby lists: [objects, members ([object, name]), enums,
+# errors], and a problem for each that is not a manifest name for Ruby.
+def pending_names(manifest, fail)
+    pend = manifest.dig("pending_port", "ruby")
+    unless pend.is_a?(Hash)
+        fail.call("api.json has no pending_port.ruby")
+        return [[], [], [], []]
+    end
+    unknown = pend.keys - %w[objects members enums errors]
+    fail.call("pending_port.ruby: unknown key(s) #{unknown.sort}") unless unknown.empty?
+    objects = Array(pend["objects"])
+    (objects - manifest["objects"].keys).sort.each { |o| fail.call("pending_port.ruby: object #{o} is not a manifest object") }
+    members = Array(pend["members"]).map do |qn|
+        obj, name = qn.split(".", 2)
+        m = (manifest.dig("objects", obj, "members") || []).find { |x| x["name"] == name }
+        fail.call("pending_port.ruby: member #{qn} is not a manifest member for Ruby") unless m && ruby_member?(m)
+        [obj, name]
+    end
+    enums = Array(pend["enums"])
+    (enums - manifest["enums"].keys).sort.each { |e| fail.call("pending_port.ruby: enum #{e} is not a manifest enum") }
+    errors = Array(pend["errors"])
+    ruby_codes = manifest["errors"].select { |e| e["languages"].include?("ruby") && e["class"] }.map { |e| e["code"] }
+    (errors - ruby_codes).sort.each { |c| fail.call("pending_port.ruby: error #{c} is not a manifest error with a Ruby class") }
+    [objects, members, enums, errors]
+end
+
+def run_checks(manifest = MANIFEST)
     failures = []
     fail = ->(msg) { failures << msg }
+    pend_objects, pend_members, pend_enums, pend_errors = pending_names(manifest, fail)
+    pending_member = ->(obj, m) { pend_members.include?([obj, m["name"]]) }
     compare = lambda do |where, expected, actual|
         (expected - actual).sort.each { |n| fail.call("#{where}: missing #{n}") }
         (actual - expected).sort.each { |n| fail.call("#{where}: extra #{n}") }
     end
-    objects = MANIFEST["objects"]
+    objects = manifest["objects"]
 
     # Optional arguments with a manifest default: the same default in Ruby.
     check_defaults = lambda do |where, obj_name, klass, meth, m|
@@ -149,10 +183,12 @@ def run_checks
     expected = []
     client["members"].each do |m|
         next unless ruby_member?(m)
-        next if m["static"]
+        next if m["static"] || pending_member.call("Client", m)
         expected.concat(ruby_names(m))
     end
-    forwarded = objects["Release"]["members"].select { |m| m["forwarded_to_client"] && ruby_member?(m) }
+    forwarded = objects["Release"]["members"].select do |m|
+        m["forwarded_to_client"] && ruby_member?(m) && !pending_member.call("Release", m)
+    end
     forwarded.each { |m| expected.concat(ruby_names(m)) }
     compare.call("OpenTideConstants (client)", expected.uniq, public_methods_of(OTC))
 
@@ -179,7 +215,7 @@ def run_checks
 
     # ---- every other object: its public methods are exactly its members.
     class_for = {}
-    (objects.keys - ["Client"]).each do |k|
+    (objects.keys - ["Client"] - pend_objects).each do |k|
         if OTC.const_defined?(k, false) && OTC.const_get(k, false).is_a?(Class)
             class_for[k] = OTC.const_get(k, false)
         else
@@ -187,15 +223,18 @@ def run_checks
         end
     end
     class_for.each do |name, klass|
-        members = objects[name]["members"].select { |m| ruby_member?(m) }
+        members = objects[name]["members"].select { |m| ruby_member?(m) && !pending_member.call(name, m) }
         compare.call(name, members.flat_map { |m| ruby_names(m) }.uniq, public_methods_of(klass))
         members.each { |m| check_args.call(name, klass, m) if m["kind"] == "method" }
     end
-    client["members"].each { |m| check_args.call("Client", OTC, m) if m["kind"] == "method" && !m["static"] && ruby_member?(m) }
+    client["members"].each do |m|
+        next if pending_member.call("Client", m)
+        check_args.call("Client", OTC, m) if m["kind"] == "method" && !m["static"] && ruby_member?(m)
+    end
 
     # ---- filters: the keys the Release accepts.
     if OTC.const_defined?(:Release, false) && OTC::Release.const_defined?(:FILTER_KEYS, false)
-        compare.call("filters (Release::FILTER_KEYS)", MANIFEST["filters"].map { |f| f["name"] }, OTC::Release::FILTER_KEYS.map(&:to_s))
+        compare.call("filters (Release::FILTER_KEYS)", manifest["filters"].map { |f| f["name"] }, OTC::Release::FILTER_KEYS.map(&:to_s))
     else
         fail.call("OpenTideConstants::Release::FILTER_KEYS is missing")
     end
@@ -208,8 +247,9 @@ def run_checks
         fail.call("OpenTideConstants::Error must be a direct subclass of StandardError")
     end
     base_methods = base ? base.public_instance_methods(true) : []
-    MANIFEST["errors"].each do |e|
+    manifest["errors"].each do |e|
         next unless e["languages"].include?("ruby") && e["class"]
+        next if pend_errors.include?(e["code"])
         klass = OTC.const_get(e["class"], false) if OTC.const_defined?(e["class"], false)
         unless klass.is_a?(Class)
             fail.call("error class OpenTideConstants::#{e['class']} is missing")
@@ -232,7 +272,8 @@ def run_checks
         want = e["fields"] - ["cause"]
         compare.call("#{klass} fields", want, fields)
     end
-    ruby_classes = MANIFEST["errors"].select { |e| e["languages"].include?("ruby") && e["class"] }.map { |e| e["class"] }
+    ruby_classes = manifest["errors"].select { |e| e["languages"].include?("ruby") && e["class"] && !pend_errors.include?(e["code"]) }
+                                     .map { |e| e["class"] }
     if base
         actual_errors = OTC.constants.map { |c| OTC.const_get(c) }
                            .select { |c| c.is_a?(Class) && c < base }.map { |c| c.name.split("::").last }
@@ -240,7 +281,7 @@ def run_checks
     end
 
     # ---- constants and the phase 2 names (must not exist yet).
-    MANIFEST["constants"].each do |name, spec|
+    manifest["constants"].each do |name, spec|
         next if name == "c_only"
         unless OTC.const_defined?(name, false)
             fail.call("constant #{name} is missing")
@@ -248,22 +289,41 @@ def run_checks
         end
         fail.call("constant #{name} is #{OTC.const_get(name).inspect}, expected #{spec['value'].inspect}") unless OTC.const_get(name) == spec["value"]
     end
-    public_classes = [OTC] + OTC.constants.map { |c| OTC.const_get(c) }.select { |c| c.is_a?(Class) }
-    MANIFEST["reserved_phase2"]["operations"].each do |op|
-        fail.call("phase 2 object #{op['object']} must not exist yet") if op["object"] != "Client" && OTC.const_defined?(op["object"], false)
-        fail.call("phase 2 operation OpenTideConstants.#{op['name']} must not exist yet") if OTC.respond_to?(op["name"])
-        public_classes.each do |klass|
-            fail.call("phase 2 operation #{klass}##{op['name']} must not exist yet") if klass.public_method_defined?(op["name"])
+    # ---- pending names (pending_port.ruby) must not exist yet.
+    pend_objects.each do |o|
+        fail.call("pending object #{o} must not exist yet (pending_port.ruby)") if OTC.const_defined?(o, false)
+    end
+    release_forwarded = objects["Release"]["members"].select { |m| m["forwarded_to_client"] }.map { |m| m["name"] }
+    pend_members.each do |obj, name|
+        m = (objects.dig(obj, "members") || []).find { |x| x["name"] == name }
+        next unless m
+        owners = [obj] + (obj == "Release" && release_forwarded.include?(name) ? ["Client"] : [])
+        owners.each do |owner|
+            klass = owner == "Client" ? OTC : (OTC.const_defined?(owner, false) ? OTC.const_get(owner, false) : nil)
+            next unless klass.is_a?(Class)
+            ruby_names(m).each do |n|
+                fail.call("pending operation #{klass}##{n} must not exist yet (pending_port.ruby)") if klass.public_method_defined?(n)
+            end
         end
     end
-    (MANIFEST["reserved_phase2"]["errors"] || []).each do |e|
-        fail.call("phase 2 error class #{e['class']} must not exist yet") if OTC.const_defined?(e["class"], false)
+    pend_codes = manifest["errors"].select { |e| pend_errors.include?(e["code"]) && e["class"] }
+    pend_codes.each do |e|
+        fail.call("pending error class #{e['class']} must not exist yet (pending_port.ruby)") if OTC.const_defined?(e["class"], false)
+    end
+    if base
+        OTC.constants.map { |c| OTC.const_get(c) }.select { |c| c.is_a?(Class) && c < base && c.const_defined?(:CODE, false) }.each do |c|
+            fail.call("#{c} has the pending code #{c::CODE} (pending_port.ruby)") if pend_errors.include?(c::CODE)
+        end
     end
 
     # ---- enums: the values the gem knows.
     enums = OTC.const_defined?(:ENUMS, false) ? OTC::ENUMS : {}
     fail.call("OpenTideConstants::ENUMS is missing") unless OTC.const_defined?(:ENUMS, false)
-    MANIFEST["enums"].each do |name, values|
+    manifest["enums"].each do |name, values|
+        if pend_enums.include?(name)
+            fail.call("pending enum #{name} must not be in ENUMS yet (pending_port.ruby)") if enums.key?(name.to_sym)
+            next
+        end
         known = enums[name.to_sym]
         known ||= OTC.const_get(ENUM_CONSTANTS[name], false) if ENUM_CONSTANTS[name] && OTC.const_defined?(ENUM_CONSTANTS[name], false)
         if known.nil?
@@ -272,7 +332,7 @@ def run_checks
         end
         compare.call("enum #{name}", values, known.map(&:to_s))
     end
-    (enums.keys.map(&:to_s) - MANIFEST["enums"].keys).each { |n| fail.call("ENUMS has #{n}, which is not a manifest enum") }
+    (enums.keys.map(&:to_s) - manifest["enums"].keys).each { |n| fail.call("ENUMS has #{n}, which is not a manifest enum") }
     failures
 rescue StandardError => e
     failures << "the check crashed: #{e.class}: #{e.message} (#{e.backtrace&.first})"
@@ -356,17 +416,47 @@ MUTATIONS = [
     ["enum-extra-value", -> { patch_const(OTC, :ENUMS, OTC::ENUMS.merge(kind: %w[tide current tsunami])) }, "enum kind: extra tsunami"],
     ["unchecked-filter", -> { patch_const(OTC::Release, :FILTER_KEYS, %i[country type kind source]) },
      "filters (Release::FILTER_KEYS): missing source_type"],
-    ["reserved-op-on-release", -> { patch_source(OTC::Release, [:heights], "def heights(station, from, to, step_s, datum); end") },
-     "phase 2 operation OpenTideConstants::Release#heights"],
-    ["reserved-astro", -> { patch_const(OTC, :Astro, Class.new) }, "phase 2 object Astro"],
-    ["reserved-error-class", -> { patch_const(OTC, :UnsupportedConventionError, Class.new(OTC::Error) { const_set(:CODE, "unsupported_convention") }) },
-     "phase 2 error class UnsupportedConventionError"],
+    ["pending-op-on-release", -> { patch_source(OTC::Release, [:heights], "def heights(station, start:, stop:, step_s: 600, datum: nil, set_id: nil); end") },
+     "pending operation OpenTideConstants::Release#heights"],
+    ["pending-op-on-client", -> { patch_source(OTC, [:extremes], "def extremes(*args, **kw, &blk); end") },
+     "pending operation OpenTideConstants#extremes"],
+    ["pending-object", -> { patch_const(OTC, :AstroTable, Class.new) }, "pending object AstroTable"],
+    ["pending-enum", -> { patch_const(OTC, :ENUMS, OTC::ENUMS.merge(extreme_type: %w[high low])) }, "pending enum extreme_type"],
+    ["pending-error-class", -> { patch_const(OTC, :UnsupportedConventionError, Class.new(OTC::Error) { const_set(:CODE, "unsupported_convention") }) },
+     "pending error class UnsupportedConventionError"],
+    ["pending-error-code", -> { patch_const(OTC, :NoConstants, Class.new(OTC::Error) { const_set(:CODE, "no_constants") }) },
+     "has the pending code no_constants"],
     ["no-SUPPORTED_FORMAT_VERSION", -> { remove_const(OTC, :SUPPORTED_FORMAT_VERSION) }, "constant SUPPORTED_FORMAT_VERSION is missing"],
+].freeze
+
+# Manifest mutations of pending_port.ruby (on a copy).
+def pending_mutation
+    m = Marshal.load(Marshal.dump(MANIFEST))
+    yield m["pending_port"]["ruby"]
+    m
+end
+
+API_MUTATIONS = [
+    ["pending-member-dropped", -> { pending_mutation { |p| p["members"].delete("Release.heights") } }, "Release: missing heights"],
+    ["pending-forwarded-dropped", -> { pending_mutation { |p| p["members"].delete("Release.extremes") } },
+     "OpenTideConstants (client): missing extremes"],
+    ["pending-object-dropped", -> { pending_mutation { |p| p["objects"].delete("AstroTable") } }, "no Ruby class for manifest object AstroTable"],
+    ["pending-enum-dropped", -> { pending_mutation { |p| p["enums"].delete("extreme_type") } }, "enum extreme_type: no value list"],
+    ["pending-error-dropped", -> { pending_mutation { |p| p["errors"].delete("no_constants") } }, "error class OpenTideConstants::NoConstantsError is missing"],
+    ["pending-unknown-member", -> { pending_mutation { |p| p["members"] << "Release.frobnicate" } },
+     "pending_port.ruby: member Release.frobnicate is not a manifest member"],
+    ["pending-unknown-object", -> { pending_mutation { |p| p["objects"] << "Astro" } }, "pending_port.ruby: object Astro"],
+    ["pending-unknown-error", -> { pending_mutation { |p| p["errors"] << "not_found" } }, "pending_port.ruby: error not_found"],
+    ["pending-unknown-key", -> { pending_mutation { |p| p["functions"] = [] } }, "pending_port.ruby: unknown key(s)"],
 ].freeze
 
 def self_test
     base = run_checks
     out = []
+    API_MUTATIONS.each do |name, mutate, expect|
+        new = run_checks(mutate.call) - base
+        out << "#{name}: not caught (wanted a problem with #{expect.inspect}; new problems #{new.inspect})" unless new.any? { |p| p.include?(expect) }
+    end
     MUTATIONS.each do |name, apply, expect|
         undo = apply.call
         got = begin
@@ -396,7 +486,8 @@ rc = failures.empty? ? 0 : 1
 unless ARGV.include?("--no-self-test")
     bad = self_test
     bad.each { |f| warn "SELF-TEST #{f}" }
-    puts "self-test: #{MUTATIONS.size - bad.size} of #{MUTATIONS.size} mutations caught"
+    n = MUTATIONS.size + API_MUTATIONS.size
+    puts "self-test: #{n - bad.size} of #{n} mutations caught"
     rc = 1 unless bad.empty?
 end
 exit rc
