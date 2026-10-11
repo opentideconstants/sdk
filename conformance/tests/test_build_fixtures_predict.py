@@ -591,3 +591,26 @@ def test_no_case_names_both_knc_roots(calls):
     for c in calls["cases"]:
         text = json.dumps(c)
         assert not ('"knc"' in text and "knc-predict" in text), c["id"]
+
+
+def test_hand_written_counts_match_the_design(calls, doc):
+    """Every hand-written event count ({$len: n}) in predict_calls.json equals the design scan of the same window
+    (5 s for M2 alone, 0.01 s for the close-root windows; the sub-second ones are the close-root filter's outcome)."""
+    by_id = {c["id"]: c for c in calls["cases"]}
+
+    def lens(cid):
+        return [s["expect"]["items"]["$len"] for s in by_id[cid]["steps"]
+                if isinstance(s.get("expect", {}).get("items"), dict)]
+    s5 = set_sum(doc, "OTC-P-0005/noaa")
+    t0, t1 = ts(bf.PW["single"][0]), ts(bf.PW["single"][1])
+    n = len(scan(lambda t, y: s5.dh(t), t0, t1, 5.0))
+    assert lens("predict-extremes/single-constituent") == [n] == lens("predict-extremes/negative-amplitude")
+    for cid, sid, key in (("predict-extremes/close-high-low", "OTC-P-0008/noaa", "close-high-low"),
+                          ("predict-extremes/close-high-low-high", "OTC-P-0009/noaa", "close-high-low-high"),
+                          ("predict-extremes/double-high", "OTC-P-0010/noaa", "double-high")):
+        s = set_sum(doc, sid)
+        a, b = ts(bf.PW[key][0]), ts(bf.PW[key][1])
+        assert lens(cid) == [len(scan(lambda t, y: s.dh(t), a, b, 0.01))], cid
+    # an even cluster drops both; each triple keeps one
+    assert [s["expect"]["items"] if isinstance(s["expect"]["items"], list) else s["expect"]["items"]["$len"]
+            for s in by_id["predict-extremes/sub-second"]["steps"]] == [[], 1, 1]
