@@ -26,6 +26,14 @@ class LoadIdsTest < Minitest::Test
         assert_invalid("tombstone twice", "station_id OTC-T-0005 appears twice") { |doc| doc["stations"] << tomb(doc).dup }
     end
 
+    # CR D5: one id across the active stations and the tombstones together:
+    # a tombstone with the id of an active station.
+    def test_active_station_and_tombstone_share_an_id
+        assert_invalid("active and tombstone", "station_id OTC-T-0001 appears twice") do |doc|
+            doc["stations"] << tomb(doc).merge("station_id" => "OTC-T-0001")
+        end
+    end
+
     # D5: a repeated licence_id.
     def test_repeated_licence_id
         assert_invalid("licence twice", "licence_id \"noaa\" appears twice") { |doc| doc["licences"] << doc["licences"][0].dup }
