@@ -70,10 +70,16 @@ class OpenTideConstants
                 elsif res.status != 200
                     raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status)
                 end
-                if expected_sha.nil? || res.sha256 != expected_sha || (expected_size && res.size != expected_size)
-                    raise ChecksumError.new("#{name}: SHA-256 or size mismatch (#{res.size} bytes)",
-                                            file: final || File.join(dir, name), expected: expected_sha, actual: res.sha256)
-                end
+                # Each failure says which check failed (R3-227).
+                why = if expected_sha.nil?
+                          "no expected SHA-256 (the .sha256 file has no row for it)"
+                      elsif expected_size && res.size != expected_size
+                          "size #{res.size}, expected #{expected_size}"
+                      elsif res.sha256 != expected_sha
+                          "SHA-256 #{res.sha256}, expected #{expected_sha}"
+                      end
+                raise ChecksumError.new("#{name}: #{why}", file: final || File.join(dir, name), expected: expected_sha,
+                                                          actual: res.sha256) if why
                 File.rename(tmp, final) if final
                 res.size
             rescue Exception # rubocop:disable Lint/RescueException

@@ -171,8 +171,8 @@ class OpenTideConstants
     end
 
     # Writes a release into a folder the caller chooses (spec §4.3.2): the
-    # data files of formats, with OTC_{D}.meta.json for jsonl, and always
-    # OTC_{D}.sha256; all of them or none. Returns the paths written, in that
+    # data files of formats, and always OTC_{D}.meta.json and OTC_{D}.sha256,
+    # whatever the formats; all of them or none. Returns the paths written, in that
     # order with the .sha256 last; a file already there with the same content
     # is left alone and is not in the list.
     def download(release = :latest, to:, formats: [:jsonl], overwrite: false)
@@ -415,12 +415,17 @@ class OpenTideConstants
     def maybe_auto_update
         return unless @auto_update && @requested == :latest && @file.nil? && !@offline && !@closed
         return if monotonic - @last_check < @update_interval
-        begin
-            update!
-        rescue StandardError => e
-            @last_check = monotonic
-            @last_error = auto_update_error(e)
-            log(:warn, "automatic update failed: #{@last_error.message}\n#{Array(e.backtrace).join("\n")}")
+        @lock.synchronize do
+            # Again under the lock: queries that passed the check above at
+            # the same time run one update, not one each (R3-221).
+            return if @closed || monotonic - @last_check < @update_interval
+            begin
+                update!
+            rescue StandardError => e
+                @last_check = monotonic
+                @last_error = auto_update_error(e)
+                log(:warn, "automatic update failed: #{@last_error.message}\n#{Array(e.backtrace).join("\n")}")
+            end
         end
     end
 

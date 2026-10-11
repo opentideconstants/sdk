@@ -541,9 +541,9 @@ class OpenTideConstants
                 @io.seek(e.pos)
                 @io.read(e.len)
             end
-            raw = line && line.bytesize == e.len ? parse_station(line) : nil
+            raw, why = line && line.bytesize == e.len ? parse_station(line) : nil
             unless raw.is_a?(Hash) && raw["station_id"] == e.station_id
-                bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : "is not a station line")
+                bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : ["is not a station line", why].compact.join(": "))
             end
             check_line!(raw, e) if e.view
             build_station(raw, e.kind, e.eff_id)
@@ -578,12 +578,14 @@ class OpenTideConstants
             bad_line!(e, "does not give the status, references and sets of its entry")
         end
 
+        # [the parsed line, nil], or [nil, why it does not parse] (R3-226: the
+        # reason goes into the invalid_release message).
         def parse_station(line)
             line = line.force_encoding(Encoding::UTF_8)
             Util.no_lone_surrogate!(line)
-            JSON.parse(line)
-        rescue JSON::ParserError, EncodingError, InvalidReleaseError
-            nil
+            [JSON.parse(line), nil]
+        rescue JSON::ParserError, EncodingError, InvalidReleaseError => err
+            [nil, err.message[0, 200]]
         end
 
         # rec_id: the set the Station gives as recommended (the effective one
