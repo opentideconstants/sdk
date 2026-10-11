@@ -36,9 +36,31 @@ class AttributionTest < Minitest::Test
         end
         c = OTC.new(file: path)
         text = c.attribution
+        assert_includes text, "Sources: "
         sources = text.split("Sources: ", 2)[1].split("; ")
         assert_equal c.release.licences.size, sources.size
-        assert(sources.none? { |s| s.start_with?(": ") })
+        assert_equal c.release.licences.map(&:attribution).sort, sources.sort, "a null provider is printed"
+    ensure
+        c&.close
+    end
+
+    # CR D2 b, mixed: a null-provider licence next to licences that share a
+    # provider. The shared ones merge into one segment; the null one stays alone.
+    def test_null_provider_next_to_a_shared_provider
+        lics = nil
+        path = release_file do |d|
+            d["licences"].each { |l| l["provider"] = "Shared" }
+            d["licences"][0]["provider"] = nil
+            lics = d["licences"].sort_by { |l| l["licence_id"] }
+        end
+        c = OTC.new(file: path)
+        null_one = lics.find { |l| l["provider"].nil? }
+        first_shared = lics.find { |l| l["provider"] == "Shared" }
+        want = lics.select { |l| l.equal?(null_one) || l.equal?(first_shared) }
+                   .map { |l| l["provider"] ? "Shared: #{l['attribution']}" : l["attribution"] }
+        text = c.attribution
+        assert_includes text, "Sources: "
+        assert_equal want, text.split("Sources: ", 2)[1].split("; ")
     ensure
         c&.close
     end
