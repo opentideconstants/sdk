@@ -232,6 +232,15 @@
    "root": "predict-bad/extremes-negative-amplitude"
   },
   {
+   "defect": "OTC-P-0059's current_offsets entry names reference station OTC-P-9999, which is not in the release (a build-check fault; format 1.0 keeps current_offsets raw, so an SDK loads it, spec 4.9 step 1)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/current-reference-missing"
+  },
+  {
    "defect": "format 1.1: height_adjusted_type X (read as other) at OTC-P-0035 (equal offsets), OTC-P-0030 (differing offsets) and OTC-P-0049 (whose reference has no noaa set)",
    "expect": "load",
    "latest": "20991231.7",

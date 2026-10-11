@@ -1521,10 +1521,10 @@ PRED_ROWS_A = {
     "M2": (28.9841042, 120.0, 0.5, 0.03, 0.0), "S2": (30.0, 0.0, 0.0, 0.0, 0.0),
     "N2": (28.4397295, 210.0, 0.5, 0.03, 0.1), "K1": (15.0410686, 15.0, 1.0, 0.08, 0.3),
     "O1": (13.9430356, 270.0, 1.0, 0.12, 0.3), "M4": (57.9682084, 240.0, 1.0, 0.06, 0.0),
-    "MN4": (57.4238337, 330.0, 1.0, 0.06, 0.1),
+    "MN4": (57.4238337, 330.0, 1.0, 0.06, 0.1), "M6": (86.9523126, 300.0, 1.5, 0.09, 0.0),
     "XRA": (1800.0, 0.0, 0.0, 0.0, 0.0), "XRB": (4580.0, 0.0, 0.0, 0.0, 0.0), "XRC": (690.0, 0.0, 0.0, 0.0, 0.0),
     "XRD": (64800.0, 0.0, 0.0, 0.0, 0.0), "XRE": (900000.0, 0.0, 0.0, 0.0, 0.0),
-    "XRF": (1000000.0, 0.0, 0.0, 0.0, 0.0), "XRG": (2090000.0, 0.0, 0.0, 0.0, 0.0),
+    "XRF": (1000000.0, 0.0, 0.0, 0.0, 0.0), "XRG": (740000.0, 0.0, 0.0, 0.0, 0.0),
 }
 # The table jumps of the New Year cases (spec 6.5): K1 and O1 +5 degrees at 2010 (extremes-new-year-missed), the
 # opposite at 2011 (extremes-new-year-doubled), +5 again at 2012 (a slack missed at T) with M2 -3 (a slack doubled);
@@ -1534,7 +1534,7 @@ PRED_JUMPS_A = {("K1", 2010): 5.0, ("O1", 2010): 5.0, ("K1", 2011): -4.05, ("O1"
 PRED_FJUMPS_A = {("M2", 2013): 0.03}
 PRED_ROWS_B = {"M2": (28.9841042, 75.0, 0.5, 0.03, 0.0), "K1": (15.0410686, 300.0, 1.0, 0.08, 0.3)}
 PRED_DOODSON = {"M2": "255 555", "S2": "273 555", "N2": "245 655", "K1": "165 555", "O1": "145 555", "M4": "455 555",
-                "MN4": "445 655"}
+                "MN4": "445 655", "M6": "655 555"}
 
 
 def predict_tables():
@@ -1664,8 +1664,9 @@ DESIGN_BINS = {
     "slack-pair": ([("M2", 0.5, 243.570917)], -0.497749999557724),
     # three slacks within 0.9 s, flood-ebb-flood (2010-08-09 06:01:10)
     "slack-triple": ([("M2", 0.5, 275.853715), ("XRF", 3.60671e-05, 338.472197)], None),
-    # five slacks within 0.95 s (2010-08-19 06:01:10)
-    "slack-five": ([("M2", 0.5, 32.038739), ("XRG", 3.28573e-05, 314.668053)], None),
+    # five slacks, each 0.82-0.88 s after the one before (one cluster, five leaves), on a flat crossing: M2 and M6 make
+    # W = (4/3) F U sin^3, and the ripple XRG crosses it five times (2010-01-20 06:02:21)
+    "slack-five": ([("M2", 0.5, 137.10115), ("M6", 0.168170146632, 351.30345), ("XRG", 4.93502e-11, 28.694425)], None),
     # current-events-new-year-slack: missed at 2012-01-01 (K1, O1), doubled (M2)
     "ny-slack-missed": ([("K1", 0.6, 107.276412), ("O1", 0.4, 57.840927)], None),
     "ny-slack-doubled": ([("M2", 0.8, 265.250366)], None),
@@ -1686,7 +1687,7 @@ PW = {
     "sub-second-triple-equal": ("2010-07-03T09:01:00Z", "2010-07-03T09:01:20Z", "2010-07-03T09:01:10.6665Z"),
     "close-slacks": ("2010-07-20T12:00:00Z", "2010-07-20T12:06:00Z"),
     # the centres of current-events-sub-second-slacks, bins 2, 3 and 4 of OTC-P-0020 (each window is centre +- 10 s)
-    "sub-second-slacks": ("2010-07-30T12:01:10.3625Z", "2010-08-09T06:01:10.6625Z", "2010-08-19T06:01:10.6645Z"),
+    "sub-second-slacks": ("2010-07-30T12:01:10.3625Z", "2010-08-09T06:01:10.6625Z", "2010-01-20T06:02:20.975Z"),
     "current-events-weak": ("2010-03-01T00:00:00Z", "2010-03-03T00:00:00Z"),
     "currents": ("2010-03-01T00:00:00Z", "2010-03-02T00:00:00Z"),
 }
@@ -1859,6 +1860,22 @@ def predict_stations():
                     "named": {"mhhw": 2.0, "mhw": 1.8, "mlw": 0.25, "mllw": 0.0},
                     "basis": {"mhhw": published(NTDE), "mhw": published(NTDE), "mlw": dict(FIRST_REDUCTION),
                               "mllw": dict(FIRST_REDUCTION)}})]))
+    # subordinate-reference-no-usable-set (spec rev 28): the reference is active, its only noaa water-level set is
+    # no_constants, and its gesla-fit set does not count (the offsets' source is noaa)
+    S.append(pstation("OTC-P-0055", "Reference No Usable Set", [
+        pgauge("OTC-P-0055", "gesla-fit", [pc("M2", 0.7, 50.0), pc("K1", 0.2, 140.0)]),
+        pset("OTC-P-0055", "noaa", [], qc_status="no_constants", no_constants_reason="fit_unusable",
+             qc_flags=[{"flag": "broken_record", "reason": "test: no usable constants"}],
+             record_issues=[{"issue": "spikes", "reason": "test: spikes"}])]))
+    S.append(subordinate("OTC-P-0056", "Sub No Usable Set Folded", offsets("OTC-P-0055", 15, 15, 0.95, 0.95)))
+    S.append(subordinate("OTC-P-0057", "Sub No Usable Set Differing", offsets("OTC-P-0055", 10, 25, 1.02, 0.97)))
+    # subordinate-current-reference-no-set: the current reference is active with no usable current set
+    S.append(pstation("OTC-P-0058", "Reference No Current Set", [
+        pset("OTC-P-0058", "noaa", [], quantity="current", qc_status="no_constants", no_constants_reason="fit_unusable",
+             qc_flags=[{"flag": "broken_record", "reason": "test: no usable constants"}],
+             record_issues=[{"issue": "spikes", "reason": "test: spikes"}])], recommended=None))
+    S.append(pstation("OTC-P-0059", "Sub Current No Reference Set", [], recommended=None, type_="subordinate",
+                      current_offsets=[current_offset(1, "OTC-P-0058", 1)]))
     return S
 
 
@@ -1941,6 +1958,9 @@ PREDICT_BAD = [
      _pred_change(lambda d: _pred_table(d, ASTRO_A)["constituents"]["M2"]["v0u_deg"].pop())),
     ("extremes-negative-amplitude", "OTC-P-0005's M2 amplitude_m is -1.0 (below the schema's minimum 0)",
      _pred_change(lambda d: _set_of(d, "OTC-P-0005")["constituents"][0].update(amplitude_m=-1.0))),
+    ("current-reference-missing", "OTC-P-0059's current_offsets entry names reference station OTC-P-9999, which is not in "
+     "the release (a build-check fault; format 1.0 keeps current_offsets raw, so an SDK loads it, spec 4.9 step 1)",
+     _pred_change(lambda d: _station(d, "OTC-P-0059")["current_offsets"][0].update(reference_station_id="OTC-P-9999"))),
     ("unknown-adjusted-type", "format 1.1: height_adjusted_type X (read as other) at OTC-P-0035 (equal offsets), "
      "OTC-P-0030 (differing offsets) and OTC-P-0049 (whose reference has no noaa set)",
      _pred_change(_unknown_adjusted_type)),
@@ -2494,9 +2514,7 @@ def predict_calls():
         c = _t(PW["sub-second-slacks"][i][:19] + "Z")
         ss.append(current_events("OTC-P-0020", _iso(c - 10), _iso(c + 10), bin_number=n))
     case("predict-current-events/sub-second-slacks", "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood "
-         "(index 0 kept); five within 0.95 s (index 2)", "4.7", ss,
-         note="five roots within 0.95 s cannot lie in five 0.703125 s leaves: they lie 2-1-2, the pairs cancel in their leaves, "
-              "and index 2 is the only candidate (see the slot report)")
+         "(index 0 kept); five, each less than 1 s after the one before, in five leaves (index 2 kept)", "4.7", ss)
     case("predict-current-events/new-year-slack", "2012-01-01: a slack missed at T is inserted at T (bin 1); a doubled one keeps L (bin 2)",
          "4.7", [current_events("OTC-P-0021", "2011-12-31T18:00:00Z", "2012-01-01T06:00:00Z", bin_number=1),
                  current_events("OTC-P-0021", "2011-12-31T18:00:00Z", "2012-01-01T06:00:00Z", bin_number=2)])
@@ -2549,6 +2567,21 @@ def predict_calls():
          note="OTC-P-0049's reference has no noaa set (reference_unavailable without the X); see the slot report on 'missing reference'")
     case("predict-subordinate/order-ratio-before-extremes-only", "differing offsets and an R ratio of 0: heights is invalid_argument, "
          "not extremes_only", "4.8 step 6", [zr("heights", "OTC-P-0040", "event")])
+    nus = lambda op, sid, **kw: error(op, "reference_unavailable", fields={"reference_station_id": "OTC-P-0055"}, station_id=sid, **kw)
+    case("predict-subordinate/reference-no-usable-set", "the reference is active, but its only noaa water-level set is no_constants "
+         "(its gesla-fit set does not count): heights, heights_at and extremes are reference_unavailable, at an equal-offsets and a "
+         "differing-offsets station (the reference checks come before extremes_only)", "4.8 step 1, step 6",
+         [nus(op, sid, **kw) for sid in ("OTC-P-0056", "OTC-P-0057")
+          for op, kw in (("heights", {"start": W2[0], "stop": "2010-03-01T06:00:00Z"}), ("heights_at", {"times": [W2[0]]}),
+                         ("extremes", {"start": W2[0], "stop": W2[1]}))])
+    case("predict-subordinate/current-reference-no-set", "a current_offsets reference that is active with no usable current set: "
+         "current_events is reference_unavailable", "4.9 step 1",
+         [error("current_events", "reference_unavailable", fields={"reference_station_id": "OTC-P-0058"}, station_id="OTC-P-0059",
+                start=W2[0], stop=W2[1])])
+    case("predict-subordinate/current-reference-no-set-missing", "a current_offsets reference that is not in the release (it loads: "
+         "current_offsets are raw in 1.0): current_events is reference_unavailable", "4.9 step 1",
+         [error("current_events", "reference_unavailable", fields={"reference_station_id": "OTC-P-9999"}, station_id="OTC-P-0059",
+                start=W2[0], stop=W2[1])], root="predict-bad/current-reference-missing")
     case("predict-reference-set-file-order", "the reference set is the first usable noaa water-level set in file order (the flagged one), "
          "not the recommended gesla-fit set, the no_constants set or the later ok set", "4.8 step 1",
          [sub_tide("extremes", "OTC-P-0043", *W2, expect={"set_id": "OTC-P-0042/noaa-b-flagged"})])
@@ -3264,7 +3297,8 @@ def tolerate_prediction(doc, meta, lines):
     """What an SDK does not check when it loads a release, because it reads astro_tables and the constants only when
     it predicts (prediction spec 4.2 steps 5 and 6, 4.2a; 6.1: the SDKs are tolerant readers of range faults): a
     convention whose astro table is absent or not named, an astro-table row with a negative speed or an array of the
-    wrong length, a constituent with no table row, and a negative amplitude. Each is put right in a copy, so that it is
+    wrong length, a constituent with no table row, a negative amplitude, and a current_offsets reference station that
+    is not in the release (current_offsets are raw in 1.0, spec 4.9 step 1). Each is put right in a copy, so that it is
     the only defect, and listed (the bad prediction fixtures, root predict-bad). Returns (doc, meta, lines, notes)."""
     notes = []
     doc = copy.deepcopy(doc)
@@ -3317,9 +3351,22 @@ def tolerate_prediction(doc, meta, lines):
                     rows[c["name"]] = {"speed_deg_per_hour": speeds[c["name"]], "v0u_deg": [0.0] * k, "f": [1.0] * k}
         return st
 
+    active_ids = {st.get("station_id") for st in doc.get("stations") or () if isinstance(st, dict) and st.get("status") == "active"}
+
+    def fix_current_refs(st, note):
+        for co in st.get("current_offsets") if isinstance(st.get("current_offsets"), list) else ():
+            if isinstance(co, dict) and isinstance(co.get("reference_station_id"), str) and co["reference_station_id"] not in active_ids:
+                if note:
+                    notes.append(f"{st.get('station_id')}: current_offsets reference {co['reference_station_id']} is not in the "
+                                 "release (current_offsets are raw in 1.0; found when it predicts: reference_unavailable)")
+                co["reference_station_id"] = st["station_id"]
+        return st
+
     for st in doc.get("stations") or ():
         if isinstance(st, dict):
             fix_station(st, True)
+            fix_current_refs(st, True)
+    lines = [fix_current_refs(l, False) if isinstance(l, dict) else l for l in lines]
     lines = [fix_station(copy.deepcopy(l), False) if isinstance(l, dict) else l for l in lines]
     if notes and isinstance(meta, dict):
         meta = dict(meta, conventions=doc["conventions"])

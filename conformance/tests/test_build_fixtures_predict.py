@@ -148,7 +148,7 @@ def test_prediction_roots_in_manifest():
     assert roots["predict"]["releases"] == [bf.PREDICT_D] and roots["predict"]["expect"] == "load"
     assert roots["knc-predict"]["releases"] == ["20991231.2"] and roots["knc-predict"]["expect"] == "load"
     for name in ("no-astro-table", "unsupported-constituent", "astro-negative-speed", "astro-negative-speed-unused",
-                 "astro-short-v0u", "extremes-negative-amplitude", "unknown-adjusted-type"):
+                 "astro-short-v0u", "extremes-negative-amplitude", "current-reference-missing", "unknown-adjusted-type"):
         assert roots[f"predict-bad/{name}"]["expect"] == "load", name
 
 
@@ -247,6 +247,7 @@ BAD_PATHS = {
     "astro-short-v0u": {"/astro_tables/0/constituents/M2/v0u_deg"},
     "extremes-negative-amplitude": None,
     "unknown-adjusted-type": None,
+    "current-reference-missing": None,
 }
 
 
@@ -262,6 +263,9 @@ def test_bad_prediction_fixture_has_one_change(name, doc):
     elif name == "extremes-negative-amplitude":
         assert paths == {f"/stations/{station_index(doc, 'OTC-P-0005')}/constant_sets/0/constituents/0/amplitude_m"}
         assert bad["stations"][station_index(doc, "OTC-P-0005")]["constant_sets"][0]["constituents"][0]["amplitude_m"] == -1.0
+    elif name == "current-reference-missing":
+        assert paths == {f"/stations/{station_index(doc, 'OTC-P-0059')}/current_offsets/0/reference_station_id"}
+        assert "OTC-P-9999" not in {s["station_id"] for s in bad["stations"]}
     elif name == "unknown-adjusted-type":
         want = {"/format_version", "/future_top_level", "/release/future_release_field"}
         want |= {f"/stations/{station_index(doc, s)}/subordinate_offsets/height_adjusted_type"
@@ -412,15 +416,15 @@ def test_close_slacks(doc):
 
 
 @pytest.mark.parametrize("n,kinds,span", [(2, ["up", "down"], 0.7), (3, ["up", "down", "up"], 0.9),
-                                          (4, ["up", "down", "up", "down", "up"], 0.95)])
+                                          (4, ["up", "down", "up", "down", "up"], 4.0)])
 def test_sub_second_slacks(doc, n, kinds, span):
-    """Two slacks 0.6 s apart (in two leaves), three within 0.9 s flood-ebb-flood (three leaves), five within 0.95 s.
-    Five roots within 0.95 s cannot sit in five leaves of 0.703125 s: they sit 2-1-2, so the two pairs cancel inside
-    their leaves (spec 4.6 step 4) and the middle one (index 2) is the only candidate."""
+    """Two slacks 0.6 s apart (in two leaves); three within 0.9 s flood-ebb-flood (three leaves); five in one cluster,
+    each 0.703125 s to 1 s after the one before, so each is a candidate in its own leaf and the index rule
+    2 * floor((n - 1) / 4) picks index 2 (spec 4.7)."""
     w, dw = bin_w(doc, "OTC-P-0020/noaa", n)
     c = ts(bf.PW["sub-second-slacks"][n - 2][:19] + "Z") + float(bf.PW["sub-second-slacks"][n - 2][19:-1])
-    zs = scan(lambda t, y: w(t), c - 20, c + 20, 0.002)
-    near = [z for z in zs if abs(z[0] - c) < 1.0]
+    zs = scan(lambda t, y: w(t), c - 20, c + 20, 0.002 if n < 4 else 0.01)
+    near = [z for z in zs if abs(z[0] - c) < (1.0 if n < 4 else 2.5)]
     assert [k for _, k in near] == kinds and near[-1][0] - near[0][0] < span
     assert isolated(zs, near, c - 20, c + 20, None)
     leaves = [leaf(r) for r, _ in near]
@@ -429,7 +433,10 @@ def test_sub_second_slacks(doc, n, kinds, span):
     elif n == 3:
         assert len(set(leaves)) == 3
     else:
-        assert leaves[0] == leaves[1] != leaves[2] != leaves[3] == leaves[4]
+        gaps = [b[0] - a[0] for a, b in zip(near, near[1:])]
+        assert all(LEAF + 0.05 < g < 0.95 for g in gaps), gaps
+        assert len(set(leaves)) == 5
+        assert all(min(in_step(r) % LEAF, LEAF - in_step(r) % LEAF) > 0.03 for r, _ in near), "no root near a leaf edge"
 
 
 def test_new_year_slacks(doc):
@@ -499,10 +506,11 @@ commercial-only-current-offsets-nc commercial-only-current-offsets-usable""".spl
 NOT_BUILT = ["otc_heights", "otc_heights_at", "otc_extremes", "otc_currents", "otc_current_events", "otc_astro_table",
              "otc_astro_equilibrium_argument", "otc_astro_node_factor", "otc_astro_equilibrium_for_year",
              "otc_astro_node_factor_for_year", "otc_astro_valid_range"]
-# A reference that is missing or removed cannot be in a release an SDK loads: every SDK refuses at load a
-# reference_station_id that names no active station (invalid_release; Python _check_ids, the reference reader's
-# cross_ref_errors). So these two cases are not built; the slot report raises them with the orchestrator.
+# Spec revision 28 removes these two: a subordinate_offsets reference that is missing or removed makes the release
+# fail to load (invalid_release), so the cases do not exist. It adds the two below.
 BLOCKED = {"subordinate-reference-removed", "datum-subordinate-reference-removed"}
+SPEC_CASES += ["subordinate-reference-no-usable-set", "subordinate-current-reference-no-set",
+               "subordinate-current-reference-no-set-missing"]
 
 
 @pytest.fixture(scope="module")

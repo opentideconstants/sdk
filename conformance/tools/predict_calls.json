@@ -3499,7 +3499,6 @@
   },
   {
    "id": "predict-current-events/sub-second-slacks",
-   "note": "five roots within 0.95 s cannot lie in five 0.703125 s leaves: they lie 2-1-2, the pairs cancel in their leaves, and index 2 is the only candidate (see the slot report)",
    "release": "20991231.7",
    "requires": [
     "predict"
@@ -3566,9 +3565,9 @@
     {
      "args": {
       "bin_number": 4,
-      "start": "2010-08-19T06:01:00Z",
+      "start": "2010-01-20T06:02:10Z",
       "station_id": "OTC-P-0020",
-      "stop": "2010-08-19T06:01:20Z"
+      "stop": "2010-01-20T06:02:30Z"
      },
      "expect": {
       "bin_number": 4,
@@ -3585,14 +3584,14 @@
          4
         ]
        },
-       "start": "2010-08-19T06:01:00Z",
-       "stop": "2010-08-19T06:01:20Z"
+       "start": "2010-01-20T06:02:10Z",
+       "stop": "2010-01-20T06:02:30Z"
       },
       "entry": "current_events_strict"
      }
     }
    ],
-   "title": "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood (index 0 kept); five within 0.95 s (index 2)"
+   "title": "two slacks 0.6 s apart (even: none); three within 0.9 s flood-ebb-flood (index 0 kept); five, each less than 1 s after the one before, in five leaves (index 2 kept)"
   },
   {
    "id": "predict-current-events/new-year-slack",
@@ -4948,6 +4947,164 @@
     }
    ],
    "title": "differing offsets and an R ratio of 0: heights is invalid_argument, not extremes_only"
+  },
+  {
+   "id": "predict-subordinate/reference-no-usable-set",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict",
+   "spec": "4.8 step 1, step 6",
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0056",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights",
+     "strict": null
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0056",
+      "times": [
+       "2010-03-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights_at",
+     "strict": null
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0056",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "extremes",
+     "strict": null
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0057",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights",
+     "strict": null
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0057",
+      "times": [
+       "2010-03-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights_at",
+     "strict": null
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0057",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "extremes",
+     "strict": null
+    }
+   ],
+   "title": "the reference is active, but its only noaa water-level set is no_constants (its gesla-fit set does not count): heights, heights_at and extremes are reference_unavailable, at an equal-offsets and a differing-offsets station (the reference checks come before extremes_only)"
+  },
+  {
+   "id": "predict-subordinate/current-reference-no-set",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict",
+   "spec": "4.9 step 1",
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0058"
+      }
+     },
+     "op": "current_events",
+     "strict": null
+    }
+   ],
+   "title": "a current_offsets reference that is active with no usable current set: current_events is reference_unavailable"
+  },
+  {
+   "id": "predict-subordinate/current-reference-no-set-missing",
+   "release": "20991231.7",
+   "requires": [
+    "predict"
+   ],
+   "root": "predict-bad/current-reference-missing",
+   "spec": "4.9 step 1",
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-9999"
+      }
+     },
+     "op": "current_events",
+     "strict": null
+    }
+   ],
+   "title": "a current_offsets reference that is not in the release (it loads: current_offsets are raw in 1.0): current_events is reference_unavailable"
   },
   {
    "id": "predict-reference-set-file-order",
