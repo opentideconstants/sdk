@@ -271,7 +271,9 @@ OTC_API void otc_open_options_init(otc_open_options *opts);
 
 /* Opens OTC_{D}.jsonl (path) with OTC_{D}.meta.json next to it. If
  * OTC_{D}.sha256 is next to it, both files are checked against it
- * (loaded_from file); otherwise loaded_from is file_unverified. A format major
+ * (loaded_from file), and it must list both: a missing row is OTC_E_CHECKSUM
+ * "not listed", before either file is hashed (spec 5.3, CR3 DR73); otherwise
+ * loaded_from is file_unverified. A format major
  * other than OTC_FORMAT_MAJOR is OTC_E_UNSUPPORTED_FORMAT; a higher minor loads
  * (spec 7.3). A release.min_reader_version newer than OTC_FORMAT_VERSION is
  * OTC_E_READER_TOO_OLD, with a message that names both versions. opts may be NULL. */

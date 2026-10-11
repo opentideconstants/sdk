@@ -1398,6 +1398,18 @@ static otc_status build_files(otc_release *r, const char *dir, char **names, cha
 }
 
 /* hex: the SHA-256 of the bytes the library uses (the open handle, or the bytes read). */
+/* spec 5.3, CR3 DR73: a .sha256 next to the file must have a row for every release file the open reads, checked
+ * before any file is hashed; a missing row is OTC_E_CHECKSUM "not listed", with path the missing file */
+static otc_status need_row(const char *path, const char *name, const char *sha_path, char **names, size_t n,
+                           otc_error *err)
+{
+    size_t i;
+    for (i = 0; i < n; i++)
+        if (!strcmp(names[i], name)) return OTC_OK;
+    otc__err_set(err, OTC_E_CHECKSUM, path, "%s is not listed in %s", name, path_base(sha_path));
+    return OTC_E_CHECKSUM;
+}
+
 static otc_status check_digest(const char *path, const char *name, const char *hex, char **names, char **digests,
                                size_t n, otc_error *err)
 {
@@ -1469,6 +1481,8 @@ static otc_status open_impl(const char *path, const otc_open_options *opts, otc_
         char hex[65];
         st = otc__sha256_rows(sha_path, &names, &digests, &n_rows);
         if (st != OTC_OK) { otc__err_set(err, st, sha_path, "%s %s", otc__sha256_rows_what(st), sha_path); goto done; }
+        if ((st = need_row(path, jsonl_name, sha_path, names, n_rows, err)) != OTC_OK) goto done;
+        if ((st = need_row(meta_path, path_base(meta_path), sha_path, names, n_rows, err)) != OTC_OK) goto done;
         if ((st = otc__sha256_handle(r->file, hex)) != OTC_OK) { otc__err_set(err, st, path, "cannot read %s", path); goto done; }
         if ((st = check_digest(path, jsonl_name, hex, names, digests, n_rows, err)) != OTC_OK) goto done;
         otc__sha256_mem(meta_text, meta_len, hex);
