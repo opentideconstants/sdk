@@ -1397,7 +1397,6 @@ static otc_status build_files(otc_release *r, const char *dir, char **names, cha
     return OTC_OK;
 }
 
-/* hex: the SHA-256 of the bytes the library uses (the open handle, or the bytes read). */
 /* spec 5.3, CR3 DR73: a .sha256 next to the file must have a row for every release file the open reads, checked
  * before any file is hashed; a missing row is OTC_E_CHECKSUM "not listed", with path the missing file */
 static otc_status need_row(const char *path, const char *name, const char *sha_path, char **names, size_t n,
@@ -1410,6 +1409,7 @@ static otc_status need_row(const char *path, const char *name, const char *sha_p
     return OTC_E_CHECKSUM;
 }
 
+/* hex: the SHA-256 of the bytes the library uses (the open handle, or the bytes read). */
 static otc_status check_digest(const char *path, const char *name, const char *hex, char **names, char **digests,
                                size_t n, otc_error *err)
 {

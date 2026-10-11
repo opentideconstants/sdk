@@ -1143,6 +1143,16 @@ def local_row_cases():
                      drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(**{J: other})),
                      step("verify", err("checksum_mismatch", file={"$regex": re.escape(J) + "$"}, expected=other, actual=rows[J]))],
                     requires=["fs", "json"]))
+    # CR2 DR44 over CR3 DR73: a data file the client was loaded from that is gone is io in verify, never checksum
+    # "not listed", also when the .sha256 has lost its row too (nothing can be hashed)
+    for opened, copy, gone, req in [(JL, [JL, M], [JL], []), (GZ, [GZ], [GZ, J], ["json"])]:
+        k = opened.replace(f"OTC_{d}", "").replace(".", "-")
+        out.append(case(f"load/verify-file{k}-missing-file-no-row", f"verify on a local {opened.replace(f'OTC_{d}', '')} client after the file is deleted and its .sha256 row removed: io, never \"not listed\" (CR2 DR44, CR3 DR73)", "4.3, 5.3",
+                        [drv("copy", files=[f"{G}/{n}" for n in copy] + [f"{G}/OTC_{d}.sha256"], to="${tmp}/rel"),
+                         step("open", {"loaded_from": "file", "datestamp": d}, file=f"${{tmp}}/rel/{opened}"),
+                         drv("delete", path=f"${{tmp}}/rel/{opened}"),
+                         drv("write", path=f"${{tmp}}/rel/OTC_{d}.sha256", text=sha(drop=gone)),
+                         step("verify", err("io"))], requires=["fs"] + req))
     return out
 
 

@@ -816,9 +816,10 @@ export class OpenTideConstants {
             if (!f.shaPath) throw new ChecksumError("no OTC_{D}.sha256 next to the file", { file: f.path, expected: null, actual: null });
             const rows = parseSha256(node.readFileOrIo(f.shaPath), f.shaPath);
             const path = node.nodePath;
+            // read every file first: a file that is gone is io, before any row check (CR2 DR44)
+            const data = f.dataPaths.map((p) => [p, node.readFileOrIo(p)] as const);
             needRows(f.path, f.dataPaths.map((p) => path.basename(p)), rows, path.basename(f.shaPath), path);   // spec 5.3, CR3 DR73, DR77
-            for (const p of f.dataPaths) {
-                const bytes = node.readFileOrIo(p);
+            for (const [p, bytes] of data) {
                 const actual = node.sha256Sync(bytes);
                 const exp = rows.get(path.basename(p)) ?? null;
                 if (actual !== exp) throw new ChecksumError(`${p}: SHA-256 ${actual}, expected ${exp}`, { file: p, expected: exp, actual });
