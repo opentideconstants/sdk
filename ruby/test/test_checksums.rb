@@ -44,9 +44,11 @@ class ChecksumTest < Minitest::Test
     def test_unlisted_file_is_not_downloaded
         no_jsonl = good_sha256.lines.reject { |l| l.include?(".jsonl") }.join
         srv = serve(File.join(FIXTURES, "good"), "OTC_#{D}.sha256" => [200, {}, no_jsonl])
-        assert_raises(OTC::ChecksumError) do
+        err = assert_raises(OTC::ChecksumError) do
             OTC.new(release: D, base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream)
         end
+        # not the "does not match the pointer" error of R38, which is a ChecksumError too
+        assert_includes err.message, "OTC_#{D}.jsonl is not listed in OTC_#{D}.sha256"
         refute_includes srv.requests, "/OTC_#{D}.jsonl"
     end
 
@@ -78,6 +80,7 @@ class ChecksumTest < Minitest::Test
     # read-only directory) is still checksum_mismatch; the failed delete is
     # logged, not raised in its place (spec §5.2 step 6, CR2 DR16).
     def test_undeletable_corrupt_file_keeps_the_checksum_error
+        posix_only # a read-only directory does not stop a delete as root or on Windows
         srv = serve
         cache = tmpdir
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
@@ -119,16 +122,28 @@ class ChecksumSwapTest < Minitest::Test
     # Runs the block with a hook on SHA-256: the moment a hash of path's
     # bytes is complete (any Digest::SHA256 hexdigest, of a String or of an
     # IO), path is replaced by a file with the other bytes (a rename, as
-    # another process would replace it). Returns how many times the swap ran.
+    # another process would replace it). Returns how many times the swap ran,
+    # or :blocked when Windows refused to rename over the open file (the
+    # library would wrap that Errno::EACCES in a FileError, so it is caught
+    # here, where the rename runs).
     def with_swap_after_hash(path, other)
         target = Digest::SHA256.hexdigest(File.binread(path))
         swaps = 0
+        blocked = false
         swap = lambda do |hex|
             return unless hex == target && swaps.zero?
             swaps += 1
             tmp = "#{path}.swap"
             File.binwrite(tmp, other)
-            File.rename(tmp, path)
+            begin
+                File.rename(tmp, path)
+            rescue Errno::EACCES
+                # Windows does not rename over a file that is open (the .jsonl
+                # is hashed through an open handle).
+                raise unless Gem.win_platform?
+                blocked = true
+                File.delete(tmp)
+            end
         end
         hook = Module.new do
             define_method(:hexdigest) do |*args|
@@ -140,10 +155,11 @@ class ChecksumSwapTest < Minitest::Test
         Digest::SHA256.singleton_class.prepend(hook) # Digest::SHA256.hexdigest(bytes)
         Digest::SHA256.prepend(hook)                 # Digest::SHA256.new / .file(p), then #hexdigest
         yield
-        swaps
+        blocked ? :blocked : swaps
     ensure
-        # A prepended module cannot be taken out again; emptying it undoes the hook.
-        hook.send(:remove_method, :hexdigest)
+        # A prepended module cannot be taken out again; emptying it undoes the
+        # hook. (hook is nil when the code before it raised; keep that error.)
+        hook&.send(:remove_method, :hexdigest)
     end
 
     # What a load gives: the datestamp and every station, as read.
@@ -166,6 +182,10 @@ class ChecksumSwapTest < Minitest::Test
             rescue OTC::ChecksumError
                 c = nil # the swapped bytes were refused: also correct
             end
+            if swaps == :blocked
+                c&.close
+                skip "#{ext}: cannot replace an open file on Windows"
+            end
             assert_equal 1, swaps, "#{ext}: the file was not swapped after its hash (the hook did not fire)"
             refute_equal File.binread(original), File.binread(path), "#{ext}: the file on disk is not the swapped one"
             next unless c
@@ -175,11 +195,6 @@ class ChecksumSwapTest < Minitest::Test
             # Positive control: the swapped bytes load to other content, so a load of them is seen.
             refute_equal want[1], OTC.new(file: other).then { |r| content(r)[1].tap { r.close } }
             assert_equal want, got, "#{ext}: loaded the bytes that replaced the hashed file"
-        rescue Errno::EACCES
-            # Windows does not rename over a file that is open (the .jsonl is
-            # hashed through an open handle).
-            raise unless Gem.win_platform?
-            skip "#{ext}: cannot replace an open file on Windows"
         end
     end
 end
