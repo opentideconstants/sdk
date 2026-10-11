@@ -83,6 +83,26 @@ function optStr(v: unknown, name: string): string | null {
     return v;
 }
 
+/**
+ * A local open, and verify on it, needs a row for every release file it reads (names), checked before any file is
+ * hashed (spec 5.3, CR3 DR73); a .json.gz (opened) also needs the OTC_{D}.json row (CR3 DR77). A missing row is
+ * checksum_mismatch "not listed", with file naming it.
+ */
+function needRows(opened: string, names: readonly string[], rows: ReadonlyMap<string, string>, shaName: string,
+    path: NodeMod["nodePath"]): void {
+    const all = opened.endsWith(".json.gz") ? [...names, path.basename(opened).slice(0, -3)] : names;
+    for (const n of all) {
+        if (!rows.has(n)) throw new ChecksumError(`${n} is not listed in ${shaName}`, { file: path.join(path.dirname(opened), n), expected: null, actual: null });
+    }
+}
+
+/** The decompressed bytes of a local OTC_{D}.json.gz (gzPath) against the OTC_{D}.json row (spec 5.3, CR3 DR77). */
+function checkJsonBytes(gzPath: string, actual: string, expected: string): void {
+    if (actual === expected) return;
+    const file = gzPath.slice(0, -3);
+    throw new ChecksumError(`${file} (decompressed from ${gzPath}): SHA-256 ${actual}, expected ${expected}`, { file, expected, actual });
+}
+
 interface FileSource {
     path: string;
     dataPaths: string[];
@@ -403,9 +423,14 @@ export class OpenTideConstants {
         const shaBytes = node.readIfExists(shaPath);
         let files;
         let from: LoadedFrom;
+        let jsonSha: string | null = null;
         if (shaBytes) {
             const rows = parseSha256(shaBytes, shaPath);
+            // every release file the open reads needs a row, before any is hashed (spec 5.3, CR3 DR73), and a .json.gz
+            // also the .json row that its decompressed bytes are checked against (CR3 DR77)
+            needRows(path.join(dir, name), dataNames, rows, `${stem}.sha256`, path);
             for (const [n, b] of bytes) checkBytes(n, node.sha256Sync(b), b.length, rows.get(n) ?? null, null);
+            if (kind === "json.gz") jsonSha = rows.get(`${stem}.json`) as string;
             files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
             from = "file";
         } else {
@@ -436,6 +461,7 @@ export class OpenTideConstants {
                 } catch (e) {
                     throw new InvalidReleaseError(`${name} does not decompress`, { cause: e });
                 }
+                if (jsonSha !== null) checkJsonBytes(full, node.sha256Sync(json), jsonSha);
             }
             rel = releaseFromJson(json, files, null, warn, commercialOnly);
         }
@@ -789,10 +815,23 @@ export class OpenTideConstants {
             const node = this.#node;
             if (!f.shaPath) throw new ChecksumError("no OTC_{D}.sha256 next to the file", { file: f.path, expected: null, actual: null });
             const rows = parseSha256(node.readFileOrIo(f.shaPath), f.shaPath);
+            const path = node.nodePath;
+            needRows(f.path, f.dataPaths.map((p) => path.basename(p)), rows, path.basename(f.shaPath), path);   // spec 5.3, CR3 DR73, DR77
             for (const p of f.dataPaths) {
-                const actual = node.sha256Sync(node.readFileOrIo(p));
-                const exp = rows.get(node.nodePath.basename(p)) ?? null;
+                const bytes = node.readFileOrIo(p);
+                const actual = node.sha256Sync(bytes);
+                const exp = rows.get(path.basename(p)) ?? null;
                 if (actual !== exp) throw new ChecksumError(`${p}: SHA-256 ${actual}, expected ${exp}`, { file: p, expected: exp, actual });
+                // a .json.gz: its decompressed bytes against the .json row, as at open (CR3 DR77)
+                if (p.endsWith(".json.gz")) {
+                    let json: Uint8Array;
+                    try {
+                        json = node.gunzipSync(bytes);
+                    } catch (e) {
+                        throw new InvalidReleaseError(`${path.basename(p)} does not decompress`, { cause: e });
+                    }
+                    checkJsonBytes(p, node.sha256Sync(json), rows.get(path.basename(p).slice(0, -3)) as string);
+                }
             }
             return true;
         }
