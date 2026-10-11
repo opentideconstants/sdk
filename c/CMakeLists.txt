@@ -9,6 +9,21 @@ set(OTC_HEADER_ABI_VERSION "${CMAKE_MATCH_1}")
 if(NOT OTC_HEADER_VERSION OR NOT OTC_HEADER_ABI_VERSION)
     message(FATAL_ERROR "include/opentideconstants.h has no OTC_VERSION \"X.Y.Z\" or OTC_ABI_VERSION")
 endif()
+# OTC_VERSION_MAJOR/MINOR/PATCH say the same as OTC_VERSION (R3-318)
+string(REPLACE "." ";" _otc_v_parts "${OTC_HEADER_VERSION}")
+set(_otc_i 0)
+foreach(_otc_part MAJOR MINOR PATCH)
+    list(GET _otc_v_parts ${_otc_i} _otc_want)
+    math(EXPR _otc_i "${_otc_i} + 1")
+    set(_otc_got "not defined")
+    if(OTC_HEADER_TEXT MATCHES "#define OTC_VERSION_${_otc_part} ([0-9]+)")
+        set(_otc_got "${CMAKE_MATCH_1}")
+    endif()
+    if(NOT _otc_got MATCHES "^[0-9]+$" OR NOT _otc_got EQUAL _otc_want)
+        message(FATAL_ERROR "include/opentideconstants.h: OTC_VERSION_${_otc_part} is ${_otc_got}, "
+            "but OTC_VERSION is \"${OTC_HEADER_VERSION}\"")
+    endif()
+endforeach()
 project(opentideconstants VERSION ${OTC_HEADER_VERSION} LANGUAGES C)
 
 option(OTC_WITH_FETCH "Build the otc_fetch module (needs libcurl)" OFF)
@@ -74,8 +89,16 @@ if(OTC_WITH_FETCH)
         set(OTC_PC_CURL_LIBS "-lcurl")
         if(_otc_curl_file)
             get_filename_component(_otc_curl_dir "${_otc_curl_file}" DIRECTORY)
-            if(NOT _otc_curl_dir IN_LIST CMAKE_C_IMPLICIT_LINK_DIRECTORIES
-               AND NOT (CMAKE_OSX_SYSROOT AND _otc_curl_dir MATCHES "^${CMAKE_OSX_SYSROOT}/"))
+            # a folder under the macOS SDK is a default one: a plain prefix compare, the
+            # sysroot path is not a regex (R3-324)
+            set(_otc_in_sysroot FALSE)
+            if(CMAKE_OSX_SYSROOT)
+                string(FIND "${_otc_curl_dir}/" "${CMAKE_OSX_SYSROOT}/" _otc_at)
+                if(_otc_at EQUAL 0)
+                    set(_otc_in_sysroot TRUE)
+                endif()
+            endif()
+            if(NOT _otc_curl_dir IN_LIST CMAKE_C_IMPLICIT_LINK_DIRECTORIES AND NOT _otc_in_sysroot)
                 set(OTC_PC_CURL_LIBS "-L${_otc_curl_dir} -lcurl")
             endif()
         endif()
@@ -249,12 +272,15 @@ install(TARGETS opentideconstants EXPORT opentideconstantsTargets
 # The config goes beside the library, except with an absolute LIBDIR: an
 # export with an absolute destination writes the configured prefix into the
 # include folder, which is wrong after `cmake --install --prefix X`, so it
-# goes to the prefix's share/cmake (a find_package search folder too).
+# goes to the prefix's DATADIR/cmake, or share/cmake when DATADIR is absolute
+# too (R3-316); both are find_package search folders.
 include(CMakePackageConfigHelpers)
-if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}" AND NOT IS_ABSOLUTE "${CMAKE_INSTALL_DATADIR}")
+if(NOT IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    set(OTC_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/opentideconstants)
+elseif(NOT IS_ABSOLUTE "${CMAKE_INSTALL_DATADIR}")
     set(OTC_CMAKE_DIR ${CMAKE_INSTALL_DATADIR}/cmake/opentideconstants)
 else()
-    set(OTC_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/opentideconstants)
+    set(OTC_CMAKE_DIR share/cmake/opentideconstants)
 endif()
 if(BUILD_SHARED_LIBS)
     set(OTC_CONFIG_SHARED TRUE)
@@ -325,10 +351,21 @@ if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
 else()
     set(OTC_PC_INCLUDEDIR "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
-configure_file(opentideconstants.pc.in opentideconstants.pc.in @ONLY)
+# The configure-time stage has its own name: in an in-source build the binary
+# folder is the source folder, and the tracked template must stay as it is (R3-315).
+configure_file(opentideconstants.pc.in ${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc.stage @ONLY)
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    set(OTC_PC_DEST "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+else()
+    set(OTC_PC_DEST "\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+endif()
+# install(FILES) skips a copy whose time stamp equals the installed file's to the
+# second, so a .pc made for another --prefix within the same second would stay
+# stale: the installed .pc is removed first, and always copied (R3-317).
 install(CODE "
     set(OTC_INSTALL_PREFIX \"\${CMAKE_INSTALL_PREFIX}\")
-    configure_file(\"${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc.in\"
+    configure_file(\"${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc.stage\"
         \"${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc\" @ONLY)
+    file(REMOVE \"\$ENV{DESTDIR}${OTC_PC_DEST}/opentideconstants.pc\")
 ")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/opentideconstants.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)

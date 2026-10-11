@@ -54,6 +54,8 @@
 extern "C" {
 #endif
 
+/* The library version. MAJOR/MINOR/PATCH are its parts; c/CMakeLists.txt and
+ * c/tools/amalgamate.py stop when they differ from OTC_VERSION. */
 #define OTC_VERSION "0.1.0"
 #define OTC_VERSION_MAJOR 0
 #define OTC_VERSION_MINOR 1
