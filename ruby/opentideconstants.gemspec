@@ -3,9 +3,12 @@ require_relative "lib/opentideconstants/version"
 # `gem build` reads s.files relative to the working folder, so
 # `gem build ruby/opentideconstants.gemspec` from the repository root would
 # not find lib/ (or would take the root's README.md): build from this folder.
-# __dir__ is relative when the gemspec is given by a relative path.
+# __dir__ is relative when the gemspec is given by a relative path. The
+# paths are compared as real paths: under a symlinked folder (macOS /tmp)
+# RubyGems' and Bundler's own chdir into this folder would otherwise look
+# different and get a second, conflicting chdir.
 gem_dir = File.expand_path(__dir__)
-Dir.chdir(gem_dir) unless File.expand_path(Dir.pwd) == gem_dir
+Dir.chdir(gem_dir) unless File.realpath(Dir.pwd) == File.realpath(gem_dir)
 
 Gem::Specification.new do |s|
     s.name        = "opentideconstants"
