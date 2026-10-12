@@ -1,0 +1,222 @@
+{
+  "code_commit": "7fb382e946155fc2097c6c5a570627e8bd4a3199",
+  "base_commit": "28d09ef2c1c1bb5b44732b6f09ddcb1d80d9b459",
+  "hp1_original_commit": "c7b907d",
+  "hp1_forward_merge_commit": "cb9c303",
+  "worktree": "/Users/jpr5/.local/state/worktrees/webcaltides/otc-kp1v-r1-vectors",
+  "canonical_git_common_dir": "/Users/jpr5/proj/webcaltides/.git",
+  "source_sha256": {
+    "scripts/otc/vectors/build_vectors_release.py": "654d5d7c9fe7699039b4150a63920e50a58640fbcbd23e54c9b8a0dfd4e3d168",
+    "scripts/otc/vectors/generate.rb": "bc41d53c8b8e1f695c3d01e4cfe6be7e25c9ed46002d94df3cc0e76afb2e8d80",
+    "scripts/otc/vectors/lib/vector_generator.rb": "cd440d632f9306681a050a3734c1abce76c15506d5a34434ce8859756947cb6c",
+    "scripts/otc/vectors/lib/check_vector_mutations.rb": "b0fbed8447669eed0e83665948d981b7fcd620b9b56785684e594148fb585a10",
+    "scripts/otc/vectors/astro_entry.py": "4b1dbe7569d6d6cdc5c51bdf8d18c9d958ae722068860ab041977e27a45b915f",
+    "scripts/otc/vectors/lib/case_oracle.rb": "66d79aeae8d24a28990897091d86797c75e07c06686e9aeb6f459653c8ed41c9",
+    "scripts/otc/vectors/lib/numerical_checks.rb": "5cdb6e75869a020a7e77f8736104e49b25cd3efd7fe27b11663d92cb3fb4b92d",
+    "scripts/otc/otc_pipeline/adapters/noaa.py": "508b6e10048f8198885345c657c4067d9cd3c1fbe6a229a6dacf0df95a2cc13a",
+    "scripts/otc/otc_pipeline/adapters/noaa_currents.py": "9c1264aad7f41744614d33b207501e17a3003facb4ea23bb97cb88070276671e",
+    "scripts/otc/otc_pipeline/astro_tables.py": "286e8b1ecbf3dbf645e01beb39d79d92699ffbd2b2e13828ddbdc415b96aa471",
+    "lib/harmonics_strict.rb": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8"
+  },
+  "schema_sha256": "0e305a6c281d68e7a74c853d43dce0840f456fff0fbd4cf073f5e6a5fad751cf",
+  "source_manifests": {
+    "noaa": "a8bfe1b7870c5247f7a7cc396486884345701a3005ae9622eece792191dc062c",
+    "noaa-currents": "3a9a4067654b024fd3d1f2e4f079374e7b75df2ced3324985d1ea6bd35b056a5"
+  },
+  "inputs_index_sha256": "c9a1b35ed6dc5e28244accd2e626ffb9e71c7a9c892076c5e94ccde363d6378a",
+  "own_tcd_provenance": {
+    "command": "congen -b 1700 -e 2100 -tcd congen-1700-2100.tcd < congen_input+otc.txt",
+    "files": {
+      "congen_dump": {
+        "path": "congen-1700-2100.json",
+        "sha256": "dda8498437faa4f799411bdf3a3b61f840818e2de7b2bb0bd34492dbd001b30e"
+      },
+      "congen_input": {
+        "path": "congen_input+otc.txt",
+        "sha256": "401fd81a7963e88a51349b9bd933188f249639036d2e1e3016193c3d7ee3cad2"
+      },
+      "congen_tcd": {
+        "path": "congen-1700-2100.tcd",
+        "sha256": "c0d5715ece280e6a194aaea4ec309cc4fc098c9ee6f6029066e2f8eda2812c01"
+      },
+      "fit_dump": {
+        "path": "tcd-1900-2100.json",
+        "sha256": "73f80a56ed85e816e09e1cd5fd4476234a0286b8aff87241791dc10f40896458"
+      },
+      "otc_definitions": {
+        "path": "otc_constituents.txt",
+        "sha256": "ada296c1ef5e95860ed435ebf68f8c3b520c40a5049fd936295f2dfa6ccfcbf2"
+      },
+      "otc_tcd": {
+        "path": "otc-tcd-20251228-ma2mb2.tcd",
+        "sha256": "ab8fa42c6dfce040924b3b035c1a87bef1cc4f10ed17449ae3ea16d0c76516a9"
+      },
+      "tcd_dump": {
+        "path": "tcd-1700-2100.json",
+        "sha256": "92a0f97a941ba9d7b3d40cfc9a487a3c443c122f94beb82d08e83b56591b2b7a"
+      }
+    },
+    "otc_tcd": {
+      "added": [
+        "MA2",
+        "MB2"
+      ],
+      "definitions_sha256": "ada296c1ef5e95860ed435ebf68f8c3b520c40a5049fd936295f2dfa6ccfcbf2",
+      "how": "tools/tcd/tcd_merge.c: the source TCD unchanged, then the added constituents with the congen run's values; amplitude 0 at every station",
+      "id": "otc-tcd-20251228-ma2mb2",
+      "last_modified": "2026-10-11 00:00 UTC",
+      "source_tcd": {
+        "path": "data/harmonics-dwf-20251228-free.tcd",
+        "sha256": "33f97cb73ac25a0fec273950c0b85ff55ddbe7edf4448e80ea8d5b3d59b0aeb1"
+      }
+    },
+    "tool": {
+      "congen": {
+        "sha256": "1dbae015e338e5780a505ebf233058f5e91628319a11bfbc465cb556cfb4b0d7",
+        "url": "https://flaterco.com/files/xtide/congen-1.7-r2.tar.xz"
+      },
+      "libtcd": {
+        "sha256": "e1dde9aafb771eab57c676a99b4b79d61c6800990a0e72782bc20057a8a2d877",
+        "url": "https://flaterco.com/files/xtide/libtcd-2.2.7-r3.tar.xz"
+      }
+    },
+    "years": [
+      1700,
+      2100
+    ]
+  },
+  "station_selection": [
+    {
+      "station_id": "OTC-V-NOAA-1820000",
+      "name": "KWAJALEIN ATOLL (Kwajalein I.)",
+      "aliases": {
+        "noaa": "1820000"
+      },
+      "lat": 8.731666564941406,
+      "lon": 167.7361145019531
+    },
+    {
+      "station_id": "OTC-V-NOAA-8443838",
+      "name": "Charlestown, Charles River entrance",
+      "aliases": {
+        "noaa": "8443838"
+      },
+      "lat": 42.3717,
+      "lon": -71.055
+    },
+    {
+      "station_id": "OTC-V-NOAA-8443970",
+      "name": "BOSTON",
+      "aliases": {
+        "noaa": "8443970"
+      },
+      "lat": 42.35388888888889,
+      "lon": -71.05027777777778
+    },
+    {
+      "station_id": "OTC-V-NOAA-8444351",
+      "name": "Hull",
+      "aliases": {
+        "noaa": "8444351"
+      },
+      "lat": 42.3033,
+      "lon": -70.92
+    },
+    {
+      "station_id": "OTC-V-NOAA-9413878",
+      "name": "Ano Nuevo Island",
+      "aliases": {
+        "noaa": "9413878"
+      },
+      "lat": 37.1083,
+      "lon": -122.338
+    },
+    {
+      "station_id": "OTC-V-NOAA-9414290",
+      "name": "SAN FRANCISCO (Golden Gate)",
+      "aliases": {
+        "noaa": "9414290"
+      },
+      "lat": 37.80630555555555,
+      "lon": -122.4658888888889
+    },
+    {
+      "station_id": "OTC-V-NOAA-9447110",
+      "name": "Lockheed Shipyard, Harbor Island",
+      "aliases": {
+        "noaa": "9447110"
+      },
+      "lat": 47.585,
+      "lon": -122.362
+    },
+    {
+      "station_id": "OTC-V-NOAA-9447130",
+      "name": "SEATTLE (Madison St.), Elliott Bay",
+      "aliases": {
+        "noaa": "9447130"
+      },
+      "lat": 47.60263888888889,
+      "lon": -122.3393055555556
+    },
+    {
+      "station_id": "OTC-V-NOAA-ACT1591",
+      "name": "Old Man Shoal, Nantucket Shoals",
+      "aliases": {
+        "noaa": "ACT1591"
+      },
+      "lat": 41.22667,
+      "lon": -69.98333
+    },
+    {
+      "station_id": "OTC-V-NOAA-ACT1616",
+      "name": "Pollock Rip Channel (Butler Hole)",
+      "aliases": {
+        "noaa": "ACT1616"
+      },
+      "lat": 41.54999923706055,
+      "lon": -69.9832992553711
+    },
+    {
+      "station_id": "OTC-V-NOAA-BOS1101",
+      "name": "Little Misery Island",
+      "aliases": {
+        "noaa": "BOS1101"
+      },
+      "lat": 42.54217,
+      "lon": -70.80013
+    },
+    {
+      "station_id": "OTC-V-NOAA-PUG1501",
+      "name": "Agate Passage, south end",
+      "aliases": {
+        "noaa": "PUG1501"
+      },
+      "lat": 47.711021423339844,
+      "lon": -122.56714630126953
+    },
+    {
+      "station_id": "OTC-V-NOAA-TPT2705",
+      "name": "Ebon (Boston) Atoll",
+      "aliases": {
+        "noaa": "TPT2705"
+      },
+      "lat": 4.6,
+      "lon": 168.68333333332993
+    },
+    {
+      "station_id": "OTC-V-SYNTHETIC-BOSTON",
+      "name": "SYNTHETIC: Boston 8443970 + MA2/MB2 (vectors only)",
+      "aliases": {},
+      "lat": 42.35388888888889,
+      "lon": -71.05027777777778
+    }
+  ],
+  "native_value_audit_sha256": "48c45d3be2280cf0d4a785fe26f2c5790a4b41859639cd7f5873c046e3d3bffb",
+  "mutations_sha256": "70376432762f8dacb46e0f3bbb61559f7f87232796ae95c5dc4ac64bd06fbbf5",
+  "artifacts": {
+    "vectors.json": "e3a85cb20e7f51a97380f64ac4fa07b410e1dbd1fbcd6fcef338d39eca578a1f",
+    "vectors-release.json": "d853e3920cf0585dc8bfa3d47f0c5ca862b659732ba7b8d5c8104e05b8e470f4"
+  },
+  "science": "Tier A vectors only; no official-prediction Tier B claim, no refit, no new definitions, no congen rerun",
+  "review": "Final milestone CR pending under the owner instruction; no push or PR from this worker"
+}
