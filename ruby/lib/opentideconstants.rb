@@ -21,3 +21,5 @@ require_relative "opentideconstants/http"
 require_relative "opentideconstants/cache"
 require_relative "opentideconstants/downloader"
 require_relative "opentideconstants/client"
+
+require_relative "opentideconstants/predict"

@@ -30,11 +30,22 @@ class Runner
     def initialize
         @client = nil
         @held = {}
+        @prediction = nil
     end
 
     def hello
         { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
-                       "features" => %w[fs fetch json eager stream] } }
+                       "features" => %w[fs fetch json eager stream predict localtime_module] + localtime_features } }
+    end
+
+    def localtime_features
+        begin
+            require "tzinfo"
+            TZInfo::DataSource.get
+            ["localtime"]
+        rescue LoadError, TZInfo::DataSourceNotFound
+            []
+        end
     end
 
     def handle(req)
@@ -240,6 +251,39 @@ class Runner
         when "set_validation"
             set = find_set(args, target)
             { "validation" => set ? set.validation.map { |v| validation(v) } : nil }
+        when "heights", "heights_at", "extremes", "currents", "current_events"
+            kw = args.reject { |k, _| k == "station_id" }.to_h { |k, v| [k.to_sym, v] }
+            %i[start stop].each { |k| kw[k] = prediction_time(kw[k]) if kw[k].is_a?(String) }
+            if op == "heights_at"
+                times = kw.delete(:times)
+                times = times.map { |v| v.is_a?(String) ? prediction_time(v) : v } if times.is_a?(Array)
+                @prediction = q(target).heights_at(args["station_id"], times, **kw)
+            else
+                @prediction = q(target).public_send(op, args["station_id"], **kw)
+            end
+            {"prediction" => prediction(@prediction)}
+        when "to_local"
+            raise ArgumentError, "no prediction held" unless @prediction
+            @prediction = @prediction.to_local(args.fetch("tz", "station"))
+            {"prediction" => prediction(@prediction)}
+        when "astro_table", "valid_range", "equilibrium_argument", "node_factor", "equilibrium_for_year", "node_factor_for_year"
+            table = rel(target).astro_table(args["id"])
+            if op == "astro_table"
+                {"astro_table" => table && {"first_year" => table.valid_range[0], "last_year" => table.valid_range[1]}}
+            else
+                raise OpenTideConstants::InvalidArgumentError, "astro table unavailable" unless table
+                if op == "valid_range"
+                    {"first_year" => table.valid_range[0], "last_year" => table.valid_range[1]}
+                else
+                    at = args.key?("at") ? prediction_time(args["at"]) : args["year"]
+                    {"value" => table.public_send(op, args["name"], at)}
+                end
+            end
+        when "datums", "ranges"
+            kw = args.reject { |k, _| k == "station_id" }.to_h { |k, v| [k.to_sym, v] }
+            value = q(target).public_send(op, args["station_id"], **kw)
+            encoded = value.is_a?(Array) ? value.map { |v| prediction_value(v) } : prediction_value(value)
+            {op => encoded}
         when "raw" then { "raw" => raw(args, target) }
         else
             raise ArgumentError, "unknown op #{op}"
@@ -262,6 +306,32 @@ class Runner
 
     # ---- encodings (conformance/README.md "Result encodings")
 
+    def prediction_time(value)
+        return value unless value.is_a?(String)
+        OpenTideConstants::Util.time(value)
+    end
+
+    def prediction_value(value)
+        case value
+        when Time then time(value)
+        when Symbol then value.to_s
+        when Hash then value.to_h { |k, v| [k.to_s, prediction_value(v)] }
+        when Array then value.map { |v| prediction_value(v) }
+        when nil, String, Numeric, true, false then value
+        else
+            value.instance_variables.reject { |v| v == :@_local }.to_h do |v|
+                [v.to_s.delete_prefix("@"), prediction_value(value.instance_variable_get(v))]
+            end
+        end
+    end
+
+    def prediction(value)
+        fields = %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number omitted_event_types tz tz_version release algorithm]
+        out = fields.to_h { |key| [key, value.respond_to?(key) ? prediction_value(value.public_send(key)) : nil] }
+        out["items"] = value.items.map { |item| prediction_value(item) }
+        out
+    end
+
     def s(v)
         v.nil? ? nil : v.to_s
     end
@@ -272,7 +342,7 @@ class Runner
 
     def encode_error(e)
         fields = {}
-        %i[url status file expected actual path removed].each do |f|
+        %i[url status file expected actual path removed constituent first_year last_year missing zone reference_station_id].each do |f|
             fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
         end
         code = e.code.to_s

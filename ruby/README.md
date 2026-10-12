@@ -68,3 +68,28 @@ otc.close
 The gem passes the language-neutral conformance suite in `conformance/` (runner: `conformance/runners/ruby/runner.rb`).
 
 Code: MIT. Data: CC BY 4.0, with a licence per constant set (`set.licence`).
+
+Native prediction uses `otc-predict-1`. Pass Ruby `Time` values. The SDK floors each instant to a whole UTC second.
+
+```ruby
+require "opentideconstants"
+OpenTideConstants.open do |otc|
+    start = Time.utc(otc.release.datestamp[0, 4].to_i, 10, 11)
+    station = otc.station_by_alias(:noaa, "9414290")
+    heights = otc.heights(station, start: start, stop: start + 86400, step_s: 600)
+    events = otc.extremes(station, start: start, stop: start + 86400)
+    datums = otc.datums(station)
+end
+```
+
+`heights_at` preserves input order and repeated instants. `currents` returns velocities, speed and direction for the selected `bin_number`. `current_events` returns signed peaks and slack events. Results and their items are immutable.
+
+If high and low offsets differ, the station provides extrema only. Curve calls raise `ExtremesOnlyError`. Subordinate current stations also provide events only.
+
+The default `historical_offsets_policy: :fallback` permits eligible NOAA2020 historical profiles when no better contemporary path exists. These results retain the retired source label, unestablished current validity and unverified current accuracy. Select an exact profile with `offset_id:`. Use `historical_offsets_policy: :exclude` to disable historical prediction and discovery. Query flags cannot override that policy.
+
+Discovery excludes flagged and fallback sets by default. Use `include_flagged: true` or `include_fallback: true` for their respective sets. Lookup retains all station metadata. `station.source_records` preserves original source values and provenance in frozen `raw` objects. Original-source licences remain separate from published-set licences. `commercial_basis: :strict` is the default; `:as_published_upstream` selects the approved upstream interpretation.
+
+Install `tzinfo` to use `result.to_local("America/New_York")`. Core prediction does not require it. Local conversion preserves the UTC instant and exposes `local_time`, `utc_offset_s` and `local_time_object`. Without the optional module, conversion raises `LocalTimeUnavailableError`.
+
+Fixture unit tests run through `ruby -Iruby/lib ruby/test/test_unit.rb`. The authenticated actual-source gates run separately through `test_core_native.rb` and `test_noaa_historical.rb`; their artifact environment is mandatory. The full H4 source is not bundled in the gem.

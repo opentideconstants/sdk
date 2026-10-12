@@ -53,7 +53,10 @@ def ruby_member?(member)
 end
 
 def public_methods_of(klass)
-    (klass.public_instance_methods(true) - IGNORED).map(&:to_s)
+    methods = klass.public_instance_methods(true) - IGNORED
+    # Prediction metadata overrides Kernel#method with the canonical data field.
+    methods << :method if klass.public_instance_methods(false).include?(:method)
+    methods.map(&:to_s)
 end
 
 def keyword_params(method)

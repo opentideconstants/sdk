@@ -15,12 +15,12 @@ Gem::Specification.new do |s|
     s.version     = OpenTideConstants::VERSION
     s.summary     = "Download, check, cache and query OpenTideConstants releases of tidal harmonic constants"
     s.description = "The Ruby SDK for OpenTideConstants: open tidal harmonic constants with stable station ids, " \
-                    "provenance, validation and per-set licences. Pure Ruby, standard library only."
+                    "provenance, validation and per-set licences. Native Ruby prediction; standard library core, optional tzinfo local time."
     s.authors     = ["Jordan Ritter"]
     s.homepage    = "https://opentideconstants.org"
     s.license     = "MIT"
     s.files       = ["README.md", "LICENSE", "supported-formats.json", "lib/opentideconstants.rb"] +
-                    Dir.glob("lib/opentideconstants/*.{rb,json}", base: gem_dir).sort
+                    Dir.glob("lib/opentideconstants/**/*.{rb,json}", base: gem_dir).sort
     s.require_paths = ["lib"]
     s.required_ruby_version = ">= 3.0"
     s.metadata    = {

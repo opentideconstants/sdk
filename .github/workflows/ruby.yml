@@ -96,10 +96,19 @@ jobs:
         env:
           OTC_RUBY_USE_INSTALLED: "1"
         run: uv run conformance/driver.py --runner "ruby conformance/runners/ruby/runner.rb" --all-steps --report ruby-report.json
+      - name: Native prediction vectors (installed gem)
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: uv run conformance/tools/run_vectors.py --runner "ruby conformance/runners/ruby/runner.rb" --no-expected-failures --report ruby-vectors.json
+      # The full H4 source gate requires a separately provisioned authenticated
+      # artifact and its explicit OTC_CORE_NATIVE_JSONL environment. It is not
+      # replaced by these bundled fixtures or reported as a CI result here.
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ruby-conformance-${{ matrix.os }}-${{ matrix.ruby }}
-          path: ruby-report.json
+          path: |
+            ruby-report.json
+            ruby-vectors.json
           if-no-files-found: error

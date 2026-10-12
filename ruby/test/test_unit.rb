@@ -205,6 +205,8 @@ end
 
 # The other unit test files (CI runs this file only).
 Dir[File.join(__dir__, "test_*.rb")].sort.each do |f|
+    # Actual H4 source proofs run explicitly with their authenticated artifact environment.
+    next if %w[test_core_native.rb test_noaa_historical.rb].include?(File.basename(f))
     require f unless File.expand_path(f) == File.expand_path(__FILE__)
 end
 
