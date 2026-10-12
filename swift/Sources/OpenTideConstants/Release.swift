@@ -12,6 +12,7 @@ public final class Release {
     internal var documents:[String:JSONValue]
     internal let jsonl:URL?
     internal let indexPath:URL?
+    internal var astroCache:[String:AstroTable]=[:]
     internal var closed=false
     internal var lru:[String:Station]=[:]
     internal var lruOrder:[String]=[]
@@ -117,7 +118,11 @@ public final class Release {
         }
         return out
     }
-    internal func historicalEligible(_ e:IndexEntry)->Bool {
+internal func betterHistoricalPath(_ e:IndexEntry)->Bool {
+    if let rid=effective(e),e.sets.contains(where: { $0["set_id"].string==rid && ["ok","flagged"].contains($0["qc_status"].string ?? "") }) { return true }
+    return !paths(e,flagged:false,fallback:false,historical:false).isEmpty
+}
+internal func historicalEligible(_ e:IndexEntry)->Bool {
         guard historicalOffsetsPolicy=="fallback",let ref=byId[e.summary["reference_station_id"].string ?? ""] else { return false }
         if let rid=effective(e),e.sets.contains(where: { $0["set_id"].string==rid && ["ok","flagged"].contains($0["qc_status"].string ?? "") }) { return false }
         if !paths(e,flagged:false,fallback:false,historical:false).isEmpty { return false }
@@ -193,4 +198,128 @@ public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,
         return text
     }
     internal func close() { closed=true;lru.removeAll();lruOrder.removeAll() }
+}
+
+public extension Release {
+    func heights(station: Station, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop, stepS: stepS)
+        let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
+        var items: [HeightPoint] = []
+        var time = a
+        while time < b {
+            items.append(HeightPoint(time: Date(timeIntervalSince1970: time), heightM: try context.total!.value(time)))
+            time += Double(stepS)
+        }
+        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+    }
+    func heights(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop, stepS: stepS)
+        let selectedStation = try requireStation(stationId: stationId)
+        let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
+        var items: [HeightPoint] = []
+        var time = a
+        while time < b {
+            items.append(HeightPoint(time: Date(timeIntervalSince1970: time), heightM: try context.total!.value(time)))
+            time += Double(stepS)
+        }
+        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+    }
+    func heightsAt(station: Station, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+        try checkOpen()
+        let seconds = try times.map(predictionInstant)
+        let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
+        let items = try seconds.map { HeightPoint(time: Date(timeIntervalSince1970: $0), heightM: try context.total!.value($0)) }
+        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+    }
+    func heightsAt(stationId: String, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+        try checkOpen()
+        let seconds = try times.map(predictionInstant)
+        let selectedStation = try requireStation(stationId: stationId)
+        let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
+        let items = try seconds.map { HeightPoint(time: Date(timeIntervalSince1970: $0), heightM: try context.total!.value($0)) }
+        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+    }
+    func extremes(station: Station, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop)
+        let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, offsetId: offsetId)
+        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum)
+    }
+    func extremes(stationId: String, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop)
+        let selectedStation = try requireStation(stationId: stationId)
+        let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, offsetId: offsetId)
+        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum)
+    }
+    func currents(station: Station, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop, stepS: stepS)
+        let context = try Predict.context(self, supplied: station, quantity: .current, setId: setId, binNumber: binNumber, series: true)
+        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS)
+    }
+    func currents(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop, stepS: stepS)
+        let selectedStation = try requireStation(stationId: stationId)
+        let context = try Predict.context(self, supplied: selectedStation, quantity: .current, setId: setId, binNumber: binNumber, series: true)
+        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS)
+    }
+    func currentEvents(station: Station, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop)
+        let context = try Predict.context(self, supplied: station, quantity: .current, setId: setId, binNumber: binNumber)
+        return try Predict.currentEvents(self, context: context, start: a, stop: b)
+    }
+    func currentEvents(stationId: String, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList {
+        try checkOpen()
+        let (a, b) = try Predict.window(start, stop)
+        let selectedStation = try requireStation(stationId: stationId)
+        let context = try Predict.context(self, supplied: selectedStation, quantity: .current, setId: setId, binNumber: binNumber)
+        return try Predict.currentEvents(self, context: context, start: a, stop: b)
+    }
+    func datums(station: Station, setId: String? = nil, allSets: Bool = false) throws -> DatumsResult {
+        try checkOpen()
+        try own(station)
+        let actual = try requireStation(stationId: station.stationId)
+        if allSets { return .all(actual.constantSets(includeNoConstants: true).map { Predict.datumInfo(setId: $0.setId, raw: $0.raw["datum"]) }) }
+        if let constants = try Predict.chosen(self, station: actual, setId: setId) { return .one(Predict.datumInfo(setId: constants.setId, raw: constants.raw["datum"])) }
+        let offsets = actual.raw["subordinate_offsets"]
+        return .one(offsets.isNull ? nil : Predict.datumInfo(setId: nil, raw: offsets["datum"]))
+    }
+    func datums(stationId: String, setId: String? = nil, allSets: Bool = false) throws -> DatumsResult {
+        try checkOpen()
+        let selectedStation = try requireStation(stationId: stationId)
+        try own(selectedStation)
+        let actual = try requireStation(stationId: selectedStation.stationId)
+        if allSets { return .all(actual.constantSets(includeNoConstants: true).map { Predict.datumInfo(setId: $0.setId, raw: $0.raw["datum"]) }) }
+        if let constants = try Predict.chosen(self, station: actual, setId: setId) { return .one(Predict.datumInfo(setId: constants.setId, raw: constants.raw["datum"])) }
+        let offsets = actual.raw["subordinate_offsets"]
+        return .one(offsets.isNull ? nil : Predict.datumInfo(setId: nil, raw: offsets["datum"]))
+    }
+    func ranges(station: Station, setId: String? = nil) throws -> Ranges {
+        try checkOpen()
+        let result = try datums(station: station, setId: setId)
+        guard case .one(let info) = result else { return Ranges(mn: nil, gt: nil, dhq: nil, dlq: nil) }
+        return Predict.ranges(info)
+    }
+    func ranges(stationId: String, setId: String? = nil) throws -> Ranges {
+        try checkOpen()
+        let selectedStation = try requireStation(stationId: stationId)
+        let result = try datums(station: selectedStation, setId: setId)
+        guard case .one(let info) = result else { return Ranges(mn: nil, gt: nil, dhq: nil, dlq: nil) }
+        return Predict.ranges(info)
+    }
+    func astroTable(id: String? = nil) throws -> AstroTable? {
+        try checkOpen()
+        let selected = id ?? meta["conventions"].array.compactMap { $0["astro_table_id"].string }.first
+        guard let selected else { return nil }
+        if let cached = astroCache[selected] { return cached }
+        guard let raw = meta["astro_tables"].array.first(where: { $0["astro_table_id"].string == selected }) else { return nil }
+        let table = try AstroTable(raw)
+        astroCache[selected] = table
+        return table
+    }
 }
