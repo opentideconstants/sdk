@@ -2665,6 +2665,68 @@
      "kind": "field",
      "type": "string",
      "nullable": true
+    },
+    {
+     "name": "offset_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source_type",
+     "kind": "field",
+     "type": "enum",
+     "nullable": true,
+     "enum": "source_type"
+    },
+    {
+     "name": "source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source_record_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "qc_status",
+     "kind": "field",
+     "type": "enum",
+     "nullable": true,
+     "enum": "qc_status"
+    },
+    {
+     "name": "qc_flags",
+     "kind": "field",
+     "type": "QcFlag[]",
+     "nullable": false
+    },
+    {
+     "name": "fallback",
+     "kind": "field",
+     "type": "Fallback",
+     "nullable": true
+    },
+    {
+     "name": "vintage",
+     "kind": "field",
+     "type": "HistoricalOffsetVintage",
+     "nullable": true
+    },
+    {
+     "name": "provenance",
+     "kind": "field",
+     "type": "HistoricalOffsetProvenance",
+     "nullable": true
     }
    ]
   },
@@ -4308,6 +4370,124 @@
      ]
     }
    ]
+  },
+  "HistoricalOffsetVintage": {
+   "c": null,
+   "members": [
+    {
+     "name": "publication_year",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "source_lifecycle",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "removal_events",
+     "kind": "field",
+     "type": "map<string,any>[]",
+     "nullable": false
+    },
+    {
+     "name": "current_validity",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "current_accuracy",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "reference_2020_equivalence",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "reference_2020_equivalence_sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    }
+   ]
+  },
+  "HistoricalOffsetProvenance": {
+   "c": null,
+   "members": [
+    {
+     "name": "source_manifest_sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "input_sha256",
+     "kind": "field",
+     "type": "string[]",
+     "nullable": false
+    },
+    {
+     "name": "book",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "annual_table_row",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "printed_page",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "pdf_page",
+     "kind": "field",
+     "type": "number",
+     "nullable": false
+    },
+    {
+     "name": "raw_row_text",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "raw_values_json",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "id_crosswalk",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false
+    },
+    {
+     "name": "reference_binding",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false
+    },
+    {
+     "name": "acceptance_report_sha256",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    }
+   ]
   }
  },
  "enums": {
@@ -4390,7 +4570,8 @@
    "fallback:reliability_withheld",
    "fallback:licence_reading",
    "fallback:datum_gate_failed",
-   "fallback:not_in_otc_input"
+   "fallback:not_in_otc_input",
+   "fallback:historical_offsets"
   ],
   "time_base_code": [
    "verified",
@@ -4466,7 +4647,8 @@
    "reliability_withheld",
    "licence_reading",
    "datum_gate_failed",
-   "not_in_otc_input"
+   "not_in_otc_input",
+   "historical_offsets"
   ],
   "source_role": [
    "gauge_station",
@@ -4982,7 +5164,9 @@
     "DatumLevel",
     "Ranges",
     "Fallback",
-    "SourceRecord"
+    "SourceRecord",
+    "HistoricalOffsetVintage",
+    "HistoricalOffsetProvenance"
    ],
    "members": [
     "Release.heights",
@@ -4994,7 +5178,17 @@
     "Release.astro_table",
     "Release.ranges",
     "Station.recommended_is_fallback",
-    "ConstantSet.fallback"
+    "ConstantSet.fallback",
+    "SubordinateOffsets.offset_id",
+    "SubordinateOffsets.source",
+    "SubordinateOffsets.source_type",
+    "SubordinateOffsets.source_version",
+    "SubordinateOffsets.source_record_id",
+    "SubordinateOffsets.qc_status",
+    "SubordinateOffsets.qc_flags",
+    "SubordinateOffsets.fallback",
+    "SubordinateOffsets.vintage",
+    "SubordinateOffsets.provenance"
    ],
    "enums": [
     "extreme_type",
@@ -5040,7 +5234,9 @@
     "DatumLevel",
     "Ranges",
     "Fallback",
-    "SourceRecord"
+    "SourceRecord",
+    "HistoricalOffsetVintage",
+    "HistoricalOffsetProvenance"
    ],
    "members": [
     "Release.heights",
@@ -5052,7 +5248,17 @@
     "Release.astro_table",
     "Release.ranges",
     "Station.recommended_is_fallback",
-    "ConstantSet.fallback"
+    "ConstantSet.fallback",
+    "SubordinateOffsets.offset_id",
+    "SubordinateOffsets.source",
+    "SubordinateOffsets.source_type",
+    "SubordinateOffsets.source_version",
+    "SubordinateOffsets.source_record_id",
+    "SubordinateOffsets.qc_status",
+    "SubordinateOffsets.qc_flags",
+    "SubordinateOffsets.fallback",
+    "SubordinateOffsets.vintage",
+    "SubordinateOffsets.provenance"
    ],
    "enums": [
     "extreme_type",
@@ -5091,7 +5297,9 @@
     "DatumInfo",
     "DatumLevel",
     "Fallback",
-    "SourceRecord"
+    "SourceRecord",
+    "HistoricalOffsetVintage",
+    "HistoricalOffsetProvenance"
    ],
    "members": [
     "Release.heights",
@@ -5102,7 +5310,17 @@
     "Release.datums",
     "Release.astro_table",
     "Station.recommended_is_fallback",
-    "ConstantSet.fallback"
+    "ConstantSet.fallback",
+    "SubordinateOffsets.offset_id",
+    "SubordinateOffsets.source",
+    "SubordinateOffsets.source_type",
+    "SubordinateOffsets.source_version",
+    "SubordinateOffsets.source_record_id",
+    "SubordinateOffsets.qc_status",
+    "SubordinateOffsets.qc_flags",
+    "SubordinateOffsets.fallback",
+    "SubordinateOffsets.vintage",
+    "SubordinateOffsets.provenance"
    ],
    "enums": [
     "extreme_type",

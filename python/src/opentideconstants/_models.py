@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import math
 import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, NoReturn, Optional, Tuple
 
 from . import _enums as E
 from ._errors import InvalidReleaseError
@@ -372,6 +373,159 @@ class Validation:
 
 
 @dataclass(frozen=True, slots=True)
+class HistoricalOffsetVintage:
+    publication_year: int
+    source_lifecycle: str
+    removal_events: Tuple[Mapping[str, Any], ...]
+    current_validity: str
+    current_accuracy: str
+    reference_2020_equivalence: str
+    reference_2020_equivalence_sha256: Optional[str]
+
+    @classmethod
+    def _parse(cls, d):
+        return cls(int(d['publication_year']), d['source_lifecycle'],
+                   tuple(MappingProxyType({k: freeze(v) for k, v in row.items()}) for row in d['removal_events']),
+                   d['current_validity'], d['current_accuracy'], d['reference_2020_equivalence'],
+                   d.get('reference_2020_equivalence_sha256'))
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalOffsetProvenance:
+    source_manifest_sha256: str
+    input_sha256: Tuple[str, ...]
+    book: str
+    annual_table_row: int
+    printed_page: int
+    pdf_page: int
+    raw_row_text: str
+    raw_values_json: str
+    id_crosswalk: Mapping[str, Any]
+    reference_binding: Mapping[str, Any]
+    acceptance_report_sha256: str
+
+    @classmethod
+    def _parse(cls, d):
+        return cls(d['source_manifest_sha256'], tuple(d['input_sha256']), d['book'], int(d['annual_table_row']),
+                   int(d['printed_page']), int(d['pdf_page']), d['raw_row_text'], d['raw_values_json'],
+                   MappingProxyType({k: freeze(v) for k, v in d['id_crosswalk'].items()}),
+                   MappingProxyType({k: freeze(v) for k, v in d['reference_binding'].items()}),
+                   d['acceptance_report_sha256'])
+
+
+_HISTORICAL_PROFILES = {
+    'noaa-2020-atlantic-table2-2513': ('atlantic', 2513, 345, 351, 'TEC2869', '8661070', 'OTC-a6c00a3f',
+                                    'R', 4, 15, 0.84, 1.0,
+                                    (("2026-02-18T14:09:46", "Lockwoods Folly Inlet (r)"),),
+                                    "  2513     Lockwoods Folly Inlet . . . . . . . . . . . . . . . . . . . . . . .         33° 55'     78° 14'     +0 04      +0 15     *0.84     *1.00    4.2    4.8     2.3"),
+    'noaa-2020-pacific-table2-517': ('pacific', 517, 284, 302, 'TWC0509', '9414290', 'OTC-ee4593cd',
+                                  'A', -35, -31, -0.06096, 0.0,
+                                  (("2026-02-18T14:09:50", "San Francisco Bar (r)"),
+                                   ("2026-07-06T11:17:37", "San Francisco Bar")),
+                                  "   517     San Francisco Bar . . . . . . . . . . . . . . . . . . . . . . . . .         37° 46'     122° 38'     -0 35       -0 31      -0.2        0.0    3.9    5.6     3.0"),
+}
+_HISTORICAL_MANIFEST = '667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7'
+_HISTORICAL_REMOVAL_SHA = 'c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61'
+_SHA256 = re.compile(r'\A[a-f0-9]{64}\Z')
+
+
+def _check_historical_offsets(d, what='subordinate_offsets'):
+    """Validate the two named own-offset contracts; ordinary offsets retain their existing behavior."""
+    if d is None:
+        return
+    if not isinstance(d, dict):
+        raise InvalidReleaseError(f'{what}: not an object')
+    _check_types(d, _OFFSET_TYPES, what)
+    fallback = d.get('fallback')
+    flags = d.get('qc_flags')
+    historical = ('offset_id' in d or isinstance(fallback, dict) and fallback.get('reason') == 'historical_offsets'
+                  or isinstance(flags, list) and any(isinstance(f, dict) and f.get('flag') == 'fallback:historical_offsets'
+                                                    for f in flags))
+    if not historical:
+        return
+
+    def fail(field) -> NoReturn:
+        raise InvalidReleaseError(f'{what}: invalid or missing historical {field}')
+
+    def text(value):
+        return isinstance(value, str) and bool(value.strip())
+
+    def digest(value):
+        return isinstance(value, str) and _SHA256.fullmatch(value) is not None
+
+    def hashes(value):
+        return isinstance(value, list) and bool(value) and all(digest(v) for v in value) and len(set(value)) == len(value)
+
+    profile_id = d.get('offset_id')
+    profile = _HISTORICAL_PROFILES.get(profile_id) if isinstance(profile_id, str) else None
+    if profile is None:
+        fail('offset_id')
+    book, row, page, pdf_page, legacy, noaa_id, reference, adjusted, high_t, low_t, high_h, low_h, removals, raw_row = profile
+    expected = {'source': 'noaa', 'source_type': 'official', 'source_version': 'annual-tide-tables-2020',
+                'source_record_id': f'annual-tide-tables-2020/{book}/Table2/{row}', 'qc_status': 'flagged',
+                'reference_station_id': reference, 'height_adjusted_type': adjusted,
+                'time_offset_high_min': high_t, 'time_offset_low_min': low_t,
+                'height_offset_high': high_h, 'height_offset_low': low_h}
+    for key, value in expected.items():
+        if d.get(key) != value or isinstance(value, (int, float)) and not _is_finite(d.get(key)):
+            fail(key)
+    if not text(d.get('licence_id')):
+        fail('licence_id')
+    if not isinstance(flags, list) or len(flags) != 1 or not isinstance(flags[0], dict) \
+            or flags[0].get('flag') != 'fallback:historical_offsets' or not text(flags[0].get('reason')):
+        fail('qc_flags')
+    if not isinstance(fallback, dict) or fallback.get('reason') != 'historical_offsets' \
+            or not all(text(fallback.get(k)) for k in ('basis', 'otc_finding')) or 'preferred_set_id' in fallback:
+        fail('fallback')
+    datum = d.get('datum')
+    required_datum = {'zero': 'chart_datum', 'chart_datum': 'mllw', 'named': {'mllw': 0.0},
+                      'basis': {'mllw': {'kind': 'published', 'method': 'source', 'source_name': 'MLLW'}}}
+    if not isinstance(datum, dict) or datum != required_datum or not _is_finite(datum['named']['mllw']):
+        fail('datum')
+    vintage = d.get('vintage')
+    if not isinstance(vintage, dict):
+        fail('vintage')
+    for key, value in {'publication_year': 2020, 'source_lifecycle': 'retired',
+                       'current_validity': 'unestablished', 'current_accuracy': 'unverified'}.items():
+        if vintage.get(key) != value or key == 'publication_year' and not _is_finite(vintage.get(key)):
+            fail(f'vintage.{key}')
+    expected_removals = [{'source_clock_timestamp': timestamp, 'name': name, 'operation': 'Removed',
+                         'source_timezone': None, 'evidence_sha256': _HISTORICAL_REMOVAL_SHA}
+                        for timestamp, name in removals]
+    if vintage.get('removal_events') != expected_removals:
+        fail('vintage.removal_events')
+    equivalence = vintage.get('reference_2020_equivalence')
+    if equivalence not in ('not_checked', 'matched_at_publisher_precision', 'disagrees'):
+        fail('vintage.reference_2020_equivalence')
+    if (equivalence == 'not_checked' and 'reference_2020_equivalence_sha256' in vintage
+            or equivalence != 'not_checked' and not digest(vintage.get('reference_2020_equivalence_sha256'))):
+        fail('vintage.reference_2020_equivalence_sha256')
+    provenance = d.get('provenance')
+    if not isinstance(provenance, dict):
+        fail('provenance')
+    for key, value in {'source_manifest_sha256': _HISTORICAL_MANIFEST, 'book': book, 'annual_table_row': row,
+                       'printed_page': page, 'pdf_page': pdf_page, 'raw_row_text': raw_row}.items():
+        if provenance.get(key) != value or isinstance(value, int) and not _is_finite(provenance.get(key)):
+            fail(f'provenance.{key}')
+    if not hashes(provenance.get('input_sha256')) or not digest(provenance.get('acceptance_report_sha256')):
+        fail('provenance evidence hashes')
+    for key, values in (('id_crosswalk', {'legacy_id': legacy, 'status': 'inferred', 'modern_alias_verified': False}),
+                        ('reference_binding', {'noaa_id': noaa_id, 'station_id': reference,
+                                               'mapping_status': 'primary_name_position'})):
+        nested = provenance.get(key)
+        if not isinstance(nested, dict) or not hashes(nested.get('evidence_sha256')) \
+                or any(nested.get(k) != v for k, v in values.items()) \
+                or key == 'id_crosswalk' and nested.get('modern_alias_verified') is not False:
+            fail(f'provenance.{key}')
+    raw_values = provenance.get('raw_values_json')
+    try:
+        if not isinstance(raw_values, str) or not raw_values.strip() or not isinstance(json.loads(raw_values), dict):
+            fail('provenance.raw_values_json')
+    except (ValueError, TypeError):
+        fail('provenance.raw_values_json')
+
+
+@dataclass(frozen=True, slots=True)
 class SubordinateOffsets:
     reference_station_id: str
     time_offset_high_min: Optional[float]
@@ -380,12 +534,28 @@ class SubordinateOffsets:
     height_offset_low: Optional[float]
     height_adjusted_type: Optional[E.HeightAdjustedType]
     licence_id: Optional[str]
+    offset_id: Optional[str] = None
+    source: Optional[str] = None
+    source_type: Optional[E.SourceType] = None
+    source_version: Optional[str] = None
+    source_record_id: Optional[str] = None
+    qc_status: Optional[E.QcStatus] = None
+    qc_flags: Tuple[QcFlag, ...] = ()
+    fallback: Optional[Fallback] = None
+    vintage: Optional[HistoricalOffsetVintage] = None
+    provenance: Optional[HistoricalOffsetProvenance] = None
 
     @classmethod
     def _parse(cls, d):
+        _check_historical_offsets(d)
         return cls(d.get("reference_station_id"), d.get("time_offset_high_min"), d.get("time_offset_low_min"),
                    d.get("height_offset_high"), d.get("height_offset_low"),
-                   E.enum_or_raw(E.HeightAdjustedType, d.get("height_adjusted_type")), d.get("licence_id"))
+                   E.enum_or_raw(E.HeightAdjustedType, d.get("height_adjusted_type")), d.get("licence_id"),
+                   d.get('offset_id'), d.get('source'), E.enum_or_raw(E.SourceType, d.get('source_type')),
+                   d.get('source_version'), d.get('source_record_id'), E.enum_or_raw(E.QcStatus, d.get('qc_status')),
+                   tuple(QcFlag._parse(flag) for flag in d.get('qc_flags') or ()), Fallback._parse(d.get('fallback')),
+                   None if d.get('vintage') is None else HistoricalOffsetVintage._parse(d['vintage']),
+                   None if d.get('provenance') is None else HistoricalOffsetProvenance._parse(d['provenance']))
 
 
 @dataclass(frozen=True, slots=True)
@@ -546,7 +716,9 @@ _STATION_TYPES = {"name": "T", "country": "T", "timezone": "T", "type": "T", "re
                   "constant_sets": "L", "validation": "L", "subordinate_offsets": "O", "current_offsets": "A",
                   "recommended_is_fallback": "B", "source_records": "L"}
 _OFFSET_TYPES = {"reference_station_id": "T", "licence_id": "T", "height_adjusted_type": "T",
-                 "time_offset_high_min": "N", "time_offset_low_min": "N", "height_offset_high": "N", "height_offset_low": "N"}
+                 "time_offset_high_min": "N", "time_offset_low_min": "N", "height_offset_high": "N", "height_offset_low": "N",
+                 "offset_id": "T", "source": "T", "source_type": "T", "source_version": "T", "source_record_id": "T",
+                 "qc_status": "T", "qc_flags": "L", "fallback": "O", "vintage": "O", "provenance": "O"}
 _VALIDATION_TYPES = {"set_id": "T", "reference_source": "T", "reference_station": "T", "window": "T",
                      "reference_distance_km": "N", "time_mae_min": "N", "time_p95_min": "N", "time_bias_min": "N",
                      "height_mae_m": "N", "range_error_m": "N", "missed_events": "I", "extra_events": "I",
@@ -642,6 +814,9 @@ def check_station_types(d) -> None:
     for cs in d.get("constant_sets") or ():
         what = f"station {sid}: set {cs.get('set_id')}"
         _check_types(cs, _SET_TYPES, what)
+        if isinstance(cs.get('fallback'), dict) and cs['fallback'].get('reason') == 'historical_offsets' or any(
+                flag.get('flag') == 'fallback:historical_offsets' for flag in cs.get('qc_flags') or ()):
+            raise InvalidReleaseError(f'{what}: historical_offsets belongs only to subordinate_offsets')
         for k, table in (("record_span", _SPAN_TYPES), ("datum", _DATUM_TYPES), ("time_base", _TIME_BASE_TYPES),
                          ("provenance", _PROVENANCE_TYPES), ("fallback", _FALLBACK_TYPES)):
             if cs.get(k) is not None:

@@ -21,7 +21,7 @@ from ._errors import (ChecksumError, FileError, InvalidArgumentError, InvalidRel
                       StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, _is_finite, build_station,
-                      freeze, parse_time)
+                      freeze, parse_time, _check_historical_offsets)
 
 SUPPORTED_FORMAT_MAJORS = (1,)
 SUPPORTED_FORMAT_VERSION = "1.0"
@@ -232,6 +232,7 @@ def _entry(d, offset=None, length=None):
             if not _is_finite(v) or abs(v) > bound:
                 raise InvalidReleaseError(f"station {d['station_id']}: {k} is not a number in range: {v!r}")
     off = d.get("subordinate_offsets")
+    _check_historical_offsets(off, f"station {d['station_id']}: subordinate_offsets")
     off = off if isinstance(off, dict) else {}
     rec_id = _s(d, "recommended_set_id")
     sets, kind = [], None
@@ -256,6 +257,7 @@ def _entry(d, offset=None, length=None):
         "country": _s(d, "country"), "type": _s(d, "type"), "lat": _n(d, "lat"), "lon": _n(d, "lon"), "kind": kind,
         "aliases": {k: ([v] if isinstance(v, str) else list(v)) for k, v in aliases.items()},
         "reference_station_id": _s(off, "reference_station_id"), "offsets_licence_id": _s(off, "licence_id"),
+        "subordinate_offsets": d.get("subordinate_offsets"),
         "recommended_set_id": rec_id, "sets": sets,
         "current_offsets": [{"bin": integral(co.get("bin")), "reference_bin": integral(co.get("reference_bin")),
                              "reference_station_id": _s(co, "reference_station_id"), "licence_id": _s(co, "licence_id")}
@@ -281,7 +283,7 @@ def _line_view(e):
             e.get("offsets_licence_id"),
             [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()), freeze(cs.get("fallback")),
                                                        tuple(cs.get("current_bins") or ())) for cs in e.get("sets") or ()],
-            freeze(e.get("current_offsets")))
+            freeze(e.get("current_offsets")), freeze(e.get("subordinate_offsets")))
 
 
 def _usable_index(idx, name, sha256, size, conv, lic):
@@ -307,7 +309,17 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not all(k in e and (e[k] is None or isinstance(e[k], str)) for k in _ENTRY_STR) \
                 or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
                 or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list) \
-                or not isinstance(e.get("current_offsets"), list):
+                or not isinstance(e.get("current_offsets"), list) or "subordinate_offsets" not in e:
+            return None
+        off = e['subordinate_offsets']
+        if not (off is None or isinstance(off, dict)):
+            return None
+        try:
+            _check_historical_offsets(off)
+        except InvalidReleaseError:
+            return None
+        if e.get('reference_station_id') != (None if off is None else _s(off, 'reference_station_id')) \
+                or e.get('offsets_licence_id') != (None if off is None else _s(off, 'licence_id')):
             return None
         e = {**e, "offset": integral(e["offset"]), "length": integral(e["length"])}
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
@@ -1138,7 +1150,18 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
             idx = json.loads(index_path.read_text(encoding="utf-8"))
             entries = _usable_index(idx, path.name, index_sha256 or file_sha256(path), size, conv, lic)
             if entries is not None:
-                return entries
+                # Own-offset labels are eligibility inputs. Compare the actual subordinate line before
+                # accepting a derived cache; a matching file hash alone cannot validate its summaries.
+                with path.open('rb') as handle:
+                    for entry in entries:
+                        if entry.get('type') != 'subordinate' and entry.get('subordinate_offsets') is None:
+                            continue
+                        handle.seek(entry['offset'])
+                        raw = _json(handle.read(entry['length']), f"{path}: cached subordinate line")
+                        if not isinstance(raw, dict) or freeze(raw.get('subordinate_offsets')) != freeze(entry['subordinate_offsets']):
+                            break
+                    else:
+                        return entries
         except (OSError, ValueError, RecursionError):
             pass  # a stale or broken index is rebuilt
     entries = []

@@ -22,6 +22,82 @@ from opentideconstants._release import freeze, haversine  # noqa: E402
 GOOD = ROOT / "conformance" / "fixtures" / "good"
 
 
+class HistoricalOffsetModelTest(unittest.TestCase):
+    def test_ordinary_offsets_have_empty_optional_historical_fields(self):
+        offsets = otc.SubordinateOffsets._parse({"reference_station_id": "OTC-reference",
+                                                "height_adjusted_type": "R"})
+        for name in ("offset_id", "source", "source_type", "source_version", "source_record_id",
+                     "qc_status", "fallback", "vintage", "provenance"):
+            self.assertIsNone(getattr(offsets, name))
+        self.assertEqual(offsets.qc_flags, ())
+
+    def test_optional_source_enums_preserve_unknown_tolerance(self):
+        offsets = otc.SubordinateOffsets._parse({"reference_station_id": "OTC-reference",
+                                                "height_adjusted_type": "R", "source_type": "future-source",
+                                                "qc_status": "future-qc"})
+        self.assertIs(offsets.source_type, otc.SourceType.OTHER)
+        self.assertIs(offsets.qc_status, otc.QcStatus.OTHER)
+
+    def test_historical_markers_require_the_complete_own_contract(self):
+        for marker in ({"offset_id": "noaa-2020-atlantic-table2-2513"},
+                       {"fallback": {"reason": "historical_offsets"}},
+                       {"qc_flags": [{"flag": "fallback:historical_offsets"}]}):
+            with self.subTest(marker=marker), self.assertRaises(otc.InvalidReleaseError):
+                otc.SubordinateOffsets._parse({"reference_station_id": "OTC-a6c00a3f",
+                                               "height_adjusted_type": "R", **marker})
+
+    def test_named_historical_enums_and_unknown_values(self):
+        self.assertEqual(otc.FallbackReason.HISTORICAL_OFFSETS, "historical_offsets")
+        self.assertEqual(otc.QcFlagName.FALLBACK_HISTORICAL_OFFSETS, "fallback:historical_offsets")
+        self.assertIs(otc.FallbackReason("future-reason"), otc.FallbackReason.OTHER)
+        self.assertIs(otc.QcFlagName("future-flag"), otc.QcFlagName.OTHER)
+
+    def test_historical_markers_are_rejected_on_constant_sets(self):
+        for marker in ({"fallback": {"reason": "historical_offsets", "basis": "original subordinate row",
+                                     "otc_finding": "retired profile"}},
+                       {"qc_flags": [{"flag": "fallback:historical_offsets", "reason": "retired profile"}]}):
+            document = json.loads((GOOD / "OTC_20991231.2.json").read_text())
+            station = next(st for st in document['stations'] if st.get('constant_sets'))
+            station['constant_sets'][0].update(marker)
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'OTC_20991231.2.json'
+                path.write_text(json.dumps(document))
+                with self.assertRaises(otc.InvalidReleaseError), otc.OpenTideConstants(file=path) as client:
+                    client.station(station['station_id'])
+
+    def test_vintage_retains_source_clock_and_freezes_removal_rows(self):
+        document = {"publication_year": 2020, "source_lifecycle": "retired",
+                    "removal_events": [{"source_clock_timestamp": "2026-02-18T14:09:46", "source_timezone": None}],
+                    "current_validity": "unestablished", "current_accuracy": "unverified",
+                    "reference_2020_equivalence": "not_checked"}
+        vintage = otc.HistoricalOffsetVintage._parse(document)
+        document["removal_events"][0]["source_clock_timestamp"] = "changed"
+        self.assertEqual(vintage.removal_events[0]["source_clock_timestamp"], "2026-02-18T14:09:46")
+        self.assertIsNone(vintage.removal_events[0]["source_timezone"])
+        self.assertIsNone(vintage.reference_2020_equivalence_sha256)
+        with self.assertRaises(TypeError):
+            vintage.removal_events[0]["source_timezone"] = "UTC"
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            vintage.current_accuracy = "verified"
+
+    def test_provenance_freezes_nested_crosswalk_without_rewriting_original_text(self):
+        digest = "a" * 64
+        raw_text = ' {"source_clock":"2026-02-18T14:09:46"} '
+        document = {"source_manifest_sha256": digest, "input_sha256": [digest], "book": "atlantic",
+                    "annual_table_row": 2513, "printed_page": 345, "pdf_page": 351,
+                    "raw_row_text": "original printed row", "raw_values_json": raw_text,
+                    "id_crosswalk": {"status": "inferred", "evidence_sha256": [digest]},
+                    "reference_binding": {"evidence_sha256": [digest]}, "acceptance_report_sha256": digest}
+        provenance = otc.HistoricalOffsetProvenance._parse(document)
+        document["id_crosswalk"]["evidence_sha256"].append("b" * 64)
+        self.assertEqual(provenance.id_crosswalk["evidence_sha256"], (digest,))
+        self.assertEqual(provenance.raw_values_json, raw_text)
+        with self.assertRaises(TypeError):
+            provenance.reference_binding["noaa_id"] = "invented"
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            provenance.raw_row_text = "changed"
+
+
 class FoldTest(unittest.TestCase):
     def test_letters_that_do_not_decompose(self):
         self.assertEqual([fold(x) for x in ["Tromsø", "Ålesund", "Łeba", "Straße"]],

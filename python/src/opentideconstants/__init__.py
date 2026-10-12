@@ -30,7 +30,8 @@ from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, Inv
                       ReaderTooOldError, ReleaseNotFoundError, StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._models import (ConstantSet, Constituent, Convention, Datum, DroppedConstituent, Fallback, FileInfo, Licence, Nearby,
                       Provenance, ProvenanceBuild, QcFlag, RecordSpan, ReleaseInfo, Station, Stats, SubordinateOffsets,
-                      TimeBase, Tombstone, UpdateResult, Validation, SourceRecord)
+                      TimeBase, Tombstone, UpdateResult, Validation, SourceRecord,
+                      HistoricalOffsetVintage, HistoricalOffsetProvenance)
 from ._release import SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release
 
 CACHE_LAYOUT_VERSION = "v1"
@@ -43,6 +44,7 @@ __all__ = [
     "Provenance", "ProvenanceBuild", "TimeBase", "QcFlag", "DroppedConstituent", "Validation",
     "SubordinateOffsets", "Nearby", "UpdateResult",
     "RecordSpan", "Datum", "Stats", "Fallback", "SourceRecord",
+    "HistoricalOffsetVintage", "HistoricalOffsetProvenance",
     # enums
     "Kind", "StationType", "StationStatus", "RemovedReason", "SourceType", "Quantity", "QcStatus", "LoadedFrom",
     "PhaseReference",

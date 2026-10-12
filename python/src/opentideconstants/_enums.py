@@ -127,6 +127,7 @@ class QcFlagName(_StrEnum):
     FALLBACK_LICENCE_READING = "fallback:licence_reading"
     FALLBACK_DATUM_GATE_FAILED = "fallback:datum_gate_failed"
     FALLBACK_NOT_IN_OTC_INPUT = "fallback:not_in_otc_input"
+    FALLBACK_HISTORICAL_OFFSETS = "fallback:historical_offsets"
     OTHER = "other"
 
 
@@ -141,6 +142,7 @@ class FallbackReason(_StrEnum):
     LICENCE_READING = "licence_reading"
     DATUM_GATE_FAILED = "datum_gate_failed"
     NOT_IN_OTC_INPUT = "not_in_otc_input"
+    HISTORICAL_OFFSETS = "historical_offsets"
     OTHER = "other"
 
 
