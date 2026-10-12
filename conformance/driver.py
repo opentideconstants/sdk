@@ -1256,7 +1256,33 @@ def act_assert_index(a):
         ref = stream_index.build(jsonl, a["datestamp"])
     except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as e:
         return [f"{jsonl}: cannot build the reference index from it ({type(e).__name__}: {e})"]
-    return [f"{p.name}: {x}" for x in stream_index.compare(doc, ref)][:20]
+    extension_problems = []
+    if isinstance(doc, dict) and isinstance(doc.get('by'), str) and doc['by'].startswith('opentideconstants-python/'):
+        # P1b's versioned private summaries are checked against actual file data, then the original exact
+        # index-format checks run on every original field. No unknown key is discarded.
+        extension_problems += match(1, doc.get('discovery_index_version', _MISSING), 0, 'discovery_index_version')
+        doc = copy.deepcopy(doc)
+        doc.pop('discovery_index_version', None)
+        records = [json.loads(line) for line in jsonl.read_bytes().splitlines() if line.strip()]
+        for entry, raw in zip(doc.get('stations') or [], records):
+            if not isinstance(entry, dict):
+                continue
+            offsets = [{key: row.get(key) for key in ('bin', 'reference_bin', 'reference_station_id', 'licence_id')}
+                       for row in raw.get('current_offsets') or []]
+            extension_problems += match(offsets, entry.pop('current_offsets', _MISSING), 0,
+                                        f"{entry.get('station_id')}.current_offsets")
+            summaries = entry.get('sets')
+            if not isinstance(summaries, list):
+                continue
+            for summary, constants in zip(summaries, raw.get('constant_sets') or []):
+                if not isinstance(summary, dict):
+                    continue
+                extension_problems += match(constants.get('fallback'), summary.pop('fallback', _MISSING), 0,
+                                            f"{summary.get('set_id')}.fallback")
+                bins = [row.get('bin') for row in constants.get('current_bins') or []]
+                extension_problems += match(bins, summary.pop('current_bins', _MISSING), 0,
+                                            f"{summary.get('set_id')}.current_bins")
+    return [f"{p.name}: {x}" for x in extension_problems + stream_index.compare(doc, ref)][:20]
 
 
 # --------------------------------------------------------------------------- run one case

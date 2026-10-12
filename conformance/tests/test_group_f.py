@@ -11,6 +11,8 @@ import pytest
 from _util import CONF, NULL_RUNNER, run_driver, write_cases, write_fake_runner
 
 sys.path.insert(0, str(CONF))
+sys.path.insert(0, str(CONF.parent / 'python' / 'src'))
+from opentideconstants import OpenTideConstants  # noqa: E402
 import driver  # noqa: E402
 from server import FixtureServer, RecordingProxy  # noqa: E402
 
@@ -602,3 +604,37 @@ def test_not_contains_matcher(tmp_path):
     bad = {"op": "citation", "expect": {"citation": {"$not_contains": 5}}}
     r = run_driver("--check-cases", "--cases", str(write_cases(tmp_path, [{"id": "b", "steps": [bad]}], name="b.json")))
     assert r.returncode == 2 and "$not_contains needs a string" in r.stdout, r.stdout[-400:]
+
+
+@pytest.mark.parametrize('mutation', [None, 'version', 'missing_version', 'fallback', 'bins', 'offsets', 'extra_key', 'name', 'constituents'])
+def test_real_python_discovery_index_is_checked_against_native_jsonl(tmp_path, mutation):
+    fixture = CONF / 'fixtures' / 'good' / 'OTC_20991231.2.jsonl'
+    server = FixtureServer().start()
+    try:
+        with OpenTideConstants(release='20991231.2', base_url=server.url + '/good/', mode='stream', cache_dir=tmp_path / 'cache') as client:
+            path = client.release._index_path
+            assert path is not None and path.is_file()
+            jsonl = path.parent / 'OTC_20991231.2.jsonl'
+            assert jsonl.read_bytes() == fixture.read_bytes()
+            actual = json.loads(path.read_text())
+    finally:
+        server.shutdown()
+    if mutation == 'version':
+        actual['discovery_index_version'] = True
+    elif mutation == 'missing_version':
+        del actual['discovery_index_version']
+    elif mutation == 'fallback':
+        actual['stations'][0]['sets'][0]['fallback'] = {'reason': 'licence_reading', 'basis': 'invented'}
+    elif mutation == 'bins':
+        actual['stations'][0]['sets'][0]['current_bins'] = [True]
+    elif mutation == 'offsets':
+        actual['stations'][0]['current_offsets'] = [{'bin': 1, 'reference_bin': 1, 'reference_station_id': 'invented', 'licence_id': None}]
+    elif mutation == 'extra_key':
+        actual['unapproved_extension'] = 1
+    elif mutation == 'name':
+        actual['stations'][0]['name_folded'] = 'wrong'
+    elif mutation == 'constituents':
+        actual['stations'][0]['sets'][0]['constituents'] = ['invented']
+    path.write_text(json.dumps(actual))
+    problems = driver.act_assert_index({'path': str(path), 'jsonl': str(jsonl), 'datestamp': '20991231.2'})
+    assert bool(problems) is (mutation is not None), problems

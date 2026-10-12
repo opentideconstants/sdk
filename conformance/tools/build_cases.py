@@ -353,7 +353,7 @@ def apply_filters(rel, stations, f):
 
 
 def discovery_filters(rel, stations, filters):
-    """SDK-QFILT oracle only for the P1b stations/search/geo/knc cases; legacy cases stay frozen."""
+    """SDK-QFILT oracle for approved discovery cases and their exact v1/no-status direct consumers."""
     def eligible(cs, licence=None):
         status = cs.get("qc_status")
         if status not in ("ok", "flagged"):
@@ -966,7 +966,7 @@ def group_v1():
             out.append(mcase(f"v1/sets/{cs['set_id']}", f"set {cs['set_id']} (qc_status {cs['qc_status']}): fields, time_base, provenance with build and carried_from_release", "4.5, 4.6, 7.4",
                              set_steps(rel, s, cs), root="v1", release=V1))
     for f in [{"source": "gesla-fit"}, {"source": "noaa"}, {"kind": "tide"}, {"source_type": "gauge"}, {}]:
-        ids = [s["station_id"] for s in apply_filters(rel, rel.active, f)]
+        ids = [s["station_id"] for s in discovery_filters(rel, rel.active, f)]
         label = "-".join(f"{k}-{v}" for k, v in f.items()) or "all"
         out.append(mcase(f"v1/list-{label}", f"stations with filters {json.dumps(f)}: a source counts only through a set with constants", "4.4, 7.4",
                          [step("stations", {"station_ids": ids}, **f), step("iter_stations", {"station_ids": ids}, **f)], root="v1", release=V1))
@@ -2595,6 +2595,20 @@ FOLD_D12 = [
 ]
 
 
+
+def discovery_index(index, path):
+    """Complete only the two authored fresh-cache probes with P1b's raw discovery summaries."""
+    result = copy.deepcopy(index)
+    result['discovery_index_version'] = 1
+    records = [json.loads(line) for line in path.read_bytes().splitlines() if line.strip()]
+    for entry, raw in zip(result['stations'], records):
+        entry['current_offsets'] = [{key: offset.get(key) for key in ('bin', 'reference_bin', 'reference_station_id', 'licence_id')}
+                                    for offset in raw.get('current_offsets') or []]
+        for summary, constants in zip(entry['sets'], raw.get('constant_sets') or []):
+            summary['fallback'] = constants.get('fallback')
+            summary['current_bins'] = [row.get('bin') for row in constants.get('current_bins') or []]
+    return result
+
 def rules_r2_pk07():
     """PK-R2-07: a line read through a fresh stream index gets the checks of the full pass (spec 6.2, CR D4). A
     cached, verified bad release whose index-v1.json (the reference builder's) is fresh: the open uses the
@@ -2615,7 +2629,7 @@ def rules_r2_pk07():
             ("qc-flags", "bad/qc-flags-not-array", {}),
             # the index names a convention that resolves, the line one that does not
             ("unresolved-convention", "bad/unresolved-convention", {"convention_id": "otc-greenwich-v1"})]:
-        idx = reference_index(FIXTURES / root / f"OTC_{d}.jsonl", d)
+        idx = discovery_index(reference_index(FIXTURES / root / f"OTC_{d}.jsonl", d), FIXTURES / root / f"OTC_{d}.jsonl")
         i = changed_line(root)
         sid = idx["stations"][i]["station_id"]
         if sets:
@@ -3306,7 +3320,7 @@ def rules_r2_pk09():
     N = Rel("bad/no-status", "20991231")
     ns_steps = [step("station", {"station": enc_station(N, N.by_id[i])}, station_id=i) for i in ("OTC-T-0019", "OTC-T-0020")] + [
                 step("station_count", {"station_count": len(N.active)}),
-                step("stations", {"station_ids": [s["station_id"] for s in apply_filters(N, N.active, {"country": "USA"})]}, country="USA"),
+                step("stations", {"station_ids": [s["station_id"] for s in discovery_filters(N, N.active, {"country": "USA"})]}, country="USA"),
                 step("stats", {"stats": stats(N)})]
     out.append(mcase("rules/r2-pk09/no-status", "OTC-T-0020's line has no status and OTC-T-0019's has status null: both are active stations, with status active (CR2 DR28)", "4.4, 6.2",
                      ns_steps, root="bad/no-status", release="20991231"))
