@@ -1819,6 +1819,13 @@
      "nullable": false,
      "c": "otc_{object}_raw_json",
      "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    },
+    {
+     "name": "recommended_is_fallback",
+     "kind": "field",
+     "type": "boolean",
+     "nullable": true,
+     "note": "Release annotation: true when its recommendation selects a labelled fallback; null when absent."
     }
    ]
   },
@@ -2067,6 +2074,13 @@
      "nullable": false,
      "c": "otc_{object}_raw_json",
      "note": "the parsed JSON object as the file gives it, frozen; unknown fields of a newer minor format appear here"
+    },
+    {
+     "name": "fallback",
+     "kind": "field",
+     "type": "Fallback",
+     "nullable": true,
+     "note": "Retained source values with an OTC finding; separate from earlier-release provenance.decision fallback."
     }
    ]
   },
@@ -4076,6 +4090,48 @@
      "note": "DLQ in metres, or null"
     }
    ]
+  },
+  "Fallback": {
+   "c": "otc_fallback",
+   "description": "Immutable annotation of retained source constants with a finding.",
+   "members": [
+    {
+     "name": "reason",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "enum": "fallback_reason"
+    },
+    {
+     "name": "basis",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "otc_finding",
+     "kind": "field",
+     "type": "string",
+     "nullable": false
+    },
+    {
+     "name": "preferred_set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript"
+     ]
+    }
+   ]
   }
  },
  "enums": {
@@ -4148,7 +4204,17 @@
    "non_tidal_signal",
    "short_record",
    "sibling_disagreement",
-   "carried_over"
+   "carried_over",
+   "fallback:time_base_disputed",
+   "fallback:time_base_unresolved",
+   "fallback:refused_fit",
+   "fallback:short_record_uncalibrated",
+   "fallback:short_record_long_period",
+   "fallback:published_full_list",
+   "fallback:reliability_withheld",
+   "fallback:licence_reading",
+   "fallback:datum_gate_failed",
+   "fallback:not_in_otc_input"
   ],
   "time_base_code": [
    "verified",
@@ -4213,6 +4279,18 @@
    "harmonic",
    "folded_offsets",
    "offsets"
+  ],
+  "fallback_reason": [
+   "time_base_disputed",
+   "time_base_unresolved",
+   "refused_fit",
+   "short_record_uncalibrated",
+   "short_record_long_period",
+   "published_full_list",
+   "reliability_withheld",
+   "licence_reading",
+   "datum_gate_failed",
+   "not_in_otc_input"
   ]
  },
  "errors": [
@@ -4713,7 +4791,8 @@
     "CurrentEvent",
     "DatumInfo",
     "DatumLevel",
-    "Ranges"
+    "Ranges",
+    "Fallback"
    ],
    "members": [
     "Release.heights",
@@ -4723,12 +4802,15 @@
     "Release.current_events",
     "Release.datums",
     "Release.astro_table",
-    "Release.ranges"
+    "Release.ranges",
+    "Station.recommended_is_fallback",
+    "ConstantSet.fallback"
    ],
    "enums": [
     "extreme_type",
     "current_event_type",
-    "prediction_method"
+    "prediction_method",
+    "fallback_reason"
    ],
    "errors": [
     "no_constants",
@@ -4803,7 +4885,8 @@
     "CurrentEvent",
     "DatumInfo",
     "DatumLevel",
-    "Ranges"
+    "Ranges",
+    "Fallback"
    ],
    "members": [
     "Release.heights",
@@ -4813,12 +4896,15 @@
     "Release.current_events",
     "Release.datums",
     "Release.astro_table",
-    "Release.ranges"
+    "Release.ranges",
+    "Station.recommended_is_fallback",
+    "ConstantSet.fallback"
    ],
    "enums": [
     "extreme_type",
     "current_event_type",
-    "prediction_method"
+    "prediction_method",
+    "fallback_reason"
    ],
    "errors": [
     "no_constants",
@@ -4847,7 +4933,8 @@
     "CurrentPoint",
     "CurrentEvent",
     "DatumInfo",
-    "DatumLevel"
+    "DatumLevel",
+    "Fallback"
    ],
    "members": [
     "Release.heights",
@@ -4856,12 +4943,15 @@
     "Release.currents",
     "Release.current_events",
     "Release.datums",
-    "Release.astro_table"
+    "Release.astro_table",
+    "Station.recommended_is_fallback",
+    "ConstantSet.fallback"
    ],
    "enums": [
     "extreme_type",
     "current_event_type",
-    "prediction_method"
+    "prediction_method",
+    "fallback_reason"
    ],
    "errors": [
     "no_constants",

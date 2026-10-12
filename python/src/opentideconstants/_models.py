@@ -186,6 +186,23 @@ class QcFlag:
         return cls(E.enum_or_raw(E.QcFlagName, d.get("flag")), d.get("reason"), freeze(d.get("values")))
 
 
+@dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash
+class Fallback:
+    """Retained source values with an OTC finding, not an earlier-release carry-over."""
+    reason: E.FallbackReason
+    basis: str
+    otc_finding: str
+    preferred_set_id: Optional[str]
+    raw: Mapping[str, Any] = field(repr=False, compare=False)
+
+    @classmethod
+    def _parse(cls, d):
+        if d is None:
+            return None
+        return cls(E.enum_or_raw(E.FallbackReason, d.get("reason")), d.get("basis"), d.get("otc_finding"),
+                   d.get("preferred_set_id"), freeze(d))
+
+
 @dataclass(frozen=True, slots=True)
 class DroppedConstituent:
     name: str
@@ -352,6 +369,7 @@ class ConstantSet:
     validation: Tuple[Validation, ...]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _constituents: Any = field(default=None, repr=False, compare=False)
+    fallback: Optional[Fallback] = None
 
     def __hash__(self):  # CR D16: hashable by id; == still compares the fields
         return hash(self.set_id)
@@ -414,6 +432,7 @@ class Station:
     recommended_set: Optional[ConstantSet]
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _sets: Tuple[ConstantSet, ...] = field(default=(), repr=False, compare=False)
+    recommended_is_fallback: Optional[bool] = None
 
     def __hash__(self):  # CR D16: hashable by id; == still compares the fields
         return hash(self.station_id)
@@ -479,10 +498,12 @@ def _is_finite(v) -> bool:
 
 # The JSON type of each known field that the SDK reads (spec 7.3: tolerant is not lax; CR2 PK-R2-05). Absent or
 # null is always allowed here; required fields are checked where they are used. T a string, N a finite number,
-# I a finite number with an integral value, O an object, L a list of objects, S a list of strings, A a list.
+# I a finite number with an integral value, O an object, L a list of objects, S a list of strings, A a list,
+# B a boolean.
 # The same table is in the Ruby, TypeScript and C SDKs.
 _STATION_TYPES = {"name": "T", "country": "T", "timezone": "T", "type": "T", "recommended_set_id": "T", "status": "T",
-                  "constant_sets": "L", "validation": "L", "subordinate_offsets": "O", "current_offsets": "A"}
+                  "constant_sets": "L", "validation": "L", "subordinate_offsets": "O", "current_offsets": "A",
+                  "recommended_is_fallback": "B"}
 _OFFSET_TYPES = {"reference_station_id": "T", "licence_id": "T", "height_adjusted_type": "T",
                  "time_offset_high_min": "N", "time_offset_low_min": "N", "height_offset_high": "N", "height_offset_low": "N"}
 _VALIDATION_TYPES = {"set_id": "T", "reference_source": "T", "reference_station": "T", "window": "T",
@@ -492,7 +513,8 @@ _VALIDATION_TYPES = {"set_id": "T", "reference_source": "T", "reference_station"
 _SET_TYPES = {"set_id": "T", "source": "T", "source_type": "T", "quantity": "T", "source_record_id": "T",
               "source_version": "T", "convention_id": "T", "licence_id": "T", "qc_status": "T", "constituents": "L",
               "dropped_constituents": "L", "qc_flags": "L", "record_span": "O", "datum": "O", "time_base": "O",
-              "provenance": "O", "current_bins": "A"}
+              "provenance": "O", "current_bins": "A", "fallback": "O"}
+_FALLBACK_TYPES = {"reason": "T", "basis": "T", "otc_finding": "T", "preferred_set_id": "T"}
 _SPAN_TYPES = {"good_samples": "I"}
 _DATUM_TYPES = {"msl_offset_m": "N", "named": "O"}
 _CONSTITUENT_TYPES = {"name": "T", "source_name": "T", "doodson": "T", "kept_reason": "T", "speed_deg_per_hour": "N",
@@ -512,6 +534,8 @@ def _type_ok(v, t) -> bool:
         return True
     if t == "T":
         return isinstance(v, str)
+    if t == "B":
+        return isinstance(v, bool)
     if t == "N":
         return _is_finite(v)
     if t == "I":
@@ -544,7 +568,7 @@ def check_station_types(d) -> None:
         what = f"station {sid}: set {cs.get('set_id')}"
         _check_types(cs, _SET_TYPES, what)
         for k, table in (("record_span", _SPAN_TYPES), ("datum", _DATUM_TYPES), ("time_base", _TIME_BASE_TYPES),
-                         ("provenance", _PROVENANCE_TYPES)):
+                         ("provenance", _PROVENANCE_TYPES), ("fallback", _FALLBACK_TYPES)):
             if cs.get(k) is not None:
                 _check_types(cs[k], table, f"{what}: {k}")
         named = (cs.get("datum") or {}).get("named") or {}
@@ -607,7 +631,7 @@ def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
                 tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
                 TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
                 tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
-                freeze(cs)))
+                freeze(cs), fallback=Fallback._parse(cs.get("fallback"))))
         if release_rid is not None and not any(s.set_id == release_rid for s in sets):
             raise InvalidReleaseError(f"{sid}: recommended_set_id {release_rid!r} does not resolve")
         rec = [s for s in sets if rid is not None and s.set_id == rid]
@@ -626,7 +650,7 @@ def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
             d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, "active" if d.get("status") is None else d.get("status")),
             None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
-            ordered)
+            ordered, recommended_is_fallback=d.get("recommended_is_fallback"))
     except InvalidReleaseError:
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as e:

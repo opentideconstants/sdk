@@ -61,11 +61,14 @@ def enc_station(s):
     if s is None:
         return None
     rs = s.recommended_set
-    return {
+    out = {
         **pick(s, ["station_id", "name", "country", "lat", "lon", "type", "kind", "timezone", "aliases", "status",
                    "is_reference", "is_subordinate", "is_tide", "is_current"]),
         "recommended_set_id": rs.set_id if rs is not None else None,
     }
+    if s.recommended_is_fallback is not None:
+        out["recommended_is_fallback"] = s.recommended_is_fallback
+    return out
 
 
 TOMBSTONE = ["station_id", "name", "status", "removed_in", "removed_reason", "merged_into", "detail"]
@@ -79,7 +82,7 @@ def enc_set(cs):
     if cs is None:
         return None
     span, datum = cs.record_span, cs.datum
-    return {
+    out = {
         **pick(cs, ["set_id", "source", "source_type", "quantity", "source_record_id", "source_version", "qc_status"]),
         "record_span": None if span is None else pick(span, ["start", "end", "good_samples"]),
         "datum": None if datum is None else pick(datum, ["msl_offset_m", "named"]),
@@ -91,6 +94,9 @@ def enc_set(cs):
         "licence_id": cs.licence.licence_id,
         "constituent_count": len(cs.constituents),
     }
+    if cs.fallback is not None:
+        out["fallback"] = pick(cs.fallback, ["reason", "basis", "otc_finding", "preferred_set_id"])
+    return out
 
 
 CONSTITUENT = ["name", "source_name", "doodson", "speed_deg_per_hour", "amplitude_m", "phase_deg",

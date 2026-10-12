@@ -21,6 +21,7 @@ Do not edit conformance/cases/*.json by hand.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -548,6 +549,39 @@ def mcase(cid, title, spec, steps, root="good", release="20991231.2", **extra):
     return case(cid, title, spec, steps, matrix={"root": root, "release": release}, **extra)
 
 
+def fallback_case(group, rel):
+    """Supplementary Python typed/raw annotation checks; other SDK ports follow after the data freeze."""
+    station = copy.deepcopy(rel.by_id["OTC-T-0001"])
+    cs = station["constant_sets"][0]
+    label = {"reason": "licence_reading", "basis": "Published source constants",
+             "otc_finding": "Retained source caveat", "preferred_set_id": station["constant_sets"][1]["set_id"]}
+    cs["fallback"] = label
+    cs["qc_status"] = "flagged"
+    cs["qc_flags"] = [{"flag": "fallback:licence_reading", "reason": label["otc_finding"]}]
+    station["recommended_is_fallback"] = True
+    path = "${tmp}/labelled/OTC_20991231.2.json"
+    steps = [drv("copy", files=[f"{FIX}/good/OTC_20991231.2.json"], to="${tmp}/labelled"),
+             drv("json_set", path=path, pointer="/stations/0/constant_sets/0/fallback", value=label),
+             drv("json_set", path=path, pointer="/stations/0/constant_sets/0/qc_status", value="flagged"),
+             drv("json_set", path=path, pointer="/stations/0/constant_sets/0/qc_flags", value=cs["qc_flags"]),
+             drv("json_set", path=path, pointer="/stations/0/recommended_is_fallback", value=True),
+             step("open", {"loaded_from": "file_unverified", "datestamp": "20991231.2", "format_version": "1.0"},
+                  file=path, mode="eager")]
+    sid = station["station_id"]
+    if group == "sets":
+        value = enc_set(rel, station, cs)
+        value["fallback"] = label
+        steps += [step("constant_set", {"set": value}, station_id=sid, set_id=cs["set_id"]),
+                  step("raw", {"raw": cs}, object="set", station_id=sid, set_id=cs["set_id"])]
+    else:
+        value = enc_station(rel, station)
+        value["recommended_is_fallback"] = True
+        steps += [step("station", {"station": value}, station_id=sid),
+                  step("raw", {"raw": station}, object="station", station_id=sid)]
+    return case(f"{group}/fallback-python", f"Python typed and raw retained fallback {group}",
+                "4.4, 4.5, 7.3; FB0", steps, runners=["python"], requires=["fs", "json", "eager"])
+
+
 # --------------------------------------------------------------------------- groups
 
 def group_release(R2, R1):
@@ -674,7 +708,7 @@ def group_stations(R2, R1):
     out.append(mcase("stations/filter-wrong-type", "a filter argument of the wrong type is invalid_argument", "4.4, 4.8",
                      [step("stations", err("invalid_argument"), country=5),
                       step("stations", err("invalid_argument"), type=["reference"])]))
-    return out
+    return out + [fallback_case("stations", rel)]
 
 
 def group_sets(R2):
@@ -696,7 +730,7 @@ def group_sets(R2):
             out.append(mcase(f"sets/{setid}", f"constant set {setid}: fields, constituents, provenance, validation", "4.5, 4.6", steps))
     out.append(mcase("sets/unknown", "constant_set() is null for an unknown set id", "4.5",
                      [step("constant_set", {"set": None}, station_id="OTC-T-0001", set_id="OTC-T-0001/no-such-set")]))
-    return out
+    return out + [fallback_case("sets", rel)]
 
 
 def group_search(R2):

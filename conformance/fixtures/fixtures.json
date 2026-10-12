@@ -1264,12 +1264,12 @@
  "reader_format_version": "1.0",
  "schemas": {
   "1.0": {
-   "sha256": "0e305a6c281d68e7a74c853d43dce0840f456fff0fbd4cf073f5e6a5fad751cf",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/d90a7a678afd8079494b63daad20e2eace6596ca/src/schema/otc-1.0.schema.json"
+   "sha256": "d03e887cf122dfe5f693d0816e4261825f242923dc1d78039ea86bc840c62534",
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/ed10d6cacdab460103ce9f67b9fc56b9456d1f15/src/schema/otc-1.0.schema.json"
   },
   "index-1.0": {
    "sha256": "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb",
-   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/d90a7a678afd8079494b63daad20e2eace6596ca/src/schema/otc-index-1.0.schema.json"
+   "url": "https://raw.githubusercontent.com/opentideconstants/opentideconstants/ed10d6cacdab460103ce9f67b9fc56b9456d1f15/src/schema/otc-index-1.0.schema.json"
   }
  },
  "supported_format_majors": [

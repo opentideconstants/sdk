@@ -538,6 +538,106 @@ class RepeatedIdsTest(unittest.TestCase):
         self.assert_invalid(self.write(edit_meta=lambda m: m["licences"].append(dict(m["licences"][0]))))
 
 
+class FallbackTest(RepeatedIdsTest):
+    """Fallback annotations are typed, immutable and retain forward-compatible raw data."""
+
+    REASONS = ("time_base_disputed", "time_base_unresolved", "refused_fit", "short_record_uncalibrated",
+               "short_record_long_period", "published_full_list", "reliability_withheld", "licence_reading",
+               "datum_gate_failed", "not_in_otc_input")
+
+    def labelled(self, reason="licence_reading", preferred=False, extra=None):
+        def edit(station):
+            cs = station["constant_sets"][0]
+            label = {"reason": reason, "basis": "Published source constants", "otc_finding": "Retained source caveat"}
+            if preferred:
+                label["preferred_set_id"] = station["constant_sets"][1]["set_id"]
+            if extra:
+                label.update(extra)
+            cs["fallback"] = label
+            cs["qc_status"] = "flagged"
+            cs["qc_flags"] = [{"flag": "fallback:" + reason, "reason": label["otc_finding"]}]
+            station["recommended_is_fallback"] = True
+        return self.write(edit)
+
+    def test_known_reasons_and_flags_are_typed_in_both_readers(self):
+        for reason in self.REASONS:
+            path = self.labelled(reason)
+            for mode in ("eager", "stream"):
+                with self.subTest(reason=reason, mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                    station = client.require_station("OTC-T-0001")
+                    cs = station.recommended_set
+                    self.assertIsInstance(cs.fallback, otc.Fallback)
+                    self.assertIs(cs.fallback.reason, otc.FallbackReason(reason))
+                    self.assertIsNot(cs.fallback.reason, otc.FallbackReason.OTHER)
+                    self.assertEqual(cs.qc_flags[0].flag, "fallback:" + reason)
+                    self.assertIsNot(cs.qc_flags[0].flag, otc.QcFlagName.OTHER)
+                    self.assertEqual(cs.fallback.basis, "Published source constants")
+                    self.assertEqual(cs.fallback.otc_finding, cs.qc_flags[0].reason)
+                    self.assertIsNone(cs.fallback.preferred_set_id)
+                    self.assertEqual(dict(cs.fallback.raw), dict(cs.raw["fallback"]))
+                    self.assertIs(station.recommended_is_fallback, True)
+                    self.assertIs(station.raw["recommended_is_fallback"], True)
+
+    def test_preferred_set_id_is_exposed_without_changing_recommendation(self):
+        path = self.labelled(preferred=True)
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                station = client.require_station("OTC-T-0001")
+                self.assertEqual(station.recommended_set.set_id, "OTC-T-0001/noaa")
+                self.assertEqual(station.recommended_set.fallback.preferred_set_id, "OTC-T-0001/gesla-fit")
+
+    def test_unknown_reason_and_flag_keep_raw_values(self):
+        path = self.labelled("future_reason", extra={"future_evidence": {"notes": ["retained"]}})
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                cs = client.require_station("OTC-T-0001").recommended_set
+                self.assertIs(cs.fallback.reason, otc.FallbackReason.OTHER)
+                self.assertEqual(cs.fallback.raw["reason"], "future_reason")
+                self.assertIs(cs.qc_flags[0].flag, otc.QcFlagName.OTHER)
+                self.assertEqual(cs.raw["qc_flags"][0]["flag"], "fallback:future_reason")
+                self.assertEqual(cs.fallback.raw["future_evidence"]["notes"], ("retained",))
+
+    def test_fallback_and_nested_raw_are_immutable(self):
+        path = self.labelled(extra={"future_evidence": {"notes": ["retained"]}})
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                station = client.require_station("OTC-T-0001")
+                cs = station.recommended_set
+                with self.assertRaises(dataclasses.FrozenInstanceError):
+                    cs.fallback.basis = "changed"
+                with self.assertRaises(dataclasses.FrozenInstanceError):
+                    cs.fallback = None
+                with self.assertRaises(dataclasses.FrozenInstanceError):
+                    station.recommended_is_fallback = False
+                with self.assertRaises(TypeError):
+                    cs.fallback.raw["basis"] = "changed"
+                with self.assertRaises(TypeError):
+                    cs.fallback.raw["future_evidence"]["notes"][0] = "changed"
+
+    def test_unlabelled_fields_are_none_and_false_marker_is_preserved(self):
+        for marker in (None, False):
+            path = self.write(None if marker is None else lambda d: d.__setitem__("recommended_is_fallback", marker))
+            for mode in ("eager", "stream"):
+                with self.subTest(marker=marker, mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                    station = client.require_station("OTC-T-0001")
+                    self.assertIs(station.recommended_is_fallback, marker)
+                    self.assertIsNone(station.recommended_set.fallback)
+
+    def test_malformed_fallback_fields_fail_at_load(self):
+        for field, value in (("fallback", []), ("reason", 5), ("basis", []), ("otc_finding", {}), ("preferred_set_id", 1)):
+            def edit(station):
+                cs = station["constant_sets"][0]
+                cs["fallback"] = {"reason": "licence_reading", "basis": "Source", "otc_finding": "Caveat"}
+                if field == "fallback":
+                    cs[field] = value
+                else:
+                    cs["fallback"][field] = value
+            with self.subTest(field=field):
+                self.assert_invalid(self.write(edit))
+        self.assert_invalid(self.write(lambda d: d.__setitem__("recommended_is_fallback", "true")))
+        self.assert_invalid(self.write(lambda d: d.__setitem__("recommended_is_fallback", 1)))
+
+
 class MalformedInputTest(RepeatedIdsTest):
     """Malformed data and bad arguments are SDK errors, raised when they happen (spec §4.8, §7.3; review PK07)."""
 

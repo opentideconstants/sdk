@@ -64,12 +64,11 @@ def _require_formats():
 def validator(schema):
     return Draft202012Validator(schema, format_checker=FORMATS)
 
-# Format 1.0 and its index schema, from the site repository at the merge of site PR #47 (the datum schema,
-# which revised format 1.0 in place), pinned by commit and SHA-256.
-SCHEMA_COMMIT = "d90a7a678afd8079494b63daad20e2eace6596ca"
+# Format 1.0 with retained fallback annotations, and its unchanged index schema, pinned by commit and SHA-256.
+SCHEMA_COMMIT = "ed10d6cacdab460103ce9f67b9fc56b9456d1f15"
 _RAW = f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_COMMIT}/src/schema"
 SCHEMAS = {
-    "1.0": (f"{_RAW}/otc-1.0.schema.json", "0e305a6c281d68e7a74c853d43dce0840f456fff0fbd4cf073f5e6a5fad751cf"),
+    "1.0": (f"{_RAW}/otc-1.0.schema.json", "d03e887cf122dfe5f693d0816e4261825f242923dc1d78039ea86bc840c62534"),
     "index-1.0": (f"{_RAW}/otc-index-1.0.schema.json", "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb"),
 }
 SCHEMA_FILES = {"1.0": "otc-1.0.schema.json", "index-1.0": "otc-index-1.0.schema.json"}

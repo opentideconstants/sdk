@@ -117,6 +117,30 @@ class QcFlagName(_StrEnum):
     SHORT_RECORD = "short_record"
     SIBLING_DISAGREEMENT = "sibling_disagreement"
     CARRIED_OVER = "carried_over"
+    FALLBACK_TIME_BASE_DISPUTED = "fallback:time_base_disputed"
+    FALLBACK_TIME_BASE_UNRESOLVED = "fallback:time_base_unresolved"
+    FALLBACK_REFUSED_FIT = "fallback:refused_fit"
+    FALLBACK_SHORT_RECORD_UNCALIBRATED = "fallback:short_record_uncalibrated"
+    FALLBACK_SHORT_RECORD_LONG_PERIOD = "fallback:short_record_long_period"
+    FALLBACK_PUBLISHED_FULL_LIST = "fallback:published_full_list"
+    FALLBACK_RELIABILITY_WITHHELD = "fallback:reliability_withheld"
+    FALLBACK_LICENCE_READING = "fallback:licence_reading"
+    FALLBACK_DATUM_GATE_FAILED = "fallback:datum_gate_failed"
+    FALLBACK_NOT_IN_OTC_INPUT = "fallback:not_in_otc_input"
+    OTHER = "other"
+
+
+class FallbackReason(_StrEnum):
+    TIME_BASE_DISPUTED = "time_base_disputed"
+    TIME_BASE_UNRESOLVED = "time_base_unresolved"
+    REFUSED_FIT = "refused_fit"
+    SHORT_RECORD_UNCALIBRATED = "short_record_uncalibrated"
+    SHORT_RECORD_LONG_PERIOD = "short_record_long_period"
+    PUBLISHED_FULL_LIST = "published_full_list"
+    RELIABILITY_WITHHELD = "reliability_withheld"
+    LICENCE_READING = "licence_reading"
+    DATUM_GATE_FAILED = "datum_gate_failed"
+    NOT_IN_OTC_INPUT = "not_in_otc_input"
     OTHER = "other"
 
 
@@ -183,6 +207,7 @@ ENUMS = {
     "source_type": SourceType, "quantity": Quantity, "qc_status": QcStatus, "loaded_from": LoadedFrom,
     "phase_reference": PhaseReference, "nodal_handling": NodalHandling, "canary_status": CanaryStatus,
     "height_adjusted_type": HeightAdjustedType, "dropped_reason": DroppedReason, "qc_flag": QcFlagName,
+    "fallback_reason": FallbackReason,
     "time_base_code": TimeBaseCode, "decision_tier": DecisionTier, "decision_outcome": DecisionOutcome, "alias_system": AliasSystem, "mode": Mode,
     "on_network_error": OnNetworkError, "format": Format, "match": Match,
 }
