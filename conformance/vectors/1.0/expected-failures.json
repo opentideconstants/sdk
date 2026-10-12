@@ -2,14 +2,6 @@
   "description": "Prediction ports remain pending until each port passes all vectors and required SDK mutations; remove only that ports entries.",
   "entries": [
     {
-      "runner": "python",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "python-no-tz",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
       "runner": "ruby",
       "reason": "Prediction port is not implemented and accepted yet."
     },

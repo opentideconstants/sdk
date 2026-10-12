@@ -22,7 +22,17 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "predict", "localtime_module"]
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:
+    pass
+else:
+    try:
+        ZoneInfo('UTC')
+        FEATURES.append('localtime')
+    except ZoneInfoNotFoundError:
+        pass
 
 
 def _load_sdk():
@@ -157,6 +167,25 @@ def enc_validation(rows):
     return [pick(v, VALIDATION) for v in rows]
 
 
+
+_PREDICTION_FIELDS = ['station_id', 'timezone', 'method', 'set_id', 'convention_id', 'astro_table_id',
+                      'reference_station_id', 'reference_bin', 'datum', 'datum_name', 'datum_kind',
+                      'datum_uncertainty_m', 'bin_number', 'omitted_event_types', 'tz', 'tz_version', 'release', 'algorithm']
+
+
+def enc_prediction(result):
+    from dataclasses import fields
+    encoded = {name: plain(getattr(result, name, None)) for name in _PREDICTION_FIELDS}
+    encoded['items'] = [{f.name: plain(getattr(item, f.name)) for f in fields(item) if not f.name.startswith('_')} for item in result.items]
+    return encoded
+
+
+def enc_datums(info):
+    from dataclasses import fields
+    encoded = {f.name: plain(getattr(info, f.name)) for f in fields(info) if f.name != 'levels'}
+    encoded['levels'] = [pick(level, [f.name for f in fields(level)]) for level in info.levels]
+    return encoded
+
 # --------------------------------------------------------------------------- ops
 
 FILTERS = ("country", "type", "kind", "source", "source_type", "include_flagged", "include_fallback")
@@ -166,6 +195,7 @@ class Runner:
     def __init__(self):
         self.client = None
         self.held = {}
+        self.prediction = None
 
     def _sdk(self):
         import opentideconstants
@@ -353,6 +383,40 @@ class Runner:
             else:
                 raise ValueError(f"unknown raw object {obj!r}")
             return {"raw": None if x is None else plain(x.raw)}
+        if op in ('heights', 'heights_at', 'extremes', 'currents', 'current_events'):
+            arguments = {k: v for k, v in a.items() if k != 'station_id'}
+            for key in ('start', 'stop'):
+                if key in arguments and isinstance(arguments[key], str):
+                    arguments[key] = _dt.datetime.fromisoformat(arguments[key].replace('Z', '+00:00'))
+            if 'times' in arguments:
+                arguments['times'] = [_dt.datetime.fromisoformat(t.replace('Z', '+00:00')) if isinstance(t, str) else t for t in arguments['times']]
+            self.prediction = getattr(self.target(req), op)(a['station_id'], **arguments)
+            return {'prediction': enc_prediction(self.prediction)}
+        if op == 'to_local':
+            if self.prediction is None:
+                raise ValueError('no prediction result is held')
+            self.prediction = self.prediction.to_local(**a)
+            return {'prediction': enc_prediction(self.prediction)}
+        if op in ('astro_table', 'valid_range', 'equilibrium_argument', 'node_factor', 'equilibrium_for_year', 'node_factor_for_year'):
+            table = self.release(req).astro_table(a.get('id'))
+            if op == 'astro_table':
+                return {'astro_table': None if table is None else dict(zip(('first_year', 'last_year'), table.valid_range))}
+            if table is None:
+                raise sdk.InvalidArgumentError('astro table is unavailable')
+            if op == 'valid_range':
+                return dict(zip(('first_year', 'last_year'), table.valid_range))
+            at = _dt.datetime.fromisoformat(a['at'].replace('Z', '+00:00')) if 'at' in a else a['year']
+            return {'value': getattr(table, op)(a['name'], at)}
+        if op in ('datums', 'ranges'):
+            arguments = {k: v for k, v in a.items() if k != 'station_id'}
+            value = getattr(self.target(req), op)(a['station_id'], **arguments)
+            if op == 'ranges':
+                return {'ranges': pick(value, ['mn', 'gt', 'dhq', 'dlq'])}
+            if isinstance(value, tuple):
+                value = [enc_datums(info) for info in value]
+            else:
+                value = None if value is None else enc_datums(value)
+            return {'datums': value}
         raise ValueError(f"unknown op {op!r}")
 
 
@@ -373,7 +437,7 @@ def finite(v):
     raise TypeError(f"the runner cannot encode a {type(v).__name__} as JSON")
 
 
-ERROR_FIELDS = ("url", "status", "file", "expected", "actual", "path")
+ERROR_FIELDS = ("url", "status", "file", "expected", "actual", "path", "constituent", "first_year", "last_year", "missing", "zone", "reference_station_id")
 
 
 def main():
@@ -388,7 +452,7 @@ def main():
         print(f"cannot load the SDK: {type(e).__name__}: {e}", file=sys.stderr)
         return 3
     out = sys.stdout
-    out.write(json.dumps({"hello": {"runner": "python", "version": version, "features": FEATURES}}) + "\n")
+    out.write(json.dumps({"hello": {"runner": "python" if "localtime" in FEATURES else "python-no-tz", "version": version, "features": FEATURES}}) + "\n")
     out.flush()
     runner = Runner()
     for line in sys.stdin:

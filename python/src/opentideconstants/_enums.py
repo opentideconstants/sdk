@@ -220,3 +220,24 @@ def enum_or_raw(cls, value):
     if isinstance(value, str):
         return cls(value)
     return cls.OTHER
+
+
+class ExtremeType(_StrEnum):
+    HIGH = "high"
+    LOW = "low"
+    OTHER = "other"
+
+
+class CurrentEventType(_StrEnum):
+    MAX_FLOOD = "max_flood"
+    MAX_EBB = "max_ebb"
+    SLACK_BEFORE_FLOOD = "slack_before_flood"
+    SLACK_BEFORE_EBB = "slack_before_ebb"
+    OTHER = "other"
+
+
+class PredictionMethod(_StrEnum):
+    HARMONIC = "harmonic"
+    FOLDED_OFFSETS = "folded_offsets"
+    OFFSETS = "offsets"
+    OTHER = "other"

@@ -390,10 +390,11 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_effective", "__weakref__")
+                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_effective", "_astro_cache", "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None,
                  commercial_only=False, commercial_basis="strict"):
+        self._astro_cache = {}
         self._meta = meta
         self._index_path = index_path
         self._opened = ()  # the files this release was loaded from (the client sets it; verify hashes them)
@@ -839,6 +840,53 @@ class Release:
         if own is None or (own is not station and own.raw != station.raw):
             raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
                                        f"{self.datestamp}")
+
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None):
+        """Heights using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import heights
+        return heights(self, station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id)
+
+    def heights_at(self, station, times, *, datum=None, set_id=None):
+        """Heights at using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import heights_at
+        return heights_at(self, station, times, datum=datum, set_id=set_id)
+
+    def extremes(self, station, *, start, stop, datum=None, set_id=None):
+        """Extremes using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import extremes
+        return extremes(self, station, start=start, stop=stop, datum=datum, set_id=set_id)
+
+    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
+        """Currents using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import currents
+        return currents(self, station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id)
+
+    def current_events(self, station, *, start, stop, bin_number=None, set_id=None):
+        """Current events using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import current_events
+        return current_events(self, station, start=start, stop=stop, bin_number=bin_number, set_id=set_id)
+
+    def datums(self, station, *, set_id=None, all_sets=False):
+        """Datums using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import datums
+        return datums(self, station, set_id=set_id, all_sets=all_sets)
+
+    def ranges(self, station, *, set_id=None):
+        """Ranges using otc-predict-1 (prediction spec section 5.2)."""
+        self._check_open()
+        from ._predict._engine import ranges
+        return ranges(self, station, set_id=set_id)
+
+    def astro_table(self, id=None):
+        self._check_open()
+        from ._predict._engine import astro_table
+        return astro_table(self, id)
 
     def reference_station(self, station: Station) -> Optional[Station]:
         self._check_open()

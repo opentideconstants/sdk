@@ -21,6 +21,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.optional-dependencies]
+tz = ["tzdata"]
+
 [project.urls]
 Homepage = "https://opentideconstants.org"
 Source = "https://github.com/opentideconstants/sdk"

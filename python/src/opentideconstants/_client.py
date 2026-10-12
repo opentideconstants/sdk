@@ -1257,6 +1257,34 @@ class OpenTideConstants:
         return self._r().nearest(lat=lat, lon=lon, max_km=max_km, country=country, type=type, kind=kind,
                                  source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None):
+        """Heights using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().heights(station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id)
+
+    def heights_at(self, station, times, *, datum=None, set_id=None):
+        """Heights at using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().heights_at(station, times, datum=datum, set_id=set_id)
+
+    def extremes(self, station, *, start, stop, datum=None, set_id=None):
+        """Extremes using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().extremes(station, start=start, stop=stop, datum=datum, set_id=set_id)
+
+    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
+        """Currents using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().currents(station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id)
+
+    def current_events(self, station, *, start, stop, bin_number=None, set_id=None):
+        """Current events using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().current_events(station, start=start, stop=stop, bin_number=bin_number, set_id=set_id)
+
+    def datums(self, station, *, set_id=None, all_sets=False):
+        """Datums using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().datums(station, set_id=set_id, all_sets=all_sets)
+
+    def ranges(self, station, *, set_id=None):
+        """Ranges using otc-predict-1 (prediction spec section 5.2)."""
+        return self._r().ranges(station, set_id=set_id)
+
     def reference_station(self, station: Station) -> Optional[Station]:
         return self._r().reference_station(station)
 

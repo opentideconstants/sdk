@@ -118,3 +118,77 @@ ERROR_CLASSES = (
     InvalidReleaseError, StationNotFoundError, StationRemovedError, PinnedReleaseError, CacheError, FileExistsError,
     FileError, InvalidArgumentError,
 )
+
+
+class NoConstantsError(OpenTideConstantsError):
+    code = "no_constants"
+
+
+class QuantityMismatchError(OpenTideConstantsError):
+    code = "quantity_mismatch"
+
+
+class UnsupportedConventionError(OpenTideConstantsError):
+    code = "unsupported_convention"
+
+
+class NoAstroTableError(OpenTideConstantsError):
+    code = "no_astro_table"
+
+
+class UnsupportedConstituentError(OpenTideConstantsError):
+    constituent: str | None
+    code = "unsupported_constituent"
+
+    def __init__(self, message: str = "", *, constituent: str | None = None):
+        super().__init__(message, constituent=constituent)
+
+
+class TimeOutOfRangeError(OpenTideConstantsError):
+    first_year: int | None
+    last_year: int | None
+    code = "time_out_of_range"
+
+    def __init__(self, message: str = "", *, first_year: int | None = None, last_year: int | None = None):
+        super().__init__(message, first_year=first_year, last_year=last_year)
+
+
+class DatumUnavailableError(OpenTideConstantsError):
+    missing: str | None
+    code = "datum_unavailable"
+
+    def __init__(self, message: str = "", *, missing: str | None = None):
+        super().__init__(message, missing=missing)
+
+
+class BinNotFoundError(OpenTideConstantsError):
+    code = "bin_not_found"
+
+
+class ExtremesOnlyError(OpenTideConstantsError):
+    code = "extremes_only"
+
+
+class LocalTimeUnavailableError(OpenTideConstantsError):
+    code = "local_time_unavailable"
+
+
+class UnknownTimeZoneError(OpenTideConstantsError):
+    zone: str | None
+    code = "unknown_time_zone"
+
+    def __init__(self, message: str = "", *, zone: str | None = None):
+        super().__init__(message, zone=zone)
+
+
+class ReferenceUnavailableError(OpenTideConstantsError):
+    reference_station_id: str | None
+    code = "reference_unavailable"
+
+    def __init__(self, message: str = "", *, reference_station_id: str | None = None):
+        super().__init__(message, reference_station_id=reference_station_id)
+
+
+ERROR_CLASSES += (
+    NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError,
+)

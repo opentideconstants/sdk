@@ -178,9 +178,9 @@ PROFILES = {
 # Profile features an SDK does not have yet (the driver's side of api.json pending_port): they are not required, and a
 # runner must not claim them. A port removes its profiles' entries in the change that makes its runner claim them.
 PENDING_FEATURES = {
-    "python": PREDICT_FEATURES, "ruby": PREDICT_FEATURES, "typescript": PREDICT_FEATURES,
+    "ruby": PREDICT_FEATURES, "typescript": PREDICT_FEATURES,
     "typescript-browser": PREDICT_FEATURES, "c": PREDICT_FEATURES + ["tzdir_env"],
-    "c-fetch": PREDICT_FEATURES + ["tzdir_env"], "python-no-tz": ["predict", "localtime_module"],
+    "c-fetch": PREDICT_FEATURES + ["tzdir_env"],
     "ruby-no-tz": ["predict", "localtime_module"], "c-no-localtime": ["predict"],
 }
 

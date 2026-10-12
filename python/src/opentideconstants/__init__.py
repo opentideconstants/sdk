@@ -13,6 +13,13 @@ no longer catches the OS error of ``os.mkdir`` or ``open(path, "x")``.
 
 See https://opentideconstants.org. Code licence: MIT. Data licence: CC BY 4.0.
 """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._predict._astro import AstroTable
+    from ._predict._results import (HeightSeries, ExtremeList, CurrentSeries, CurrentEventList, HeightPoint, Extreme,
+                                   CurrentPoint, CurrentEvent, DatumInfo, DatumLevel, Ranges)
+
 from ._client import DEFAULT_BASE_URL, OpenTideConstants, __version__
 from ._enums import (AliasSystem, CanaryStatus, DecisionOutcome, DecisionTier, DroppedReason, FallbackReason, Format,
                      HeightAdjustedType, Kind, LoadedFrom, Match, Mode, NodalHandling, OnNetworkError,
@@ -33,16 +40,47 @@ __all__ = [
     "OpenTideConstants", "Release",
     # objects
     "ReleaseInfo", "FileInfo", "Station", "Tombstone", "ConstantSet", "Constituent", "Convention", "Licence",
-    "Provenance", "ProvenanceBuild", "TimeBase", "QcFlag", "DroppedConstituent", "Validation", "SubordinateOffsets", "Nearby", "UpdateResult",
+    "Provenance", "ProvenanceBuild", "TimeBase", "QcFlag", "DroppedConstituent", "Validation",
+    "SubordinateOffsets", "Nearby", "UpdateResult",
     "RecordSpan", "Datum", "Stats", "Fallback",
     # enums
-    "Kind", "StationType", "StationStatus", "RemovedReason", "SourceType", "Quantity", "QcStatus", "LoadedFrom", "PhaseReference",
-    "NodalHandling", "CanaryStatus", "HeightAdjustedType", "DroppedReason", "QcFlagName", "TimeBaseCode", "DecisionTier",
+    "Kind", "StationType", "StationStatus", "RemovedReason", "SourceType", "Quantity", "QcStatus", "LoadedFrom",
+    "PhaseReference",
+    "NodalHandling", "CanaryStatus", "HeightAdjustedType", "DroppedReason", "QcFlagName", "TimeBaseCode",
+    "DecisionTier",
     "DecisionOutcome", "AliasSystem", "Mode", "OnNetworkError", "Format", "Match", "FallbackReason",
     # errors
     "OpenTideConstantsError", "NetworkError", "ReleaseNotFoundError", "OfflineError", "ChecksumError",
-    "UnsupportedFormatError", "ReaderTooOldError", "InvalidReleaseError", "StationNotFoundError", "StationRemovedError",
+    "UnsupportedFormatError", "ReaderTooOldError", "InvalidReleaseError", "StationNotFoundError",
+    "StationRemovedError",
     "PinnedReleaseError", "CacheError", "FileExistsError", "FileError", "InvalidArgumentError",
+    # prediction
+    "AstroTable", "HeightSeries", "ExtremeList", "CurrentSeries", "CurrentEventList", "HeightPoint", "Extreme",
+    "CurrentPoint", "CurrentEvent", "DatumInfo", "DatumLevel", "Ranges", "ExtremeType", "CurrentEventType",
+    "PredictionMethod", "NoConstantsError", "QuantityMismatchError", "UnsupportedConventionError",
+    "NoAstroTableError", "UnsupportedConstituentError", "TimeOutOfRangeError", "DatumUnavailableError",
+    "BinNotFoundError", "ExtremesOnlyError", "LocalTimeUnavailableError", "UnknownTimeZoneError",
+    "ReferenceUnavailableError",
     # constants
     "SUPPORTED_FORMAT_MAJORS", "SUPPORTED_FORMAT_VERSION", "DEFAULT_BASE_URL", "CACHE_LAYOUT_VERSION", "__version__",
 ]
+
+from ._errors import (NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError)
+from ._enums import ExtremeType, CurrentEventType, PredictionMethod
+
+_PREDICTION_TYPES = ["AstroTable", "HeightSeries", "ExtremeList", "CurrentSeries", "CurrentEventList", "HeightPoint", "Extreme", "CurrentPoint", "CurrentEvent", "DatumInfo", "DatumLevel", "Ranges"]
+
+def __getattr__(name):
+    if name in _PREDICTION_TYPES:
+        if name == 'AstroTable':
+            from ._predict._astro import AstroTable
+            value = AstroTable
+        else:
+            from ._predict import _results
+            value = getattr(_results, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+def __dir__():
+    return sorted(set(globals()) | set(_PREDICTION_TYPES))

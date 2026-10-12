@@ -4852,49 +4852,10 @@
    ]
   },
   "python": {
-   "objects": [
-    "AstroTable",
-    "HeightSeries",
-    "ExtremeList",
-    "CurrentSeries",
-    "CurrentEventList",
-    "HeightPoint",
-    "Extreme",
-    "CurrentPoint",
-    "CurrentEvent",
-    "DatumInfo",
-    "DatumLevel",
-    "Ranges"
-   ],
-   "members": [
-    "Release.heights",
-    "Release.heights_at",
-    "Release.extremes",
-    "Release.currents",
-    "Release.current_events",
-    "Release.datums",
-    "Release.astro_table",
-    "Release.ranges"
-   ],
-   "enums": [
-    "extreme_type",
-    "current_event_type",
-    "prediction_method"
-   ],
-   "errors": [
-    "no_constants",
-    "quantity_mismatch",
-    "unsupported_convention",
-    "no_astro_table",
-    "unsupported_constituent",
-    "time_out_of_range",
-    "datum_unavailable",
-    "bin_not_found",
-    "extremes_only",
-    "local_time_unavailable",
-    "unknown_time_zone",
-    "reference_unavailable"
-   ]
+   "objects": [],
+   "members": [],
+   "enums": [],
+   "errors": []
   },
   "typescript": {
    "objects": [
