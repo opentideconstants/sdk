@@ -11,6 +11,7 @@ Run: uv run --with "pytest>=8,<9" --with jsonschema==4.25.1 --with rfc3339-valid
 """
 from __future__ import annotations
 
+import copy
 import datetime
 import hashlib
 import json
@@ -809,6 +810,24 @@ def test_bands(calls):
     """Spec 6.3: every event step avoids the four bands (build_fixtures.band_problems), except the one recorded exception."""
     assert bf.band_problems(calls) == []
     assert set(bf.BAND_EXCEPTIONS) == {"predict-extremes/single-constituent"}
+
+
+def test_bands_reject_nonexempt_half_second_event(calls, doc):
+    """The real M2 event stays forbidden outside the exact named fixed-window exception."""
+    case = copy.deepcopy(next(c for c in calls["cases"] if c["id"] == "predict-extremes/single-constituent"))
+    case["id"] = "predict-extremes/nonexempt-half-second"
+    args = case["steps"][0]["strict"]["args"]
+    args["start"], args["stop"] = "2010-03-06T18:08:00Z", "2010-03-06T18:10:00Z"
+    assert case["id"] not in bf.BAND_EXCEPTIONS
+    start, stop = ts(args["start"]), ts(args["stop"])
+    sm = set_sum(doc, args["constituents"]["$set"], args["astro"])
+    roots = scan(lambda t, y: sm.dh(t), start, stop, 0.01)
+    assert len(roots) == 1
+    event = roots[0][0]
+    assert math.floor(event) == ts("2010-03-06T18:08:53Z")
+    assert abs(event - math.floor(event) - 0.5) < bf.ROUND_BAND
+    problems = bf.band_problems({"cases": [case]})
+    assert len(problems) == 1 and "band 3: event at 2010-03-06T18:08:53Z" in problems[0], problems
 
 
 # --------------------------------------------------------------------------- the hand-written outcomes (spec 6.5, S4)
