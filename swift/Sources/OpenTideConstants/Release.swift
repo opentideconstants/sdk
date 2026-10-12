@@ -70,7 +70,7 @@ public final class Release {
         for e in entries where e.status=="active" {
             type[StationType(value:e.summary["type"]).rawValue,default:0]+=1
             if let k=e.kind { kind[k.rawValue,default:0]+=1 };if let c=e.summary["country"].string { country[c,default:0]+=1 }
-            for cs in e.sets { if let s=cs["source"].string { source[s,default:0]+=1 };qc[QcStatus(value:cs["qc_status"]).rawValue,default:0]+=1 }
+            for cs in e.sets { let status=QcStatus(value:cs["qc_status"]);if [.ok,.flagged].contains(status),let s=cs["source"].string { source[s,default:0]+=1 };qc[status.rawValue,default:0]+=1 }
         }
         return Stats(type:type,kind:kind,country:country,source:source,qcStatus:qc)
     } }
