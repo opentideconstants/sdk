@@ -1,0 +1,516 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-datums",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-datums/list",
+   "title": "datums(): the recommended set's levels in key order, with their basis",
+   "spec": "datums spec 7.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0001"
+     },
+     "expect": {
+      "datums": {
+       "chart_datum": "mllw",
+       "levels": [
+        {
+         "above_chart_m": -0.38,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": null,
+         "flags": [],
+         "key": "lat",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": -0.38
+        },
+        {
+         "above_chart_m": 2.31,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mhhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 2.31
+        },
+        {
+         "above_chart_m": 2.05,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mhw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 2.05
+        },
+        {
+         "above_chart_m": 0.0,
+         "control_set_id": null,
+         "control_source_id": "9990001",
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mllw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": "source",
+         "uncertainty_m": 0.01,
+         "value_m": 0.0
+        },
+        {
+         "above_chart_m": 0.15,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mlw",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 0.15
+        },
+        {
+         "above_chart_m": 1.12,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "msl",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.12
+        },
+        {
+         "above_chart_m": 1.1,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2001-12-31",
+          "name": "NTDE 1983-2001",
+          "start": "1983-01-01"
+         },
+         "flags": [],
+         "key": "mtl",
+         "kind": "published",
+         "method": "source",
+         "source_name": null,
+         "uncertainty_basis": null,
+         "uncertainty_m": null,
+         "value_m": 1.1
+        },
+        {
+         "above_chart_m": -0.41,
+         "control_set_id": null,
+         "control_source_id": null,
+         "control_station_id": null,
+         "data_span": null,
+         "epoch": {
+          "end": "2038-12-31",
+          "name": "OTC LAT 2020-2038",
+          "start": "2020-01-01"
+         },
+         "flags": [],
+         "key": "otc_lat",
+         "kind": "computed",
+         "method": "harmonic_extremes",
+         "source_name": null,
+         "uncertainty_basis": "calibrated",
+         "uncertainty_m": 0.02,
+         "value_m": -0.41
+        }
+       ],
+       "msl_offset_m": 1.12,
+       "set_id": "OTC-P-0001/noaa",
+       "zero": "chart_datum",
+       "zero_name": "MLLW"
+      }
+     },
+     "op": "datums"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-datums/all-sets",
+   "title": "datums(all_sets: true): one DatumInfo per set, in file order",
+   "spec": "datums spec 7.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "all_sets": true,
+      "station_id": "OTC-P-0001"
+     },
+     "expect": {
+      "datums": [
+       {
+        "chart_datum": "mllw",
+        "levels": [
+         {
+          "above_chart_m": -0.38,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": null,
+          "flags": [],
+          "key": "lat",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": -0.38
+         },
+         {
+          "above_chart_m": 2.31,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "mhhw",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": 2.31
+         },
+         {
+          "above_chart_m": 2.05,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "mhw",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": 2.05
+         },
+         {
+          "above_chart_m": 0.0,
+          "control_set_id": null,
+          "control_source_id": "9990001",
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "mllw",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": "source",
+          "uncertainty_m": 0.01,
+          "value_m": 0.0
+         },
+         {
+          "above_chart_m": 0.15,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "mlw",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": 0.15
+         },
+         {
+          "above_chart_m": 1.12,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "msl",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": 1.12
+         },
+         {
+          "above_chart_m": 1.1,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2001-12-31",
+           "name": "NTDE 1983-2001",
+           "start": "1983-01-01"
+          },
+          "flags": [],
+          "key": "mtl",
+          "kind": "published",
+          "method": "source",
+          "source_name": null,
+          "uncertainty_basis": null,
+          "uncertainty_m": null,
+          "value_m": 1.1
+         },
+         {
+          "above_chart_m": -0.41,
+          "control_set_id": null,
+          "control_source_id": null,
+          "control_station_id": null,
+          "data_span": null,
+          "epoch": {
+           "end": "2038-12-31",
+           "name": "OTC LAT 2020-2038",
+           "start": "2020-01-01"
+          },
+          "flags": [],
+          "key": "otc_lat",
+          "kind": "computed",
+          "method": "harmonic_extremes",
+          "source_name": null,
+          "uncertainty_basis": "calibrated",
+          "uncertainty_m": 0.02,
+          "value_m": -0.41
+         }
+        ],
+        "msl_offset_m": 1.12,
+        "set_id": "OTC-P-0001/noaa",
+        "zero": "chart_datum",
+        "zero_name": "MLLW"
+       },
+       {
+        "chart_datum": null,
+        "levels": [],
+        "msl_offset_m": 3.4,
+        "set_id": "OTC-P-0001/gesla-fit",
+        "zero": "gauge_zero",
+        "zero_name": null
+       }
+      ]
+     },
+     "op": "datums"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-datums/ranges",
+   "title": "ranges(): MN, GT, DHQ, DLQ from levels of the same kind and epoch",
+   "spec": "datums spec 7.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0001"
+     },
+     "expect": {
+      "ranges": {
+       "dhq": 0.26000000000000023,
+       "dlq": 0.15,
+       "gt": 2.31,
+       "mn": 1.9
+      }
+     },
+     "op": "ranges"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-datums/ranges-mixed-kinds",
+   "title": "a range from levels of different kinds or epochs is refused (null)",
+   "spec": "datums spec 7.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0054"
+     },
+     "expect": {
+      "ranges": {
+       "dhq": 0.19999999999999996,
+       "dlq": 0.25,
+       "gt": null,
+       "mn": null
+      }
+     },
+     "op": "ranges"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

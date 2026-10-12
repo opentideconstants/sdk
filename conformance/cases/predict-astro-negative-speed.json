@@ -1,0 +1,297 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-astro-negative-speed",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-astro-negative-speed/used-row",
+   "title": "M2's row speed is negative: heights, extremes, current_events and astro_table are invalid_argument naming the table and the row",
+   "spec": "4.2a",
+   "matrix": {
+    "root": "predict-bad/astro-negative-speed",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0005",
+      "stop": "2010-03-01T01:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "otc-test-predict-a"
+        },
+        {
+         "$contains": "M2"
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0005",
+      "stop": "2010-03-01T12:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "otc-test-predict-a"
+        },
+        {
+         "$contains": "M2"
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "bin_number": 1,
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0016",
+      "stop": "2010-03-01T12:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "otc-test-predict-a"
+        },
+        {
+         "$contains": "M2"
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    },
+    {
+     "args": {},
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "otc-test-predict-a"
+        },
+        {
+         "$contains": "M2"
+        }
+       ]
+      }
+     },
+     "op": "astro_table"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0005/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0005/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-01T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           1
+          ]
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-01T12:00:00Z"
+        },
+        "entry": "current_events_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-astro-negative-speed/unused-row",
+   "title": "a negative speed on a row that no set uses: heights on a set without it still fails",
+   "spec": "4.2a",
+   "matrix": {
+    "root": "predict-bad/astro-negative-speed-unused",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0005",
+      "stop": "2010-03-01T01:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$all": [
+        {
+         "$contains": "otc-test-predict-a"
+        },
+        {
+         "$contains": "MN4"
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0005/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-astro-negative-speed/short-v0u",
+   "title": "a v0u_deg array one entry short: invalid_argument",
+   "spec": "4.2a",
+   "matrix": {
+    "root": "predict-bad/astro-short-v0u",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0005",
+      "stop": "2010-03-01T01:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "otc-test-predict-a"
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0005/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

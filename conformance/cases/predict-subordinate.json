@@ -1,0 +1,5280 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-subordinate",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-subordinate/tide-ratio",
+   "title": "R, differing offsets: NOAA's event method",
+   "spec": "4.8",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0030",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0030",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:13:52Z",
+         "type": "high",
+         "height_m": 2.477558672452778,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:08:41Z",
+         "type": "low",
+         "height_m": 0.5856895393307985,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:17:56Z",
+         "type": "high",
+         "height_m": 1.9479842924960655,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:01:04Z",
+         "type": "low",
+         "height_m": -0.3876725843271542,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T05:45:16Z",
+         "type": "high",
+         "height_m": 2.4120266913902895,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T11:43:24Z",
+         "type": "low",
+         "height_m": 0.6145324145013739,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:47:11Z",
+         "type": "high",
+         "height_m": 1.937559497788295,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:36:37Z",
+         "type": "low",
+         "height_m": -0.31493609330249145,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0030"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/tide-additive",
+   "title": "A, differing offsets",
+   "spec": "4.8",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0031",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0031",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T04:56:52Z",
+         "type": "high",
+         "height_m": 2.479579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:52:41Z",
+         "type": "low",
+         "height_m": 0.5476423870722433,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:00:56Z",
+         "type": "high",
+         "height_m": 1.9752231357105385,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:45:04Z",
+         "type": "low",
+         "height_m": -0.4455842697215859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T05:28:16Z",
+         "type": "high",
+         "height_m": 2.4171682775145613,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T11:27:24Z",
+         "type": "low",
+         "height_m": 0.5770738923483406,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:30:11Z",
+         "type": "high",
+         "height_m": 1.9652947597983763,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:20:37Z",
+         "type": "low",
+         "height_m": -0.3713633605127464,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0031"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/tide-missing-offsets",
+   "title": "an absent time offset is 0, an absent height offset the identity",
+   "spec": "4.8 step 3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0032",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0032",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:16:52Z",
+         "type": "high",
+         "height_m": 2.359579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:48:41Z",
+         "type": "low",
+         "height_m": 0.537878148365019,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:20:56Z",
+         "type": "high",
+         "height_m": 1.8552231357105384,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:41:04Z",
+         "type": "low",
+         "height_m": -0.35602584274942733,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T05:48:16Z",
+         "type": "high",
+         "height_m": 2.297168277514561,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T11:23:24Z",
+         "type": "low",
+         "height_m": 0.5643665031135066,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:50:11Z",
+         "type": "high",
+         "height_m": 1.8452947597983762,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:16:37Z",
+         "type": "low",
+         "height_m": -0.28922702446147175,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0032"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/tide-order-swap",
+   "title": "shifted events that swap order are ordered by time; a reference high 178 min before start (inside the padding M = 250 + 60 min) lands inside the window",
+   "spec": "4.8 steps 2, 4",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0033",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0033",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T08:18:41Z",
+         "type": "low",
+         "height_m": 0.5976423870722434,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:11:52Z",
+         "type": "high",
+         "height_m": 2.359579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:11:04Z",
+         "type": "low",
+         "height_m": -0.3955842697215859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:15:56Z",
+         "type": "high",
+         "height_m": 1.8552231357105384,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T08:53:24Z",
+         "type": "low",
+         "height_m": 0.6270738923483407,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T09:43:16Z",
+         "type": "high",
+         "height_m": 2.297168277514561,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T20:45:11Z",
+         "type": "high",
+         "height_m": 1.8452947597983762,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T20:46:37Z",
+         "type": "low",
+         "height_m": -0.3213633605127464,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T08:00:00Z",
+      "station_id": "OTC-P-0033",
+      "stop": "2010-03-02T08:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0033",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T08:18:41Z",
+         "type": "low",
+         "height_m": 0.5976423870722434,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:11:52Z",
+         "type": "high",
+         "height_m": 2.359579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:11:04Z",
+         "type": "low",
+         "height_m": -0.3955842697215859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:15:56Z",
+         "type": "high",
+         "height_m": 1.8552231357105384,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "note": "step 1: the reference high at 05:01:52 shifts +250 min to 09:11:52; a padding of 120 min (or none) loses it",
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0033"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0033"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T08:00:00Z",
+         "stop": "2010-03-02T08:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/tide-fractional-offset",
+   "title": "+12.5 and -7.25 min give whole-second times, floor(t + 0.5); +12.345 and -7.29 min (740.7 s, -437.4 s) are added to the unrounded r, then rounded once",
+   "spec": "4.8 step 3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0034",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0034",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:14:22Z",
+         "type": "high",
+         "height_m": 2.359579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:41:26Z",
+         "type": "low",
+         "height_m": 0.5976423870722434,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:18:26Z",
+         "type": "high",
+         "height_m": 1.8552231357105384,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:33:49Z",
+         "type": "low",
+         "height_m": -0.3955842697215859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T05:45:46Z",
+         "type": "high",
+         "height_m": 2.297168277514561,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T11:16:09Z",
+         "type": "low",
+         "height_m": 0.6270738923483407,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:47:41Z",
+         "type": "high",
+         "height_m": 1.8452947597983762,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:09:22Z",
+         "type": "low",
+         "height_m": -0.3213633605127464,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0062",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0062",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:14:13Z",
+         "type": "high",
+         "height_m": 2.359579688050265,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:41:24Z",
+         "type": "low",
+         "height_m": 0.5976423870722434,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:18:16Z",
+         "type": "high",
+         "height_m": 1.8552231357105384,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:33:47Z",
+         "type": "low",
+         "height_m": -0.3955842697215859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T05:45:37Z",
+         "type": "high",
+         "height_m": 2.297168277514561,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T11:16:07Z",
+         "type": "low",
+         "height_m": 0.6270738923483407,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:47:32Z",
+         "type": "high",
+         "height_m": 1.8452947597983762,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:09:19Z",
+         "type": "low",
+         "height_m": -0.3213633605127464,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0034"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0062"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/series",
+   "title": "heights at a station with differing offsets: extremes_only",
+   "spec": "4.8a, 5.4",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0031",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "extremes_only",
+      "error_message": {
+       "$contains": "offsets differ"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0031",
+      "times": [
+       "2010-03-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "extremes_only"
+     },
+     "op": "heights_at"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/reference-no-chart-datum",
+   "title": "the reference's noaa set has no chart datum: datum_unavailable",
+   "spec": "4.8 step 2",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0045",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "datum_unavailable"
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/current",
+   "title": "a subordinate current station: events by offsets (a reference slack 5 min 20 s before start lands inside the window); currents is extremes_only",
+   "spec": "4.9",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0050",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0050",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T02:29:15Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:13:45Z",
+         "type": "max_ebb",
+         "velocity_ms": -1.345365274364209,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:00:10Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:20:06Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8725269375565029,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:53:54Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:17:12Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.9529379801954457,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:31:13Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:21:31Z",
+         "type": "max_flood",
+         "velocity_ms": 1.110185663673414,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T03:08:40Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:52:45Z",
+         "type": "max_ebb",
+         "velocity_ms": -1.3148834075164417,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T09:39:18Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T12:59:27Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8509058908547344,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T15:34:11Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T18:56:58Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.9145378873205666,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T21:11:04Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T09:00:00Z",
+      "station_id": "OTC-P-0050",
+      "stop": "2010-03-02T09:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0050",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T09:00:10Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:20:06Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8725269375565029,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:53:54Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:17:12Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.9529379801954457,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:31:13Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:21:31Z",
+         "type": "max_flood",
+         "velocity_ms": 1.110185663673414,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T03:08:40Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:52:45Z",
+         "type": "max_ebb",
+         "velocity_ms": -1.3148834075164417,
+         "direction_deg": 225.0,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0050",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "extremes_only"
+     },
+     "op": "currents"
+    }
+   ],
+   "note": "step 1: the reference slack_before_flood at 08:54:40 shifts +5.5 min to 09:00:10",
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "offset": {
+          "$current_offset": [
+           "OTC-P-0050",
+           1
+          ]
+         },
+         "ref_bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           1
+          ]
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_current_events_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "offset": {
+          "$current_offset": [
+           "OTC-P-0050",
+           1
+          ]
+         },
+         "ref_bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           1
+          ]
+         },
+         "start": "2010-03-01T09:00:00Z",
+         "stop": "2010-03-02T09:00:00Z"
+        },
+        "entry": "subordinate_current_events_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/current-null-adjustment",
+   "title": "a null adjustment or ratio drops that event type (omitted_event_types)",
+   "spec": "4.9 step 4",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0051",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": [
+        "max_ebb",
+        "slack_before_ebb"
+       ],
+       "reference_bin": 1,
+       "reference_station_id": "OTC-P-0016",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0051",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T09:00:10Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:20:06Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8725269375565029,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:31:13Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:21:31Z",
+         "type": "max_flood",
+         "velocity_ms": 1.110185663673414,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T09:39:18Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T12:59:27Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8509058908547344,
+         "direction_deg": 45.0,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T21:11:04Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "offset": {
+          "$current_offset": [
+           "OTC-P-0051",
+           1
+          ]
+         },
+         "ref_bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           1
+          ]
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_current_events_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/event-datum",
+   "title": "the event path on a reference whose chart datum is 0.85 above its zero, with the subordinate's own datum: chart (the default), mhhw and msl",
+   "spec": "4.8 steps 2, 5",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 3.137474327399,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": 0.6937919952370448,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 2.710702991739742,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -0.10418887549619128,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 3.1129284415089145,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": 0.7129241859231663,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 2.6753564470152957,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "datum": "mhhw",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mhhw",
+       "datum_kind": "published",
+       "datum_name": "mhhw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 1.537474327399,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": -0.9062080047629553,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 1.1107029917397417,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -1.7041888754961914,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 1.5129284415089144,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": -0.8870758140768338,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 1.0753564470152956,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "datum": "msl",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "msl",
+       "datum_kind": "published",
+       "datum_name": "msl",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 2.3374743273989997,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": -0.10620800476295522,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 1.9107029917397418,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -0.9041888754961913,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 2.312928441508914,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": -0.08707581407683374,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 1.8753564470152957,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": -1.6,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": -0.8,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/folded-ratio",
+   "title": "equal offsets, R 0.9, +37 min: heights by folding, method folded_offsets",
+   "spec": "4.8a",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0035",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T00:00:00Z",
+         "height_m": -0.1409202349168095,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:10:00Z",
+         "height_m": -0.07799700017143985,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:20:00Z",
+         "height_m": -0.009118806698196424,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:30:00Z",
+         "height_m": 0.06516907371924785,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:40:00Z",
+         "height_m": 0.14428819670827298,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:50:00Z",
+         "height_m": 0.2276345229630531,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:00:00Z",
+         "height_m": 0.3145860000795332,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:10:00Z",
+         "height_m": 0.4045099988668124,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:20:00Z",
+         "height_m": 0.4967704631675526,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:30:00Z",
+         "height_m": 0.5907346444520294,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:40:00Z",
+         "height_m": 0.685779307805446,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:50:00Z",
+         "height_m": 0.7812963139382818,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:00:00Z",
+         "height_m": 0.8766975019892717,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:10:00Z",
+         "height_m": 0.9714188195631785,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:20:00Z",
+         "height_m": 1.0649236690327526,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:30:00Z",
+         "height_m": 1.1567054619810175,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:40:00Z",
+         "height_m": 1.246289396107505,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:50:00Z",
+         "height_m": 1.333233490356634,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:00:00Z",
+         "height_m": 1.4171289338114361,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:10:00Z",
+         "height_m": 1.4975998215121364,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:20:00Z",
+         "height_m": 1.5743023652983452,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:30:00Z",
+         "height_m": 1.6469236796417506,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:40:00Z",
+         "height_m": 1.7151802509108744,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:50:00Z",
+         "height_m": 1.7788162033862926,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:00:00Z",
+         "height_m": 1.8376014765062836,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:10:00Z",
+         "height_m": 1.8913300252711145,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:20:00Z",
+         "height_m": 1.939818149589275,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:30:00Z",
+         "height_m": 1.9829030488059793,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:40:00Z",
+         "height_m": 2.020441685045916,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:50:00Z",
+         "height_m": 2.052310023720321,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:00:00Z",
+         "height_m": 2.0784027020753637,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:10:00Z",
+         "height_m": 2.0986331575437704,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:20:00Z",
+         "height_m": 2.1129342274931737,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:30:00Z",
+         "height_m": 2.1212592113682653,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:40:00Z",
+         "height_m": 2.1235833658369625,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:50:00Z",
+         "height_m": 2.1199057840028956,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:00:00Z",
+         "height_m": 2.1102515916469935,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:10:00Z",
+         "height_m": 2.0946743773719754,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:20:00Z",
+         "height_m": 2.073258759957456,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:30:00Z",
+         "height_m": 2.046122985621431,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:40:00Z",
+         "height_m": 2.0134214405765043,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:50:00Z",
+         "height_m": 1.9753469605230016,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:00:00Z",
+         "height_m": 1.9321328186817772,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:10:00Z",
+         "height_m": 1.8840542776850766,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:20:00Z",
+         "height_m": 1.831429598045276,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:30:00Z",
+         "height_m": 1.7746204068313811,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:40:00Z",
+         "height_m": 1.714031344335326,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:50:00Z",
+         "height_m": 1.6501089235132347,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:00:00Z",
+         "height_m": 1.58333955640644,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:10:00Z",
+         "height_m": 1.5142467230299368,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:20:00Z",
+         "height_m": 1.443387280793653,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:30:00Z",
+         "height_m": 1.3713469357521224,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:40:00Z",
+         "height_m": 1.2987349202210101,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:50:00Z",
+         "height_m": 1.226177943889656,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:00:00Z",
+         "height_m": 1.1543135068567991,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:10:00Z",
+         "height_m": 1.0837826824239156,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:20:00Z",
+         "height_m": 1.0152224944100816,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:30:00Z",
+         "height_m": 0.9492580277444691,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:40:00Z",
+         "height_m": 0.886494421698569,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:50:00Z",
+         "height_m": 0.8275089020377036,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:00:00Z",
+         "height_m": 0.7728430113719612,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:10:00Z",
+         "height_m": 0.7229951959478222,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:20:00Z",
+         "height_m": 0.6784139020504864,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:30:00Z",
+         "height_m": 0.6394913261786201,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:40:00Z",
+         "height_m": 0.6065579504346055,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:50:00Z",
+         "height_m": 0.5798779784475926,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:00:00Z",
+         "height_m": 0.5596457680432918,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:10:00Z",
+         "height_m": 0.5459833352719787,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:20:00Z",
+         "height_m": 0.5389389808781634,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:30:00Z",
+         "height_m": 0.5384870654558,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:40:00Z",
+         "height_m": 0.5445289340340251,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:50:00Z",
+         "height_m": 0.5568949653522282,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:00:00Z",
+         "height_m": 0.5753476962819996,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:10:00Z",
+         "height_m": 0.5995859483853637,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:20:00Z",
+         "height_m": 0.6292498620803537,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:30:00Z",
+         "height_m": 0.6639267248771678,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:40:00Z",
+         "height_m": 0.7031574641344679,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:50:00Z",
+         "height_m": 0.7464436621836887,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:00:00Z",
+         "height_m": 0.7932549427768566,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:10:00Z",
+         "height_m": 0.8430365728540576,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:20:00Z",
+         "height_m": 0.895217122686859,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:30:00Z",
+         "height_m": 0.9492160305349958,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:40:00Z",
+         "height_m": 1.004450924920897,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:50:00Z",
+         "height_m": 1.0603445682627608,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:00:00Z",
+         "height_m": 1.1163312995774397,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:10:00Z",
+         "height_m": 1.1718628708439296,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:20:00Z",
+         "height_m": 1.2264135909262766,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:30:00Z",
+         "height_m": 1.2794847121023027,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:40:00Z",
+         "height_m": 1.3306080166470868,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:50:00Z",
+         "height_m": 1.3793485839175883,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:00:00Z",
+         "height_m": 1.4253067413274654,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:10:00Z",
+         "height_m": 1.4681192248482406,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:20:00Z",
+         "height_m": 1.507459595585146,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:30:00Z",
+         "height_m": 1.5430379779888779,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:40:00Z",
+         "height_m": 1.574600201834528,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:50:00Z",
+         "height_m": 1.601926443799021,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:00:00Z",
+         "height_m": 1.6248294749070278,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:10:00Z",
+         "height_m": 1.6431526270497683,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:20:00Z",
+         "height_m": 1.6567675950259808,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:30:00Z",
+         "height_m": 1.665572190062259,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:40:00Z",
+         "height_m": 1.66948815659291,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:50:00Z",
+         "height_m": 1.6684591563691944,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:00:00Z",
+         "height_m": 1.662449012996526,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:10:00Z",
+         "height_m": 1.6514402961134373,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:20:00Z",
+         "height_m": 1.6354333080753314,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:30:00Z",
+         "height_m": 1.6144455177002857,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:40:00Z",
+         "height_m": 1.5885114659416764,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:50:00Z",
+         "height_m": 1.5576831478859077,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:00:00Z",
+         "height_m": 1.5220308548626615,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:10:00Z",
+         "height_m": 1.4816444403386084,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:20:00Z",
+         "height_m": 1.4366349542640715,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:30:00Z",
+         "height_m": 1.3871365732460381,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:40:00Z",
+         "height_m": 1.333308738873124,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:50:00Z",
+         "height_m": 1.2753384041895424,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:00:00Z",
+         "height_m": 1.2134422791062502,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:10:00Z",
+         "height_m": 1.1478689597558025,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:20:00Z",
+         "height_m": 1.0789008246403378,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:30:00Z",
+         "height_m": 1.006855582005379,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:40:00Z",
+         "height_m": 0.9320873581735512,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:50:00Z",
+         "height_m": 0.8549872254815608,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:00:00Z",
+         "height_m": 0.7759830807617295,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:10:00Z",
+         "height_m": 0.6955388006636172,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:20:00Z",
+         "height_m": 0.6141526181189538,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:30:00Z",
+         "height_m": 0.532354684412982,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:40:00Z",
+         "height_m": 0.45070380309160984,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:50:00Z",
+         "height_m": 0.3697833446782959,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:00:00Z",
+         "height_m": 0.29019637428605694,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:10:00Z",
+         "height_m": 0.21256004700627706,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:20:00Z",
+         "height_m": 0.13749934780355055,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:30:00Z",
+         "height_m": 0.06564027291679853,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:40:00Z",
+         "height_m": -0.0023974321382427277,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:50:00Z",
+         "height_m": -0.06600784746341004,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:00:00Z",
+         "height_m": -0.12460662382375443,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:10:00Z",
+         "height_m": -0.17763874637325117,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:20:00Z",
+         "height_m": -0.22458616067326131,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:30:00Z",
+         "height_m": -0.2649751036704997,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:40:00Z",
+         "height_m": -0.29838298538699837,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:50:00Z",
+         "height_m": -0.3244446741563838,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:00:00Z",
+         "height_m": -0.34285804913643725,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:10:00Z",
+         "height_m": -0.35338869829503183,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:20:00Z",
+         "height_m": -0.3558736577232082,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:30:00Z",
+         "height_m": -0.35022410853233943,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:40:00Z",
+         "height_m": -0.3364269702069609,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:50:00Z",
+         "height_m": -0.3145453535233249,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0035"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z",
+          "2010-03-01T00:10:00Z",
+          "2010-03-01T00:20:00Z",
+          "2010-03-01T00:30:00Z",
+          "2010-03-01T00:40:00Z",
+          "2010-03-01T00:50:00Z",
+          "2010-03-01T01:00:00Z",
+          "2010-03-01T01:10:00Z",
+          "2010-03-01T01:20:00Z",
+          "2010-03-01T01:30:00Z",
+          "2010-03-01T01:40:00Z",
+          "2010-03-01T01:50:00Z",
+          "2010-03-01T02:00:00Z",
+          "2010-03-01T02:10:00Z",
+          "2010-03-01T02:20:00Z",
+          "2010-03-01T02:30:00Z",
+          "2010-03-01T02:40:00Z",
+          "2010-03-01T02:50:00Z",
+          "2010-03-01T03:00:00Z",
+          "2010-03-01T03:10:00Z",
+          "2010-03-01T03:20:00Z",
+          "2010-03-01T03:30:00Z",
+          "2010-03-01T03:40:00Z",
+          "2010-03-01T03:50:00Z",
+          "2010-03-01T04:00:00Z",
+          "2010-03-01T04:10:00Z",
+          "2010-03-01T04:20:00Z",
+          "2010-03-01T04:30:00Z",
+          "2010-03-01T04:40:00Z",
+          "2010-03-01T04:50:00Z",
+          "2010-03-01T05:00:00Z",
+          "2010-03-01T05:10:00Z",
+          "2010-03-01T05:20:00Z",
+          "2010-03-01T05:30:00Z",
+          "2010-03-01T05:40:00Z",
+          "2010-03-01T05:50:00Z",
+          "2010-03-01T06:00:00Z",
+          "2010-03-01T06:10:00Z",
+          "2010-03-01T06:20:00Z",
+          "2010-03-01T06:30:00Z",
+          "2010-03-01T06:40:00Z",
+          "2010-03-01T06:50:00Z",
+          "2010-03-01T07:00:00Z",
+          "2010-03-01T07:10:00Z",
+          "2010-03-01T07:20:00Z",
+          "2010-03-01T07:30:00Z",
+          "2010-03-01T07:40:00Z",
+          "2010-03-01T07:50:00Z",
+          "2010-03-01T08:00:00Z",
+          "2010-03-01T08:10:00Z",
+          "2010-03-01T08:20:00Z",
+          "2010-03-01T08:30:00Z",
+          "2010-03-01T08:40:00Z",
+          "2010-03-01T08:50:00Z",
+          "2010-03-01T09:00:00Z",
+          "2010-03-01T09:10:00Z",
+          "2010-03-01T09:20:00Z",
+          "2010-03-01T09:30:00Z",
+          "2010-03-01T09:40:00Z",
+          "2010-03-01T09:50:00Z",
+          "2010-03-01T10:00:00Z",
+          "2010-03-01T10:10:00Z",
+          "2010-03-01T10:20:00Z",
+          "2010-03-01T10:30:00Z",
+          "2010-03-01T10:40:00Z",
+          "2010-03-01T10:50:00Z",
+          "2010-03-01T11:00:00Z",
+          "2010-03-01T11:10:00Z",
+          "2010-03-01T11:20:00Z",
+          "2010-03-01T11:30:00Z",
+          "2010-03-01T11:40:00Z",
+          "2010-03-01T11:50:00Z",
+          "2010-03-01T12:00:00Z",
+          "2010-03-01T12:10:00Z",
+          "2010-03-01T12:20:00Z",
+          "2010-03-01T12:30:00Z",
+          "2010-03-01T12:40:00Z",
+          "2010-03-01T12:50:00Z",
+          "2010-03-01T13:00:00Z",
+          "2010-03-01T13:10:00Z",
+          "2010-03-01T13:20:00Z",
+          "2010-03-01T13:30:00Z",
+          "2010-03-01T13:40:00Z",
+          "2010-03-01T13:50:00Z",
+          "2010-03-01T14:00:00Z",
+          "2010-03-01T14:10:00Z",
+          "2010-03-01T14:20:00Z",
+          "2010-03-01T14:30:00Z",
+          "2010-03-01T14:40:00Z",
+          "2010-03-01T14:50:00Z",
+          "2010-03-01T15:00:00Z",
+          "2010-03-01T15:10:00Z",
+          "2010-03-01T15:20:00Z",
+          "2010-03-01T15:30:00Z",
+          "2010-03-01T15:40:00Z",
+          "2010-03-01T15:50:00Z",
+          "2010-03-01T16:00:00Z",
+          "2010-03-01T16:10:00Z",
+          "2010-03-01T16:20:00Z",
+          "2010-03-01T16:30:00Z",
+          "2010-03-01T16:40:00Z",
+          "2010-03-01T16:50:00Z",
+          "2010-03-01T17:00:00Z",
+          "2010-03-01T17:10:00Z",
+          "2010-03-01T17:20:00Z",
+          "2010-03-01T17:30:00Z",
+          "2010-03-01T17:40:00Z",
+          "2010-03-01T17:50:00Z",
+          "2010-03-01T18:00:00Z",
+          "2010-03-01T18:10:00Z",
+          "2010-03-01T18:20:00Z",
+          "2010-03-01T18:30:00Z",
+          "2010-03-01T18:40:00Z",
+          "2010-03-01T18:50:00Z",
+          "2010-03-01T19:00:00Z",
+          "2010-03-01T19:10:00Z",
+          "2010-03-01T19:20:00Z",
+          "2010-03-01T19:30:00Z",
+          "2010-03-01T19:40:00Z",
+          "2010-03-01T19:50:00Z",
+          "2010-03-01T20:00:00Z",
+          "2010-03-01T20:10:00Z",
+          "2010-03-01T20:20:00Z",
+          "2010-03-01T20:30:00Z",
+          "2010-03-01T20:40:00Z",
+          "2010-03-01T20:50:00Z",
+          "2010-03-01T21:00:00Z",
+          "2010-03-01T21:10:00Z",
+          "2010-03-01T21:20:00Z",
+          "2010-03-01T21:30:00Z",
+          "2010-03-01T21:40:00Z",
+          "2010-03-01T21:50:00Z",
+          "2010-03-01T22:00:00Z",
+          "2010-03-01T22:10:00Z",
+          "2010-03-01T22:20:00Z",
+          "2010-03-01T22:30:00Z",
+          "2010-03-01T22:40:00Z",
+          "2010-03-01T22:50:00Z",
+          "2010-03-01T23:00:00Z",
+          "2010-03-01T23:10:00Z",
+          "2010-03-01T23:20:00Z",
+          "2010-03-01T23:30:00Z",
+          "2010-03-01T23:40:00Z",
+          "2010-03-01T23:50:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/folded-additive",
+   "title": "equal offsets, A +0.15 m, -12 min",
+   "spec": "4.8a",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0036",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0036",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T00:00:00Z",
+         "height_m": 0.3934747640780236,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:10:00Z",
+         "height_m": 0.48971844521277774,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:20:00Z",
+         "height_m": 0.5893355195945758,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:30:00Z",
+         "height_m": 0.691619293543362,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:40:00Z",
+         "height_m": 0.7958660247315832,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T00:50:00Z",
+         "height_m": 0.9013818815802125,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:00:00Z",
+         "height_m": 1.0074892189693867,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:10:00Z",
+         "height_m": 1.1135320843495764,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:20:00Z",
+         "height_m": 1.2188808922809309,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:30:00Z",
+         "height_m": 1.3229362304526429,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:40:00Z",
+         "height_m": 1.4251317856241013,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T01:50:00Z",
+         "height_m": 1.5249364029521129,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:00:00Z",
+         "height_m": 1.621855316121411,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:10:00Z",
+         "height_m": 1.7154306078959238,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:20:00Z",
+         "height_m": 1.8052409805465546,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:30:00Z",
+         "height_m": 1.8909009325318349,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:40:00Z",
+         "height_m": 1.9720594513471164,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T02:50:00Z",
+         "height_m": 2.0483983422744725,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:00:00Z",
+         "height_m": 2.1196303185809686,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:10:00Z",
+         "height_m": 2.185496980423382,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:20:00Z",
+         "height_m": 2.2457668072926626,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:30:00Z",
+         "height_m": 2.300233282389998,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:40:00Z",
+         "height_m": 2.348713257089037,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T03:50:00Z",
+         "height_m": 2.3910456499524537,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:00:00Z",
+         "height_m": 2.427090558063216,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:10:00Z",
+         "height_m": 2.4567288392345352,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:20:00Z",
+         "height_m": 2.4798622025783867,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:30:00Z",
+         "height_m": 2.496413822587206,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:40:00Z",
+         "height_m": 2.5063294690152738,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T04:50:00Z",
+         "height_m": 2.509579122139734,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:00:00Z",
+         "height_m": 2.5061590211361873,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:10:00Z",
+         "height_m": 2.4960940730028796,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:20:00Z",
+         "height_m": 2.479440531342593,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:30:00Z",
+         "height_m": 2.4562888389317528,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:40:00Z",
+         "height_m": 2.4267665158708764,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T05:50:00Z",
+         "height_m": 2.391040966606144,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:00:00Z",
+         "height_m": 2.3493220745475405,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:10:00Z",
+         "height_m": 2.301864452546701,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:20:00Z",
+         "height_m": 2.2489692212114085,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:30:00Z",
+         "height_m": 2.1909851948543113,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:40:00Z",
+         "height_m": 2.128309366618812,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T06:50:00Z",
+         "height_m": 2.061386599704104,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:00:00Z",
+         "height_m": 1.990708450211692,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:10:00Z",
+         "height_m": 1.916811068466479,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:20:00Z",
+         "height_m": 1.840272149138209,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:30:00Z",
+         "height_m": 1.761706925456941,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:40:00Z",
+         "height_m": 1.6817632285959934,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T07:50:00Z",
+         "height_m": 1.6011156591418154,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:00:00Z",
+         "height_m": 1.52045894278509,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:10:00Z",
+         "height_m": 1.440500566203425,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:20:00Z",
+         "height_m": 1.3619528109058268,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:30:00Z",
+         "height_m": 1.285524321926891,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:40:00Z",
+         "height_m": 1.2119113641493207,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T08:50:00Z",
+         "height_m": 1.1417889312148524,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:00:00Z",
+         "height_m": 1.0758018800904703,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:10:00Z",
+         "height_m": 1.0145562681373124,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:20:00Z",
+         "height_m": 0.9586110688208493,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:30:00Z",
+         "height_m": 0.9084704370168732,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:40:00Z",
+         "height_m": 0.8645766852843317,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T09:50:00Z",
+         "height_m": 0.8273041187403569,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:00:00Z",
+         "height_m": 0.796953858620493,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:10:00Z",
+         "height_m": 0.7737497636832099,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:20:00Z",
+         "height_m": 0.7578355348684213,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:30:00Z",
+         "height_m": 0.7492730626612515,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:40:00Z",
+         "height_m": 0.7480420491257511,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:50:00Z",
+         "height_m": 0.7540409082811415,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:00:00Z",
+         "height_m": 0.7670889201403536,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:10:00Z",
+         "height_m": 0.7869295860643231,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:20:00Z",
+         "height_m": 0.813235106830052,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:30:00Z",
+         "height_m": 0.8456118806555749,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:40:00Z",
+         "height_m": 0.8836068969999251,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:50:00Z",
+         "height_m": 0.9267148838093343,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:00:00Z",
+         "height_m": 0.9743860514816551,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:10:00Z",
+         "height_m": 1.026034266516882,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:20:00Z",
+         "height_m": 1.0810454818653923,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:30:00Z",
+         "height_m": 1.1387862494976857,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:40:00Z",
+         "height_m": 1.1986121436921493,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T12:50:00Z",
+         "height_m": 1.25987593086622,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:00:00Z",
+         "height_m": 1.3219353331930765,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:10:00Z",
+         "height_m": 1.3841602484217967,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:20:00Z",
+         "height_m": 1.4459393067744846,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:30:00Z",
+         "height_m": 1.5066856670023114,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:40:00Z",
+         "height_m": 1.565841977007267,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T13:50:00Z",
+         "height_m": 1.6228844492187786,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:00:00Z",
+         "height_m": 1.6773260264353154,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:10:00Z",
+         "height_m": 1.7287186393692047,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:20:00Z",
+         "height_m": 1.776654581964678,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:30:00Z",
+         "height_m": 1.8207670539695253,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:40:00Z",
+         "height_m": 1.8607299416057568,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T14:50:00Z",
+         "height_m": 1.8962569258948474,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:00:00Z",
+         "height_m": 1.9271000237462583,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:10:00Z",
+         "height_m": 1.9530476789036426,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:20:00Z",
+         "height_m": 1.973922527939406,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:30:00Z",
+         "height_m": 1.9895789705142342,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:40:00Z",
+         "height_m": 1.9999006729824345,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:50:00Z",
+         "height_m": 2.004798130188775,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:00:00Z",
+         "height_m": 2.004206402114622,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:10:00Z",
+         "height_m": 1.9980831301889268,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:20:00Z",
+         "height_m": 1.986406922953785,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:30:00Z",
+         "height_m": 1.9691761828570031,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:40:00Z",
+         "height_m": 1.946408425793983,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:50:00Z",
+         "height_m": 1.9181401232644961,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:00:00Z",
+         "height_m": 1.8844270743241696,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:10:00Z",
+         "height_m": 1.84534529159431,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:20:00Z",
+         "height_m": 1.8009923631543157,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:30:00Z",
+         "height_m": 1.7514892308747387,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:40:00Z",
+         "height_m": 1.6969823063149272,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T17:50:00Z",
+         "height_m": 1.6376458283112227,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:00:00Z",
+         "height_m": 1.5736843523631634,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:10:00Z",
+         "height_m": 1.5053352513279827,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:20:00Z",
+         "height_m": 1.4328711001156003,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:30:00Z",
+         "height_m": 1.3566018142715297,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:40:00Z",
+         "height_m": 1.2768764136766568,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T18:50:00Z",
+         "height_m": 1.1940842880728177,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:00:00Z",
+         "height_m": 1.1086558506318036,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:10:00Z",
+         "height_m": 1.0210624790889444,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:20:00Z",
+         "height_m": 0.9318156606975515,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:30:00Z",
+         "height_m": 0.8414652770029841,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:40:00Z",
+         "height_m": 0.7505969866211619,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T19:50:00Z",
+         "height_m": 0.6598286882366019,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:00:00Z",
+         "height_m": 0.5698060712405245,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:10:00Z",
+         "height_m": 0.48119728709013,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:20:00Z",
+         "height_m": 0.39468679987346145,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:30:00Z",
+         "height_m": 0.3109684989741536,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:40:00Z",
+         "height_m": 0.23073817946147956,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T20:50:00Z",
+         "height_m": 0.1546855162014269,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:00:00Z",
+         "height_m": 0.08348567513124983,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:10:00Z",
+         "height_m": 0.01779071911395036,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:20:00Z",
+         "height_m": -0.04177902411236967,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:30:00Z",
+         "height_m": -0.09464345847341682,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:40:00Z",
+         "height_m": -0.14027090567558953,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T21:50:00Z",
+         "height_m": -0.17818580897181602,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:00:00Z",
+         "height_m": -0.20797579007526967,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:10:00Z",
+         "height_m": -0.2292979064162406,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:20:00Z",
+         "height_m": -0.2418839716304444,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:30:00Z",
+         "height_m": -0.24554482145351098,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:40:00Z",
+         "height_m": -0.2401734295843141,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:50:00Z",
+         "height_m": -0.2257468029931542,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:00:00Z",
+         "height_m": -0.2023266129304533,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:10:00Z",
+         "height_m": -0.17005854584231783,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:20:00Z",
+         "height_m": -0.12917038678133919,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:30:00Z",
+         "height_m": -0.07996887596639524,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:40:00Z",
+         "height_m": -0.022835406158690397,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:50:00Z",
+         "height_m": 0.04177934623258284,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0036"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z",
+          "2010-03-01T00:10:00Z",
+          "2010-03-01T00:20:00Z",
+          "2010-03-01T00:30:00Z",
+          "2010-03-01T00:40:00Z",
+          "2010-03-01T00:50:00Z",
+          "2010-03-01T01:00:00Z",
+          "2010-03-01T01:10:00Z",
+          "2010-03-01T01:20:00Z",
+          "2010-03-01T01:30:00Z",
+          "2010-03-01T01:40:00Z",
+          "2010-03-01T01:50:00Z",
+          "2010-03-01T02:00:00Z",
+          "2010-03-01T02:10:00Z",
+          "2010-03-01T02:20:00Z",
+          "2010-03-01T02:30:00Z",
+          "2010-03-01T02:40:00Z",
+          "2010-03-01T02:50:00Z",
+          "2010-03-01T03:00:00Z",
+          "2010-03-01T03:10:00Z",
+          "2010-03-01T03:20:00Z",
+          "2010-03-01T03:30:00Z",
+          "2010-03-01T03:40:00Z",
+          "2010-03-01T03:50:00Z",
+          "2010-03-01T04:00:00Z",
+          "2010-03-01T04:10:00Z",
+          "2010-03-01T04:20:00Z",
+          "2010-03-01T04:30:00Z",
+          "2010-03-01T04:40:00Z",
+          "2010-03-01T04:50:00Z",
+          "2010-03-01T05:00:00Z",
+          "2010-03-01T05:10:00Z",
+          "2010-03-01T05:20:00Z",
+          "2010-03-01T05:30:00Z",
+          "2010-03-01T05:40:00Z",
+          "2010-03-01T05:50:00Z",
+          "2010-03-01T06:00:00Z",
+          "2010-03-01T06:10:00Z",
+          "2010-03-01T06:20:00Z",
+          "2010-03-01T06:30:00Z",
+          "2010-03-01T06:40:00Z",
+          "2010-03-01T06:50:00Z",
+          "2010-03-01T07:00:00Z",
+          "2010-03-01T07:10:00Z",
+          "2010-03-01T07:20:00Z",
+          "2010-03-01T07:30:00Z",
+          "2010-03-01T07:40:00Z",
+          "2010-03-01T07:50:00Z",
+          "2010-03-01T08:00:00Z",
+          "2010-03-01T08:10:00Z",
+          "2010-03-01T08:20:00Z",
+          "2010-03-01T08:30:00Z",
+          "2010-03-01T08:40:00Z",
+          "2010-03-01T08:50:00Z",
+          "2010-03-01T09:00:00Z",
+          "2010-03-01T09:10:00Z",
+          "2010-03-01T09:20:00Z",
+          "2010-03-01T09:30:00Z",
+          "2010-03-01T09:40:00Z",
+          "2010-03-01T09:50:00Z",
+          "2010-03-01T10:00:00Z",
+          "2010-03-01T10:10:00Z",
+          "2010-03-01T10:20:00Z",
+          "2010-03-01T10:30:00Z",
+          "2010-03-01T10:40:00Z",
+          "2010-03-01T10:50:00Z",
+          "2010-03-01T11:00:00Z",
+          "2010-03-01T11:10:00Z",
+          "2010-03-01T11:20:00Z",
+          "2010-03-01T11:30:00Z",
+          "2010-03-01T11:40:00Z",
+          "2010-03-01T11:50:00Z",
+          "2010-03-01T12:00:00Z",
+          "2010-03-01T12:10:00Z",
+          "2010-03-01T12:20:00Z",
+          "2010-03-01T12:30:00Z",
+          "2010-03-01T12:40:00Z",
+          "2010-03-01T12:50:00Z",
+          "2010-03-01T13:00:00Z",
+          "2010-03-01T13:10:00Z",
+          "2010-03-01T13:20:00Z",
+          "2010-03-01T13:30:00Z",
+          "2010-03-01T13:40:00Z",
+          "2010-03-01T13:50:00Z",
+          "2010-03-01T14:00:00Z",
+          "2010-03-01T14:10:00Z",
+          "2010-03-01T14:20:00Z",
+          "2010-03-01T14:30:00Z",
+          "2010-03-01T14:40:00Z",
+          "2010-03-01T14:50:00Z",
+          "2010-03-01T15:00:00Z",
+          "2010-03-01T15:10:00Z",
+          "2010-03-01T15:20:00Z",
+          "2010-03-01T15:30:00Z",
+          "2010-03-01T15:40:00Z",
+          "2010-03-01T15:50:00Z",
+          "2010-03-01T16:00:00Z",
+          "2010-03-01T16:10:00Z",
+          "2010-03-01T16:20:00Z",
+          "2010-03-01T16:30:00Z",
+          "2010-03-01T16:40:00Z",
+          "2010-03-01T16:50:00Z",
+          "2010-03-01T17:00:00Z",
+          "2010-03-01T17:10:00Z",
+          "2010-03-01T17:20:00Z",
+          "2010-03-01T17:30:00Z",
+          "2010-03-01T17:40:00Z",
+          "2010-03-01T17:50:00Z",
+          "2010-03-01T18:00:00Z",
+          "2010-03-01T18:10:00Z",
+          "2010-03-01T18:20:00Z",
+          "2010-03-01T18:30:00Z",
+          "2010-03-01T18:40:00Z",
+          "2010-03-01T18:50:00Z",
+          "2010-03-01T19:00:00Z",
+          "2010-03-01T19:10:00Z",
+          "2010-03-01T19:20:00Z",
+          "2010-03-01T19:30:00Z",
+          "2010-03-01T19:40:00Z",
+          "2010-03-01T19:50:00Z",
+          "2010-03-01T20:00:00Z",
+          "2010-03-01T20:10:00Z",
+          "2010-03-01T20:20:00Z",
+          "2010-03-01T20:30:00Z",
+          "2010-03-01T20:40:00Z",
+          "2010-03-01T20:50:00Z",
+          "2010-03-01T21:00:00Z",
+          "2010-03-01T21:10:00Z",
+          "2010-03-01T21:20:00Z",
+          "2010-03-01T21:30:00Z",
+          "2010-03-01T21:40:00Z",
+          "2010-03-01T21:50:00Z",
+          "2010-03-01T22:00:00Z",
+          "2010-03-01T22:10:00Z",
+          "2010-03-01T22:20:00Z",
+          "2010-03-01T22:30:00Z",
+          "2010-03-01T22:40:00Z",
+          "2010-03-01T22:50:00Z",
+          "2010-03-01T23:00:00Z",
+          "2010-03-01T23:10:00Z",
+          "2010-03-01T23:20:00Z",
+          "2010-03-01T23:30:00Z",
+          "2010-03-01T23:40:00Z",
+          "2010-03-01T23:50:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/folded-extremes",
+   "title": "the folded station's extremes, equal to the event method's away from New Year (times within 1 s, heights within 1e-5 m: the step's compare)",
+   "spec": "4.8a",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0035",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0035",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:38:52Z",
+         "type": "high",
+         "height_m": 2.12362171924525,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:25:41Z",
+         "type": "low",
+         "height_m": 0.5378781483649926,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:42:56Z",
+         "type": "high",
+         "height_m": 1.6697008221395504,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:18:04Z",
+         "type": "low",
+         "height_m": -0.35602584274946647,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T06:10:16Z",
+         "type": "high",
+         "height_m": 2.0674514497631407,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T12:00:24Z",
+         "type": "low",
+         "height_m": 0.5643665031135017,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T17:12:11Z",
+         "type": "high",
+         "height_m": 1.660765283818602,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T23:53:37Z",
+         "type": "low",
+         "height_m": -0.28922702446144677,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0035"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "folded_extremes"
+       },
+       "compare": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0035"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict",
+        "height_m": 1e-05,
+        "time_s": 1
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/folded-new-year",
+   "title": "a window across 2013-01-01 with +40 min: the folded curve uses year Y(t)'s tables",
+   "spec": "4.8a",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2012-12-31T22:00:00Z",
+      "station_id": "OTC-P-0037",
+      "stop": "2013-01-01T02:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "folded_offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0037",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2012-12-31T22:00:00Z",
+         "height_m": 0.9401678996114591,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T22:10:00Z",
+         "height_m": 0.8261686139792969,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T22:20:00Z",
+         "height_m": 0.7115651790895414,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T22:30:00Z",
+         "height_m": 0.597071131880603,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T22:40:00Z",
+         "height_m": 0.48342843013571535,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T22:50:00Z",
+         "height_m": 0.37140263062915946,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:00:00Z",
+         "height_m": 0.26177717237698317,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:10:00Z",
+         "height_m": 0.15534681640519032,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:20:00Z",
+         "height_m": 0.05291031971978444,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:30:00Z",
+         "height_m": -0.04473755407072688,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:40:00Z",
+         "height_m": -0.13681456238580614,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2012-12-31T23:50:00Z",
+         "height_m": -0.22255990463658937,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:00:00Z",
+         "height_m": -0.3271794698681698,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:10:00Z",
+         "height_m": -0.39976089405728943,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:20:00Z",
+         "height_m": -0.46382543430448386,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:30:00Z",
+         "height_m": -0.518780575442606,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:40:00Z",
+         "height_m": -0.5641003895038466,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T00:50:00Z",
+         "height_m": -0.5993331599529719,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:00:00Z",
+         "height_m": -0.6241081700627491,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:10:00Z",
+         "height_m": -0.6381415042531136,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:20:00Z",
+         "height_m": -0.6412407301120402,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:30:00Z",
+         "height_m": -0.6333083512491013,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:40:00Z",
+         "height_m": -0.6143439465320273,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2013-01-01T01:50:00Z",
+         "height_m": -0.5844449389689281,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0037"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2012-12-31T22:00:00Z",
+          "2012-12-31T22:10:00Z",
+          "2012-12-31T22:20:00Z",
+          "2012-12-31T22:30:00Z",
+          "2012-12-31T22:40:00Z",
+          "2012-12-31T22:50:00Z",
+          "2012-12-31T23:00:00Z",
+          "2012-12-31T23:10:00Z",
+          "2012-12-31T23:20:00Z",
+          "2012-12-31T23:30:00Z",
+          "2012-12-31T23:40:00Z",
+          "2012-12-31T23:50:00Z",
+          "2013-01-01T00:00:00Z",
+          "2013-01-01T00:10:00Z",
+          "2013-01-01T00:20:00Z",
+          "2013-01-01T00:30:00Z",
+          "2013-01-01T00:40:00Z",
+          "2013-01-01T00:50:00Z",
+          "2013-01-01T01:00:00Z",
+          "2013-01-01T01:10:00Z",
+          "2013-01-01T01:20:00Z",
+          "2013-01-01T01:30:00Z",
+          "2013-01-01T01:40:00Z",
+          "2013-01-01T01:50:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/differing-offsets-series",
+   "title": "differing offsets: heights fails with extremes_only (the offsets differ); extremes works",
+   "spec": "4.8a",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0030",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "extremes_only",
+      "error_message": {
+       "$contains": "offsets differ"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0030",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0001",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0030",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:13:52Z",
+         "type": "high",
+         "height_m": 2.477558672452778,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T11:08:41Z",
+         "type": "low",
+         "height_m": 0.5856895393307985,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T16:17:56Z",
+         "type": "high",
+         "height_m": 1.9479842924960655,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T23:01:04Z",
+         "type": "low",
+         "height_m": -0.3876725843271542,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0030"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-02T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/zero-ratio",
+   "title": "R ratio 0 and -0.5, equal and differing offsets: heights and extremes are invalid_argument",
+   "spec": "4.8 step 3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0038",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0038",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0039",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0039",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0040",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0040",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0041",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0041",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0038"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0038"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-02T00:00:00Z"
+        },
+        "entry": "folded_extremes"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0039"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0039"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-02T00:00:00Z"
+        },
+        "entry": "folded_extremes"
+       }
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0040"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0040"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-02T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 6,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0041"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     },
+     {
+      "authored_step": 7,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0041"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-02T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/unknown-adjusted-type",
+   "title": "height_adjusted_type X (read as other): invalid_argument naming X, equal and differing offsets; with a failing reference too, still invalid_argument (the type check comes first)",
+   "spec": "4.8 step 6",
+   "matrix": {
+    "root": "predict-bad/unknown-adjusted-type",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0035",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0035",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0030",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0030",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0049",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0049",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument",
+      "error_message": {
+       "$contains": "X"
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "note": "OTC-P-0049's reference has no noaa set (reference_unavailable without the X)",
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/order-ratio-before-extremes-only",
+   "title": "differing offsets and an R ratio of 0: heights is invalid_argument, not extremes_only",
+   "spec": "4.8 step 6",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0040",
+      "stop": "2010-03-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "invalid_argument"
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.12,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0040"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "times": [
+          "2010-03-01T00:00:00Z"
+         ]
+        },
+        "entry": "folded_heights"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/reference-no-usable-set",
+   "title": "the reference is active, but its only noaa water-level set is no_constants (its gesla-fit set does not count): heights, heights_at and extremes are reference_unavailable, at an equal-offsets and a differing-offsets station (the reference checks come before extremes_only)",
+   "spec": "4.8 step 1, step 6",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0056",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0056",
+      "times": [
+       "2010-03-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights_at"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0056",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0057",
+      "stop": "2010-03-01T06:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0057",
+      "times": [
+       "2010-03-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "heights_at"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0057",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0055"
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/current-reference-no-set",
+   "title": "a current_offsets reference that is active with no usable current set: current_events is reference_unavailable",
+   "spec": "4.9 step 1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0058"
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/current-reference-no-set-missing",
+   "title": "a current_offsets reference that is not in the release (it loads: current_offsets are raw in 1.0): current_events is reference_unavailable",
+   "spec": "4.9 step 1",
+   "matrix": {
+    "root": "predict-bad/current-reference-missing",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-9999"
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-subordinate/current-reference-removed",
+   "title": "a current_offsets reference that is a removed station (a tombstone; it loads): current_events is reference_unavailable",
+   "spec": "4.9 step 1",
+   "matrix": {
+    "root": "predict-bad/current-reference-removed",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0059",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "error": "reference_unavailable",
+      "error_fields": {
+       "reference_station_id": "OTC-P-0097"
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

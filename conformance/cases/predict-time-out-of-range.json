@@ -1,0 +1,232 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-time-out-of-range",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-time-out-of-range",
+   "title": "1999-12-31T23:59:59Z and 2031-01-01T00:00:00Z; extremes whose grid padding reaches out of the table (heights with the same stop work)",
+   "spec": "4.3, 4.6 step 1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0001",
+      "times": [
+       "1999-12-31T23:59:59Z"
+      ]
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "heights_at"
+    },
+    {
+     "args": {
+      "station_id": "OTC-P-0001",
+      "times": [
+       "2031-01-01T00:00:00Z"
+      ]
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "heights_at"
+    },
+    {
+     "args": {
+      "start": "2030-12-31T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2031-01-01T00:00:00Z"
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2000-01-01T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2000-01-02T00:00:00Z"
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "start": "2030-12-31T22:00:00Z",
+      "station_id": "OTC-P-0001",
+      "step_s": 3600,
+      "stop": "2031-01-01T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2030-12-31T22:00:00Z",
+         "height_m": 0.18726209925237686,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2030-12-31T23:00:00Z",
+         "height_m": -0.07847188649604997,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "1999-12-31T23:59:59Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2031-01-01T00:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2030-12-31T00:00:00Z",
+         "stop": "2031-01-01T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_refusal",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2000-01-01T00:00:00Z",
+         "stop": "2000-01-02T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2030-12-31T22:00:00Z",
+          "2030-12-31T23:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}
