@@ -9,7 +9,7 @@ import * as sdk from '../dist/index.js';
 import { loadCached, verifyCached } from '../dist/core.js';
 import { headerFromMeta, indexJsonl } from '../dist/loader.js';
 import * as nodeRuntime from '../dist/node.js';
-import { storedIndex } from '../dist/release.js';
+import { storedIndex, usableIndex } from '../dist/release.js';
 
 const cache = process.env.OTC_CACHED_STREAM_CACHE;
 const historical = process.env.OTC_CACHED_HISTORY_DIR ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/proofs/T1/historical-targets';
@@ -76,6 +76,113 @@ const diskDir = (f, overrides = {}) => ({
     writeIndex: bytes => nodeRuntime.writeAtomicSync(path.join(f.dir, 'index-v1.json'), bytes),
     removeIndex: () => nodeRuntime.removeFileSync(path.join(f.dir, 'index-v1.json')),
     ...overrides,
+});
+
+test('native Node cached stream legacy malformed lines stay lazy', async () => {
+    const casesRoot = new URL('../../conformance/', import.meta.url);
+    const rules = JSON.parse(fs.readFileSync(new URL('cases/rules.json', casesRoot))).cases;
+    for (const suffix of ['qc-flags', 'unresolved-convention']) {
+        const rule = rules.find(row => row.id === `rules/r2-pk07/index-line-${suffix}`);
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'otc-legacy-index-'));
+        const dir = path.join(root, 'v1/releases/20991231');
+        fs.mkdirSync(dir, { recursive: true });
+        try {
+            for (const file of rule.steps[0].files) {
+                const source = new URL(file.replace('${fixtures}/', 'fixtures/'), casesRoot);
+                fs.copyFileSync(source, path.join(dir, path.basename(source.pathname)));
+            }
+            for (const step of rule.steps.filter(step => step.driver === 'write')) {
+                fs.writeFileSync(step.path.replace('${cache}', root), step.text);
+            }
+            const before = fs.readFileSync(path.join(dir, '.verified'));
+            await observe(async receipts => {
+                const client = await sdk.OpenTideConstants.open({ release: '20991231', cacheDir: root, offline: true, mode: 'stream' });
+                try {
+                    assert.equal(receipts.reads.filter(row => row.file?.endsWith('.jsonl')).length, 0);
+                    const lines = fs.readFileSync(path.join(dir, 'OTC_20991231.jsonl'), 'utf8').trimEnd().split('\n').map(line => JSON.parse(line));
+                    assert.deepEqual(client.requireStation('OTC-T-0003').raw, lines.find(line => line.station_id === 'OTC-T-0003'));
+                    const badId = rule.steps.find(step => step.op === 'station').args.station_id;
+                    assert.throws(() => client.requireStation(badId), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+                    assert.equal(fs.existsSync(path.join(dir, 'index-v1.json')), false);
+                    assert.deepEqual(fs.readFileSync(path.join(dir, '.verified')), before);
+                } finally { client.close(); }
+                assert.equal(receipts.active.size, 0);
+            });
+            await assert.rejects(sdk.OpenTideConstants.open({ release: '20991231', cacheDir: root, offline: true, mode: 'stream' }), error => error.code === 'invalid_release');
+        } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    }
+});
+
+test('native Node cached stream legacy projection keeps expanded offsets strict', async () => {
+    const f = fixture();
+    try {
+        const header = headerFromMeta(f.meta);
+        const entries = indexJsonl(header, f.jsonl, false).entries;
+        const expanded = storedIndex(entries, date, hash(f.jsonl), f.jsonl.length, 'test');
+        const conventions = new Set(header.conventions.map(row => row.convention_id));
+        const licences = new Set(header.licences.map(row => row.licence_id));
+        const accepts = index => usableIndex(index, date, hash(f.jsonl), f.jsonl.length, conventions, licences);
+        const partial = structuredClone(expanded);
+        delete partial.stations.find(row => row.station_id === 'OTC-28c56e20').subordinate_offsets;
+        assert.equal(accepts(partial), null, 'mixed expanded own-field deletion must stay stale');
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(partial));
+        await observe(async receipts => {
+            const client = await open(f);
+            try {
+                assert.ok(receipts.reads.some(row => row.file?.endsWith('.jsonl')), 'partial own-field deletion rebuilds from real lines');
+                assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json'))).stations, expanded.stations);
+            } finally { client.close(); }
+            assert.equal(receipts.active.size, 0);
+        });
+        const legacy = structuredClone(expanded);
+        for (const entry of legacy.stations) delete entry.subordinate_offsets;
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(legacy));
+        const before = fs.readFileSync(path.join(f.dir, 'index-v1.json'));
+        await observe(async receipts => {
+            const client = await open(f);
+            try {
+                assert.equal(receipts.reads.filter(row => row.file?.endsWith('.jsonl')).length, 0);
+                for (const id of ['OTC-28c56e20', 'OTC-541f1a73', entries[0].station_id]) {
+                    assert.deepEqual(client.requireStation(id).raw, JSON.parse(f.jsonl.toString().trimEnd().split('\n').find(line => JSON.parse(line).station_id === id)));
+                }
+                assert.deepEqual(fs.readFileSync(path.join(f.dir, 'index-v1.json')), before, 'projection must not add on-disk keys');
+            } finally { client.close(); }
+            assert.equal(receipts.active.size, 0);
+        });
+        const tampered = structuredClone(expanded);
+        tampered.stations.find(row => row.station_id === 'OTC-28c56e20').subordinate_offsets.fallback.basis += ' changed';
+        assert.notEqual(accepts(tampered), null, 'valid expanded summary still requires a matching full own-offset line');
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(tampered));
+        const client = await open(f);
+        try {
+            assert.throws(() => client.requireStation('OTC-28c56e20'), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+            assert.equal(fs.existsSync(path.join(f.dir, 'index-v1.json')), false);
+            assert.ok(fs.existsSync(path.join(f.dir, '.verified')));
+        } finally { client.close(); }
+        const wrongHistoricalValue = structuredClone(expanded);
+        wrongHistoricalValue.stations.find(row => row.station_id === 'OTC-28c56e20').subordinate_offsets.time_offset_high_min += 1;
+        assert.equal(accepts(wrongHistoricalValue), null, 'source-bound historical numeric validation is unchanged');
+        const basis = entries.find(entry => entry.station_id === 'OTC-28c56e20').stored.subordinate_offsets.fallback.basis;
+        const changedLine = fixture(Buffer.from(f.jsonl.toString().replace(basis, `B${basis.slice(1)}`)));
+        try {
+            const originalSummary = structuredClone(expanded);
+            originalSummary.jsonl_sha256 = hash(changedLine.jsonl);
+            fs.writeFileSync(path.join(changedLine.dir, 'index-v1.json'), JSON.stringify(originalSummary));
+            const originalVerified = fs.readFileSync(path.join(changedLine.dir, '.verified'));
+            await observe(async receipts => {
+                const client = await open(changedLine);
+                try {
+                    assert.equal(receipts.reads.filter(row => row.file?.endsWith('.jsonl')).length, 0);
+                    assert.throws(() => client.requireStation('OTC-28c56e20'), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+                    assert.equal(fs.existsSync(path.join(changedLine.dir, 'index-v1.json')), false);
+                    assert.deepEqual(fs.readFileSync(path.join(changedLine.dir, '.verified')), originalVerified);
+                    assert.deepEqual(fs.readFileSync(path.join(changedLine.dir, `${stem}.jsonl`)), changedLine.jsonl);
+                    assert.deepEqual(fs.readFileSync(path.join(changedLine.dir, `${stem}.meta.json`)), changedLine.meta);
+                } finally { client.close(); }
+                assert.equal(receipts.active.size, 0);
+            });
+        } finally { changedLine.cleanup(); }
+    } finally { f.cleanup(); }
 });
 
 test('native Node cached stream absent-invalid-valid index', async () => {

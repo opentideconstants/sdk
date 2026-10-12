@@ -297,7 +297,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
                         if (x instanceof InvalidReleaseError) throw bad(`the line of ${e.station_id} fails a check: ${x.message}`, x);
                         throw x;
                     }
-                    if (lineView(got.stored) !== lineView(e.stored)) throw bad(`the line of ${e.station_id} does not give the status, references and sets of its entry`);
+                    if (lineView(got.stored, e.legacyOffsets) !== lineView(e.stored, e.legacyOffsets)) throw bad(`the line of ${e.station_id} does not give the status, references and sets of its entry`);
                 }
                 return deepFreeze(v);
             },

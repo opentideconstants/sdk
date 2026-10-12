@@ -65,6 +65,8 @@ const ENTRY_STR = ["name", "name_folded", "country", "type", "kind", "reference_
 /** @internal One line (station or tombstone) of a release, as the SDK keeps it in memory: the stored entry plus derived facts. */
 export interface IndexEntry {
     stored: StoredEntry;
+    /** Legacy discovery entries omit the own-offset payload; never serialized into index-v1.json. */
+    legacyOffsets?: boolean;
     offset: number;
     length: number;
     station_id: string;
@@ -381,10 +383,11 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
  * @internal The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
  * status, the references and the sets. The other keys are used as the index gives them (spec 6.2).
  */
-export function lineView(s: StoredEntry): string {
+export function lineView(s: StoredEntry, legacyOffsets = false): string {
     const sets = Array.isArray(s.sets) ? s.sets : [];
     return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
-        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents, cs.fallback, cs.current_bins]), s.subordinate_offsets, s.current_offsets]);
+        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents, cs.fallback, cs.current_bins]),
+        ...(legacyOffsets ? [] : [s.subordinate_offsets]), s.current_offsets]);
 }
 
 /** @internal The in-memory entry of a stored index entry (spec 6.2). */
@@ -431,12 +434,21 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
     if (jsonlSha256 === null || v["jsonl_sha256"] !== jsonlSha256 || jsonlSize === null || v["jsonl_size"] !== jsonlSize) return null;
     const stations = v["stations"];
     if (!Array.isArray(stations)) return null;
+    // A complete older discovery index lacks this payload everywhere. A partial deletion from an expanded
+    // index remains stale, so its full validation cannot be downgraded entry by entry.
+    const legacyOffsets = stations.every((e) => isObject(e) && !Object.hasOwn(e, "subordinate_offsets"));
     const strOrNull = (x: unknown) => x === null || typeof x === "string";
     const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
     const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0;
     const out: IndexEntry[] = [];
     let start = 0; // the least offset the next entry may have: after the line before it and its line end (CR2 DR9)
-    for (const e of stations) {
+    for (const entry of stations) {
+        const e = legacyOffsets && isObject(entry) ? {
+            ...entry,
+            reference_station_id: entry["reference_station_id"] ?? null,
+            offsets_licence_id: entry["offsets_licence_id"] ?? null,
+            subordinate_offsets: null,
+        } : entry;
         if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
         const offset = e["offset"];
         const length = e["length"];
@@ -467,11 +479,13 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
             if (e["lat"] === null || e["lon"] === null) return null;
         }
         const own = isObject(e["subordinate_offsets"]) ? e["subordinate_offsets"] : null;
-        if (e["reference_station_id"] !== str(own,"reference_station_id") || e["offsets_licence_id"] !== str(own,"licence_id")) return null;
+        if (!legacyOffsets && (e["reference_station_id"] !== str(own,"reference_station_id") || e["offsets_licence_id"] !== str(own,"licence_id"))) return null;
         const stored = e as unknown as StoredEntry;
         const rec = stored.recommended_set_id === null ? undefined : stored.sets.find((cs) => cs.set_id === stored.recommended_set_id);
         // kind is derived, not trusted: from the recommended set here, and from the reference station below
-        out.push(entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null }));
+        const indexed = entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null });
+        if (legacyOffsets) indexed.legacyOffsets = true;
+        out.push(indexed);
     }
     checkLinks(out);
     resolveKinds(out);
