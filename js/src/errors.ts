@@ -20,7 +20,20 @@ export type ErrorCode =
     | "file_exists"
     | "unsupported"
     | "io"
-    | "invalid_argument";
+    | "invalid_argument"
+    | "no_constants"
+    | "quantity_mismatch"
+    | "unsupported_convention"
+    | "no_astro_table"
+    | "unsupported_constituent"
+    | "time_out_of_range"
+    | "datum_unavailable"
+    | "bin_not_found"
+    | "extremes_only"
+    | "local_time_unavailable"
+    | "unknown_time_zone"
+    | "reference_unavailable"
+    | "historical_offsets_excluded";
 
 interface CauseOption {
     cause?: unknown;
@@ -190,5 +203,95 @@ export class FileError extends OpenTideConstantsError {
 export class InvalidArgumentError extends OpenTideConstantsError {
     constructor(message: string) {
         super("invalid_argument", message);
+    }
+}
+
+export class NoConstantsError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("no_constants", message, options);
+    }
+}
+
+export class QuantityMismatchError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("quantity_mismatch", message, options);
+    }
+}
+
+export class UnsupportedConventionError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("unsupported_convention", message, options);
+    }
+}
+
+export class NoAstroTableError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("no_astro_table", message, options);
+    }
+}
+
+export class UnsupportedConstituentError extends OpenTideConstantsError {
+    readonly constituent: string | null;
+    constructor(message: string, detail: {constituent: string | null} & CauseOption) {
+        super("unsupported_constituent", message, detail);
+        this.constituent = detail.constituent;
+    }
+}
+
+export class TimeOutOfRangeError extends OpenTideConstantsError {
+    readonly first_year: number;
+    readonly last_year: number;
+    constructor(message: string, detail: {first_year: number; last_year: number} & CauseOption) {
+        super("time_out_of_range", message, detail);
+        this.first_year = detail.first_year;
+        this.last_year = detail.last_year;
+    }
+}
+
+export class DatumUnavailableError extends OpenTideConstantsError {
+    readonly missing: string | null;
+    constructor(message: string, detail: {missing: string | null} & CauseOption) {
+        super("datum_unavailable", message, detail);
+        this.missing = detail.missing;
+    }
+}
+
+export class BinNotFoundError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("bin_not_found", message, options);
+    }
+}
+
+export class ExtremesOnlyError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("extremes_only", message, options);
+    }
+}
+
+export class LocalTimeUnavailableError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("local_time_unavailable", message, options);
+    }
+}
+
+export class UnknownTimeZoneError extends OpenTideConstantsError {
+    readonly zone: string | null;
+    constructor(message: string, detail: {zone: string | null} & CauseOption) {
+        super("unknown_time_zone", message, detail);
+        this.zone = detail.zone;
+    }
+}
+
+export class ReferenceUnavailableError extends OpenTideConstantsError {
+    readonly reference_station_id: string | null;
+    constructor(message: string, detail: {reference_station_id: string | null} & CauseOption) {
+        super("reference_unavailable", message, detail);
+        this.reference_station_id = detail.reference_station_id;
+    }
+}
+
+export class HistoricalOffsetsExcludedError extends OpenTideConstantsError {
+    constructor(message: string, options?: CauseOption) {
+        super("historical_offsets_excluded", message, options);
     }
 }

@@ -18,3 +18,8 @@ export type { ErrorCode } from "./errors.js";
 export { VERSION, SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, DEFAULT_BASE_URL, CACHE_LAYOUT_VERSION } from "./constants.js";
 export type { JsonObject, Json } from "./json.js";
 export type * from "./types.js";
+
+export {AstroTable} from './predict/astro.js';
+export type {HeightOptions,HeightWindowOptions,CurrentOptions,CurrentWindowOptions,DatumOptions,RangeOptions} from './predict/engine.js';
+export {HeightPoint, Extreme, CurrentPoint, CurrentEvent, HeightSeries, ExtremeList, CurrentSeries, CurrentEventList, DatumLevel, DatumInfo, Ranges} from './predict/results.js';
+export {NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError, HistoricalOffsetsExcludedError} from './errors.js';

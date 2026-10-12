@@ -410,3 +410,9 @@ export interface HistoricalOffsetProvenance {
     readonly reference_binding: JsonObject;
     readonly acceptance_report_sha256: string;
 }
+
+export type ExtremeType = "high" | "low";
+
+export type CurrentEventType = "max_flood" | "max_ebb" | "slack_before_flood" | "slack_before_ebb";
+
+export type PredictionMethod = "harmonic" | "folded_offsets" | "offsets";

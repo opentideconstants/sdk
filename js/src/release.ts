@@ -1,3 +1,6 @@
+import * as prediction from './predict/engine.js';
+import {AstroTable} from './predict/astro.js';
+import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,Ranges} from './predict/results.js';
 import { compareDatestamps, foldName } from "./constants.js";
 import {
     FileError, InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
@@ -1017,7 +1020,26 @@ export class Release {
     /** @internal The untouched release metadata and astronomical resources for the native predictor. */
     get _header(): JsonObject { this.#open(); return this.#header; }
 
-    get historicalOffsetsPolicy(): "fallback" | "exclude" { this.#open(); return this.#historicalPolicy; }
+/** @internal */
+get _commercialOnly(): boolean { this.#open(); return this.#commercialOnly; }
+/** @internal */
+_betterHistoricalPath(station: Station): boolean {
+    this.#open(); const e=this.#byId.get(station.station_id);
+    if(!e)return false;
+    const rid=this._recommendedId(e);
+    return e.stored.sets.some(cs=>cs.set_id===rid&&cs.qc_status!==null&&WITH_CONSTANTS.has(cs.qc_status))
+        ||this.#ordinaryPaths(e,{country:null,type:null,kind:null,source:null,sourceType:null,includeFlagged:false,includeFallback:false}).length>0;
+}
+async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { this.#open(); return prediction.heights(this,station,options); }
+async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { this.#open(); return prediction.heightsAt(this,station,times,options); }
+async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { this.#open(); return prediction.extremes(this,station,options); }
+async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { this.#open(); return prediction.currents(this,station,options); }
+async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { this.#open(); return prediction.currentEvents(this,station,options); }
+datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { this.#open(); return prediction.datums(this,station,options); }
+ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { this.#open(); return prediction.ranges(this,station,options); }
+async astroTable(id: string|null = null): Promise<AstroTable|null> { this.#open(); return prediction.astroTable(this,id); }
+get historicalOffsetsPolicy()
+: "fallback" | "exclude" { this.#open(); return this.#historicalPolicy; }
 
     #setEligible(cs: StoredSet, f: CheckedFilters, offsetsLicence: string | null = null): boolean {
         if (cs.qc_status === null || !WITH_CONSTANTS.has(cs.qc_status)) return false;
@@ -1044,7 +1066,7 @@ export class Release {
         if (!convention || convention.v0_model !== 'schureman_tcd' || convention.nodal_handling !== 'f_u_at_prediction') return false;
         const datum = obj(raw,'datum');
         if (datum?.['chart_datum'] !== 'mllw' || num(datum,'msl_offset_m') === null || obj(datum,'named')?.['mllw'] !== 0 || obj(obj(datum,'basis'),'mllw')?.['kind'] !== 'published') return false;
-        return true;
+        return prediction.historicalDiscovery(this,this.#station(e));
     }
     #ordinaryPaths(e: IndexEntry, f: CheckedFilters): StoredSet[] {
         const paths = e.stored.sets.filter(cs => this.#setEligible(cs,f));

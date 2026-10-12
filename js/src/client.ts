@@ -1,7 +1,9 @@
+/// <reference lib="esnext.disposable" preserve="true" />
+import type * as prediction from './predict/engine.js';
+import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,Ranges} from './predict/results.js';
 // Symbol.dispose and Symbol.asyncDispose below: the published client.d.ts keeps
 // this lib reference, so a consumer without ESNext.Disposable or @types/node
 // still typechecks it (R2-248).
-/// <reference lib="esnext.disposable" preserve="true" />
 import {
     checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
@@ -561,7 +563,15 @@ export class OpenTideConstants {
     // ------------------------------------------------------------------ release management (spec 4.3)
 
     /** The loaded release. After close it stays readable: the closed Release, whose metadata stays readable (CR2 DR32). */
-    get release(): Release {
+async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { return this.#current().heights(station,options); }
+async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { return this.#current().heightsAt(station,times,options); }
+async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { return this.#current().extremes(station,options); }
+async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { return this.#current().currents(station,options); }
+async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { return this.#current().currentEvents(station,options); }
+datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { return this.#current().datums(station,options); }
+ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { return this.#current().ranges(station,options); }
+get release(): Release {
+
         return this.#closed ? this.#release : this.#current();
     }
 
