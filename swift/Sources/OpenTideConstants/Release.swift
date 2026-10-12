@@ -137,9 +137,16 @@ internal func filteredEntries(country:String?=nil,type:String?=nil,kind:String?=
 public func stations(country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[Station] {
     try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback).map { try requireStation(stationId:$0.id) }
 }
-public func iterStations(country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->AnySequence<Station> {
+public func iterStations(country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->(()throws->Station?) {
     let selected=try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback)
-    return AnySequence { var i=0;return AnyIterator<Station> { guard i<selected.count,!self.closed else { return nil };defer { i+=1 };return try? self.requireStation(stationId:selected[i].id) } }
+    var i=0
+    return {
+        try self.checkOpen()
+        guard i<selected.count else { return nil }
+        let station=try self.requireStation(stationId:selected[i].id)
+        i+=1
+        return station
+    }
 }
 public func search(name:String,limit:Int64?=nil,match:String?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[Station] {
     let q=NameFold.fold(name)

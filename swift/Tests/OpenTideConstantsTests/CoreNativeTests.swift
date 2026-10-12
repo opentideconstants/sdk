@@ -70,7 +70,7 @@ func testActualIndexFirstQueries() throws {
     let iterator=try load()
     let sequence=try iterator.iterStations()
     XCTAssertEqual(iterator.lruOrder.count,0,"constructing iterator must not decode stations")
-    let steps=sequence.makeIterator();let first=steps.next()
+    let steps=sequence;let first=try steps()
     XCTAssertNotNil(first);if try iterator.stationCount==1008 { XCTAssertEqual(first?.stationId,"OTC-000d594d") };XCTAssertEqual(iterator.lruOrder.count,1,"first iterator step must decode one station")
     phase("index_iterator_decoded_\(iterator.lruOrder.count)_id_\(first!.stationId)")
 }
@@ -107,14 +107,17 @@ func testActualReleaseLifetimeObservation() throws {
         observe("pool_control_\(run)_drained")
     }
     weak var weakIteratorRelease:Release?
-    var sequence:AnySequence<Station>?
+    var sequence:(()throws->Station?)?
     do {
         let release=try Reader.load(url,mode:.stream,commercialOnly:false,commercialBasis:"strict",historicalOffsetsPolicy:"fallback")
         weakIteratorRelease=release
         sequence=try release.iterStations();release.close()
     }
     XCTAssertNotNil(weakIteratorRelease,"lazy sequence legitimately owns its Release")
-    XCTAssertNil(sequence?.makeIterator().next())
+    XCTAssertThrowsError(try sequence?()) { error in
+        guard let native=error as? OpenTideConstantsError else { return XCTFail("unexpected error \(error)") }
+        XCTAssertEqual(native.code,"io");XCTAssertEqual(native.message,"the release is closed")
+    }
     observe("closed_release_retained_by_iterator")
     sequence=nil
     XCTAssertNil(weakIteratorRelease,"dropping iterator must release owned Release")
