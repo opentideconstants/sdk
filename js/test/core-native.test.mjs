@@ -7,9 +7,11 @@ const file = process.env.OTC_CORE_NATIVE_JSON;
 const jsonl = process.env.OTC_CORE_NATIVE_JSONL;
 let client, raw;
 before(async () => {
+    if (process.env.OTC_CORE_NATIVE_HEADER_ONLY === '1') return;
     assert.ok(file && jsonl, 'actual pinned H4 paths required');
     raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-    client = await sdk.OpenTideConstants.open({ file });
+    const activeSdk = process.env.OTC_CORE_NATIVE_SDK ? await import(process.env.OTC_CORE_NATIVE_SDK) : sdk;
+    client = await activeSdk.OpenTideConstants.open({ file });
 });
 after(() => client?.close());
 
@@ -98,4 +100,62 @@ test('actual full H4 stream keeps every source and the same four discovery polic
         }
         assert.equal(records,27372);
     } finally { stream.close(); }
+});
+
+// A bounded real META fixture: no station/source rerun and no invented header values.
+for (const mode of ['eager', 'stream']) {
+    for (const field of ['release', 'astro_tables', 'constituents', 'complete']) {
+        test(`actual META private header ${mode}/${field}`, async () => {
+            const metaPath = process.env.OTC_CORE_NATIVE_META ?? jsonl?.replace(/\.jsonl$/, '.meta.json');
+            assert.ok(metaPath, 'actual unchanged H4 META path required');
+            const metaBytes = fs.readFileSync(metaPath);
+            const metadata = JSON.parse(metaBytes.toString('utf8'));
+            const loader = await import(process.env.OTC_CORE_NATIVE_HEADER_LOADER ?? '../dist/loader.js');
+            const fixture = { ...metadata, stations: [] };
+            const release = mode === 'eager'
+                ? loader.releaseFromJson(new TextEncoder().encode(JSON.stringify(fixture)), [])
+                : loader.releaseFromJsonl(metaBytes, new Uint8Array(), { eager: false, files: [] });
+            try {
+                assert.ok(release._header, 'native private header hook must retain the original parsed resources');
+                if (field === 'complete') {
+                    assert.deepEqual(release._header, mode === 'eager' ? fixture : metadata);
+                    assert.ok(Object.isFrozen(release._header));
+                    assert.throws(() => { release._header.release.build_commit = 'mutation'; }, TypeError);
+                } else {
+                    assert.deepEqual(release._header[field], metadata[field]);
+                    assert.ok(Object.isFrozen(release._header[field]));
+                    if (field === 'astro_tables') {
+                        assert.ok(metadata.astro_tables.length > 0);
+                        for (const table of release._header.astro_tables) {
+                            assert.ok(Object.isFrozen(table.constituents));
+                        }
+                    }
+                }
+            } finally { release._close(); }
+        });
+    }
+}
+
+test('actual source typed provenance and licence links for at least three original records', () => {
+    let checked=0;
+    for (const input of raw.stations) {
+        const station=client.requireStation(input.station_id);
+        assert.ok(Array.isArray(station.source_records), 'native typed source records must be available');
+        for (let index=0;index<input.source_records.length;index++) {
+            const original=input.source_records[index];
+            const source=station.source_records[index];
+            assert.deepEqual(source.provenance,original.provenance);
+            assert.equal(source.licence_id,original.licence_id);
+            const licence=raw.licences.find(l=>l.licence_id===original.licence_id) ?? null;
+            assert.equal(source.licence?.licence_id ?? null,licence?.licence_id ?? null);
+            assert.deepEqual(source.licence?.raw ?? null,licence);
+            assert.equal(source.upstream_licence_id,original.upstream_licence_id ?? null);
+            const upstream=raw.licences.find(l=>l.licence_id===original.upstream_licence_id) ?? null;
+            assert.equal(source.upstreamLicence?.licence_id ?? null,upstream?.licence_id ?? null);
+            assert.deepEqual(source.upstreamLicence?.raw ?? null,upstream);
+            checked++;
+        }
+        if (checked>=3) break;
+    }
+    assert.ok(checked>=3,'actual fixture must supply at least three source records');
 });
