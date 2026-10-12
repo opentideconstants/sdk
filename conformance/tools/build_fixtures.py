@@ -3089,6 +3089,8 @@ def _bsum(table, terms):
 
     def coeffs(y):
         i = y - first
+        if isinstance(i, float) and i.is_integer():  # JSON Schema integer also permits a number such as 2000.0
+            i = int(i)
         if not 0 <= i <= table["last_year"] - first:
             raise ValueError(f"year {y} outside astro table {table['astro_table_id']}")
         return [(rows[n]["speed_deg_per_hour"], rows[n]["v0u_deg"][i], rows[n]["f"][i] * a, g) for n, a, g in terms]

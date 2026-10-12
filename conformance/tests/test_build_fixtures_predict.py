@@ -812,12 +812,18 @@ def test_bands(calls):
     assert set(bf.BAND_EXCEPTIONS) == {"predict-extremes/single-constituent"}
 
 
-def test_bands_reject_nonexempt_half_second_event(calls, doc):
-    """The real M2 event stays forbidden outside the exact named fixed-window exception."""
+def nonexempt_half_second_case(calls):
     case = copy.deepcopy(next(c for c in calls["cases"] if c["id"] == "predict-extremes/single-constituent"))
     case["id"] = "predict-extremes/nonexempt-half-second"
     args = case["steps"][0]["strict"]["args"]
     args["start"], args["stop"] = "2010-03-06T18:08:00Z", "2010-03-06T18:10:00Z"
+    return case
+
+
+def test_bands_reject_nonexempt_half_second_event(calls, doc):
+    """The real M2 event stays forbidden outside the exact named fixed-window exception."""
+    case = nonexempt_half_second_case(calls)
+    args = case["steps"][0]["strict"]["args"]
     assert case["id"] not in bf.BAND_EXCEPTIONS
     start, stop = ts(args["start"]), ts(args["stop"])
     sm = set_sum(doc, args["constituents"]["$set"], args["astro"])
@@ -828,6 +834,45 @@ def test_bands_reject_nonexempt_half_second_event(calls, doc):
     assert abs(event - math.floor(event) - 0.5) < bf.ROUND_BAND
     problems = bf.band_problems({"cases": [case]})
     assert len(problems) == 1 and "band 3: event at 2010-03-06T18:08:53Z" in problems[0], problems
+
+
+def test_band_consumer_accepts_integer_valued_float_year(calls, doc, tmp_path, monkeypatch):
+    """JSON integer 2000.0 has the same native band result and values as integer-token 2000."""
+    case = nonexempt_half_second_case(calls)
+    args = case["steps"][0]["strict"]["args"]
+    expected = bf.band_problems({"cases": [case]})
+    assert len(expected) == 1 and "band 3" in expected[0]
+    floating = copy.deepcopy(doc)
+    floating_table = table(floating, args["astro"])
+    floating_table["first_year"] = float(floating_table["first_year"])
+    schemas = bf.load_schemas(bf.VENDORED_SCHEMAS)
+    assert list(bf.validator(schemas["1.0"]).iter_errors(floating)) == []
+    path = tmp_path / case["root"] / f"OTC_{case['release']}.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(floating), encoding="utf-8")
+    assert isinstance(json.loads(path.read_bytes())["astro_tables"][0]["first_year"], float)
+    # Redirect only the actual file root: no validator or event calculation is replaced.
+    monkeypatch.setattr(bf, "FIXTURES", tmp_path)
+    assert bf.band_problems({"cases": [case]}) == expected
+    sm = set_sum(doc, args["constituents"]["$set"], args["astro"])
+    value, deriv = bf._bsum(sm.t, sm.terms)
+    float_value, float_deriv = bf._bsum(floating_table, sm.terms)
+    for instant in (args["start"], args["stop"], "2020-01-01T00:00:00Z"):
+        t = ts(instant)
+        assert float_value(t, year_of(t)) == value(t, year_of(t))
+        assert float_deriv(t, year_of(t)) == deriv(t, year_of(t))
+
+
+def test_bsum_does_not_truncate_schema_invalid_fractional_year(doc):
+    fractional = copy.deepcopy(doc)
+    ta = table(fractional, bf.ASTRO_A)
+    ta["first_year"] += 0.5
+    schemas = bf.load_schemas(bf.VENDORED_SCHEMAS)
+    assert list(bf.validator(schemas["1.0"]).iter_errors(fractional))
+    sm = set_sum(doc, "OTC-P-0005/noaa")
+    value, _ = bf._bsum(ta, sm.terms)
+    with pytest.raises(TypeError):
+        value(ts("2020-01-01T00:00:00Z"), 2020)
 
 
 # --------------------------------------------------------------------------- the hand-written outcomes (spec 6.5, S4)
