@@ -153,6 +153,12 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
 /** @internal Reads one line by offset and length. */
 export type LineReader = (offset: number, length: number) => Uint8Array;
 
+// Keep fallback bytes outside the lexical context shared by the returned station source.
+// An external positional reader must not retain the buffer used only to build the index.
+function bufferLineReader(bytes: Uint8Array): LineReader {
+    return (offset, length) => bytes.subarray(offset, offset + length);
+}
+
 /** @internal A release from `.jsonl` + `.meta.json`. Eager keeps every document; stream reads lines on demand. */
 export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: {
     eager: boolean;
@@ -183,7 +189,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     if (opts.eager) {
         source = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
     } else {
-        const read: LineReader = opts.reader ?? ((o, l) => (jsonl as Uint8Array).subarray(o, o + l));
+        const read: LineReader = opts.reader ?? bufferLineReader(jsonl as Uint8Array);
         const fromIndex = Boolean(opts.index);
         const convs = new Set(header.conventions.map((c) => String(c["convention_id"])));
         const lics = new Set(header.licences.map((l) => String(l["licence_id"])));

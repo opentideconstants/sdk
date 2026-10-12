@@ -2,6 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as otc from "../dist/index.js";
+import { Session } from "node:inspector";
+import { releaseFromJsonl } from "../dist/loader.js";
 
 test("datestamps order by date, then counter", async () => {
     const { compareDatestamps } = await import("../dist/constants.js");
@@ -347,6 +349,52 @@ test("R2-008: attribution never drops a licence it cannot find: invalid_release,
 });
 
 const GOOD = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+
+function readFixtureLine(offset, length) {
+    const fd = fs.openSync(path.join(GOOD, "OTC_20991231.2.jsonl"), "r");
+    try {
+        const bytes = new Uint8Array(length);
+        const count = fs.readSync(fd, bytes, 0, length, offset);
+        return bytes.subarray(0, count);
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+function retainedFixture(reader) {
+    const jsonl = Uint8Array.from(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.jsonl")));
+    const meta = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.meta.json"));
+    return {
+        bytes: new WeakRef(jsonl),
+        release: releaseFromJsonl(meta, jsonl, { eager: false, files: [], reader }),
+    };
+}
+
+async function collectInspectorGarbage() {
+    const session = new Session();
+    session.connect();
+    try {
+        await new Promise(setImmediate);
+        await new Promise((resolve, reject) => {
+            session.post("HeapProfiler.collectGarbage", (error) => error ? reject(error) : resolve());
+        });
+    } finally {
+        session.disconnect();
+    }
+}
+
+for (const [name, reader, retained] of [["positional file reader", readFixtureLine, false], ["byte-backed browser fallback", null, true]]) {
+    test(`stream ${name} retains only its required input bytes`, async () => {
+        const { release, bytes } = retainedFixture(reader);
+        await collectInspectorGarbage();
+        assert.equal(bytes.deref() !== undefined, retained, "whole JSONL input retention");
+        const documents = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+        for (const document of documents) {
+            const station = document.status === "removed" ? release.tombstone(document.station_id) : release.station(document.station_id);
+            assert.deepEqual(station.raw, document, "on-demand record and provenance remain complete after GC");
+        }
+    });
+}
 
 test("T21: iterStations checks its filters when called, not at the first next()", async () => {
     const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir() });
