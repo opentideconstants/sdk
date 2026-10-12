@@ -45,6 +45,50 @@ class StreamIndexTest < Minitest::Test
         File.write(index_path(cache), JSON.generate(idx))
     end
 
+    def test_complete_legacy_index_stays_lazy_and_reads_full_records
+        srv = serve
+        cache = tmpdir
+        original = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+        raw = original.station("OTC-T-0001").raw
+        original.close
+        tamper_index(cache) do |rows|
+            rows.each do |row|
+                row.delete("subordinate_offsets")
+                row["sets"].each { |set| %w[source_record_id source_version datum].each { |key| set.delete(key) } }
+            end
+        end
+        inode = File.stat(index_path(cache)).ino
+        c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+        assert_equal inode, File.stat(index_path(cache)).ino, "legacy index was rebuilt at open"
+        assert_equal raw, c.station("OTC-T-0001").raw
+        assert_equal 18, c.stations.size
+    ensure
+        original&.close
+        c&.close
+    end
+
+    def test_partial_expanded_index_is_stale
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        built = JSON.parse(File.read(index_path(cache)))
+        c = nil
+        ["subordinate_offsets", "source_record_id", "source_version", "datum"].each do |key|
+            tamper_index(cache) do |rows|
+                if key == "subordinate_offsets"
+                    rows.find { |row| row["sets"].empty? }.delete(key)
+                else
+                    rows.find { |row| !row["sets"].empty? }["sets"][0].delete(key)
+                end
+            end
+            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+            assert_equal built, JSON.parse(File.read(index_path(cache))), key
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
     # R42/D4: an entry whose line has another station_id is invalid_release
     # naming index-v1.json, and the index is deleted so the next open rebuilds it.
     def test_line_that_does_not_match_its_entry

@@ -843,7 +843,14 @@ class OpenTideConstants
         return nil unless idx["datestamp"] == d && idx["jsonl"] == jsonl
         return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
         return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
-        return nil unless idx["stations"].is_a?(Array) && idx["stations"].all? { |e| Reader.index_entry_ok?(e) }
+        return nil unless idx["stations"].is_a?(Array)
+        # Discovery-v1 indexes omit the expanded fields throughout the document.
+        # A partly stripped expanded index must still fail the strict checks.
+        legacy = idx["stations"].all? do |e|
+            e.is_a?(Hash) && !e.key?("subordinate_offsets") && e["sets"].is_a?(Array) &&
+                e["sets"].all? { |cs| cs.is_a?(Hash) && %w[source_record_id source_version datum].none? { |k| cs.key?(k) } }
+        end
+        return nil unless idx["stations"].all? { |e| Reader.index_entry_ok?(e, legacy: legacy) }
         return nil unless index_in_bounds?(idx["stations"], idx["jsonl_size"])
         idx["stations"]
     rescue JSON::ParserError, EncodingError, SystemCallError, IOError

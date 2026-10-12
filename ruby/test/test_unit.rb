@@ -49,6 +49,20 @@ class VersionTest < Minitest::Test
 end
 
 class FormatOneTest < Minitest::Test
+    def test_unknown_source_type_filter_uses_typed_enum_and_preserves_raw
+        path = File.join(FIXTURES, "bad/unknown-enums/OTC_20991231.json")
+        raw = JSON.parse(File.read(path)).fetch("stations").find { |station| station["station_id"] == "OTC-T-0016" }
+        c = OpenTideConstants.new(file: path)
+        assert_equal ["OTC-T-0016"], c.stations(source_type: :other).map(&:station_id)
+        assert_empty c.stations(source_type: "satellite")
+        station = c.station("OTC-T-0016")
+        assert_equal :other, station.recommended_set.source_type
+        assert_equal raw, station.raw
+        assert_equal "satellite", station.recommended_set.raw["source_type"]
+    ensure
+        c&.close
+    end
+
     def open(root, d, ext = "jsonl", mode: :eager)
         OpenTideConstants.new(file: File.join(FIXTURES, root, "OTC_#{d}.#{ext}"), mode: mode)
     end

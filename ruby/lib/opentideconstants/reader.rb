@@ -254,11 +254,16 @@ class OpenTideConstants
         # The keys of an index entry that a line read through the index must
         # give as they are (PK-R2-07): the status, the references and the
         # sets. The other keys are used as the index gives them (spec §6.2).
-        def line_view(e)
+        def line_view(e, legacy: !e.key?("subordinate_offsets"))
             sets = e["sets"].is_a?(Array) ? e["sets"] : []
-            [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
-             sets.map { |cs| SET_KEYS.map { |k| cs[k] } + [cs["constituents"], cs["fallback"], cs["current_bins"], cs["source_record_id"], cs["source_version"], cs["datum"]] },
-             e["subordinate_offsets"], e["current_offsets"]]
+            view = [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
+                    sets.map do |cs|
+                        fields = SET_KEYS.map { |k| cs[k] } + [cs["constituents"], cs["fallback"], cs["current_bins"]]
+                        fields += [cs["source_record_id"], cs["source_version"], cs["datum"]] unless legacy
+                        fields
+                    end]
+            view << e["subordinate_offsets"] unless legacy
+            view << e["current_offsets"]
         end
 
         # v as an Integer when it is a JSON integer or a number with an
@@ -268,20 +273,20 @@ class OpenTideConstants
         end
 
         # True when e has every key of an index entry with the right type (spec §6.2).
-        def index_entry_ok?(e)
+        def index_entry_ok?(e, legacy: false)
             return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)
             return false unless e["station_id"].is_a?(String) && e["status"].is_a?(String)
             return false unless ENTRY_STR.all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(String)) }
             return false unless %w[lat lon].all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(Numeric)) }
             return false unless e["aliases"].is_a?(Hash) && e["aliases"].values.all? { |v| v.is_a?(Array) && v.all?(String) }
-            return false unless e.key?("subordinate_offsets") && (e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash))
+            return false unless legacy || (e.key?("subordinate_offsets") && (e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash)))
             return false unless e["current_offsets"].is_a?(Array) && e["current_offsets"].all?(Hash)
             return false unless e["sets"].is_a?(Array)
             e["sets"].all? do |cs|
                 cs.is_a?(Hash) && SET_KEYS.all? { |k| cs.key?(k) && (cs[k].nil? || cs[k].is_a?(String)) } &&
                     cs.key?("fallback") && (cs["fallback"].nil? || cs["fallback"].is_a?(Hash)) &&
                     cs["current_bins"].is_a?(Array) && cs["current_bins"].all? { |b| b.is_a?(Numeric) && b.finite? && b == b.to_i && b.between?(1, 2**53 - 1) } &&
-                    %w[source_record_id source_version datum].all? { |k| cs.key?(k) } &&
+                    (legacy || %w[source_record_id source_version datum].all? { |k| cs.key?(k) }) &&
                     cs["constituents"].is_a?(Array) && cs["constituents"].all?(String)
             end
         end
@@ -295,7 +300,7 @@ class OpenTideConstants
                 unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]
                     raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} is not #{e['station_id']}"
                 end
-                unless line_view(index_entry(raw, e["offset"], e["length"])) == line_view(e)
+                unless line_view(index_entry(raw, e["offset"], e["length"]), legacy: !e.key?("subordinate_offsets")) == line_view(e)
                     raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} does not give the entry of #{e['station_id']}"
                 end
                 return raw
@@ -304,7 +309,11 @@ class OpenTideConstants
             raw["constant_sets"] = e["sets"].map do |cs|
                 cs.reject { |k, _| k == "constituents" }.merge("constituents" => cs["constituents"].map { |n| { "name" => n } })
             end
-            raw["subordinate_offsets"] = e["subordinate_offsets"]
+            raw["subordinate_offsets"] = if e.key?("subordinate_offsets")
+                e["subordinate_offsets"]
+            elsif e["reference_station_id"] || e["offsets_licence_id"]
+                { "reference_station_id" => e["reference_station_id"], "licence_id" => e["offsets_licence_id"] }
+            end
             raw["current_offsets"] = e["current_offsets"]
             raw
         end

@@ -551,7 +551,7 @@ class OpenTideConstants
                     (!f.key?(:kind) || same.call(e.kind, f[:kind])) &&
                     eligible_paths(e, f.fetch(:include_flagged, false), f.fetch(:include_fallback, false)).any? do |cs|
                         (!f.key?(:source) || same.call(cs["source"], f[:source])) &&
-                            (!f.key?(:source_type) || same.call(cs["source_type"], f[:source_type]))
+                            (!f.key?(:source_type) || same.call(Util.enum(cs["source_type"], ENUMS[:source_type]), f[:source_type]))
                     end
             end
         end
@@ -596,7 +596,7 @@ class OpenTideConstants
             rescue InvalidReleaseError => err
                 bad_line!(e, "fails a check: #{err.message}")
             end
-            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len)) == e.view
+            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len), legacy: e.view.length == 7) == e.view
             bad_line!(e, "does not give the status, references and sets of its entry")
         end
 
