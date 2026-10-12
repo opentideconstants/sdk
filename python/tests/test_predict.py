@@ -3,6 +3,7 @@ import dataclasses
 import datetime as dt
 import json
 import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -55,6 +56,24 @@ class PredictionTest(unittest.TestCase):
         instant = dt.datetime(2010, 3, 1, microsecond=999999, tzinfo=UTC)
         result = self.client.heights_at('OTC-P-0001', [instant])
         self.assertEqual(result.items[0].time, instant.replace(microsecond=0))
+
+    def test_real_runner_fractional_instants_across_python_versions(self):
+        runner = [sys.executable, str(ROOT / 'conformance/runners/python/runner.py')]
+        if os.environ.get('OTC_TEST_INSTALLED'):
+            runner.append('--installed')
+        requests = [{'op': 'open', 'args': {'file': str(PREDICT / 'OTC_20991231.7.json')}},
+                    {'op': 'heights_at', 'args': {'station_id': 'OTC-P-0001',
+                     'times': ['2010-03-01T12:00:00.7Z', '2010-03-01T12:00:00.7000001+00:00']}},
+                    {'op': 'heights_at', 'args': {'station_id': 'OTC-P-0001',
+                     'times': ['2010-03-01T12:00:00.7']}}]
+        process = subprocess.run(runner, input=''.join(json.dumps(row) + '\n' for row in requests),
+                                 capture_output=True, text=True, check=True)
+        replies = [json.loads(line) for line in process.stdout.splitlines()][1:]
+        self.assertIn('result', replies[1], replies[1])
+        points = replies[1]['result']['prediction']['items']
+        self.assertEqual(points[0], points[1])
+        self.assertEqual(points[0]['time'], '2010-03-01T12:00:00Z')
+        self.assertEqual(replies[2]['error']['code'], 'invalid_argument')
 
     def test_native_empty_window_checks_without_year_refusal(self):
         t = dt.datetime(2200, 1, 1, tzinfo=UTC)

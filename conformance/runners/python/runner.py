@@ -18,6 +18,7 @@ import datetime as _dt
 import json
 import math
 import os
+import re
 import sys
 from enum import Enum
 from pathlib import Path
@@ -40,6 +41,14 @@ def _load_sdk():
     handshake (stderr and exit status 3): a stand-in would hide a missing class or version."""
     import opentideconstants
     return opentideconstants, opentideconstants.__version__, opentideconstants.OpenTideConstantsError
+
+
+def prediction_time(value):
+    """Keep ISO offset/naive semantics, including fractional seconds on Python 3.10."""
+    value = value.replace('Z', '+00:00')
+    value = re.sub(r'(?<=:[0-9]{2})(\.[0-9]+)(?=[+-][0-9]{2}:[0-9]{2}$|$)',
+                   lambda match: (match.group(1) + '000000')[:7], value)
+    return _dt.datetime.fromisoformat(value)
 
 
 # --------------------------------------------------------------------------- encodings (README "Result encodings")
@@ -387,9 +396,9 @@ class Runner:
             arguments = {k: v for k, v in a.items() if k != 'station_id'}
             for key in ('start', 'stop'):
                 if key in arguments and isinstance(arguments[key], str):
-                    arguments[key] = _dt.datetime.fromisoformat(arguments[key].replace('Z', '+00:00'))
+                    arguments[key] = prediction_time(arguments[key])
             if 'times' in arguments:
-                arguments['times'] = [_dt.datetime.fromisoformat(t.replace('Z', '+00:00')) if isinstance(t, str) else t for t in arguments['times']]
+                arguments['times'] = [prediction_time(t) if isinstance(t, str) else t for t in arguments['times']]
             self.prediction = getattr(self.target(req), op)(a['station_id'], **arguments)
             return {'prediction': enc_prediction(self.prediction)}
         if op == 'to_local':
@@ -405,7 +414,7 @@ class Runner:
                 raise sdk.InvalidArgumentError('astro table is unavailable')
             if op == 'valid_range':
                 return dict(zip(('first_year', 'last_year'), table.valid_range))
-            at = _dt.datetime.fromisoformat(a['at'].replace('Z', '+00:00')) if 'at' in a else a['year']
+            at = prediction_time(a['at']) if 'at' in a else a['year']
             return {'value': getattr(table, op)(a['name'], at)}
         if op in ('datums', 'ranges'):
             arguments = {k: v for k, v in a.items() if k != 'station_id'}
