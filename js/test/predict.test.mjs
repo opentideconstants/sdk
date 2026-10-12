@@ -6,11 +6,28 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
+import {spawnSync} from 'node:child_process';
 import * as sdk from '../dist/index.js';
 const vectors=JSON.parse(fs.readFileSync(new URL('../../conformance/vectors/1.0/vectors.json',import.meta.url),'utf8'));
 let client;
 before(async()=>{assert.ok(process.env.OTC_PREDICT_NATIVE_JSON,'actual pinned vector release required');client=await sdk.OpenTideConstants.open({file:process.env.OTC_PREDICT_NATIVE_JSON});});
 after(()=>client?.close());
+test('native reader defers heavy engine until first actual prediction',()=>{
+    const root=fileURLToPath(new URL('../..',import.meta.url));
+    const trace=messages=>spawnSync(process.execPath,['conformance/runners/node/runner.mjs'],{
+        cwd:root,env:{...process.env,NODE_DEBUG:'esm'},input:messages.length?messages.map(m=>JSON.stringify(m)).join('\n')+'\n':'',encoding:'utf8',maxBuffer:16*1024*1024
+    });
+    const loaded=run=>/\/predict\/(engine|harmonic)\.js/.test(run.stderr);
+    const empty=trace([]);assert.equal(empty.status,0);assert.equal(loaded(empty),false,'reader import must not load heavy prediction kernel');
+    const vector=vectors.vectors.find(v=>v.id.includes('1820000')&&v.op==='heights_at');
+    const open={op:'open',args:{file:process.env.OTC_PREDICT_NATIVE_JSON}};
+    const metadata=trace([open,{op:'datums',args:{station_id:vector.args.station_id}},{op:'ranges',args:{station_id:vector.args.station_id}}]);
+    assert.equal(metadata.status,0);assert.equal(loaded(metadata),false,'synchronous metadata must not load heavy prediction kernel');
+    assert.ok(metadata.stdout.trim().split('\n').slice(1).map(JSON.parse).every(r=>r.ok));
+    const first=trace([open,{op:vector.op,args:vector.args}]);
+    assert.equal(first.status,0);assert.equal(loaded(first),true,'actual first prediction must load native engine');
+    const reply=JSON.parse(first.stdout.trim().split('\n').at(-1));assert.equal(reply.ok,true);assert.equal(reply.result.prediction.items.length,vector.expect.prediction.items.length);
+});
 for(const [family,op] of [['1820000','heights_at'],['BOS1101','currents'],['ACT1591','current_events']]) {
     test(`native immutable ${family}/${op}`,async()=>{
         const v=vectors.vectors.find(v=>v.id.includes(family)&&v.op===op);
@@ -63,6 +80,8 @@ test('native browser all immutable vectors and actual Intl localization',async()
         const observed=await page.evaluate(async({origin,rows})=>{
             const {OpenTideConstants}=await import('/sdk/index.js');
             const client=await OpenTideConstants.open({baseUrl:origin+'/',cacheDir:'native-immutable-vector-input'});
+            const heavyLoaded=()=>performance.getEntriesByType('resource').some(entry=>/\/predict\/(engine|harmonic)\.js/.test(entry.name));
+            const beforePrediction=heavyLoaded();
             const results=[];
             try {
                 for(const vector of rows){
@@ -76,7 +95,7 @@ test('native browser all immutable vectors and actual Intl localization',async()
                 }
                 const native=await client.heightsAt('OTC-V-NOAA-1820000',[new Date('2010-03-01T00:00:00Z')]);
                 const local=native.toLocal('UTC');
-                return {results,local:local.items[0].local_time,offset:local.items[0].utc_offset_s,original:native.items[0].local_time,version:local.tz_version,cache:await caches.keys()};
+                return {results,beforePrediction,afterPrediction:heavyLoaded(),local:local.items[0].local_time,offset:local.items[0].utc_offset_s,original:native.items[0].local_time,version:local.tz_version,cache:await caches.keys()};
             } finally {client.close();}
         },{origin,rows:vectors.vectors});
         for(let i=0;i<vectors.vectors.length;i++) {
@@ -92,6 +111,7 @@ test('native browser all immutable vectors and actual Intl localization',async()
             }
         }
         assert.equal(observed.local,'2010-03-01T00:00:00+00:00');assert.equal(observed.offset,0);assert.equal(observed.original,null);assert.equal(observed.version,null);
+        assert.equal(observed.beforePrediction,false,'browser reader must defer heavy native kernel');assert.equal(observed.afterPrediction,true,'browser first actual prediction must load native kernel');
         assert.ok(observed.cache.includes('opentideconstants-v1:native-immutable-vector-input'));
         console.log('actual Chromium: all60 immutable vector predictions and native Intl GREEN');
     } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

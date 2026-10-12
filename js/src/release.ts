@@ -1,6 +1,8 @@
-import * as prediction from './predict/engine.js';
+import type * as prediction from './predict/engine.js';
+import * as X from './errors.js';
 import {AstroTable} from './predict/astro.js';
-import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,Ranges} from './predict/results.js';
+import {DatumInfo,DatumLevel,Ranges} from './predict/results.js';
+import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList} from './predict/results.js';
 import { compareDatestamps, foldName } from "./constants.js";
 import {
     FileError, InvalidArgumentError, InvalidReleaseError, StationNotFoundError, StationRemovedError,
@@ -1030,14 +1032,14 @@ _betterHistoricalPath(station: Station): boolean {
     return e.stored.sets.some(cs=>cs.set_id===rid&&cs.qc_status!==null&&WITH_CONSTANTS.has(cs.qc_status))
         ||this.#ordinaryPaths(e,{country:null,type:null,kind:null,source:null,sourceType:null,includeFlagged:false,includeFallback:false}).length>0;
 }
-async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { this.#open(); return prediction.heights(this,station,options); }
-async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { this.#open(); return prediction.heightsAt(this,station,times,options); }
-async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { this.#open(); return prediction.extremes(this,station,options); }
-async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { this.#open(); return prediction.currents(this,station,options); }
-async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { this.#open(); return prediction.currentEvents(this,station,options); }
-datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { this.#open(); return prediction.datums(this,station,options); }
-ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { this.#open(); return prediction.ranges(this,station,options); }
-async astroTable(id: string|null = null): Promise<AstroTable|null> { this.#open(); return prediction.astroTable(this,id); }
+async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { this.#open(); return (await import('./predict/engine.js')).heights(this,station,options); }
+async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { this.#open(); return (await import('./predict/engine.js')).heightsAt(this,station,times,options); }
+async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { this.#open(); return (await import('./predict/engine.js')).extremes(this,station,options); }
+async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { this.#open(); return (await import('./predict/engine.js')).currents(this,station,options); }
+async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { this.#open(); return (await import('./predict/engine.js')).currentEvents(this,station,options); }
+datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { this.#open(); return predictionDatums(this,station,options); }
+ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { this.#open(); return predictionRanges(this,station,options); }
+async astroTable(id: string|null = null): Promise<AstroTable|null> { this.#open(); return (await import('./predict/engine.js')).astroTable(this,id); }
 get historicalOffsetsPolicy()
 : "fallback" | "exclude" { this.#open(); return this.#historicalPolicy; }
 
@@ -1066,7 +1068,12 @@ get historicalOffsetsPolicy()
         if (!convention || convention.v0_model !== 'schureman_tcd' || convention.nodal_handling !== 'f_u_at_prediction') return false;
         const datum = obj(raw,'datum');
         if (datum?.['chart_datum'] !== 'mllw' || num(datum,'msl_offset_m') === null || obj(datum,'named')?.['mllw'] !== 0 || obj(obj(datum,'basis'),'mllw')?.['kind'] !== 'published') return false;
-        return prediction.historicalDiscovery(this,this.#station(e));
+        try {
+            const table=predictionAstroTable(this,str(convention.raw,'astro_table_id') ?? '');
+            if(!table)return false;
+            for(const constituent of objects(raw,'constituents'))table._row(str(constituent,'name') ?? '');
+            return true;
+        } catch(error) {if(error instanceof X.OpenTideConstantsError)return false;throw error;}
     }
     #ordinaryPaths(e: IndexEntry, f: CheckedFilters): StoredSet[] {
         const paths = e.stored.sets.filter(cs => this.#setEligible(cs,f));
@@ -1755,4 +1762,50 @@ function canonicalJson(v: Json | undefined): string | undefined {
     if (isObject(v)) return JSON.stringify(Object.fromEntries(Object.keys(v).sort().map(k => [k, JSON.parse(canonicalJson(v[k]) ?? "null")])));
     if (Array.isArray(v)) return JSON.stringify(v.map(x => JSON.parse(canonicalJson(x) ?? "null")));
     return JSON.stringify(v);
+}
+
+const predictionTables=new WeakMap<Release,Map<string,AstroTable>>();
+/** @internal Shared astronomical metadata lookup; no computational engine dependency. */
+export function predictionAstroTable(release:Release,id:string|null=null):AstroTable|null {
+    const metadata=release._header;
+    if(id!==null&&typeof id!=='string')throw new X.InvalidArgumentError('astro table id must be a string');
+    if(id===null)id=release.conventions.map(c=>str(c.raw,'astro_table_id')).find(v=>v!==null)??null;
+    if(id===null)return null;
+    let cache=predictionTables.get(release);if(!cache){cache=new Map();predictionTables.set(release,cache);}
+    const hit=cache.get(id);if(hit)return hit;
+    const raw=objects(metadata,'astro_tables').find(t=>t['astro_table_id']===id);if(!raw)return null;
+    const table=new AstroTable(raw);cache.set(id,table);return table;
+}
+/** @internal Shared station validation for metadata and native prediction. */
+export function predictionStation(release:Release,station:Station|string):Station {
+    void release._header;
+    if(typeof station==='string')return release.requireStation(station);
+    if(!(station instanceof Station))throw new X.InvalidArgumentError('station must be a Station or station id');
+    const actual=release.station(station.station_id);
+    if(!actual||JSON.stringify(actual.raw)!==JSON.stringify(station.raw))throw new X.InvalidArgumentError('station is not from this release');
+    return actual;
+}
+/** @internal Shared option validation for metadata and native prediction. */
+export function predictionOptions(setId:string|null|undefined,datum:string|null|undefined=null,binNumber:number|null|undefined=null):void {
+    if(setId!==null&&setId!==undefined&&typeof setId!=='string')throw new X.InvalidArgumentError('setId must be a string');
+    if(datum!==null&&datum!==undefined&&typeof datum!=='string')throw new X.InvalidArgumentError('datum must be a string');
+    if(binNumber!==null&&binNumber!==undefined&&(typeof binNumber!=='number'||!Number.isInteger(binNumber)||binNumber<1||binNumber>Number.MAX_SAFE_INTEGER))throw new X.InvalidArgumentError('binNumber must be an integer from 1 to 2^53 - 1');
+}
+function datumInfo(setId:string|null,d:JsonObject|null):DatumInfo {
+    const named=obj(d,'named')??{},basis=obj(d,'basis'),chartId=str(d,'chart_datum'),chart=chartId===null?null:num(named,chartId),levels:DatumLevel[]=[];
+    for(const key of Object.keys(named).sort()){const b=obj(basis,key),control=obj(b,'control'),value=num(named,key) as number;levels.push(new DatumLevel({key,value_m:value,above_chart_m:chart===null?null:value-chart,kind:str(b,'kind'),method:str(b,'method') as string,source_name:str(b,'source_name'),epoch:obj(b,'epoch'),data_span:obj(b,'data_span'),control_station_id:str(control,'station_id'),control_set_id:str(control,'set_id'),control_source_id:str(control,'source_id'),uncertainty_m:num(b,'uncertainty_m'),uncertainty_basis:str(b,'uncertainty_basis'),flags:arr(b,'flags').filter((v):v is string=>typeof v==='string')}));}
+    return new DatumInfo({set_id:setId,zero:str(d,'zero'),zero_name:str(d,'zero_name'),chart_datum:chartId,msl_offset_m:num(d,'msl_offset_m'),levels});
+}
+function predictionDatums(release:Release,input:Station|string,opts:prediction.DatumOptions={}):DatumInfo|readonly DatumInfo[]|null {
+    const station=predictionStation(release,input);predictionOptions(opts.setId);const all=opts.allSets===undefined?false:opts.allSets;if(typeof all!=='boolean')throw new X.InvalidArgumentError('allSets must be a boolean');if(all)return Object.freeze(station.constantSets({includeNoConstants:true}).map(s=>datumInfo(s.set_id,obj(s.raw,'datum'))));const constants=predictionChosen(release,station,opts.setId);if(constants)return datumInfo(constants.set_id,obj(constants.raw,'datum'));const off=obj(station.raw,'subordinate_offsets');return off?datumInfo(null,obj(off,'datum')):null;
+}
+function predictionRanges(release:Release,input:Station|string,opts:prediction.RangeOptions={}):Ranges {
+    const info=predictionDatums(release,input,opts),levels=info instanceof DatumInfo?info.levels:[];
+    const difference=(a:string,b:string)=>{const high=levels.find(l=>l.key===a),low=levels.find(l=>l.key===b);if(!high||!low||high.value_m==null||low.value_m==null||high.kind===null||high.kind!==low.kind||JSON.stringify(high.epoch)!==JSON.stringify(low.epoch))return null;return high.value_m-low.value_m;};return new Ranges({mn:difference('mhw','mlw'),gt:difference('mhhw','mllw'),dhq:difference('mhhw','mhw'),dlq:difference('mlw','mllw')});
+}
+/** @internal Shared set selection for metadata and prediction. */
+export function predictionChosen(release:Release,station:Station,setId:string|null|undefined):ConstantSet|null {
+    if(setId===null||setId===undefined)return station.recommendedSet;
+    const constants=station.constantSet(setId);if(!constants)throw new X.InvalidArgumentError(`setId ${setId} is not a set of ${station.station_id}`);
+    if(release._commercialOnly&&!constants.licence.commercial_use)throw new X.InvalidArgumentError(`commercial_only refuses set_id ${setId}`);return constants;
 }

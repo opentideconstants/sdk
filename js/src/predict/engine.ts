@@ -1,9 +1,9 @@
 import * as X from '../errors.js';
-import {Station,type Release,type ConstantSet} from '../release.js';
+import {Station,type Release,type ConstantSet,predictionStation as stationFor,predictionOptions as options,predictionChosen as chosen,predictionAstroTable} from '../release.js';
 import {arr,num,obj,str,isObject,type JsonObject} from '../json.js';
 import {AstroTable,instant,utc,angle} from './astro.js';
 import {Sum,events,RAD} from './harmonic.js';
-import {HeightPoint,Extreme,CurrentPoint,CurrentEvent,HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,DatumLevel,Ranges} from './results.js';
+import {HeightPoint,Extreme,CurrentPoint,CurrentEvent,HeightSeries,ExtremeList,CurrentSeries,CurrentEventList} from './results.js';
 import type {ExtremeType,CurrentEventType,PredictionMethod} from '../types.js';
 import {requireHistoricalOffset} from '../historical-offsets.js';
 
@@ -19,43 +19,15 @@ interface Context {
     total:Sum;minor:Sum|null;currentBin:JsonObject|null;sigma:number;
     datumName:string|null;datumKind:string|null;datumUncertainty:number|null;omitted:readonly CurrentEventType[]|null;
 }
-const tables=new WeakMap<Release,Map<string,AstroTable>>();
 const objects=(o:JsonObject|null,key:string)=>arr(o,key).filter(isObject);
+export function astroTable(release:Release,id:string|null=null):AstroTable|null {return predictionAstroTable(release,id);}
 function contextFor(station:Station,constants:ConstantSet,table:AstroTable):Context {
     return {station,constants,table,method:'harmonic',reference:null,referenceBin:null,binNumber:null,offsets:null,
         total:new Sum(table,[]),minor:null,currentBin:null,sigma:1,datumName:null,datumKind:null,datumUncertainty:null,omitted:null};
 }
-export function astroTable(release:Release,id:string|null=null):AstroTable|null {
-    const metadata=release._header;
-    if(id!==null&&typeof id!=='string')throw new X.InvalidArgumentError('astro table id must be a string');
-    if(id===null)id=release.conventions.map(c=>str(c.raw,'astro_table_id')).find(v=>v!==null)??null;
-    if(id===null)return null;
-    let cache=tables.get(release);if(!cache){cache=new Map();tables.set(release,cache);}
-    const hit=cache.get(id);if(hit)return hit;
-    const raw=objects(metadata,'astro_tables').find(t=>t['astro_table_id']===id);if(!raw)return null;
-    const table=new AstroTable(raw);cache.set(id,table);return table;
-}
-function stationFor(release:Release,station:Station|string):Station {
-    void release._header;
-    if(typeof station==='string')return release.requireStation(station);
-    if(!(station instanceof Station))throw new X.InvalidArgumentError('station must be a Station or station id');
-    const actual=release.station(station.station_id);
-    if(!actual||JSON.stringify(actual.raw)!==JSON.stringify(station.raw))throw new X.InvalidArgumentError('station is not from this release');
-    return actual;
-}
-function options(setId:string|null|undefined,datum:string|null|undefined=null,binNumber:number|null|undefined=null):void {
-    if(setId!==null&&setId!==undefined&&typeof setId!=='string')throw new X.InvalidArgumentError('setId must be a string');
-    if(datum!==null&&datum!==undefined&&typeof datum!=='string')throw new X.InvalidArgumentError('datum must be a string');
-    if(binNumber!==null&&binNumber!==undefined&&(typeof binNumber!=='number'||!Number.isInteger(binNumber)||binNumber<1||binNumber>Number.MAX_SAFE_INTEGER))throw new X.InvalidArgumentError('binNumber must be an integer from 1 to 2^53 - 1');
-}
 function window(start:Date,stop:Date,step?:number):readonly[number,number] {
     const first=instant(start),last=instant(stop);if(first>last)throw new X.InvalidArgumentError('start must not be after stop');
     if(step!==undefined&&(typeof step!=='number'||!Number.isInteger(step)||step<=0))throw new X.InvalidArgumentError('stepS must be a positive integer');return [first,last];
-}
-function chosen(release:Release,station:Station,setId:string|null|undefined):ConstantSet|null {
-    if(setId===null||setId===undefined)return station.recommendedSet;
-    const constants=station.constantSet(setId);if(!constants)throw new X.InvalidArgumentError(`setId ${setId} is not a set of ${station.station_id}`);
-    if(release._commercialOnly&&!constants.licence.commercial_use)throw new X.InvalidArgumentError(`commercial_only refuses set_id ${setId}`);return constants;
 }
 function tableFor(release:Release,constants:ConstantSet):AstroTable {
     const convention=constants.convention;
@@ -169,18 +141,6 @@ export function currentEvents(release:Release,station:Station|string,opts:Omit<C
         candidates=(start===stop?[]:currentEventsFor(c,start-margin,stop+margin)).filter(([,kind])=>kept.includes(kind)).map(([root,kind,value,direction]):[number,CurrentEventType,number,number|null]=>{const time=root+(num(entry,`time_adj_${kind}_min`) as number)*60;if(kind==='max_flood'||kind==='max_ebb'){value*=num(entry,kind==='max_flood'?'flood_amp_ratio':'ebb_amp_ratio') as number;direction=num(entry,kind==='max_flood'?'mean_flood_dir_deg':'mean_ebb_dir_deg');}return [time,kind,value,direction];}).sort((a,b)=>Math.floor(a[0]+0.5)-Math.floor(b[0]+0.5));
     }else candidates=currentEventsFor(c,start,stop);
     const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,type,value,direction])=>new CurrentEvent({time:utc(Math.floor(t+0.5)),type,velocity_ms:value,direction_deg:direction,local_time:null,utc_offset_s:null}));return new CurrentEventList({...resultFields(release,c),items,bin_number:c.binNumber as number,omitted_event_types:c.omitted});
-}
-function datumInfo(setId:string|null,d:JsonObject|null):DatumInfo {
-    const named=obj(d,'named')??{},basis=obj(d,'basis'),chartId=str(d,'chart_datum'),chart=chartId===null?null:num(named,chartId),levels:DatumLevel[]=[];
-    for(const key of Object.keys(named).sort()){const b=obj(basis,key),control=obj(b,'control'),value=num(named,key) as number;levels.push(new DatumLevel({key,value_m:value,above_chart_m:chart===null?null:value-chart,kind:str(b,'kind'),method:str(b,'method') as string,source_name:str(b,'source_name'),epoch:obj(b,'epoch'),data_span:obj(b,'data_span'),control_station_id:str(control,'station_id'),control_set_id:str(control,'set_id'),control_source_id:str(control,'source_id'),uncertainty_m:num(b,'uncertainty_m'),uncertainty_basis:str(b,'uncertainty_basis'),flags:arr(b,'flags').filter((v):v is string=>typeof v==='string')}));}
-    return new DatumInfo({set_id:setId,zero:str(d,'zero'),zero_name:str(d,'zero_name'),chart_datum:chartId,msl_offset_m:num(d,'msl_offset_m'),levels});
-}
-export function datums(release:Release,input:Station|string,opts:DatumOptions={}):DatumInfo|readonly DatumInfo[]|null {
-    const station=stationFor(release,input);options(opts.setId);const all=opts.allSets===undefined?false:opts.allSets;if(typeof all!=='boolean')throw new X.InvalidArgumentError('allSets must be a boolean');if(all)return Object.freeze(station.constantSets({includeNoConstants:true}).map(s=>datumInfo(s.set_id,obj(s.raw,'datum'))));const constants=chosen(release,station,opts.setId);if(constants)return datumInfo(constants.set_id,obj(constants.raw,'datum'));const off=obj(station.raw,'subordinate_offsets');return off?datumInfo(null,obj(off,'datum')):null;
-}
-export function ranges(release:Release,input:Station|string,opts:RangeOptions={}):Ranges {
-    const info=datums(release,input,opts),levels=info instanceof DatumInfo?info.levels:[];
-    const difference=(a:string,b:string)=>{const high=levels.find(l=>l.key===a),low=levels.find(l=>l.key===b);if(!high||!low||high.value_m==null||low.value_m==null||high.kind===null||high.kind!==low.kind||JSON.stringify(high.epoch)!==JSON.stringify(low.epoch))return null;return high.value_m-low.value_m;};return new Ranges({mn:difference('mhw','mlw'),gt:difference('mhhw','mllw'),dhq:difference('mhhw','mhw'),dlq:difference('mlw','mllw')});
 }
 /** @internal Discovery validates the same model and own policy as prediction, without evaluating a time window. */
 export function historicalDiscovery(release:Release,station:Station):boolean {try{context(release,station,'water_level',null,'chart');return true;}catch(e){if(e instanceof X.OpenTideConstantsError)return false;throw e;}}
