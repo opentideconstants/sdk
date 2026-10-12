@@ -1267,6 +1267,9 @@ def act_assert_index(a):
         for entry, raw in zip(doc.get('stations') or [], records):
             if not isinstance(entry, dict):
                 continue
+            own_offsets = raw.get("subordinate_offsets")
+            extension_problems += match(own_offsets, entry.pop('subordinate_offsets', _MISSING), 0,
+                                        f"{entry.get('station_id')}.subordinate_offsets")
             offsets = [{key: row.get(key) for key in ('bin', 'reference_bin', 'reference_station_id', 'licence_id')}
                        for row in raw.get('current_offsets') or []]
             extension_problems += match(offsets, entry.pop('current_offsets', _MISSING), 0,
