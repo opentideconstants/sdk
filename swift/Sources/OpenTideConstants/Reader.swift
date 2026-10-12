@@ -169,7 +169,7 @@ internal extension Reader {
     }
 }
 internal extension Reader {
-    static func load(_ url:URL,mode:Mode,commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String,indexPath:URL?=nil)throws->Release {
+    static func load(_ url:URL,mode:Mode,commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String,indexPath:URL?=nil,files:[FileInfo]=[])throws->Release {
         let isLines=url.lastPathComponent.hasSuffix(".jsonl")
         var meta:JSONValue,entries:[IndexEntry]=[],docs:[String:JSONValue]=[:]
         if isLines { meta=try JSONValue.parse(read(URL(fileURLWithPath:String(url.path.dropLast(6))+".meta.json"))) }
@@ -199,7 +199,7 @@ internal extension Reader {
         }
         if isLines { try eachLine(url) { line,offset in try consume(JSONValue.parse(line),offset,line.count) } }
         else { for d in docs.values { try consume(d,nil,nil) } }
-        let release=try Release(meta:meta,entries:entries,documents:docs,jsonl:isLines && mode == .stream ? url:nil,indexPath:indexPath,files:[],commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+        let release=try Release(meta:meta,entries:entries,documents:docs,jsonl:isLines && mode == .stream ? url:nil,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
         if isLines,mode == .stream,let indexPath {
             // All summaries are derived from authenticated actual lines; stale or modified derived indexes are rebuilt.
             let digest=try SHA256.file(url),size=(try FileManager.default.attributesOfItem(atPath:url.path)[.size] as? NSNumber)?.int64Value ?? 0

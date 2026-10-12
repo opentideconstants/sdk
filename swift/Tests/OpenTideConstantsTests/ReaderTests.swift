@@ -1,6 +1,78 @@
 import XCTest
 @testable import OpenTideConstants
 final class ReaderTests: XCTestCase {
+    func testActualReaderFileInfoHandoff() throws {
+        let fixtureRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("conformance/fixtures/good")
+        let index = try JSONValue.parse(Data(contentsOf: fixtureRoot.appendingPathComponent("OTC_index.json")))
+        let metadata = try XCTUnwrap(index["releases"].array.first { $0["datestamp"].string == "20991231" })
+        let names = ["OTC_20991231.json", "OTC_20991231.jsonl", "OTC_20991231.meta.json"]
+        let authenticated = metadata["files"].array.filter { names.contains($0["name"].string ?? "") }.map(FileInfo.init)
+        XCTAssertEqual(authenticated.map(\.name), names)
+        let manifest = try String(contentsOf: fixtureRoot.appendingPathComponent("OTC_20991231.sha256"), encoding: .utf8)
+        for record in authenticated {
+            let bytes = try Data(contentsOf: fixtureRoot.appendingPathComponent(record.name))
+            XCTAssertEqual(record.size, Int64(bytes.count), record.name)
+            XCTAssertEqual(record.sha256, SHA256.digest(bytes), record.name)
+            XCTAssertTrue(manifest.split(separator: "\n").contains { $0 == "\(SHA256.digest(bytes))  \(record.name)" }, record.name)
+            XCTAssertFalse(record.raw.object.isEmpty, record.name)
+        }
+        let source = fixtureRoot.appendingPathComponent(names[0])
+        var release: Release? = try Reader.load(source, mode: .eager, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback", files: authenticated)
+        weak let weakRelease = release
+        let defaultRelease = try Reader.load(source, mode: .eager, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")
+        defer { release?.close(); defaultRelease.close() }
+        XCTAssertEqual(defaultRelease.files, [])
+        XCTAssertEqual(release?.meta, defaultRelease.meta)
+        XCTAssertEqual(release?.entries.map(\.summary), defaultRelease.entries.map(\.summary))
+        XCTAssertEqual(release?.documents, defaultRelease.documents)
+        XCTAssertEqual(try release?.stationCount, try defaultRelease.stationCount)
+        XCTAssertEqual(release?.commercialOnly, defaultRelease.commercialOnly)
+        XCTAssertEqual(release?.commercialBasis, defaultRelease.commercialBasis)
+        XCTAssertEqual(release?.historicalOffsetsPolicy, defaultRelease.historicalOffsetsPolicy)
+        let retained = try XCTUnwrap(release).files
+        XCTAssertEqual(retained, authenticated, "exact authenticated order and complete raw metadata")
+        for expected in authenticated {
+            let actual = retained.first { $0.name == expected.name }
+            XCTAssertNotNil(actual, "authenticated record lost: \(expected.name)")
+            if let actual {
+                XCTAssertFalse(actual.raw.object.isEmpty, expected.name)
+                XCTAssertEqual(actual.raw, expected.raw, expected.name)
+                XCTAssertEqual(actual.name, expected.name, expected.name)
+                XCTAssertEqual(actual.url, expected.url, expected.name)
+                XCTAssertEqual(actual.size, expected.size, expected.name)
+                XCTAssertEqual(actual.sha256, expected.sha256, expected.name)
+            }
+            print("READER_FILES_VALUE name=\(expected.name) size=\(expected.size ?? -1) sha256=\(expected.sha256 ?? "missing") url=\(expected.url ?? "missing") actual=\(actual == nil ? "missing" : "present") raw_equal=\(actual?.raw == expected.raw)")
+        }
+        release?.close()
+        release = nil
+        XCTAssertNil(weakRelease, "retained immutable file metadata must not retain Release or its parser backing")
+        XCTAssertEqual(retained, authenticated, "all file metadata remains readable after close and deallocation")
+        print("READER_FILES_DEFAULT files=\(defaultRelease.files.count) source_equal=true policy_equal=true station_count=\(try defaultRelease.stationCount)")
+        print("READER_FILES_LIFETIME retained=\(retained.count) release_deallocated=\(weakRelease == nil)")
+        // Compatibility control: retain real producer metadata beyond FileInfo's known projections.
+        let sourceMetadata = try JSONValue.parse(Data(contentsOf: source))["release"]
+        let extended = authenticated.map { record in
+            var raw = metadata.object.merging(record.raw.object) { _, fileValue in fileValue }
+            raw["source_versions"] = sourceMetadata["source_versions"]
+            return FileInfo(.object(raw))
+        }
+        let extendedRelease = try Reader.load(source, mode: .eager, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback", files: extended)
+        extendedRelease.close()
+        XCTAssertEqual(extendedRelease.files, extended, "unknown producer keys, content hash, and sources survive unchanged")
+        print("READER_FILES_UNKNOWN complete_raw_equal=\(extendedRelease.files == extended) producer_sources=\(sourceMetadata["source_versions"].object.count)")
+        XCTAssertThrowsError(try Reader.load(source, mode: .eager, commercialOnly: false, commercialBasis: "invalid", historicalOffsetsPolicy: "fallback", files: authenticated)) { error in
+            guard case OpenTideConstantsError.invalidArgument(let message, let details) = error else {
+                XCTFail("unexpected private Reader error: \(error)"); return
+            }
+            XCTAssertEqual(message, "invalid policy")
+            XCTAssertEqual(details, [:])
+        }
+        print("READER_FILES_ERROR invalid_policy=invalid_argument")
+    }
     func testActualNullableProvenance() throws {
         guard let directory = ProcessInfo.processInfo.environment["OTC_PROVENANCE_CONTROLS"] else {
             throw OpenTideConstantsError.invalidArgument("real provenance controls environment required")
