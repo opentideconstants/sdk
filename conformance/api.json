@@ -1681,7 +1681,7 @@
      "name": "country",
      "kind": "field",
      "type": "string",
-     "nullable": false
+     "nullable": true
     },
     {
      "name": "lat",
