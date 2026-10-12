@@ -195,7 +195,7 @@ class OpenTideConstants:
                  mode: str = "eager", base_url: Optional[str] = None, timeout=None, proxy=None, ca_file=None,
                  user_agent: Optional[str] = None, on_network_error: str = "use_cache", auto_update: bool = False,
                  update_interval=86_400, logger: Optional[logging.Logger] = None, verify_on_open: bool = False,
-                 commercial_only: bool = False):
+                 commercial_only: bool = False, commercial_basis: str = "strict"):
         self._log = logger or logging.getLogger("opentideconstants")
         self._lock = threading.RLock()
         self._release: Optional[Release] = None
@@ -214,6 +214,8 @@ class OpenTideConstants:
                         ("commercial_only", commercial_only)):
             if not isinstance(v, bool):
                 raise InvalidArgumentError(f"{name} must be a boolean")
+        if not isinstance(commercial_basis, str) or commercial_basis not in ("strict", "as_published_upstream"):
+            raise InvalidArgumentError(f"commercial_basis must be strict or as_published_upstream, not {commercial_basis!r}")
         # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
         # spec §4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
         if file is not None and (release != "latest" or offline or on_network_error != "use_cache"):
@@ -241,6 +243,7 @@ class OpenTideConstants:
         # select only sets whose licence allows commercial use, in every release this client loads (spec §4.2,
         # K-NC DR106)
         self._commercial_only = commercial_only
+        self._commercial_basis = commercial_basis
         ua = f"opentideconstants-python/{__version__} (+https://opentideconstants.org)"
         _check_user_agent(user_agent)
         if user_agent:
@@ -340,7 +343,7 @@ class OpenTideConstants:
         else:
             files = [FileInfo(p.name, None, p.stat().st_size, None) for p in sorted(opened, key=lambda p: p.name)]
             lf = "file_unverified"
-        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only, json_sha256=json_sha256)
+        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only, commercial_basis=self._commercial_basis, json_sha256=json_sha256)
         rel._opened = tuple(opened)
         self._set(rel, lf)
 
@@ -396,7 +399,7 @@ class OpenTideConstants:
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"),
-                            commercial_only=self._commercial_only)
+                            commercial_only=self._commercial_only, commercial_basis=self._commercial_basis)
         rel._zenodo_version_doi = v.get("zenodo_version_doi")
         rel._opened = tuple(check)
         return rel
@@ -798,7 +801,7 @@ class OpenTideConstants:
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"),
-                                commercial_only=self._commercial_only)
+                                commercial_only=self._commercial_only, commercial_basis=self._commercial_basis)
             # a null DOI never erases a known one (CR2 DR11)
             zdoi = info.zenodo_version_doi if info is not None and info.zenodo_version_doi is not None \
                 else old.get("zenodo_version_doi")
@@ -1231,26 +1234,28 @@ class OpenTideConstants:
     def station_by_alias(self, system: str, alias_id: str) -> Optional[Station]:
         return self._r().station_by_alias(system, alias_id)
 
-    def stations(self, *, country=None, type=None, kind=None, source=None, source_type=None):  # noqa: A002
-        return self._r().stations(country=country, type=type, kind=kind, source=source, source_type=source_type)
+    def stations(self, *, country=None, type=None, kind=None, source=None,  # noqa: A002
+                 source_type=None, include_flagged=False, include_fallback=False):
+        return self._r().stations(country=country, type=type, kind=kind, source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
-    def iter_stations(self, *, country=None, type=None, kind=None, source=None, source_type=None):  # noqa: A002
-        return self._r().iter_stations(country=country, type=type, kind=kind, source=source, source_type=source_type)
+    def iter_stations(self, *, country=None, type=None, kind=None, source=None,  # noqa: A002
+                      source_type=None, include_flagged=False, include_fallback=False):
+        return self._r().iter_stations(country=country, type=type, kind=kind, source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
     def search(self, *, name, limit=None, match=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-               source_type=None):
+               source_type=None, include_flagged=False, include_fallback=False):
         return self._r().search(name=name, limit=limit, match=match, country=country, type=type, kind=kind,
-                                source=source, source_type=source_type)
+                                source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
     def near(self, *, lat, lon, radius_km, limit=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-             source_type=None) -> Tuple[Nearby, ...]:
+             source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Nearby, ...]:
         return self._r().near(lat=lat, lon=lon, radius_km=radius_km, limit=limit, country=country, type=type,
-                              kind=kind, source=source, source_type=source_type)
+                              kind=kind, source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
     def nearest(self, *, lat, lon, max_km=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-                source_type=None) -> Optional[Nearby]:
+                source_type=None, include_flagged=False, include_fallback=False) -> Optional[Nearby]:
         return self._r().nearest(lat=lat, lon=lon, max_km=max_km, country=country, type=type, kind=kind,
-                                 source=source, source_type=source_type)
+                                 source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
     def reference_station(self, station: Station) -> Optional[Station]:
         return self._r().reference_station(station)

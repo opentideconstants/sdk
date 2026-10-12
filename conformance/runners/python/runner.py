@@ -159,7 +159,7 @@ def enc_validation(rows):
 
 # --------------------------------------------------------------------------- ops
 
-FILTERS = ("country", "type", "kind", "source", "source_type")
+FILTERS = ("country", "type", "kind", "source", "source_type", "include_flagged", "include_fallback")
 
 
 class Runner:

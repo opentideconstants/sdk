@@ -72,7 +72,7 @@
    "required": false,
    "positional": false,
    "default": null,
-   "note": "the station has at least one usable set from this source"
+   "note": "Matches a source on the same eligible direct or actual reference path as source_type (SDK-QFILT)."
   },
   {
    "name": "source_type",
@@ -81,7 +81,23 @@
    "positional": false,
    "default": null,
    "enum": "source_type",
-   "note": "applied to the recommended set; with commercial_only, to the effective recommended set, and a station with none matches no value (K-NC DR106)"
+   "note": "Matches source_type on an eligible direct or actual reference path; both source filters must match the same path (SDK-QFILT)."
+  },
+  {
+   "name": "include_flagged",
+   "type": "boolean",
+   "required": false,
+   "positional": false,
+   "default": false,
+   "note": "SDK-QFILT independent per-call opt-in; actual bool required. Python implemented; other SDK alignment deferred until data freeze."
+  },
+  {
+   "name": "include_fallback",
+   "type": "boolean",
+   "required": false,
+   "positional": false,
+   "default": false,
+   "note": "SDK-QFILT independent per-call opt-in; actual bool required. Python implemented; other SDK alignment deferred until data freeze."
   }
  ],
  "objects": {
@@ -220,6 +236,14 @@
        "default": false,
        "c": "(C: otc_open_options.commercial_only)",
        "note": "select only constant sets whose licence allows commercial use: the effective recommended set, the source_type filter and the attribution's tide source (spec 4.2, K-NC DR106); not a boolean is invalid_argument; C: a bool field of otc_open_options (otc_fetch_open takes it through oopts)"
+      },
+      {
+       "name": "commercial_basis",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "strict",
+       "note": "SDK-QFILT: strict or as_published_upstream only; inherited by every loaded Release/update. Discovery only; explicit non-commercial licences remain excluded. Python implemented; other SDK alignment deferred."
       }
      ],
      "returns": "Client",

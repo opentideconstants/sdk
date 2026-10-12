@@ -90,11 +90,11 @@ VARIANTS = [
     ("server", None, "eager", ["fs", "fetch", "eager"]),  # the variant passes cache_dir, an fs option
 ]
 
-FILTERS = ["country", "type", "kind", "source", "source_type"]
+FILTERS = ["country", "type", "kind", "source", "source_type", "include_flagged", "include_fallback"]
 OPEN_ARGS = ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file", "user_agent",
              "on_network_error", "auto_update", "update_interval", "verify_on_open",
              "require_checksum",   # require_checksum: C only, so a step that passes it needs that feature (CR2 DR34)
-             "commercial_only"]    # K-NC DR106 (C: otc_open_options.commercial_only)
+             "commercial_only", "commercial_basis"]    # K-NC DR106 (C: otc_open_options.commercial_only)
 # op -> allowed argument names (README "Operations")
 OPS = {
     "open": OPEN_ARGS, "close": [], "hold_release": ["name"], "loaded_from": [], "last_error": [],

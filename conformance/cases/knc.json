@@ -1690,13 +1690,10 @@
      "expect": {
       "station_ids": [
        "OTC-T-0181",
-       "OTC-T-0182",
        "OTC-T-0183",
        "OTC-T-0184",
        "OTC-T-0185",
        "OTC-T-0186",
-       "OTC-T-0187",
-       "OTC-T-0188",
        "OTC-T-0189",
        "OTC-T-0190"
       ]
@@ -1717,7 +1714,7 @@
   },
   {
    "id": "commercial-only/source-type-filter",
-   "title": "source_type compares the effective recommended set; a station with none matches no value; without the option the release's (K-NC DR106)",
+   "title": "source_type matches an eligible direct or actual offsets-reference path; commercial discovery excludes non-commercial legs (SDK-QFILT)",
    "spec": "4.2, 4.4, 4.5, 4.6",
    "matrix": {
     "root": "knc",
@@ -1734,7 +1731,11 @@
      },
      "expect": {
       "station_ids": [
-       "OTC-T-0185"
+       "OTC-T-0181",
+       "OTC-T-0183",
+       "OTC-T-0185",
+       "OTC-T-0186",
+       "OTC-T-0190"
       ]
      }
     },
@@ -1745,7 +1746,11 @@
      },
      "expect": {
       "station_ids": [
-       "OTC-T-0185"
+       "OTC-T-0181",
+       "OTC-T-0183",
+       "OTC-T-0185",
+       "OTC-T-0186",
+       "OTC-T-0190"
       ]
      }
     },
@@ -1766,6 +1771,10 @@
        "OTC-T-0182",
        "OTC-T-0183",
        "OTC-T-0185",
+       "OTC-T-0186",
+       "OTC-T-0187",
+       "OTC-T-0188",
+       "OTC-T-0189",
        "OTC-T-0190"
       ]
      }
@@ -2123,6 +2132,762 @@
      },
      "expect": {
       "attribution": "Tidal constants: OpenTideConstants 20991231.2, doi:10.5072/zenodo.1, CC BY 4.0. Sources: Example Tide Model Group: Example tide model, interpolated by OpenTideConstants tests."
+     }
+    }
+   ]
+  },
+  {
+   "id": "knc/qfilt-labelled-fallback-strict",
+   "title": "Independent fallback/flagged discovery opt-ins retain explicit metadata and licence basis",
+   "spec": "SDK-QFILT",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "runners": [
+    "python"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json"
+     ],
+     "to": "${tmp}/filtered"
+    },
+    {
+     "driver": "json_set",
+     "path": "${tmp}/filtered/OTC_20991231.2.json",
+     "pointer": "/stations/1/constant_sets/0/fallback",
+     "value": {
+      "reason": "licence_reading",
+      "basis": "Actual committed synthetic fixture source evidence"
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/filtered/OTC_20991231.2.json",
+      "commercial_only": true,
+      "commercial_basis": "strict"
+     },
+     "expect": {
+      "loaded_from": "file_unverified",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0002",
+      "set_id": "OTC-T-0002/fallback"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0002/fallback",
+       "source": "ticon-fallback",
+       "source_type": "gauge",
+       "quantity": "water_level",
+       "source_record_id": "ticon-fallback:T-0002",
+       "source_version": "20991231",
+       "record_span": {
+        "start": "2090-01-01T00:00:00Z",
+        "end": "2098-12-31T23:00:00Z",
+        "good_samples": null
+       },
+       "datum": null,
+       "qc_status": "flagged",
+       "qc_flags": [
+        {
+         "flag": "carried_over",
+         "reason": "the source failed a check in this build",
+         "values": null
+        }
+       ],
+       "dropped_constituents": [],
+       "time_base": {
+        "code": "verified",
+        "reason": "test: time base verified",
+        "declared": "utc_instant",
+        "published": "utc_instant",
+        "correction": null,
+        "months_dropped": [],
+        "decided_in": "20991231",
+        "decided_build_commit": "0123456",
+        "evidence": [
+         {
+          "comparator_kind": "official_constants",
+          "comparator_id": "noaa:9900001",
+          "distance_km": 0.0,
+          "lag_min": 0.5,
+          "detail": "M2 phase lag against the official constants"
+         }
+        ]
+       },
+       "is_recommended": true,
+       "convention_id": "otc-greenwich-v1",
+       "licence_id": "gesla-derived",
+       "constituent_count": 2,
+       "fallback": {
+        "reason": "licence_reading",
+        "basis": "Actual committed synthetic fixture source evidence",
+        "otc_finding": null,
+        "preferred_set_id": null
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "knc/qfilt-labelled-fallback-as_published_upstream",
+   "title": "Independent fallback/flagged discovery opt-ins retain explicit metadata and licence basis",
+   "spec": "SDK-QFILT",
+   "requires": [
+    "fs",
+    "json",
+    "eager"
+   ],
+   "runners": [
+    "python"
+   ],
+   "steps": [
+    {
+     "driver": "copy",
+     "files": [
+      "${fixtures}/good/OTC_20991231.2.json"
+     ],
+     "to": "${tmp}/filtered"
+    },
+    {
+     "driver": "json_set",
+     "path": "${tmp}/filtered/OTC_20991231.2.json",
+     "pointer": "/stations/1/constant_sets/0/fallback",
+     "value": {
+      "reason": "licence_reading",
+      "basis": "Actual committed synthetic fixture source evidence"
+     }
+    },
+    {
+     "op": "open",
+     "args": {
+      "file": "${tmp}/filtered/OTC_20991231.2.json",
+      "commercial_only": true,
+      "commercial_basis": "as_published_upstream"
+     },
+     "expect": {
+      "loaded_from": "file_unverified",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": []
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [],
+      "distance_km": []
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": false,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": null,
+      "distance_km": null
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ],
+      "distance_km": [
+       0.0
+      ]
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": false,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": "OTC-T-0002",
+      "distance_km": 0.0
+     }
+    },
+    {
+     "op": "stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "iter_stations",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "search",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "name": "South San Francisco",
+      "match": "exact",
+      "limit": 1
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ]
+     }
+    },
+    {
+     "op": "near",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "radius_km": 0.001
+     },
+     "expect": {
+      "station_ids": [
+       "OTC-T-0002"
+      ],
+      "distance_km": [
+       0.0
+      ]
+     }
+    },
+    {
+     "op": "nearest",
+     "args": {
+      "source": "ticon-fallback",
+      "include_flagged": true,
+      "include_fallback": true,
+      "lat": 37.665,
+      "lon": -122.38,
+      "max_km": 0.001
+     },
+     "expect": {
+      "station_id": "OTC-T-0002",
+      "distance_km": 0.0
+     }
+    },
+    {
+     "op": "constant_set",
+     "args": {
+      "station_id": "OTC-T-0002",
+      "set_id": "OTC-T-0002/fallback"
+     },
+     "expect": {
+      "set": {
+       "set_id": "OTC-T-0002/fallback",
+       "source": "ticon-fallback",
+       "source_type": "gauge",
+       "quantity": "water_level",
+       "source_record_id": "ticon-fallback:T-0002",
+       "source_version": "20991231",
+       "record_span": {
+        "start": "2090-01-01T00:00:00Z",
+        "end": "2098-12-31T23:00:00Z",
+        "good_samples": null
+       },
+       "datum": null,
+       "qc_status": "flagged",
+       "qc_flags": [
+        {
+         "flag": "carried_over",
+         "reason": "the source failed a check in this build",
+         "values": null
+        }
+       ],
+       "dropped_constituents": [],
+       "time_base": {
+        "code": "verified",
+        "reason": "test: time base verified",
+        "declared": "utc_instant",
+        "published": "utc_instant",
+        "correction": null,
+        "months_dropped": [],
+        "decided_in": "20991231",
+        "decided_build_commit": "0123456",
+        "evidence": [
+         {
+          "comparator_kind": "official_constants",
+          "comparator_id": "noaa:9900001",
+          "distance_km": 0.0,
+          "lag_min": 0.5,
+          "detail": "M2 phase lag against the official constants"
+         }
+        ]
+       },
+       "is_recommended": true,
+       "convention_id": "otc-greenwich-v1",
+       "licence_id": "gesla-derived",
+       "constituent_count": 2,
+       "fallback": {
+        "reason": "licence_reading",
+        "basis": "Actual committed synthetic fixture source evidence",
+        "otc_finding": null,
+        "preferred_set_id": null
+       }
+      }
      }
     }
    ]

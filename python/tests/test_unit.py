@@ -1,9 +1,11 @@
 """Unit tests (python -m unittest discover -s python/tests). The conformance suite is the main proof.
 With OTC_TEST_INSTALLED=1 they test the installed package instead of python/src."""
+import copy
 import dataclasses
 import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,7 +16,7 @@ if not os.environ.get("OTC_TEST_INSTALLED"):  # set it to test the installed pac
 import opentideconstants as otc  # noqa: E402
 from opentideconstants._cache import datestamp_key  # noqa: E402
 from opentideconstants._fold import fold  # noqa: E402
-from opentideconstants._release import haversine  # noqa: E402
+from opentideconstants._release import freeze, haversine  # noqa: E402
 
 GOOD = ROOT / "conformance" / "fixtures" / "good"
 
@@ -1569,7 +1571,9 @@ class Format10Test(unittest.TestCase):
         self.assertNotIn("OTC-T-0104", ids)
         stats = self.c.release.stats
         self.assertEqual(stats.qc_status["no_constants"], 2)
-        total_sets = sum(len(s.constant_sets(include_no_constants=True)) for s in self.c.stations())
+        doc = json.loads((FIXTURES / "v1" / "OTC_20991231.3.json").read_bytes())
+        metadata = [self.c.require_station(s["station_id"]) for s in doc["stations"] if s["status"] == "active"]
+        total_sets = sum(len(s.constant_sets(include_no_constants=True)) for s in metadata)
         self.assertEqual(sum(stats.qc_status.values()), total_sets)
         self.assertEqual(sum(stats.source.values()), total_sets - 2)
 
@@ -1734,6 +1738,199 @@ class ProxyTrustTest(unittest.TestCase):
         self.assertEqual(self._get(target + "/x"), b"target")   # the control: the system roots are used
         with self.assertRaises(otc.NetworkError):
             self._get(target + "/x", ca_file=str(self.files["private"][0]))
+
+
+class DiscoveryPolicyTest(unittest.TestCase):
+    """SDK-QFILT through native file readers, without replacing reader or filtering functions."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.doc = json.loads((GOOD / "OTC_20991231.2.json").read_bytes())
+        nc_doc = json.loads((FIXTURES / "knc" / "OTC_20991231.2.json").read_bytes())
+        self.doc["licences"].append(copy.deepcopy(next(l for l in nc_doc["licences"] if l["licence_id"] == "nc-test")))
+        self.serial = 0
+
+    def open_doc(self, mode="eager", **options):
+        root = Path(self.tmp.name) / str(self.serial)
+        self.serial += 1
+        root.mkdir()
+        path = root / "OTC_20991231.2.jsonl"
+        path.write_text("".join(json.dumps(s) + "\n" for s in self.doc["stations"]), encoding="utf-8")
+        path.with_suffix(".meta.json").write_text(json.dumps({k: v for k, v in self.doc.items() if k != "stations"}), encoding="utf-8")
+        client = otc.OpenTideConstants(file=path, mode=mode, **options)
+        self.addCleanup(client.close)
+        return client
+
+    def station_doc(self, sid):
+        return next(s for s in self.doc["stations"] if s["station_id"] == sid)
+
+    def label(self, cs, reason="licence_reading"):
+        cs["fallback"] = {"reason": reason, "basis": "published fixture evidence retained"}
+
+    def ids(self, target, **options):
+        return [s.station_id for s in target.stations(**options)]
+
+    def test_independent_quality_opt_ins_and_raw_retention(self):
+        self.label(self.station_doc("OTC-T-0002")["constant_sets"][0])
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode)
+            for target in (client, client.release):
+                self.assertNotIn("OTC-T-0002", self.ids(target))
+                self.assertNotIn("OTC-T-0012", self.ids(target))
+                self.assertNotIn("OTC-T-0002", self.ids(target, include_flagged=True))
+                self.assertIn("OTC-T-0012", self.ids(target, include_flagged=True))
+                self.assertIn("OTC-T-0002", self.ids(target, include_fallback=True))
+                self.assertNotIn("OTC-T-0012", self.ids(target, include_fallback=True))
+                self.assertIn("OTC-T-0002", self.ids(target, include_flagged=True, include_fallback=True))
+                st = target.require_station("OTC-T-0002")
+                self.assertEqual(st.raw, freeze(self.station_doc("OTC-T-0002")))
+                self.assertEqual(st.recommended_set.fallback.basis, "published fixture evidence retained")
+
+    def test_fallback_precedes_tolerated_ok_and_unknown_qc_never_qualifies(self):
+        cs = self.station_doc("OTC-T-0002")["constant_sets"][0]
+        self.label(cs)
+        cs["qc_status"] = "ok"
+        self.station_doc("OTC-T-0012")["constant_sets"][0]["qc_status"] = "future-qc"
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode)
+            self.assertNotIn("OTC-T-0002", self.ids(client))
+            self.assertIn("OTC-T-0002", self.ids(client, include_fallback=True))
+            self.assertNotIn("OTC-T-0012", self.ids(client, include_flagged=True, include_fallback=True))
+
+    def test_commercial_bases_never_override_noncommercial_licence(self):
+        cs = self.station_doc("OTC-T-0002")["constant_sets"][0]
+        self.label(cs)
+        for allowed in (True, False):
+            cs["licence_id"] = "gesla-derived" if allowed else "nc-test"
+            for mode in ("eager", "stream"):
+                for basis in ("strict", "as_published_upstream"):
+                    for commercial in (False, True):
+                        client = self.open_doc(mode, commercial_only=commercial, commercial_basis=basis)
+                        eligible = not commercial or (allowed and basis == "as_published_upstream")
+                        self.assertEqual("OTC-T-0002" in self.ids(client, include_fallback=True), eligible)
+                        self.assertNotIn("OTC-T-0002", self.ids(client))
+
+    def test_source_filters_match_one_eligible_path(self):
+        cs = self.station_doc("OTC-T-0001")["constant_sets"][1]
+        self.label(cs, "manual_review")
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode)
+            self.assertNotIn("OTC-T-0001", self.ids(client, source="gesla-fit"))
+            self.assertIn("OTC-T-0001", self.ids(client, source="gesla-fit", include_fallback=True))
+            self.assertNotIn("OTC-T-0001", self.ids(client, source="noaa", source_type=cs["source_type"], include_fallback=True))
+
+    def test_offsets_do_not_substitute_a_later_reference_set(self):
+        st = self.station_doc("OTC-T-0001")
+        first = copy.deepcopy(st["constant_sets"][0])
+        first["set_id"] += "-first-flagged"
+        first["qc_status"] = "flagged"
+        st["constant_sets"].insert(0, first)
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode)
+            self.assertNotIn("OTC-T-0003", self.ids(client))
+            self.assertIn("OTC-T-0003", self.ids(client, include_flagged=True))
+            self.assertIn("OTC-T-0001", self.ids(client))
+
+    def test_current_offsets_check_the_actual_first_reference_bin_and_licences(self):
+        current = self.station_doc("OTC-T-0019")
+        subordinate = copy.deepcopy(current)
+        subordinate["station_id"] = "OTC-T-0990"
+        subordinate["aliases"] = {}
+        subordinate["constant_sets"] = []
+        subordinate["recommended_set_id"] = None
+        subordinate["current_offsets"] = [{"bin": 1, "reference_station_id": current["station_id"], "reference_bin": 1,
+                                            "licence_id": "noaa", "time_adj_max_flood_min": 0,
+                                            "time_adj_max_ebb_min": 0, "time_adj_slack_before_flood_min": 0,
+                                            "time_adj_slack_before_ebb_min": 0, "flood_amp_ratio": 1, "ebb_amp_ratio": 1}]
+        self.doc["stations"].append(subordinate)
+        first = copy.deepcopy(current["constant_sets"][0])
+        first["set_id"] += "-first"
+        first["qc_status"] = "flagged"
+        self.label(first)
+        current["constant_sets"].insert(0, first)
+        for mode in ("eager", "stream"):
+            for basis in ("strict", "as_published_upstream"):
+                client = self.open_doc(mode, commercial_only=True, commercial_basis=basis)
+                self.assertNotIn("OTC-T-0990", self.ids(client, include_flagged=True))
+                self.assertEqual("OTC-T-0990" in self.ids(client, include_fallback=True), basis == "as_published_upstream")
+        first["licence_id"] = "nc-test"
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode, commercial_only=True, commercial_basis="as_published_upstream")
+            self.assertNotIn("OTC-T-0990", self.ids(client, include_fallback=True))
+        first["licence_id"] = "noaa"
+        subordinate["current_offsets"][0]["licence_id"] = "nc-test"
+        client = self.open_doc(commercial_only=True, commercial_basis="as_published_upstream")
+        self.assertNotIn("OTC-T-0990", self.ids(client, include_fallback=True))
+        subordinate["current_offsets"][0]["reference_bin"] = 999
+        client = self.open_doc()
+        self.assertNotIn("OTC-T-0990", self.ids(client, include_fallback=True))
+
+    def test_eligibility_precedes_ranking_limits_and_nearest(self):
+        closest = self.station_doc("OTC-T-0001")
+        normal = copy.deepcopy(closest)
+        normal["station_id"] = "OTC-T-0998"
+        normal["name"] = "Policy closest usable"
+        normal["aliases"] = {}
+        normal["lat"] += 0.0001
+        normal["constant_sets"] = [normal["constant_sets"][0]]
+        normal["constant_sets"][0]["set_id"] = "OTC-T-0998/noaa"
+        normal["recommended_set_id"] = "OTC-T-0998/noaa"
+        self.doc["stations"].append(normal)
+        closest["name"] = "Policy closest"
+        for cs in closest["constant_sets"]:
+            self.label(cs)
+        for mode in ("eager", "stream"):
+            client = self.open_doc(mode)
+            for target in (client, client.release):
+                self.assertEqual([s.station_id for s in target.search(name="Policy closest", limit=1)], ["OTC-T-0998"])
+                geo = {"lat": closest["lat"], "lon": closest["lon"]}
+                self.assertEqual(target.near(**geo, radius_km=1, limit=1)[0].station.station_id, "OTC-T-0998")
+                self.assertEqual(target.nearest(**geo, max_km=1).station.station_id, "OTC-T-0998")
+                self.assertEqual(target.nearest(**geo, max_km=1, include_fallback=True).station.station_id, closest["station_id"])
+
+    def test_basis_propagates_through_network_cache_stream_and_update(self):
+        index = json.loads((GOOD / "OTC_index.json").read_bytes())
+        for mode in ("eager", "stream"):
+            script = {"/OTC_latest-f1.json": (200, {}, json.dumps(index["releases"][1]).encode())}
+            server = _Server(script=script)
+            self.addCleanup(server.close)
+            cache = Path(self.tmp.name) / ("cache-" + mode)
+            with otc.OpenTideConstants(base_url=server.url, cache_dir=cache, mode=mode,
+                                      commercial_only=True, commercial_basis="as_published_upstream") as client:
+                old = client.release
+                self.assertEqual(old._commercial_basis, "as_published_upstream")
+                del script["/OTC_latest-f1.json"]
+                self.assertTrue(client.update().updated)
+                self.assertEqual(client.release._commercial_basis, "as_published_upstream")
+                self.assertEqual(old._commercial_basis, "as_published_upstream")
+            if mode == "stream":
+                path = cache / "v1" / "releases" / "20991231.2" / "index-v1.json"
+                old_index = json.loads(path.read_bytes())
+                old_index.pop("discovery_index_version")
+                path.write_text(json.dumps(old_index), encoding="utf-8")
+            with otc.OpenTideConstants(cache_dir=cache, offline=True, mode=mode,
+                                      commercial_only=True, commercial_basis="as_published_upstream") as cached:
+                self.assertEqual(cached.release._commercial_basis, "as_published_upstream")
+            if mode == "stream":
+                self.assertEqual(json.loads(path.read_bytes())["discovery_index_version"], 1)
+
+    def test_all_methods_validate_opt_ins_when_called(self):
+        client = self.open_doc()
+        calls = [("stations", {}), ("iter_stations", {}), ("search", {"name": "San"}),
+                 ("near", {"lat": 0, "lon": 0, "radius_km": 1}), ("nearest", {"lat": 0, "lon": 0})]
+        for target in (client, client.release):
+            for name, args in calls:
+                for option in ("include_flagged", "include_fallback"):
+                    for value in (1, 0, "true", None):
+                        with self.subTest(owner=type(target).__name__, method=name, option=option, value=value):
+                            with self.assertRaisesRegex(otc.InvalidArgumentError, option):
+                                getattr(target, name)(**args, **{option: value})
+
+    def test_commercial_basis_validation(self):
+        for value in (None, True, 1, [], "unknown", "STRICT"):
+            with self.assertRaisesRegex(otc.InvalidArgumentError, "commercial_basis"):
+                self.open_doc(commercial_basis=value)
 
 
 class CommercialOnlyTest(unittest.TestCase):

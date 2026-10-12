@@ -244,7 +244,9 @@ def _entry(d, offset=None, length=None):
         if _status(d) == "active" and not isinstance(cs.get("set_id"), str):
             raise InvalidReleaseError(f"station {d.get('station_id')!r}: a constant set has no set_id")
         sets.append({**{k: _s(cs, k) for k in _SET_KEYS},
-                     "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)]})
+                     "constituents": [c.get("name") for c in cs.get("constituents") or () if isinstance(c.get("name"), str)],
+                     "fallback": cs.get("fallback"),
+                     "current_bins": [integral(b.get("bin")) for b in cs.get("current_bins") or ()]})
         if rec_id is not None and cs.get("set_id") == rec_id:
             kind = {"water_level": "tide", "current": "current"}.get(cs.get("quantity"), "other")
     name = _s(d, "name")
@@ -255,6 +257,9 @@ def _entry(d, offset=None, length=None):
         "aliases": {k: ([v] if isinstance(v, str) else list(v)) for k, v in aliases.items()},
         "reference_station_id": _s(off, "reference_station_id"), "offsets_licence_id": _s(off, "licence_id"),
         "recommended_set_id": rec_id, "sets": sets,
+        "current_offsets": [{"bin": integral(co.get("bin")), "reference_bin": integral(co.get("reference_bin")),
+                             "reference_station_id": _s(co, "reference_station_id"), "licence_id": _s(co, "licence_id")}
+                            for co in d.get("current_offsets") or ()],
     }
 
 
@@ -274,7 +279,9 @@ def _line_view(e):
     status, the references and the sets. The other keys are used as the index gives them (spec §6.2)."""
     return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
             e.get("offsets_licence_id"),
-            [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()),) for cs in e.get("sets") or ()])
+            [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()), freeze(cs.get("fallback")),
+                                                       tuple(cs.get("current_bins") or ())) for cs in e.get("sets") or ()],
+            freeze(e.get("current_offsets")))
 
 
 def _usable_index(idx, name, sha256, size, conv, lic):
@@ -286,7 +293,8 @@ def _usable_index(idx, name, sha256, size, conv, lic):
     def is_num(v):
         return v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
 
-    if not isinstance(idx, dict) or integral(idx.get("index_version")) != INDEX_VERSION:
+    if not isinstance(idx, dict) or integral(idx.get("index_version")) != INDEX_VERSION \
+            or integral(idx.get("discovery_index_version")) != 1:
         return None
     if idx.get("jsonl") != name or name != f"OTC_{idx.get('datestamp')}.jsonl" or idx.get("jsonl_sha256") != sha256 \
             or not is_int(idx.get("jsonl_size")) or integral(idx["jsonl_size"]) != size or not isinstance(idx.get("stations"), list):
@@ -298,7 +306,8 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not isinstance(e.get("station_id"), str) or not isinstance(e.get("status"), str) \
                 or not all(k in e and (e[k] is None or isinstance(e[k], str)) for k in _ENTRY_STR) \
                 or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
-                or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list):
+                or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list) \
+                or not isinstance(e.get("current_offsets"), list):
             return None
         e = {**e, "offset": integral(e["offset"]), "length": integral(e["length"])}
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
@@ -313,10 +322,17 @@ def _usable_index(idx, name, sha256, size, conv, lic):
             return None
         for cs in e["sets"]:
             if not isinstance(cs, dict) or not all(k in cs and (cs[k] is None or isinstance(cs[k], str)) for k in _SET_KEYS) \
-                    or not isinstance(cs.get("constituents"), list) or not all(isinstance(x, str) for x in cs["constituents"]):
+                    or not isinstance(cs.get("constituents"), list) or not all(isinstance(x, str) for x in cs["constituents"]) \
+                    or "fallback" not in cs or not (cs["fallback"] is None or isinstance(cs["fallback"], dict)) \
+                    or not isinstance(cs.get("current_bins"), list) or not all(integral(n) is not None for n in cs["current_bins"]):
                 return None
             if e["status"] == "active" and (cs["convention_id"] not in conv or cs["licence_id"] not in lic):
                 return None  # a reference that does not resolve: rebuild, and the pass raises invalid_release
+        for co in e["current_offsets"]:
+            if not isinstance(co, dict) or not all(k in co for k in ("bin", "reference_bin", "reference_station_id", "licence_id")) \
+                    or not all(co[k] is None or integral(co[k]) is not None for k in ("bin", "reference_bin")) \
+                    or not all(co[k] is None or isinstance(co[k], str) for k in ("reference_station_id", "licence_id")):
+                return None
         if e["status"] == "active":
             if e["offsets_licence_id"] is not None and e["offsets_licence_id"] not in lic:
                 return None
@@ -374,10 +390,10 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "_opened", "_commercial_only", "_effective", "__weakref__")
+                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_effective", "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None,
-                 commercial_only=False):
+                 commercial_only=False, commercial_basis="strict"):
         self._meta = meta
         self._index_path = index_path
         self._opened = ()  # the files this release was loaded from (the client sets it; verify hashes them)
@@ -406,6 +422,7 @@ class Release:
         _resolve_kinds(entries)
         # commercial_only (spec §4.2, K-NC DR106): station_id -> the effective recommended set_id (or None)
         self._commercial_only = commercial_only
+        self._commercial_basis = commercial_basis
         self._effective = _effective_ids(entries, self._lic_by_id) if commercial_only else None
         active = sorted((e for e in entries if e.get("status") == "active"), key=lambda e: e["station_id"])
         self._entries = active
@@ -655,42 +672,81 @@ class Release:
         sid = self._alias.get(str(system), {}).get(alias_id)
         return None if sid is None else self.station(sid)
 
-    def _filtered(self, country=None, type=None, kind=None, source=None, source_type=None):  # noqa: A002
+    def _set_eligible(self, cs, include_flagged, include_fallback, offsets_licence=None):
+        status = cs.get("qc_status")
+        if status not in _USABLE:
+            return False
+        fallback = cs.get("fallback")
+        if fallback is not None:
+            if not include_fallback:
+                return False
+        elif status != "ok" and not include_flagged:
+            return False
+        if offsets_licence is not None and offsets_licence not in self._lic_by_id:
+            return False
+        if not self._commercial_only:
+            return True
+        if self._commercial_basis == "strict" and fallback is not None and fallback.get("reason") == "licence_reading":
+            return False
+        licences = [cs["licence_id"]] + ([offsets_licence] if offsets_licence is not None else [])
+        return all(self._lic_by_id[lid].commercial_use is True for lid in licences)
+
+    def _eligible_paths(self, e, include_flagged, include_fallback):
+        for cs in e.get("sets") or ():
+            if self._set_eligible(cs, include_flagged, include_fallback):
+                yield cs
+        ref = self._by_id.get(e.get("reference_station_id"))
+        if ref is not None:
+            # Select first usable NOAA water-level set before applying query policy; do not evade its exclusion.
+            cs = next((cs for cs in ref["sets"] if cs.get("source") == _OFFSETS_SOURCE
+                       and cs.get("qc_status") in _USABLE and _typed(E.Quantity, cs.get("quantity")) == "water_level"), None)
+            if cs is not None and self._set_eligible(cs, include_flagged, include_fallback, e.get("offsets_licence_id")):
+                yield cs
+        for co in e.get("current_offsets") or ():
+            ref = self._by_id.get(co.get("reference_station_id"))
+            n = co.get("reference_bin")
+            own_bin = co.get("bin")
+            if ref is None or n is None or not 1 <= n <= 2**53 - 1 \
+                    or own_bin is None or not 1 <= own_bin <= 2**53 - 1:
+                continue
+            cs = next((cs for cs in ref["sets"] if cs.get("qc_status") in _USABLE
+                       and _typed(E.Quantity, cs.get("quantity")) == "current" and n in cs.get("current_bins", ())), None)
+            if cs is not None and self._set_eligible(cs, include_flagged, include_fallback, co.get("licence_id")):
+                yield cs
+
+    def _filtered(self, country=None, type=None, kind=None, source=None, source_type=None,
+                  include_flagged=False, include_fallback=False):  # noqa: A002
         self._check_open()
         for name, v in (("country", country), ("type", type), ("kind", kind), ("source", source),
                         ("source_type", source_type)):
             _check_type(name, v, (str,))
+        for name, value in (("include_flagged", include_flagged), ("include_fallback", include_fallback)):
+            _check_type(name, value, (bool,), allow_none=False)
         out = []
         for e in self._entries:
             if country is not None and e.get("country") != country:
                 continue
-            # an enum filter compares the typed value: an unknown value in the data is "other", so "other" matches
-            # it and its raw string matches nothing (CR2 DR7)
             if type is not None and _typed(E.StationType, e.get("type")) != str(type):
                 continue
             if kind is not None and _typed(E.Kind, e.get("kind")) != str(kind):
                 continue
-            sets = e.get("sets") or ()
-            if source is not None and not any(s.get("source") == source and s.get("qc_status") in _USABLE for s in sets):
-                continue
-            if source_type is not None:
-                # with commercial_only, the effective recommended set (spec §4.4, K-NC DR106)
-                rid = e.get("recommended_set_id") if self._effective is None else self._effective[e["station_id"]]
-                rec = [s for s in sets if rid is not None and s.get("set_id") == rid]
-                if not rec or _typed(E.SourceType, rec[0].get("source_type")) != str(source_type):
-                    continue
-            out.append(e)
+            if any((source is None or cs.get("source") == source)
+                   and (source_type is None or _typed(E.SourceType, cs.get("source_type")) == str(source_type))
+                   for cs in self._eligible_paths(e, include_flagged, include_fallback)):
+                out.append(e)
         return out
 
-    def stations(self, *, country=None, type=None, kind=None, source=None, source_type=None) -> Tuple[Station, ...]:  # noqa: A002
+    def stations(self, *, country=None, type=None, kind=None, source=None,  # noqa: A002
+                 source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Station, ...]:
         """Active stations matching every filter, ordered by station_id."""
         return tuple(self._station_from_entry(e) for e in
-                     self._filtered(country, type, kind, source, source_type))
+                     self._filtered(country, type, kind, source, source_type, include_flagged, include_fallback))
 
-    def iter_stations(self, *, country=None, type=None, kind=None, source=None, source_type=None) -> Iterator[Station]:  # noqa: A002
+    def iter_stations(self, *, country=None, type=None, kind=None, source=None,  # noqa: A002
+                      source_type=None, include_flagged=False, include_fallback=False) -> Iterator[Station]:
         """The same stations as stations(), one at a time. The arguments are checked when it is called; each step
         checks that the release is not closed (CR2 DR32)."""
-        entries = self._filtered(country, type, kind, source, source_type)
+        entries = self._filtered(country, type, kind, source, source_type, include_flagged, include_fallback)
 
         def steps():
             for e in entries:
@@ -700,7 +756,7 @@ class Release:
         return steps()
 
     def search(self, *, name, limit=None, match=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-               source_type=None) -> Tuple[Station, ...]:
+               source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Station, ...]:
         _check_type("name", name, (str,), allow_none=False)
         limit = _limit(limit)
         if match is not None and match != "exact":
@@ -709,7 +765,7 @@ class Release:
         if not q:
             raise InvalidArgumentError("the query is empty")
         ranked = []
-        for e in self._filtered(country, type, kind, source, source_type):
+        for e in self._filtered(country, type, kind, source, source_type, include_flagged, include_fallback):
             n = e["name_folded"] or ""
             if n == q:
                 r = 0
@@ -754,24 +810,24 @@ class Release:
         return hits
 
     def near(self, *, lat, lon, radius_km, limit=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-             source_type=None) -> Tuple[Nearby, ...]:
+             source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Nearby, ...]:
         lat = _number("lat", lat, -90, 90)
         lon = _number("lon", lon, -180, 180)
         radius_km = _number("radius_km", radius_km, 0)
         limit = _limit(limit)
         hits = self._distances(lat, lon, radius_km, dict(country=country, type=type, kind=kind, source=source,
-                                                         source_type=source_type))
+                                                         source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback))
         if limit is not None:
             hits = hits[:limit]
         return tuple(Nearby(self._station_from_entry(h[2]), h[0]) for h in hits)
 
     def nearest(self, *, lat, lon, max_km=None, country=None, type=None, kind=None, source=None,  # noqa: A002
-                source_type=None) -> Optional[Nearby]:
+                source_type=None, include_flagged=False, include_fallback=False) -> Optional[Nearby]:
         lat = _number("lat", lat, -90, 90)
         lon = _number("lon", lon, -180, 180)
         max_km = _number("max_km", max_km, 0, allow_none=True)
         hits = self._distances(lat, lon, max_km, dict(country=country, type=type, kind=kind, source=source,
-                                                      source_type=source_type))
+                                                      source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback))
         return Nearby(self._station_from_entry(hits[0][2]), hits[0][0]) if hits else None
 
     def _own_station(self, station, what):
@@ -939,7 +995,7 @@ def _validate_refs(d, conventions, licences):
 
 def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None,
                   index_sha256: Optional[str] = None, commercial_only: bool = False,
-                  json_sha256: Optional[str] = None) -> Release:
+                  json_sha256: Optional[str] = None, commercial_basis: str = "strict") -> Release:
     """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json). commercial_only: the
     open option of spec §4.2 (K-NC DR106). json_sha256: for a .json.gz, the OTC_{D}.json row that the decompressed
     bytes must match (spec §5.3, CR3 DR77)."""
@@ -951,13 +1007,13 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path, index_sha256)
             return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
-                           commercial_only=commercial_only)
+                           commercial_only=commercial_only, commercial_basis=commercial_basis)
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
             if line.strip():
                 docs.append(_json(line, f"{path} line {i + 1}"))
-        return _eager(meta, docs, files, commercial_only)
+        return _eager(meta, docs, files, commercial_only, commercial_basis)
     data = _read_bytes(path)
     if name.endswith(".gz"):
         try:
@@ -975,10 +1031,10 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
     if mode == "stream":
         # a .json file has no lines to seek to: keep the parsed stations, as in eager mode
         mode = "eager"
-    return _eager(meta, stations, files, commercial_only)
+    return _eager(meta, stations, files, commercial_only, commercial_basis)
 
 
-def _eager(meta, docs, files, commercial_only=False) -> Release:
+def _eager(meta, docs, files, commercial_only=False, commercial_basis="strict") -> Release:
     conv, lic = _refs(meta, "the release")
     try:
         entries = [_entry(d) for d in docs]
@@ -1000,7 +1056,7 @@ def _eager(meta, docs, files, commercial_only=False) -> Release:
             if _status(d) == "active" and eff[sid] != d.get("recommended_set_id"):
                 stations[sid] = build_station(d, conv, lic, kinds.get(sid), eff[sid])
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs,
-                   commercial_only=commercial_only)
+                   commercial_only=commercial_only, commercial_basis=commercial_basis)
 
 
 def check_json_sha256(gz_path: Path, data: bytes, expected: str) -> None:
@@ -1061,7 +1117,7 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
     if index_path is not None:
         from ._cache import atomic_write
         from ._client import SDK
-        doc = {"index_version": INDEX_VERSION, "datestamp": path.name[len("OTC_"):-len(".jsonl")], "jsonl": path.name,
+        doc = {"index_version": INDEX_VERSION, "discovery_index_version": 1, "datestamp": path.name[len("OTC_"):-len(".jsonl")], "jsonl": path.name,
                "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
         try:
             atomic_write(index_path, json.dumps(doc, ensure_ascii=False).encode("utf-8"))

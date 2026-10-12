@@ -350,6 +350,90 @@ def apply_filters(rel, stations, f):
     return out
 
 
+def discovery_filters(rel, stations, filters):
+    """SDK-QFILT oracle only for the P1b stations/search/geo/knc cases; legacy cases stay frozen."""
+    def eligible(cs, licence=None):
+        status = cs.get("qc_status")
+        if status not in ("ok", "flagged"):
+            return False
+        fallback = cs.get("fallback")
+        if fallback is not None:
+            if not filters.get("include_fallback", False):
+                return False
+        elif status == "flagged" and not filters.get("include_flagged", False):
+            return False
+        if licence is not None and licence not in rel.licences:
+            return False
+        if not rel.commercial_only:
+            return True
+        if fallback is not None and fallback.get("reason") == "licence_reading" and getattr(rel, "commercial_basis", "strict") == "strict":
+            return False
+        return all(rel.licences[lid].get("commercial_use") is True
+                   for lid in [cs["licence_id"]] + ([licence] if licence is not None else []))
+
+    def paths(station):
+        yield from (cs for cs in station.get("constant_sets", []) if eligible(cs))
+        offsets = station.get("subordinate_offsets") or {}
+        ref = rel.by_id.get(offsets.get("reference_station_id"))
+        if ref is not None:
+            selected = next((cs for cs in ref.get("constant_sets", []) if cs.get("source") == "noaa"
+                             and cs.get("quantity") == "water_level" and cs.get("qc_status") in ("ok", "flagged")), None)
+            if selected is not None and eligible(selected, offsets.get("licence_id")):
+                yield selected
+        for offsets in station.get("current_offsets", []):
+            ref = rel.by_id.get(offsets.get("reference_station_id"))
+            if ref is None:
+                continue
+            selected = next((cs for cs in ref.get("constant_sets", []) if cs.get("quantity") == "current"
+                             and cs.get("qc_status") in ("ok", "flagged")
+                             and any(b["bin"] == offsets.get("reference_bin") for b in cs.get("current_bins", []))), None)
+            if selected is not None and eligible(selected, offsets.get("licence_id")):
+                yield selected
+
+    metadata = {k: v for k, v in filters.items() if k in ("country", "type", "kind")}
+    return [st for st in apply_filters(rel, stations, metadata)
+            if any(("source" not in filters or cs["source"] == filters["source"])
+                   and ("source_type" not in filters or typed(cs["source_type"], SOURCE_TYPES) == filters["source_type"])
+                   for cs in paths(st))]
+
+
+def discovery_case(group, rel, basis=None):
+    """Label actual committed fixture constants in a native reader case; producer integration is separate."""
+    sid = "OTC-T-0002"
+    station = rel.by_id[sid]
+    cs = station["constant_sets"][0]
+    index = next(i for i, st in enumerate(rel.doc["stations"]) if st["station_id"] == sid)
+    label = {"reason": "licence_reading", "basis": "Actual committed synthetic fixture source evidence"}
+    path = "${tmp}/filtered/OTC_20991231.2.json"
+    options = {} if basis is None else {"commercial_only": True, "commercial_basis": basis}
+    steps = [drv("copy", files=[f"{FIX}/good/OTC_20991231.2.json"], to="${tmp}/filtered"),
+             drv("json_set", path=path, pointer=f"/stations/{index}/constant_sets/0/fallback", value=label),
+             step("open", {"loaded_from": "file_unverified", "datestamp": "20991231.2"}, file=path, **options)]
+    ops = {"stations": ("stations", "iter_stations"), "search": ("search",), "geo": ("near", "nearest"),
+           "knc": ("stations", "iter_stations", "search", "near", "nearest")}[group]
+    for flagged, fallback in ((False, False), (True, False), (False, True), (True, True)):
+        admitted = fallback and basis != "strict"
+        for op in ops:
+            args = {"source": cs["source"], "include_flagged": flagged, "include_fallback": fallback}
+            if op == "search":
+                args.update(name=station["name"], match="exact", limit=1)
+            if op in ("near", "nearest"):
+                args.update(lat=station["lat"], lon=station["lon"])
+                args["radius_km" if op == "near" else "max_km"] = 0.001
+            expect = {"station_ids": [sid] if admitted else []}
+            if op == "near":
+                expect["distance_km"] = [0.0] if admitted else []
+            if op == "nearest":
+                expect = {"station_id": sid if admitted else None, "distance_km": 0.0 if admitted else None}
+            steps.append(step(op, expect, **args))
+    value = enc_set(rel, station, cs)
+    value["fallback"] = {k: label.get(k) for k in ("reason", "basis", "otc_finding", "preferred_set_id")}
+    steps.append(step("constant_set", {"set": value}, station_id=sid, set_id=cs["set_id"]))
+    return case(f"{group}/qfilt-labelled-fallback" + (f"-{basis}" if basis else ""),
+                "Independent fallback/flagged discovery opt-ins retain explicit metadata and licence basis", "SDK-QFILT",
+                steps, requires=["fs", "json", "eager"], runners=["python"])
+
+
 def occurrences(text, sub):
     """Every start index of sub in text, overlapping ones included."""
     out, i = [], text.find(sub)
@@ -359,10 +443,10 @@ def occurrences(text, sub):
     return out
 
 
-def search(rel, name, limit=None, match=None, **f):
+def search(rel, name, limit=None, match=None, query_filters=apply_filters, **f):
     q = fold(name)
     ranked = []
-    for s in apply_filters(rel, rel.active, f):
+    for s in query_filters(rel, rel.active, f):
         n = fold(s["name"])
         if n == q:
             r = 0
@@ -390,16 +474,16 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * EARTH_R_KM * math.asin(min(1.0, math.sqrt(a)))
 
 
-def near(rel, lat, lon, radius_km, limit=None, **f):
-    hits = sorted((haversine(lat, lon, s["lat"], s["lon"]), s["station_id"]) for s in apply_filters(rel, rel.active, f))
+def near(rel, lat, lon, radius_km, limit=None, query_filters=apply_filters, **f):
+    hits = sorted((haversine(lat, lon, s["lat"], s["lon"]), s["station_id"]) for s in query_filters(rel, rel.active, f))
     hits = [h for h in hits if h[0] <= radius_km]
     if limit is not None:
         hits = hits[:limit]
     return {"station_ids": [h[1] for h in hits], "distance_km": [h[0] for h in hits]}
 
 
-def nearest(rel, lat, lon, max_km=None, **f):
-    hits = sorted((haversine(lat, lon, s["lat"], s["lon"]), s["station_id"]) for s in apply_filters(rel, rel.active, f))
+def nearest(rel, lat, lon, max_km=None, query_filters=apply_filters, **f):
+    hits = sorted((haversine(lat, lon, s["lat"], s["lon"]), s["station_id"]) for s in query_filters(rel, rel.active, f))
     if max_km is not None:
         hits = [h for h in hits if h[0] <= max_km]
     if not hits:
@@ -701,14 +785,14 @@ def group_stations(R2, R1):
                    {"source_type": "model"}, {"source_type": "official"}, {"country": "ZZZ"}, {"kind": "no-such-kind"},
                    {"source": "ticon-fallback"}, {"source_type": "gauge", "country": "USA"}]
     for f in filter_sets:
-        ids = [s["station_id"] for s in apply_filters(rel, rel.active, f)]
+        ids = [s["station_id"] for s in discovery_filters(rel, rel.active, f)]
         label = "-".join(f"{k}-{v}" for k, v in f.items()) or "all"
         out.append(mcase(f"stations/list-{label}", f"stations and iter_stations with filters {json.dumps(f)}", "4.4",
                          [step("stations", {"station_ids": ids}, **f), step("iter_stations", {"station_ids": ids}, **f)]))
     out.append(mcase("stations/filter-wrong-type", "a filter argument of the wrong type is invalid_argument", "4.4, 4.8",
                      [step("stations", err("invalid_argument"), country=5),
                       step("stations", err("invalid_argument"), type=["reference"])]))
-    return out + [fallback_case("stations", rel)]
+    return out + [fallback_case("stations", rel), discovery_case("stations", rel)]
 
 
 def group_sets(R2):
@@ -744,7 +828,7 @@ def group_search(R2):
         ("no such place", {}), ("e", {"limit": 4, "country": "USA"}),
     ]
     for i, (q, kw) in enumerate(queries, 1):
-        ids = search(rel, q, **kw)
+        ids = search(rel, q, **kw, query_filters=discovery_filters)
         label = re.sub(r"[^a-z0-9]+", "-", fold(q)).strip("-") or "blank"
         extra = "-".join(f"{k}-{v}" for k, v in kw.items())
         cid = f"search/{i:02d}-{label}" + (f"-{extra}" if extra else "")
@@ -752,13 +836,13 @@ def group_search(R2):
                          [step("search", {"station_ids": ids}, name=q, **kw)]))
     out.append(mcase("search/empty-query", "an empty query (also after trimming) is invalid_argument", "4.4.1",
                      [step("search", err("invalid_argument"), name=""), step("search", err("invalid_argument"), name="   ")]))
-    return out
+    return out + [discovery_case("search", rel)]
 
 
 def group_geo(R2):
     rel = R2
     out = []
-    spec_example = near(rel, 0.0, 179.95, 50)
+    spec_example = near(rel, 0.0, 179.95, 50, query_filters=discovery_filters)
     assert spec_example["station_ids"] == ["OTC-T-0007", "OTC-T-0008"]
     assert abs(spec_example["distance_km"][0] - 5.559754011674749) < 1e-9 and abs(spec_example["distance_km"][1] - 16.679262035030458) < 1e-9
     nears = [
@@ -776,7 +860,7 @@ def group_geo(R2):
     ]
     for label, kw in nears:
         out.append(mcase(f"geo/near-{label}", f"near {json.dumps(kw)}", "4.4, 6.3",
-                         [step("near", {**near(rel, **kw), "tolerance": TOL}, **kw)]))
+                         [step("near", {**near(rel, **kw, query_filters=discovery_filters), "tolerance": TOL}, **kw)]))
     nearests = [
         ("plain", dict(lat=37.79, lon=-122.33)),
         ("antimeridian", dict(lat=0.0, lon=179.99)),
@@ -788,14 +872,14 @@ def group_geo(R2):
     ]
     for label, kw in nearests:
         out.append(mcase(f"geo/nearest-{label}", f"nearest {json.dumps(kw)}", "4.4, 6.3",
-                         [step("nearest", {**nearest(rel, **kw), "tolerance": TOL}, **kw)]))
+                         [step("nearest", {**nearest(rel, **kw, query_filters=discovery_filters), "tolerance": TOL}, **kw)]))
     out.append(mcase("geo/invalid-arguments", "lat or lon out of range and a negative radius are invalid_argument", "4.4, 4.8",
                      [step("near", err("invalid_argument"), lat=91.0, lon=0.0, radius_km=10),
                       step("near", err("invalid_argument"), lat=0.0, lon=-180.5, radius_km=10),
                       step("near", err("invalid_argument"), lat=0.0, lon=0.0, radius_km=-1),
                       step("nearest", err("invalid_argument"), lat=-90.5, lon=0.0),
                       step("nearest", err("invalid_argument"), lat=0.0, lon=181.0)]))
-    return out
+    return out + [discovery_case("geo", rel)]
 
 
 def group_tolerant():
@@ -3392,13 +3476,15 @@ def group_knc():
                         step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s183, rel=KC)]}, station_id="OTC-T-0183"),
                         step("constant_sets", {"set_ids": [c["set_id"] for c in sets_in_order(s183, True, rel=KC)]}, station_id="OTC-T-0183", include_no_constants=True),
                         step("station", {"station": enc_station(KC, s183)}, station_id="OTC-T-0183"),
-                        step("stations", {"station_ids": [x["station_id"] for x in KC.active]}),
-                        step("search", {"station_ids": search(KC, "KNC 0183")}, name="KNC 0183")]))
-    with_opt = [x["station_id"] for x in apply_filters(KC, KC.active, {"source_type": "official"})]
-    without = [x["station_id"] for x in apply_filters(K, K.active, {"source_type": "official"})]
-    if with_opt != ["OTC-T-0185"] or without != ["OTC-T-0181", "OTC-T-0182", "OTC-T-0183", "OTC-T-0185", "OTC-T-0190"]:
+                        step("stations", {"station_ids": [x["station_id"] for x in discovery_filters(KC, KC.active, {})]}),
+                        step("search", {"station_ids": search(KC, "KNC 0183", query_filters=discovery_filters)}, name="KNC 0183")]))
+    with_opt = [x["station_id"] for x in discovery_filters(KC, KC.active, {"source_type": "official"})]
+    without = [x["station_id"] for x in discovery_filters(K, K.active, {"source_type": "official"})]
+    if with_opt != ["OTC-T-0181", "OTC-T-0183", "OTC-T-0185", "OTC-T-0186", "OTC-T-0190"] or \
+            without != ["OTC-T-0181", "OTC-T-0182", "OTC-T-0183", "OTC-T-0185", "OTC-T-0186", "OTC-T-0187",
+                        "OTC-T-0188", "OTC-T-0189", "OTC-T-0190"]:
         raise SystemExit(f"K-NC: source_type filter {with_opt} / {without}")
-    out.append(co_case("commercial-only/source-type-filter", "source_type compares the effective recommended set; a station with none matches no value; without the option the release's (K-NC DR106)",
+    out.append(co_case("commercial-only/source-type-filter", "source_type matches an eligible direct or actual offsets-reference path; commercial discovery excludes non-commercial legs (SDK-QFILT)",
                        [step("stations", {"station_ids": with_opt}, source_type="official"),
                         step("iter_stations", {"station_ids": with_opt}, source_type="official"),
                         {"op": "open", "matrix_open": {"commercial_only": None}},
@@ -3427,7 +3513,7 @@ def group_knc():
     steps.append(att_text("co-good-0004", G2C, ["OTC-T-0004"]))
     out.append(co_case("commercial-only/all-commercial-unchanged", "good 20991231.2 (every licence commercial) under the option: the attribution texts and every recommended set as without it; OTC-T-0004 (a subordinate with its own set) gives only its set's licence (K-NC DR106)",
                        steps, root="good"))
-    return out
+    return out + [discovery_case("knc", R2, "strict"), discovery_case("knc", R2, "as_published_upstream")]
 
 
 GROUPS = {
