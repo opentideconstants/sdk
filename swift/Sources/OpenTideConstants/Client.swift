@@ -1,4 +1,8 @@
 import Foundation
+public let supportedFormatMajors:[Int] = [1]
+public let supportedFormatVersion:String = "1.0"
+public let defaultBaseUrl:String = "https://data.opentideconstants.org/"
+public let cacheLayoutVersion:String = "v1"
 public final class OpenTideConstants {
     public private(set) var release:Release
     public private(set) var loadedFrom:LoadedFrom
