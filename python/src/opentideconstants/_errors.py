@@ -181,6 +181,10 @@ class UnknownTimeZoneError(OpenTideConstantsError):
         super().__init__(message, zone=zone)
 
 
+class HistoricalOffsetsExcludedError(OpenTideConstantsError):
+    code = 'historical_offsets_excluded'
+
+
 class ReferenceUnavailableError(OpenTideConstantsError):
     reference_station_id: str | None
     code = "reference_unavailable"
@@ -190,5 +194,6 @@ class ReferenceUnavailableError(OpenTideConstantsError):
 
 
 ERROR_CLASSES += (
+    HistoricalOffsetsExcludedError,
     NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError,
 )

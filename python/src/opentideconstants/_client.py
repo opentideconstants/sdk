@@ -195,7 +195,8 @@ class OpenTideConstants:
                  mode: str = "eager", base_url: Optional[str] = None, timeout=None, proxy=None, ca_file=None,
                  user_agent: Optional[str] = None, on_network_error: str = "use_cache", auto_update: bool = False,
                  update_interval=86_400, logger: Optional[logging.Logger] = None, verify_on_open: bool = False,
-                 commercial_only: bool = False, commercial_basis: str = "strict"):
+                 commercial_only: bool = False, commercial_basis: str = "strict",
+                 historical_offsets_policy: str = "fallback"):
         self._log = logger or logging.getLogger("opentideconstants")
         self._lock = threading.RLock()
         self._release: Optional[Release] = None
@@ -216,6 +217,9 @@ class OpenTideConstants:
                 raise InvalidArgumentError(f"{name} must be a boolean")
         if not isinstance(commercial_basis, str) or commercial_basis not in ("strict", "as_published_upstream"):
             raise InvalidArgumentError(f"commercial_basis must be strict or as_published_upstream, not {commercial_basis!r}")
+        if not isinstance(historical_offsets_policy, str) or historical_offsets_policy not in ('fallback', 'exclude'):
+            raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
+        self._historical_offsets_policy = historical_offsets_policy
         # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
         # spec §4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
         if file is not None and (release != "latest" or offline or on_network_error != "use_cache"):
@@ -343,7 +347,8 @@ class OpenTideConstants:
         else:
             files = [FileInfo(p.name, None, p.stat().st_size, None) for p in sorted(opened, key=lambda p: p.name)]
             lf = "file_unverified"
-        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only, commercial_basis=self._commercial_basis, json_sha256=json_sha256)
+        rel = load_document(path, self._mode, files, commercial_only=self._commercial_only, commercial_basis=self._commercial_basis,
+                            historical_offsets_policy=self._historical_offsets_policy, json_sha256=json_sha256)
         rel._opened = tuple(opened)
         self._set(rel, lf)
 
@@ -399,7 +404,8 @@ class OpenTideConstants:
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"),
-                            commercial_only=self._commercial_only, commercial_basis=self._commercial_basis)
+                            commercial_only=self._commercial_only, commercial_basis=self._commercial_basis,
+                            historical_offsets_policy=self._historical_offsets_policy)
         rel._zenodo_version_doi = v.get("zenodo_version_doi")
         rel._opened = tuple(check)
         return rel
@@ -801,7 +807,8 @@ class OpenTideConstants:
             rel = load_document(d / data_name, mode, files_infos,
                                 index_path=d / "index-v1.json" if mode == "stream" else None,
                                 index_sha256=(files.get(data_name) or {}).get("sha256"),
-                                commercial_only=self._commercial_only, commercial_basis=self._commercial_basis)
+                                commercial_only=self._commercial_only, commercial_basis=self._commercial_basis,
+                                historical_offsets_policy=self._historical_offsets_policy)
             # a null DOI never erases a known one (CR2 DR11)
             zdoi = info.zenodo_version_doi if info is not None and info.zenodo_version_doi is not None \
                 else old.get("zenodo_version_doi")
@@ -1257,17 +1264,17 @@ class OpenTideConstants:
         return self._r().nearest(lat=lat, lon=lon, max_km=max_km, country=country, type=type, kind=kind,
                                  source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
-    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None):
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None):
         """Heights using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().heights(station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id)
+        return self._r().heights(station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id)
 
-    def heights_at(self, station, times, *, datum=None, set_id=None):
+    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None):
         """Heights at using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().heights_at(station, times, datum=datum, set_id=set_id)
+        return self._r().heights_at(station, times, datum=datum, set_id=set_id, offset_id=offset_id)
 
-    def extremes(self, station, *, start, stop, datum=None, set_id=None):
+    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None):
         """Extremes using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().extremes(station, start=start, stop=stop, datum=datum, set_id=set_id)
+        return self._r().extremes(station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id)
 
     def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
         """Currents using otc-predict-1 (prediction spec section 5.2)."""

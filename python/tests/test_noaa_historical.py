@@ -279,6 +279,76 @@ class NativeHistoricalEligibility(unittest.TestCase):
                     historical_offset_eligibility(offsets, **arguments)
 
 
+class NativeHistoricalPublic(unittest.TestCase):
+    """Public policy/value calls on the exact source-derived producer specimen."""
+
+    @classmethod
+    def setUpClass(cls):
+        release = os.environ.get('OTC_NOAA_NATIVE_RELEASE')
+        if not release:
+            raise RuntimeError('OTC_NOAA_NATIVE_RELEASE is required for the actual public historical gate')
+        cls.path = Path(release)
+        cls.document = load_native_inputs(cls.path)
+        cls.targets = [station for station in cls.document['stations']
+                       if station.get('subordinate_offsets', {}).get('offset_id')]
+        if len(cls.targets) != 2:
+            raise AssertionError('actual two historical profiles required')
+
+    def test_default_explicit_metadata_and_full_curve_refusals(self):
+        for mode, suffix in (('eager', '.json'), ('stream', '.jsonl')):
+            with self.subTest(mode=mode), otc.OpenTideConstants(file=self.path.with_suffix(suffix), mode=mode) as client:
+                self.assertEqual(client.release.historical_offsets_policy, 'fallback')
+                for target in self.targets:
+                    sid, own = target['station_id'], target['subordinate_offsets']
+                    self.assertIn(sid, {station.station_id for station in client.stations()})
+                    for caller in (client, client.release):
+                        default = caller.extremes(sid, start=START, stop=STOP)
+                        explicit = caller.extremes(sid, start=START, stop=STOP, offset_id=own['offset_id'])
+                        self.assertEqual(default, explicit)
+                        self.assertEqual(default.offset_id, own['offset_id'])
+                        self.assertEqual(default.offset_source_version, 'annual-tide-tables-2020')
+                        self.assertTrue(default.historical_offsets)
+                        self.assertEqual(default.current_validity, 'unestablished')
+                        self.assertEqual(default.current_accuracy, 'unverified')
+                        self.assertEqual(default.reference_2020_equivalence, 'not_checked')
+                        self.assertIn('retired NOAA profile', default.source_note)
+                        for options in ({}, {'offset_id': own['offset_id']}):
+                            with self.assertRaises(otc.ExtremesOnlyError):
+                                caller.heights(sid, start=START, stop=STOP, **options)
+                            with self.assertRaises(otc.ExtremesOnlyError):
+                                caller.heights_at(sid, [START], **options)
+
+    def test_strict_exclusion_cannot_be_loosened(self):
+        for mode, suffix in (('eager', '.json'), ('stream', '.jsonl')):
+            with self.subTest(mode=mode), otc.OpenTideConstants(file=self.path.with_suffix(suffix), mode=mode,
+                                                               historical_offsets_policy='exclude') as client:
+                self.assertEqual(client.release.historical_offsets_policy, 'exclude')
+                for target in self.targets:
+                    sid = target['station_id']
+                    self.assertIsNotNone(client.station(sid))
+                    for flagged in (False, True):
+                        for fallback in (False, True):
+                            self.assertNotIn(sid, {station.station_id for station in client.stations(
+                                include_flagged=flagged, include_fallback=fallback)})
+                    for caller in (client, client.release):
+                        for options in ({}, {'offset_id': target['subordinate_offsets']['offset_id']}):
+                            with self.assertRaises(otc.HistoricalOffsetsExcludedError):
+                                caller.extremes(sid, start=START, stop=STOP, **options)
+
+    def test_invalid_policy_and_selectors(self):
+        for policy in ('unknown', None, True):
+            with self.subTest(policy=policy), self.assertRaises(otc.InvalidArgumentError):
+                otc.OpenTideConstants(file=self.path, historical_offsets_policy=policy)
+        with otc.OpenTideConstants(file=self.path) as client:
+            for target in self.targets:
+                sid, own = target['station_id'], target['subordinate_offsets']
+                for value in (True, 1, 'another-profile'):
+                    with self.subTest(value=value), self.assertRaises(otc.InvalidArgumentError):
+                        client.extremes(sid, start=START, stop=STOP, offset_id=value)
+                with self.assertRaises(otc.InvalidArgumentError):
+                    client.extremes(sid, start=START, stop=STOP, set_id='another-set', offset_id=own['offset_id'])
+
+
 if __name__ == "__main__":
     if "--native" not in sys.argv:
         unittest.main()

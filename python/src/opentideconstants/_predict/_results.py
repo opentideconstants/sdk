@@ -82,6 +82,16 @@ class HeightSeries(_LocalResult):
     tz_version: str | None = None
     release: str | None = None
     algorithm: str | None = None
+    offset_id: str | None = None
+    offset_source: str | None = None
+    offset_source_version: str | None = None
+    historical_offsets: bool = False
+    current_validity: str | None = None
+    current_accuracy: str | None = None
+    reference_set_id: str | None = None
+    reference_source_version: str | None = None
+    reference_2020_equivalence: str | None = None
+    source_note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +113,16 @@ class ExtremeList(_LocalResult):
     tz_version: str | None = None
     release: str | None = None
     algorithm: str | None = None
+    offset_id: str | None = None
+    offset_source: str | None = None
+    offset_source_version: str | None = None
+    historical_offsets: bool = False
+    current_validity: str | None = None
+    current_accuracy: str | None = None
+    reference_set_id: str | None = None
+    reference_source_version: str | None = None
+    reference_2020_equivalence: str | None = None
+    source_note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

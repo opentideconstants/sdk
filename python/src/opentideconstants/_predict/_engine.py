@@ -186,20 +186,37 @@ def _current(context, row):
     context.minor = Sum(context.table, row.get('constituents') or (), amplitude='minor_amplitude_ms', phase='minor_phase_deg', mean=row.get('mean_minor_ms', 0.0))
 
 
-def _context(release, station, quantity, set_id, datum=None, bin_number=None, series=False):
+def _context(release, station, quantity, set_id, datum=None, bin_number=None, series=False, offset_id=None):
     station = _station(release, station)
     _options(set_id, datum, bin_number)
+    if offset_id is not None and not isinstance(offset_id, str):
+        raise X.InvalidArgumentError('offset_id must be a string')
+    if offset_id is not None and set_id is not None:
+        raise X.InvalidArgumentError('set_id and offset_id are mutually exclusive')
     constants = _chosen(release, station, set_id)
     usable = constants is not None and constants.qc_status in ('ok', 'flagged')
     tide_offsets, current_offsets = station.raw.get('subordinate_offsets'), station.raw.get('current_offsets')
-    if set_id is None and not usable and station.type == 'subordinate' and (tide_offsets or current_offsets):
+    historical = tide_offsets is not None and tide_offsets.get('offset_id') is not None
+    if offset_id is not None:
+        if not historical or tide_offsets['offset_id'] != offset_id:
+            raise X.InvalidArgumentError(f'offset_id {offset_id!r} is not a profile of {station.station_id}')
+        usable = False  # explicit selection chooses the historical path over an ordinary recommendation
+    blocked_better = historical and offset_id is None and release._better_historical_path(release._by_id[station.station_id])
+    if set_id is None and not usable and station.type == 'subordinate' and ((tide_offsets and not blocked_better) or current_offsets):
         if tide_offsets:
             if quantity != 'water_level':
                 raise X.QuantityMismatchError('tide offsets need water_level')
             kind = tide_offsets.get('height_adjusted_type')
             if kind not in ('R', 'A'):
                 raise X.InvalidArgumentError(f'height_adjusted_type {kind!r} is not R or A')
+            if historical and release.historical_offsets_policy == 'exclude':
+                raise X.HistoricalOffsetsExcludedError('historical_offsets_policy=exclude refuses historical prediction')
             reference, constants = _reference(release, tide_offsets, quantity)
+            if historical:
+                from .._historical_offsets import require_historical_offset
+                require_historical_offset(tide_offsets, policy=release.historical_offsets_policy,
+                    licences=release._lic_by_id, selected_reference=constants, better_path=blocked_better,
+                    selection='explicit' if offset_id is not None else 'auto', commercial_only=release._commercial_only)
             table = _table(release, constants)
             context = _Context(station, constants, table, reference=reference, offsets=tide_offsets)
             # Validate all constituents before datum checks.
@@ -266,26 +283,35 @@ def _result(release, context, cls: type[_ResultT], items, datum=None) -> _Result
         fields['bin_number'] = context.bin_number
     if cls is CurrentEventList:
         fields['omitted_event_types'] = context.omitted
+    if cls in (HeightSeries, ExtremeList) and context.offsets is not None and context.offsets.get('offset_id') is not None:
+        offsets = context.offsets
+        vintage = offsets['vintage']
+        fields.update(set_id=None, offset_id=offsets['offset_id'], offset_source=offsets['source'],
+                      offset_source_version=offsets['source_version'], historical_offsets=True,
+                      current_validity=vintage['current_validity'], current_accuracy=vintage['current_accuracy'],
+                      reference_set_id=context.constants.set_id, reference_source_version=context.constants.source_version,
+                      reference_2020_equivalence=vintage['reference_2020_equivalence'],
+                      source_note='OTC historical-offset calculation using NOAA2020 parameters; retired NOAA profile; current validity unestablished; current accuracy unverified.')
     return constructor(**fields)
 
 
-def heights(release, station, *, start, stop, step_s=600, datum=None, set_id=None) -> HeightSeries:
+def heights(release, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None) -> HeightSeries:
     start, stop = _window(start, stop, step_s)
-    context = _context(release, station, 'water_level', set_id, datum, series=True)
+    context = _context(release, station, 'water_level', set_id, datum, series=True, offset_id=offset_id)
     return _result(release, context, HeightSeries, (HeightPoint(utc(t), context.total.value(t)) for t in range(start, stop, step_s)), datum)
 
 
-def heights_at(release, station, times, *, datum=None, set_id=None) -> HeightSeries:
+def heights_at(release, station, times, *, datum=None, set_id=None, offset_id=None) -> HeightSeries:
     if isinstance(times, (str, bytes)) or not isinstance(times, Sequence):
         raise X.InvalidArgumentError('times must be a sequence of aware datetimes')
     seconds = [instant(t) for t in times]
-    context = _context(release, station, 'water_level', set_id, datum, series=True)
+    context = _context(release, station, 'water_level', set_id, datum, series=True, offset_id=offset_id)
     return _result(release, context, HeightSeries, (HeightPoint(utc(t), context.total.value(t)) for t in seconds), datum)
 
 
-def extremes(release, station, *, start, stop, datum=None, set_id=None) -> ExtremeList:
+def extremes(release, station, *, start, stop, datum=None, set_id=None, offset_id=None) -> ExtremeList:
     start, stop = _window(start, stop)
-    context = _context(release, station, 'water_level', set_id, datum)
+    context = _context(release, station, 'water_level', set_id, datum, offset_id=offset_id)
     if context.method == 'offsets' and start != stop:
         offsets = context.offsets
         margin = max(120.0, max(abs(offsets.get('time_offset_high_min') or 0), abs(offsets.get('time_offset_low_min') or 0)) + 60.0) * 60.0

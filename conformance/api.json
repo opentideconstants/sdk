@@ -244,6 +244,14 @@
        "positional": false,
        "default": "strict",
        "note": "SDK-QFILT: strict or as_published_upstream only; inherited by every loaded Release/update. Discovery only; explicit non-commercial licences remain excluded. Python implemented; other SDK alignment deferred."
+      },
+      {
+       "name": "historical_offsets_policy",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "fallback",
+       "note": "fallback or exclude; retained by every loaded Release. Strict exclusion cannot be loosened by discovery flags or explicit offset_id."
       }
      ],
      "returns": "Client",
@@ -1170,6 +1178,14 @@
        "positional": false,
        "default": null,
        "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      },
+      {
+       "name": "offset_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "Exact own historical profile; exclusive with set_id; cannot bypass release policy, own/reference rights or integrity."
       }
      ],
      "returns": "HeightSeries",
@@ -1185,7 +1201,8 @@
       "datum_unavailable",
       "reference_unavailable",
       "not_built",
-      "extremes_only"
+      "extremes_only",
+      "historical_offsets_excluded"
      ],
      "languages": [
       "ruby",
@@ -1236,6 +1253,14 @@
        "positional": false,
        "default": null,
        "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      },
+      {
+       "name": "offset_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "Exact own historical profile; exclusive with set_id; cannot bypass release policy, own/reference rights or integrity."
       }
      ],
      "returns": "HeightSeries",
@@ -1251,7 +1276,8 @@
       "datum_unavailable",
       "reference_unavailable",
       "not_built",
-      "extremes_only"
+      "extremes_only",
+      "historical_offsets_excluded"
      ],
      "languages": [
       "ruby",
@@ -1309,6 +1335,14 @@
        "positional": false,
        "default": null,
        "note": "a set_id of the station's constant sets; null = the recommended set; a set_id that names no set of the station is invalid_argument (prediction spec 4.2 step 1)"
+      },
+      {
+       "name": "offset_id",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "Exact own historical profile; exclusive with set_id; cannot bypass release policy, own/reference rights or integrity."
       }
      ],
      "returns": "ExtremeList",
@@ -1323,7 +1357,8 @@
       "time_out_of_range",
       "datum_unavailable",
       "reference_unavailable",
-      "not_built"
+      "not_built",
+      "historical_offsets_excluded"
      ],
      "languages": [
       "ruby",
@@ -1586,6 +1621,12 @@
      "c": "otc_astro_table",
      "typescript_async": true,
      "note": "prediction spec 5.2: null when the release has none (C OTC_E_NOT_FOUND); runs the table check of 4.2a, so a table that fails it (a negative row speed, a malformed table) is invalid_argument naming the table and the row; C reads the table from .meta.json on first use and keeps it until otc_close"
+    },
+    {
+     "name": "historical_offsets_policy",
+     "kind": "attribute",
+     "type": "string",
+     "nullable": false
     }
    ]
   },
@@ -3450,6 +3491,66 @@
      ],
      "c": "otc_tz_open/otc_tz_local/otc_tz_close",
      "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    },
+    {
+     "name": "offset_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "offset_source",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "offset_source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "historical_offsets",
+     "kind": "field",
+     "type": "boolean",
+     "nullable": false
+    },
+    {
+     "name": "current_validity",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "current_accuracy",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_2020_equivalence",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source_note",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
     }
    ]
   },
@@ -3618,6 +3719,66 @@
      ],
      "c": "otc_tz_open/otc_tz_local/otc_tz_close",
      "note": "a new result of the same kind with local_time and utc_offset_s on every item and tz and tz_version set; the original is unchanged; zone rules are loaded only here (prediction spec 4.1, 5.1); C converts each t with otc_tz_local; C built without local time returns OTC_E_NOT_BUILT"
+    },
+    {
+     "name": "offset_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "offset_source",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "offset_source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "historical_offsets",
+     "kind": "field",
+     "type": "boolean",
+     "nullable": false
+    },
+    {
+     "name": "current_validity",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "current_accuracy",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_set_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "reference_2020_equivalence",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
+    },
+    {
+     "name": "source_note",
+     "kind": "field",
+     "type": "string",
+     "nullable": true
     }
    ]
   },
@@ -5082,6 +5243,19 @@
    "languages": [
     "c"
    ]
+  },
+  {
+   "code": "historical_offsets_excluded",
+   "class": "HistoricalOffsetsExcludedError",
+   "c": "OTC_E_HISTORICAL_OFFSETS_EXCLUDED",
+   "when": "An attempted historical-offset prediction while the loaded Release uses exclude; metadata lookup remains available.",
+   "fields": [],
+   "languages": [
+    "ruby",
+    "python",
+    "typescript",
+    "c"
+   ]
   }
  ],
  "error_base_class": {
@@ -5188,7 +5362,28 @@
     "SubordinateOffsets.qc_flags",
     "SubordinateOffsets.fallback",
     "SubordinateOffsets.vintage",
-    "SubordinateOffsets.provenance"
+    "SubordinateOffsets.provenance",
+    "Release.historical_offsets_policy",
+    "HeightSeries.offset_id",
+    "HeightSeries.offset_source",
+    "HeightSeries.offset_source_version",
+    "HeightSeries.historical_offsets",
+    "HeightSeries.current_validity",
+    "HeightSeries.current_accuracy",
+    "HeightSeries.reference_set_id",
+    "HeightSeries.reference_source_version",
+    "HeightSeries.reference_2020_equivalence",
+    "HeightSeries.source_note",
+    "ExtremeList.offset_id",
+    "ExtremeList.offset_source",
+    "ExtremeList.offset_source_version",
+    "ExtremeList.historical_offsets",
+    "ExtremeList.current_validity",
+    "ExtremeList.current_accuracy",
+    "ExtremeList.reference_set_id",
+    "ExtremeList.reference_source_version",
+    "ExtremeList.reference_2020_equivalence",
+    "ExtremeList.source_note"
    ],
    "enums": [
     "extreme_type",
@@ -5210,7 +5405,8 @@
     "extremes_only",
     "local_time_unavailable",
     "unknown_time_zone",
-    "reference_unavailable"
+    "reference_unavailable",
+    "historical_offsets_excluded"
    ]
   },
   "python": {
@@ -5258,7 +5454,28 @@
     "SubordinateOffsets.qc_flags",
     "SubordinateOffsets.fallback",
     "SubordinateOffsets.vintage",
-    "SubordinateOffsets.provenance"
+    "SubordinateOffsets.provenance",
+    "Release.historical_offsets_policy",
+    "HeightSeries.offset_id",
+    "HeightSeries.offset_source",
+    "HeightSeries.offset_source_version",
+    "HeightSeries.historical_offsets",
+    "HeightSeries.current_validity",
+    "HeightSeries.current_accuracy",
+    "HeightSeries.reference_set_id",
+    "HeightSeries.reference_source_version",
+    "HeightSeries.reference_2020_equivalence",
+    "HeightSeries.source_note",
+    "ExtremeList.offset_id",
+    "ExtremeList.offset_source",
+    "ExtremeList.offset_source_version",
+    "ExtremeList.historical_offsets",
+    "ExtremeList.current_validity",
+    "ExtremeList.current_accuracy",
+    "ExtremeList.reference_set_id",
+    "ExtremeList.reference_source_version",
+    "ExtremeList.reference_2020_equivalence",
+    "ExtremeList.source_note"
    ],
    "enums": [
     "extreme_type",
@@ -5280,7 +5497,8 @@
     "extremes_only",
     "local_time_unavailable",
     "unknown_time_zone",
-    "reference_unavailable"
+    "reference_unavailable",
+    "historical_offsets_excluded"
    ]
   },
   "c": {
@@ -5320,7 +5538,28 @@
     "SubordinateOffsets.qc_flags",
     "SubordinateOffsets.fallback",
     "SubordinateOffsets.vintage",
-    "SubordinateOffsets.provenance"
+    "SubordinateOffsets.provenance",
+    "Release.historical_offsets_policy",
+    "HeightSeries.offset_id",
+    "HeightSeries.offset_source",
+    "HeightSeries.offset_source_version",
+    "HeightSeries.historical_offsets",
+    "HeightSeries.current_validity",
+    "HeightSeries.current_accuracy",
+    "HeightSeries.reference_set_id",
+    "HeightSeries.reference_source_version",
+    "HeightSeries.reference_2020_equivalence",
+    "HeightSeries.source_note",
+    "ExtremeList.offset_id",
+    "ExtremeList.offset_source",
+    "ExtremeList.offset_source_version",
+    "ExtremeList.historical_offsets",
+    "ExtremeList.current_validity",
+    "ExtremeList.current_accuracy",
+    "ExtremeList.reference_set_id",
+    "ExtremeList.reference_source_version",
+    "ExtremeList.reference_2020_equivalence",
+    "ExtremeList.source_note"
    ],
    "enums": [
     "extreme_type",
@@ -5342,7 +5581,8 @@
     "extremes_only",
     "local_time_unavailable",
     "unknown_time_zone",
-    "reference_unavailable"
+    "reference_unavailable",
+    "historical_offsets_excluded"
    ],
    "c_structs": [
     "otc_predict_opts",

@@ -64,11 +64,12 @@ __all__ = [
     "NoAstroTableError", "UnsupportedConstituentError", "TimeOutOfRangeError", "DatumUnavailableError",
     "BinNotFoundError", "ExtremesOnlyError", "LocalTimeUnavailableError", "UnknownTimeZoneError",
     "ReferenceUnavailableError",
+    "HistoricalOffsetsExcludedError",
     # constants
     "SUPPORTED_FORMAT_MAJORS", "SUPPORTED_FORMAT_VERSION", "DEFAULT_BASE_URL", "CACHE_LAYOUT_VERSION", "__version__",
 ]
 
-from ._errors import (NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError)
+from ._errors import (NoConstantsError, QuantityMismatchError, UnsupportedConventionError, NoAstroTableError, UnsupportedConstituentError, TimeOutOfRangeError, DatumUnavailableError, BinNotFoundError, ExtremesOnlyError, LocalTimeUnavailableError, UnknownTimeZoneError, ReferenceUnavailableError, HistoricalOffsetsExcludedError)
 from ._enums import ExtremeType, CurrentEventType, PredictionMethod
 
 _PREDICTION_TYPES = ["AstroTable", "HeightSeries", "ExtremeList", "CurrentSeries", "CurrentEventList", "HeightPoint", "Extreme", "CurrentPoint", "CurrentEvent", "DatumInfo", "DatumLevel", "Ranges"]

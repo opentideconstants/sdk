@@ -402,10 +402,13 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_effective", "_astro_cache", "__weakref__")
+                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_historical_offsets_policy", "_effective", "_astro_cache", "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None,
-                 commercial_only=False, commercial_basis="strict"):
+                 commercial_only=False, commercial_basis="strict", historical_offsets_policy="fallback"):
+        if not isinstance(historical_offsets_policy, str) or historical_offsets_policy not in ('fallback', 'exclude'):
+            raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
+        self._historical_offsets_policy = historical_offsets_policy
         self._astro_cache = {}
         self._meta = meta
         self._index_path = index_path
@@ -704,12 +707,48 @@ class Release:
         licences = [cs["licence_id"]] + ([offsets_licence] if offsets_licence is not None else [])
         return all(self._lic_by_id[lid].commercial_use is True for lid in licences)
 
-    def _eligible_paths(self, e, include_flagged, include_fallback):
+    @property
+    def historical_offsets_policy(self):
+        self._check_open()
+        return self._historical_offsets_policy
+
+    def _better_historical_path(self, e):
+        # An ordinary default remains authoritative even when a query excludes its QC/source.
+        rid = self._effective.get(e['station_id']) if self._effective is not None else e.get('recommended_set_id')
+        if any(cs.get('set_id') == rid and cs.get('qc_status') in _USABLE for cs in e.get('sets') or ()):
+            return True
+        return any(self._eligible_paths(e, False, False, historical=False))
+
+    def _historical_discovery(self, e):
+        from ._historical_offsets import historical_offset_eligibility
+        from ._predict._engine import _reference, _context
+        from . import _errors as X
+        offsets = e['subordinate_offsets']
+        if self._historical_offsets_policy == 'exclude' or self._better_historical_path(e):
+            return False
+        try:
+            reference, constants = _reference(self, offsets, 'water_level')
+            if not historical_offset_eligibility(offsets, policy=self._historical_offsets_policy,
+                    licences=self._lic_by_id, selected_reference=constants, better_path=False,
+                    commercial_only=self._commercial_only):
+                return False
+            # Validate the selected native model/MLLW without switching to another reference set.
+            _context(self, reference, 'water_level', constants.set_id, 'chart')
+        except (X.NoConstantsError, X.ReferenceUnavailableError, X.InvalidArgumentError, X.UnsupportedConventionError,
+                X.NoAstroTableError, X.UnsupportedConstituentError, X.DatumUnavailableError):
+            return False
+        return True
+
+    def _eligible_paths(self, e, include_flagged, include_fallback, *, historical=True):
         for cs in e.get("sets") or ():
             if self._set_eligible(cs, include_flagged, include_fallback):
                 yield cs
         ref = self._by_id.get(e.get("reference_station_id"))
-        if ref is not None:
+        own = e.get('subordinate_offsets') or {}
+        if own.get('offset_id') is not None:
+            if historical and self._historical_discovery(e):
+                yield dict(own, quantity='water_level')
+        elif ref is not None:
             # Select first usable NOAA water-level set before applying query policy; do not evade its exclusion.
             cs = next((cs for cs in ref["sets"] if cs.get("source") == _OFFSETS_SOURCE
                        and cs.get("qc_status") in _USABLE and _typed(E.Quantity, cs.get("quantity")) == "water_level"), None)
@@ -853,23 +892,23 @@ class Release:
             raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
                                        f"{self.datestamp}")
 
-    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None):
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None):
         """Heights using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
         from ._predict._engine import heights
-        return heights(self, station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id)
+        return heights(self, station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id)
 
-    def heights_at(self, station, times, *, datum=None, set_id=None):
+    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None):
         """Heights at using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
         from ._predict._engine import heights_at
-        return heights_at(self, station, times, datum=datum, set_id=set_id)
+        return heights_at(self, station, times, datum=datum, set_id=set_id, offset_id=offset_id)
 
-    def extremes(self, station, *, start, stop, datum=None, set_id=None):
+    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None):
         """Extremes using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
         from ._predict._engine import extremes
-        return extremes(self, station, start=start, stop=stop, datum=datum, set_id=set_id)
+        return extremes(self, station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id)
 
     def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
         """Currents using otc-predict-1 (prediction spec section 5.2)."""
@@ -1055,7 +1094,8 @@ def _validate_refs(d, conventions, licences):
 
 def load_document(path: Path, mode: str, files, index_path: Optional[Path] = None,
                   index_sha256: Optional[str] = None, commercial_only: bool = False,
-                  json_sha256: Optional[str] = None, commercial_basis: str = "strict") -> Release:
+                  json_sha256: Optional[str] = None, commercial_basis: str = "strict",
+                  historical_offsets_policy: str = "fallback") -> Release:
     """Load a release from a data file (.json, .json.gz or .jsonl with its .meta.json). commercial_only: the
     open option of spec §4.2 (K-NC DR106). json_sha256: for a .json.gz, the OTC_{D}.json row that the decompressed
     bytes must match (spec §5.3, CR3 DR77)."""
@@ -1067,13 +1107,14 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         if mode == "stream":
             entries = _stream_index(path, conv, lic, index_path, index_sha256)
             return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
-                           commercial_only=commercial_only, commercial_basis=commercial_basis)
+                           commercial_only=commercial_only, commercial_basis=commercial_basis,
+                           historical_offsets_policy=historical_offsets_policy)
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
             if line.strip():
                 docs.append(_json(line, f"{path} line {i + 1}"))
-        return _eager(meta, docs, files, commercial_only, commercial_basis)
+        return _eager(meta, docs, files, commercial_only, commercial_basis, historical_offsets_policy)
     data = _read_bytes(path)
     if name.endswith(".gz"):
         try:
@@ -1091,10 +1132,10 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
     if mode == "stream":
         # a .json file has no lines to seek to: keep the parsed stations, as in eager mode
         mode = "eager"
-    return _eager(meta, stations, files, commercial_only, commercial_basis)
+    return _eager(meta, stations, files, commercial_only, commercial_basis, historical_offsets_policy)
 
 
-def _eager(meta, docs, files, commercial_only=False, commercial_basis="strict") -> Release:
+def _eager(meta, docs, files, commercial_only=False, commercial_basis="strict", historical_offsets_policy="fallback") -> Release:
     conv, lic = _refs(meta, "the release")
     try:
         entries = [_entry(d) for d in docs]
@@ -1116,7 +1157,8 @@ def _eager(meta, docs, files, commercial_only=False, commercial_basis="strict") 
             if _status(d) == "active" and eff[sid] != d.get("recommended_set_id"):
                 stations[sid] = build_station(d, conv, lic, kinds.get(sid), eff[sid])
     return Release(meta=meta, entries=entries, files=files, mode="eager", stations=stations, tombstones=tombs,
-                   commercial_only=commercial_only, commercial_basis=commercial_basis)
+                   commercial_only=commercial_only, commercial_basis=commercial_basis,
+                   historical_offsets_policy=historical_offsets_policy)
 
 
 def check_json_sha256(gz_path: Path, data: bytes, expected: str) -> None:
