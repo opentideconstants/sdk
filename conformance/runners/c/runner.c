@@ -78,6 +78,7 @@ static struct {
     char    *cache_dir, *base_url, *proxy, *ca_file, *user_agent;
     bool     offline;
     bool     require_checksum;           /* otc_open_options.require_checksum, for every open (CR2 DR34) */
+    char    *commercial_basis, *historical_offsets_policy;
     bool     commercial_only;            /* otc_open_options.commercial_only, for every open (K-NC DR106) */
     double   timeout_s;
     otc_on_network_error on_network_error;
@@ -104,6 +105,8 @@ static double now_s(void)
 
 static void client_free(void)
 {
+    free(g_client.commercial_basis);
+    free(g_client.historical_offsets_policy);
     free(g_client.cache_dir);
     free(g_client.base_url);
     free(g_client.proxy);
@@ -775,6 +778,13 @@ static void arg_filter(args *a, otc_filter *f)
     f->kind = arg_str(a, "kind");
     f->source = arg_str(a, "source");
     f->source_type = arg_str(a, "source_type");
+    {
+        const cJSON *v = a->obj ? cJSON_GetObjectItemCaseSensitive(a->obj, "include_flagged") : NULL;
+        const cJSON *w = a->obj ? cJSON_GetObjectItemCaseSensitive(a->obj, "include_fallback") : NULL;
+        if ((v && !cJSON_IsBool(v)) || (w && !cJSON_IsBool(w))) a->bad = 1;
+    }
+    f->include_flagged = arg_bool(a, "include_flagged", false);
+    f->include_fallback = arg_bool(a, "include_fallback", false);
 }
 
 /* ------------------------------------------------------------------- ops */
@@ -885,6 +895,8 @@ static void open_options(otc_open_options *oo, otc_error *err)
     oo->error = err;
     oo->require_checksum = g_client.require_checksum;
     oo->commercial_only = g_client.commercial_only;
+    oo->commercial_basis = g_client.commercial_basis;
+    oo->historical_offsets_policy = g_client.historical_offsets_policy;
 }
 
 static void op_open(request *q, reply *r)
@@ -917,6 +929,7 @@ static void op_open(request *q, reply *r)
         bool offline = arg_bool(&q->a, "offline", false), auto_update = arg_bool(&q->a, "auto_update", false);
         bool require_checksum = arg_bool(&q->a, "require_checksum", false);
         bool commercial_only = arg_bool(&q->a, "commercial_only", false);
+        const char *commercial_basis = arg_str(&q->a, "commercial_basis"), *history_policy = arg_str(&q->a, "historical_offsets_policy");
         /* absent or null: OTC_TIMEOUT_DEFAULT (the defaults); an explicit value, 0 included, goes to the library as it
          * is, so the library judges it (CR 4c). The sentinel itself has no other spelling: a case that gives it fails
          * loudly */
@@ -938,6 +951,8 @@ static void op_open(request *q, reply *r)
         g_client.offline = offline;
         g_client.require_checksum = require_checksum;
         g_client.commercial_only = commercial_only;
+        g_client.commercial_basis = dup_or_null(commercial_basis);
+        g_client.historical_offsets_policy = dup_or_null(history_policy);
         g_client.timeout_s = timeout_s;
         g_client.on_network_error = one && !strcmp(one, "raise") ? OTC_ON_NETWORK_ERROR_RAISE : OTC_ON_NETWORK_ERROR_USE_CACHE;
         /* C always reads the .jsonl; eager mode also keeps OTC_{D}.json in the cache, as the other SDKs do */

@@ -13,26 +13,135 @@ static int typed_is(const char *name, const char *want)
     return name && !strcmp(name, want);
 }
 
-int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e)
+/* Discovery uses one eligible source path for both source predicates. */
+static int commercial(const otc_release *rel, const char *id)
 {
-    if (!f) return 1;
-    if (f->country && otc__strcmp_null(e->country, f->country) != 0) return 0;
-    if (f->type && !typed_is(otc_station_type_name(e->type), f->type)) return 0;
-    if (f->kind && !typed_is(otc_kind_name(e->kind), f->kind)) return 0;
-    if (f->source) {
-        size_t i;
-        int hit = 0;
-        for (i = 0; i < e->n_sources; i++)
-            if (!strcmp(e->sources[i], f->source)) hit = 1;
-        if (!hit) return 0;
+    const otc_licence *l = otc__find_licence(rel, id);
+    return l && l->commercial_use;
+}
+static int eligible(const otc_release *rel, const cJSON *s, const otc_filter *f, const char *own)
+{
+    const char *qc = otc__jstr(s, "qc_status");
+    const cJSON *fallback = otc__jget(s, "fallback");
+    if (!qc || (strcmp(qc, "ok") && strcmp(qc, "flagged"))) return 0;
+    if (fallback ? !(f && f->include_fallback) : (strcmp(qc, "ok") && !(f && f->include_flagged))) return 0;
+    if (own && !otc__find_licence(rel, own)) return 0;
+    if (!rel->commercial_only) return 1;
+    if (!rel->commercial_upstream && otc__jstr_is(otc__jstr_item(fallback, "reason"), "licence_reading")) return 0;
+    return commercial(rel, otc__jstr(s, "licence_id")) && (!own || commercial(rel, own));
+}
+static int source_matches(const cJSON *s, const otc_filter *f)
+{
+    return !f || ((!f->source || otc__jstr_is(otc__jstr_item(s, "source"), f->source))
+        && (!f->source_type || typed_is(otc_source_type_name(otc__parse_source_type(otc__jstr(s, "source_type"))), f->source_type)));
+}
+static int usable(const cJSON *s)
+{
+    const char *qc = otc__jstr(s, "qc_status");
+    return qc && (!strcmp(qc, "ok") || !strcmp(qc, "flagged"));
+}
+static const cJSON *first_reference(const otc__entry *ref, const char *quantity, int64_t bin)
+{
+    const cJSON *s;
+    if (!ref) return NULL;
+    cJSON_ArrayForEach(s, ref->sets_json) {
+        const cJSON *b;
+        if (!usable(s) || !otc__jstr_is(otc__jstr_item(s, "quantity"), quantity)) continue;
+        if (!strcmp(quantity, "water_level")) {
+            if (otc__jstr_is(otc__jstr_item(s, "source"), "noaa")) return s;
+        } else cJSON_ArrayForEach(b, otc__jget(s, "current_bins")) {
+            double n = cJSON_IsNumber(b) ? b->valuedouble : otc__jnum(b, "bin");
+            if (n == (double)bin) return s;
+        }
     }
-    if (f->source_type) {
-        /* with commercial_only, the effective recommended set's (spec 4.4, K-NC DR106) */
-        int has = rel->commercial_only ? e->eff_pos >= 0 : e->has_rec;
-        const char *type = rel->commercial_only ? e->eff_source_type : e->rec_source_type;
-        if (!has || !typed_is(otc_source_type_name(otc__parse_source_type(type)), f->source_type)) return 0;
+    return NULL;
+}
+static int ordinary_paths(const otc_release *rel, const otc_filter *f, const otc__entry *e)
+{
+    const cJSON *s, *co;
+    const otc__entry *ref;
+    cJSON_ArrayForEach(s, e->sets_json) if (eligible(rel, s, f, NULL) && source_matches(s, f)) return 1;
+    if (!otc__jstr(e->own_offsets, "offset_id") && e->has_offsets) {
+        ref = otc__find_entry(rel, e->ref_id);
+        s = first_reference(ref, "water_level", 0);
+        if (s && eligible(rel, s, f, e->off_licence) && source_matches(s, f)) return 1;
+    }
+    cJSON_ArrayForEach(co, e->current_offsets) {
+        int64_t bin = otc__jint(co, "bin"), rb = otc__jint(co, "reference_bin");
+        if (bin < 1 || rb < 1 || bin > INT64_C(9007199254740991) || rb > INT64_C(9007199254740991)) continue;
+        ref = otc__find_entry(rel, otc__jstr(co, "reference_station_id"));
+        s = first_reference(ref, "current", rb);
+        if (s && eligible(rel, s, f, otc__jstr(co, "licence_id")) && source_matches(s, f)) return 1;
+    }
+    return 0;
+}
+static int historical_table_ok(const otc_release *rel, const cJSON *conv, const cJSON *set)
+{
+    const cJSON *table = NULL, *candidate, *row, *x, *cons;
+    double first, last;
+    const char *id = otc__jstr(conv, "astro_table_id");
+    if (!id) return 0;
+    cJSON_ArrayForEach(candidate, otc__jget(rel->meta, "astro_tables")) {
+        if (otc__jstr_is(otc__jstr_item(candidate, "astro_table_id"), id)) { table = candidate; break; }
+    }
+    first = otc__jnum(table, "first_year"); last = otc__jnum(table, "last_year");
+    if (!table || !isfinite(first) || !isfinite(last) || first != floor(first) || last != floor(last) || first > last || last - first >= INT_MAX || !cJSON_IsObject(otc__jget(table, "constituents"))) return 0;
+    cJSON_ArrayForEach(row, otc__jget(table, "constituents")) {
+        static const char *const keys[] = {"v0u_deg", "f"}; size_t k;
+        if (!cJSON_IsObject(row)) return 0;
+        for (k=0; k<2; k++) {
+            const cJSON *values = otc__jget(row, keys[k]);
+            if (!cJSON_IsArray(values) || (double)cJSON_GetArraySize(values) != last-first+1) return 0;
+            cJSON_ArrayForEach(x, values) if (!cJSON_IsNumber(x) || !isfinite(x->valuedouble)) return 0;
+        }
+        x = otc__jget(row, "speed_deg_per_hour");
+        if (x && (!cJSON_IsNumber(x) || !isfinite(x->valuedouble) || x->valuedouble < 0)) return 0;
+    }
+    cJSON_ArrayForEach(cons, otc__jget(set, "constituents")) {
+        const char *name = otc__jstr(cons, "name");
+        row = name ? otc__jget(otc__jget(table, "constituents"), name) : NULL;
+        if (!row || !isfinite(otc__jnum(row, "speed_deg_per_hour"))) return 0;
     }
     return 1;
+}
+
+static int historical_path(const otc_release *rel, const otc__entry *e)
+{
+    const cJSON *off = e->own_offsets, *s, *datum, *conv;
+    const otc__entry *ref;
+    otc_station_t *st = NULL;
+    const otc_set *set;
+    const char *sid;
+    int ok;
+    if (!otc__jstr(off, "offset_id") || rel->historical_excluded) return 0;
+    if ((rel->commercial_only ? e->eff_pos >= 0 : e->has_rec) || ordinary_paths(rel, NULL, e)) return 0;
+    ref = otc__find_entry(rel, otc__jstr(off, "reference_station_id"));
+    s = first_reference(ref, "water_level", 0);
+    if (!s || !otc__jstr_is(otc__jstr_item(s, "qc_status"), "ok") || otc__jget(s, "fallback")) return 0;
+    if (rel->commercial_only && (!commercial(rel, otc__jstr(off, "licence_id")) || !commercial(rel, otc__jstr(s, "licence_id")))) return 0;
+    sid = otc__jstr(s, "set_id");
+    if (!sid || otc_station(rel, ref->id, &st) != OTC_OK) return 0;
+    if (otc_station_set(st, sid, &set) != OTC_OK) { otc_station_free(st); return 0; }
+    s = set->json;
+    datum = otc__jget(s, "datum"); conv = set->conv ? set->conv->json : NULL;
+    ok = otc__jstr_is(otc__jstr_item(s, "source_record_id"), otc__jstr(otc__jget(otc__jget(off, "provenance"), "reference_binding"), "noaa_id"))
+        && otc__jstr_is(otc__jstr_item(conv, "v0_model"), "schureman_tcd")
+        && otc__jstr_is(otc__jstr_item(conv, "nodal_handling"), "f_u_at_prediction")
+        && otc__jstr_is(otc__jstr_item(datum, "chart_datum"), "mllw")
+        && isfinite(otc__jnum(datum, "msl_offset_m"))
+        && otc__jnum(otc__jget(datum, "named"), "mllw") == 0.0
+        && otc__jstr_is(otc__jstr_item(otc__jget(otc__jget(datum, "basis"), "mllw"), "kind"), "published");
+    ok = ok && historical_table_ok(rel, conv, s);
+    otc_station_free(st);
+    return ok;
+}
+
+int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e)
+{
+    if (f && f->country && otc__strcmp_null(e->country, f->country)) return 0;
+    if (f && f->type && !typed_is(otc_station_type_name(e->type), f->type)) return 0;
+    if (f && f->kind && !typed_is(otc_kind_name(e->kind), f->kind)) return 0;
+    return ordinary_paths(rel, f, e) || (historical_path(rel, e) && source_matches(e->own_offsets, f));
 }
 
 static int filter_ok(const otc_filter *f)

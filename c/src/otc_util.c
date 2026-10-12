@@ -192,7 +192,11 @@ static const name_row QCF[] = {{OTC_QC_FLAG_TIME_BASE, "time_base"}, {OTC_QC_FLA
                                {OTC_QC_FLAG_NON_TIDAL_SIGNAL, "non_tidal_signal"},
                                {OTC_QC_FLAG_SHORT_RECORD, "short_record"},
                                {OTC_QC_FLAG_SIBLING_DISAGREEMENT, "sibling_disagreement"},
-                               {OTC_QC_FLAG_CARRIED_OVER, "carried_over"}, {0, NULL}};
+                               {OTC_QC_FLAG_CARRIED_OVER, "carried_over"}, {OTC_QC_FLAG_FALLBACK_TIME_BASE_DISPUTED, "fallback:time_base_disputed"}, {OTC_QC_FLAG_FALLBACK_TIME_BASE_UNRESOLVED, "fallback:time_base_unresolved"}, {OTC_QC_FLAG_FALLBACK_REFUSED_FIT, "fallback:refused_fit"}, {OTC_QC_FLAG_FALLBACK_SHORT_RECORD_UNCALIBRATED, "fallback:short_record_uncalibrated"}, {OTC_QC_FLAG_FALLBACK_SHORT_RECORD_LONG_PERIOD, "fallback:short_record_long_period"}, {OTC_QC_FLAG_FALLBACK_PUBLISHED_FULL_LIST, "fallback:published_full_list"}, {OTC_QC_FLAG_FALLBACK_RELIABILITY_WITHHELD, "fallback:reliability_withheld"}, {OTC_QC_FLAG_FALLBACK_LICENCE_READING, "fallback:licence_reading"}, {OTC_QC_FLAG_FALLBACK_DATUM_GATE_FAILED, "fallback:datum_gate_failed"}, {OTC_QC_FLAG_FALLBACK_NOT_IN_OTC_INPUT, "fallback:not_in_otc_input"}, {OTC_QC_FLAG_FALLBACK_HISTORICAL_OFFSETS, "fallback:historical_offsets"}, {0, NULL}};
+
+static const name_row FALLBACK_REASON[] = {{OTC_FALLBACK_REASON_TIME_BASE_DISPUTED, "time_base_disputed"}, {OTC_FALLBACK_REASON_TIME_BASE_UNRESOLVED, "time_base_unresolved"}, {OTC_FALLBACK_REASON_REFUSED_FIT, "refused_fit"}, {OTC_FALLBACK_REASON_SHORT_RECORD_UNCALIBRATED, "short_record_uncalibrated"}, {OTC_FALLBACK_REASON_SHORT_RECORD_LONG_PERIOD, "short_record_long_period"}, {OTC_FALLBACK_REASON_PUBLISHED_FULL_LIST, "published_full_list"}, {OTC_FALLBACK_REASON_RELIABILITY_WITHHELD, "reliability_withheld"}, {OTC_FALLBACK_REASON_LICENCE_READING, "licence_reading"}, {OTC_FALLBACK_REASON_DATUM_GATE_FAILED, "datum_gate_failed"}, {OTC_FALLBACK_REASON_NOT_IN_OTC_INPUT, "not_in_otc_input"}, {OTC_FALLBACK_REASON_HISTORICAL_OFFSETS, "historical_offsets"}, {0, NULL}};
+static const name_row SOURCE_ROLE[] = {{OTC_SOURCE_ROLE_GAUGE_STATION, "gauge_station"}, {OTC_SOURCE_ROLE_PUBLISHED_HARMONIC_RECORD, "published_harmonic_record"}, {OTC_SOURCE_ROLE_MODEL, "model"}, {OTC_SOURCE_ROLE_REFERENCE, "reference"}, {0, NULL}};
+static const name_row SOURCE_DISPOSITION[] = {{OTC_SOURCE_DISPOSITION_METADATA_ONLY, "metadata_only"}, {OTC_SOURCE_DISPOSITION_NOT_FITTED, "not_fitted"}, {OTC_SOURCE_DISPOSITION_LICENCE_RESTRICTED, "licence_restricted"}, {OTC_SOURCE_DISPOSITION_UNAVAILABLE, "unavailable"}, {OTC_SOURCE_DISPOSITION_RETAINED, "retained"}, {0, NULL}};
 
 #define ENUM_FUNCS(T, ROWS, OTHER, NAME, PARSE)                                                   \
     const char *NAME(T v) { return enum_name(ROWS, OTHER, (int)v); }                              \
@@ -391,16 +395,6 @@ otc_status otc__copy_member(const cJSON *obj, const char *key, char *buf, size_t
     return otc__copy_jstr(otc__jstr_item(obj, key), buf, len, needed);
 }
 
-/* 1 when a string in v holds a NUL. */
-static int json_has_nul_string(const cJSON *v)
-{
-    const cJSON *c;
-    if (cJSON_IsString(v) && otc__jstr_len(v) != strlen(v->valuestring)) return 1;
-    for (c = v ? v->child : NULL; c; c = c->next)
-        if (json_has_nul_string(c)) return 1;
-    return 0;
-}
-
 /* copy is cJSON_Duplicate(orig): cJSON copies a string up to its first NUL, so each
  * string of orig with a NUL inside gets its full bytes back in copy (raw = 0), or
  * becomes its raw JSON literal for printing (raw = 1). 0 when out of memory. */
@@ -408,6 +402,16 @@ static int json_dup_strings(cJSON *copy, const cJSON *orig, int raw)
 {
     const cJSON *o;
     cJSON *c;
+    if (raw && cJSON_IsNumber(orig) && isfinite(orig->valuedouble)) {
+        char number[32]; char *bytes;
+        int n = snprintf(number, sizeof number, "%.17g", orig->valuedouble);
+        if (n < 0 || (size_t)n >= sizeof number) return 0;
+        bytes = (char *)cJSON_malloc((size_t)n + 1);
+        if (!bytes) return 0;
+        memcpy(bytes, number, (size_t)n + 1);
+        cJSON_free(copy->valuestring); copy->valuestring = bytes; copy->type = cJSON_Raw;
+        return 1;
+    }
     if (cJSON_IsString(orig) && otc__jstr_len(orig) != strlen(orig->valuestring)) {
         size_t n = otc__jstr_len(orig);
         char *lit = raw ? otc__json_escape_n(orig->valuestring, n) : NULL, *bytes;
@@ -442,14 +446,12 @@ otc_status otc__copy_json(const cJSON *v, char *buf, size_t len, size_t *needed)
     char *text;
     otc_status st;
     if (!v) return otc__copy_str(NULL, buf, len, needed);
-    if (json_has_nul_string(v)) {
+    { /* Raw accessors preserve each parsed number exactly as well as NUL strings. */
         /* cJSON prints a string up to its first NUL: print a copy whose such strings are raw literals */
         cJSON *copy = cJSON_Duplicate(v, 1);
         if (!copy || !json_dup_strings(copy, v, 1)) { cJSON_Delete(copy); return OTC_E_NOMEM; }
         text = cJSON_PrintUnformatted(copy);
         cJSON_Delete(copy);
-    } else {
-        text = cJSON_PrintUnformatted(v);
     }
     if (!text) return OTC_E_NOMEM;
     st = otc__copy_str(text, buf, len, needed);
@@ -1375,4 +1377,24 @@ char *otc__fold_n(const char *s, size_t sn, size_t *out_len)
     if (i) memmove(out, out + i, o - i + 1);
     if (out_len) *out_len = o - i;
     return out;
+}
+
+ENUM_FUNCS(otc_fallback_reason_t, FALLBACK_REASON, OTC_FALLBACK_REASON_OTHER, otc_fallback_reason_name, otc__parse_fallback_reason)
+
+ENUM_FUNCS(otc_source_role, SOURCE_ROLE, OTC_SOURCE_ROLE_OTHER, otc_source_role_name, otc__parse_source_role)
+
+ENUM_FUNCS(otc_source_disposition, SOURCE_DISPOSITION, OTC_SOURCE_DISPOSITION_OTHER, otc_source_disposition_name, otc__parse_source_disposition)
+
+otc_status otc__open_policy_options(const otc_open_options *opts, otc_error *err)
+{
+    if (!opts || opts->struct_size < sizeof *opts) return OTC_OK;
+    if (opts->commercial_basis && strcmp(opts->commercial_basis, "strict") && strcmp(opts->commercial_basis, "as_published_upstream")) {
+        otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "commercial_basis must be strict or as_published_upstream");
+        return OTC_E_INVALID_ARGUMENT;
+    }
+    if (opts->historical_offsets_policy && strcmp(opts->historical_offsets_policy, "fallback") && strcmp(opts->historical_offsets_policy, "exclude")) {
+        otc__err_set(err, OTC_E_INVALID_ARGUMENT, NULL, "historical_offsets_policy must be fallback or exclude");
+        return OTC_E_INVALID_ARGUMENT;
+    }
+    return OTC_OK;
 }

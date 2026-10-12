@@ -100,6 +100,8 @@ static void free_sets(otc_station_t *st)
 void otc_station_free(otc_station_t *st)
 {
     if (!st) return;
+    free(st->source_records);
+    free(st->offset_flags);
     free_sets(st);
     free(st->order_all);
     free(st->order_usable);
@@ -116,6 +118,7 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     const cJSON *set_id = otc__jstr_item(j, "set_id");
     size_t i;
     s->json = j;
+    s->fallback.json = otc__jget(j, "fallback");
     s->station = st;
     s->conv = otc__find_convention(rel, otc__jstr(j, "convention_id"));
     s->lic = otc__find_licence(rel, otc__jstr(j, "licence_id"));
@@ -178,6 +181,23 @@ otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind
     st->root = root;
     st->rel = rel;
     st->kind = kind;
+    {
+        const cJSON *records = otc__jget(root, "source_records"), *record;
+        const cJSON *off = otc__jget(root, "subordinate_offsets"), *flags = otc__jget(off, "qc_flags");
+        st->n_source_records = cJSON_IsArray(records) ? (size_t)cJSON_GetArraySize(records) : 0;
+        st->source_records = (otc_source_record *)calloc(st->n_source_records ? st->n_source_records : 1, sizeof *st->source_records);
+        st->n_offset_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
+        st->offset_flags = (otc_qc_flag *)calloc(st->n_offset_flags ? st->n_offset_flags : 1, sizeof *st->offset_flags);
+        if (!st->source_records || !st->offset_flags) { otc_station_free(st); return OTC_E_NOMEM; }
+        i = 0;
+        cJSON_ArrayForEach(record, records) { st->source_records[i].json = record; st->source_records[i++].rel = rel; }
+        i = 0;
+        cJSON_ArrayForEach(record, flags) st->offset_flags[i++].json = record;
+        st->offset_fallback.json = otc__jget(off, "fallback");
+        st->offset_vintage.json = otc__jget(off, "vintage");
+        st->offset_provenance.json = otc__jget(off, "provenance");
+    }
+
     st->n_val = cJSON_IsArray(vals) ? (size_t)cJSON_GetArraySize(vals) : 0;
     st->val = (otc_validation_t *)calloc(st->n_val ? st->n_val : 1, sizeof *st->val);
     st->n_sets = cJSON_IsArray(sets) ? (size_t)cJSON_GetArraySize(sets) : 0;
@@ -333,7 +353,12 @@ otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out)
     out->height_offset_high = out->height_offset_low = NAN;
     out->height_adjusted_type = OTC_HEIGHT_ADJUSTED_TYPE_UNSET;
     out->licence_id = NULL;
-    off = otc__jget(st->root, "subordinate_offsets");
+out->offset_id = out->source = out->source_version = out->source_record_id = NULL;
+out->source_type = OTC_SOURCE_TYPE_UNSET; out->qc_status = OTC_QC_STATUS_UNSET;
+out->qc_flags = NULL; out->qc_flags_count = 0;
+out->fallback = NULL; out->vintage = NULL; out->provenance = NULL;
+off = otc__jget(st->root, "subordinate_offsets");
+
     if (!cJSON_IsObject(off)) return OTC_E_NOT_FOUND;
     out->reference_station_id = otc__jstr(off, "reference_station_id");
     out->time_offset_high_min = otc__jnum(off, "time_offset_high_min");
@@ -342,6 +367,15 @@ otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out)
     out->height_offset_low = otc__jnum(off, "height_offset_low");
     out->height_adjusted_type = otc__parse_height_adjusted_type(otc__jstr(off, "height_adjusted_type"));
     out->licence_id = otc__jstr(off, "licence_id");
+    out->offset_id = otc__jstr(off, "offset_id"); out->source = otc__jstr(off, "source");
+    out->source_version = otc__jstr(off, "source_version"); out->source_record_id = otc__jstr(off, "source_record_id");
+    out->source_type = otc__parse_source_type(otc__jstr(off, "source_type"));
+    out->qc_status = otc__parse_qc_status(otc__jstr(off, "qc_status"));
+    out->qc_flags = st->offset_flags; out->qc_flags_count = st->n_offset_flags;
+    if (st->offset_fallback.json) out->fallback = &st->offset_fallback;
+    if (st->offset_vintage.json) out->vintage = &st->offset_vintage;
+    if (st->offset_provenance.json) out->provenance = &st->offset_provenance;
+
     return OTC_OK;
 }
 
@@ -717,4 +751,187 @@ otc_status otc_constituent_raw_json(const otc_set *s, size_t i, char *buf, size_
     if (!s || i >= s->n_cons) return OTC_E_INVALID_ARGUMENT;
     cons = otc__jget(s->json, "constituents");
     return otc__copy_json(cJSON_GetArrayItem(cons, (int)i), buf, len, needed);
+}
+
+int otc_station_recommended_is_fallback(const otc_station_t *st)
+{
+    const cJSON *v = st ? otc__jget(st->root, "recommended_is_fallback") : NULL;
+    return cJSON_IsBool(v) ? cJSON_IsTrue(v) : -1;
+}
+otc_status otc_set_fallback(const otc_set *set, const otc_fallback **out)
+{
+    if (out) *out = NULL;
+    if (!set || !out) return OTC_E_INVALID_ARGUMENT;
+    if (!set->fallback.json) return OTC_E_NOT_FOUND;
+    *out = &set->fallback; return OTC_OK;
+}
+size_t otc_station_source_record_count(const otc_station_t *st) { return st ? st->n_source_records : 0; }
+otc_status otc_station_source_record_at(const otc_station_t *st, size_t index, const otc_source_record **out)
+{
+    if (out) *out = NULL;
+    if (!st || !out || index >= st->n_source_records) return OTC_E_INVALID_ARGUMENT;
+    *out = &st->source_records[index]; return OTC_OK;
+}
+
+otc_fallback_reason_t otc_fallback_reason(const otc_fallback *v) { return v ? otc__parse_fallback_reason(otc__jstr(v->json, "reason")) : OTC_FALLBACK_REASON_UNSET; }
+
+otc_status otc_fallback_basis(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "basis", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_otc_finding(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "otc_finding", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_preferred_set_id(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "preferred_set_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_raw_json(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(v->json, buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source_version(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_version", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source_record_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_record_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_source_role otc_source_record_role(const otc_source_record *v) { return v ? otc__parse_source_role(otc__jstr(v->json, "role")) : OTC_SOURCE_ROLE_UNSET; }
+
+otc_source_disposition otc_source_record_disposition(const otc_source_record *v) { return v ? otc__parse_source_disposition(otc__jstr(v->json, "disposition")) : OTC_SOURCE_DISPOSITION_UNSET; }
+
+otc_status otc_source_record_detail(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "detail", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_licence_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "licence_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_upstream_licence_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "upstream_licence_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_published_set_ids_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "published_set_ids"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+size_t otc_source_record_published_set_id_count(const otc_source_record *v) { const cJSON *a = v ? otc__jget(v->json, "published_set_ids") : NULL; return cJSON_IsArray(a) ? (size_t)cJSON_GetArraySize(a) : 0; }
+otc_status otc_source_record_published_set_id_at(const otc_source_record *v, size_t i, char *buf, size_t len, size_t *needed) { const cJSON *a = v ? otc__jget(v->json, "published_set_ids") : NULL; if (!v || i >= otc_source_record_published_set_id_count(v)) return OTC_E_INVALID_ARGUMENT; return otc__copy_jstr(cJSON_GetArrayItem(a, (int)i), buf, len, needed); }
+
+otc_status otc_source_record_provenance_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "provenance"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_original_metadata_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { if (!v) return OTC_E_INVALID_ARGUMENT; return otc__jget(v->json, "original_metadata") ? otc__copy_json(otc__jget(v->json, "original_metadata"), buf, len, needed) : otc__copy_str("{}", buf, len, needed); }
+
+otc_status otc_source_record_original_harmonics_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "original_harmonics"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_licence(const otc_source_record *v, const otc_licence **out) { if (out) *out = NULL; if (!v || !out) return OTC_E_INVALID_ARGUMENT; *out = otc__find_licence(v->rel, otc__jstr(v->json, "licence_id")); return *out ? OTC_OK : OTC_E_NOT_FOUND; }
+
+otc_status otc_source_record_upstream_licence(const otc_source_record *v, const otc_licence **out) { if (out) *out = NULL; if (!v || !out) return OTC_E_INVALID_ARGUMENT; *out = otc__find_licence(v->rel, otc__jstr(v->json, "upstream_licence_id")); return *out ? OTC_OK : OTC_E_NOT_FOUND; }
+
+otc_status otc_source_record_raw_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(v->json, buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+double otc_historical_offset_vintage_publication_year(const otc_historical_offset_vintage *v) { return v ? otc__jnum(v->json, "publication_year") : NAN; }
+
+otc_status otc_historical_offset_vintage_source_lifecycle(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_lifecycle", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_removal_events_json(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "removal_events"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_current_validity(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "current_validity", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_current_accuracy(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "current_accuracy", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_reference_2020_equivalence(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "reference_2020_equivalence", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_reference_2020_equivalence_sha256(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "reference_2020_equivalence_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_source_manifest_sha256(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_manifest_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_input_sha256_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "input_sha256"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+size_t otc_historical_offset_provenance_input_sha256_count(const otc_historical_offset_provenance *v) { const cJSON *a = v ? otc__jget(v->json, "input_sha256") : NULL; return cJSON_IsArray(a) ? (size_t)cJSON_GetArraySize(a) : 0; }
+otc_status otc_historical_offset_provenance_input_sha256_at(const otc_historical_offset_provenance *v, size_t i, char *buf, size_t len, size_t *needed) { const cJSON *a = v ? otc__jget(v->json, "input_sha256") : NULL; if (!v || i >= otc_historical_offset_provenance_input_sha256_count(v)) return OTC_E_INVALID_ARGUMENT; return otc__copy_jstr(cJSON_GetArrayItem(a, (int)i), buf, len, needed); }
+
+otc_status otc_historical_offset_provenance_book(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "book", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+double otc_historical_offset_provenance_annual_table_row(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "annual_table_row") : NAN; }
+
+double otc_historical_offset_provenance_printed_page(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "printed_page") : NAN; }
+
+double otc_historical_offset_provenance_pdf_page(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "pdf_page") : NAN; }
+
+otc_status otc_historical_offset_provenance_raw_row_text(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "raw_row_text", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_raw_values_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "raw_values_json", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_id_crosswalk_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "id_crosswalk"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_reference_binding_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "reference_binding"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_acceptance_report_sha256(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "acceptance_report_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+/* Source-bound NOAA2020 profiles. Current validity is never inferred. */
+static int digest_string(const cJSON *v)
+{
+    size_t i;
+    if (!cJSON_IsString(v) || otc__jstr_len(v) != 64) return 0;
+    for (i = 0; i < 64; i++) if (!((v->valuestring[i] >= 'a' && v->valuestring[i] <= 'f') || (v->valuestring[i] >= '0' && v->valuestring[i] <= '9'))) return 0;
+    return 1;
+}
+static int hashes(const cJSON *v)
+{
+    const cJSON *x, *y;
+    if (!cJSON_IsArray(v) || !cJSON_GetArraySize(v)) return 0;
+    cJSON_ArrayForEach(x, v) {
+        if (!digest_string(x)) return 0;
+        for (y = v->child; y != x; y = y->next) if (otc__jstr_same(x, y)) return 0;
+    }
+    return 1;
+}
+static int nonempty(const cJSON *o, const char *key)
+{
+    const char *s = otc__jstr(o, key);
+    if (!s) return 0;
+    for (; *s; s++) if (*s != ' ' && *s != '\t' && *s != '\r' && *s != '\n') return 1;
+    return 0;
+}
+static int subset_equal(const cJSON *actual, const cJSON *expected)
+{
+    const cJSON *v;
+    if (!cJSON_IsObject(actual)) return 0;
+    cJSON_ArrayForEach(v, expected) if (!cJSON_Compare(cJSON_GetObjectItemCaseSensitive(actual, v->string), v, 1)) return 0;
+    return 1;
+}
+int otc__historical_valid(const cJSON *off)
+{
+    const cJSON *vintage = otc__jget(off, "vintage"), *prov = otc__jget(off, "provenance"), *fallback = otc__jget(off, "fallback"), *flags = otc__jget(off, "qc_flags"), *flag;
+    const char *id = otc__jstr(off, "offset_id"), *text = NULL;
+    cJSON *expected = NULL, *raw = NULL;
+    int valid = 0;
+    if (id && !strcmp(id, "noaa-2020-atlantic-table2-2513")) text = "{\"offset_id\":\"noaa-2020-atlantic-table2-2513\",\"source\":\"noaa\",\"source_type\":\"official\",\"source_version\":\"annual-tide-tables-2020\",\"source_record_id\":\"annual-tide-tables-2020/atlantic/Table2/2513\",\"qc_status\":\"flagged\",\"reference_station_id\":\"OTC-a6c00a3f\",\"height_adjusted_type\":\"R\",\"time_offset_high_min\":4,\"time_offset_low_min\":15,\"height_offset_high\":0.84,\"height_offset_low\":1.0,\"datum\":{\"basis\":{\"mllw\":{\"kind\":\"published\",\"method\":\"source\",\"source_name\":\"MLLW\"}},\"chart_datum\":\"mllw\",\"named\":{\"mllw\":0.0},\"zero\":\"chart_datum\"},\"vintage\":{\"publication_year\":2020,\"source_lifecycle\":\"retired\",\"current_validity\":\"unestablished\",\"current_accuracy\":\"unverified\",\"removal_events\":[{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"Lockwoods Folly Inlet (r)\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-02-18T14:09:46\",\"source_timezone\":null}]},\"provenance\":{\"source_manifest_sha256\":\"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7\",\"book\":\"atlantic\",\"annual_table_row\":2513,\"printed_page\":345,\"pdf_page\":351,\"raw_row_text\":\"  2513     Lockwoods Folly Inlet . . . . . . . . . . . . . . . . . . . . . . .         33° 55'     78° 14'     +0 04      +0 15     *0.84     *1.00    4.2    4.8     2.3\"}}";
+    if (id && !strcmp(id, "noaa-2020-pacific-table2-517")) text = "{\"offset_id\":\"noaa-2020-pacific-table2-517\",\"source\":\"noaa\",\"source_type\":\"official\",\"source_version\":\"annual-tide-tables-2020\",\"source_record_id\":\"annual-tide-tables-2020/pacific/Table2/517\",\"qc_status\":\"flagged\",\"reference_station_id\":\"OTC-ee4593cd\",\"height_adjusted_type\":\"A\",\"time_offset_high_min\":-35,\"time_offset_low_min\":-31,\"height_offset_high\":-0.06096,\"height_offset_low\":0.0,\"datum\":{\"basis\":{\"mllw\":{\"kind\":\"published\",\"method\":\"source\",\"source_name\":\"MLLW\"}},\"chart_datum\":\"mllw\",\"named\":{\"mllw\":0.0},\"zero\":\"chart_datum\"},\"vintage\":{\"publication_year\":2020,\"source_lifecycle\":\"retired\",\"current_validity\":\"unestablished\",\"current_accuracy\":\"unverified\",\"removal_events\":[{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"San Francisco Bar (r)\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-02-18T14:09:50\",\"source_timezone\":null},{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"San Francisco Bar\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-07-06T11:17:37\",\"source_timezone\":null}]},\"provenance\":{\"source_manifest_sha256\":\"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7\",\"book\":\"pacific\",\"annual_table_row\":517,\"printed_page\":284,\"pdf_page\":302,\"raw_row_text\":\"   517     San Francisco Bar . . . . . . . . . . . . . . . . . . . . . . . . .         37° 46'     122° 38'     -0 35       -0 31      -0.2        0.0    3.9    5.6     3.0\"}}";
+    if (!text || !nonempty(off, "licence_id") || !cJSON_IsArray(flags) || cJSON_GetArraySize(flags) != 1) return 0;
+    flag = cJSON_GetArrayItem(flags, 0);
+    if (!otc__jstr_is(otc__jstr_item(flag, "flag"), "fallback:historical_offsets") || !nonempty(flag, "reason") || !otc__jstr_is(otc__jstr_item(fallback, "reason"), "historical_offsets") || !nonempty(fallback, "basis") || !nonempty(fallback, "otc_finding") || cJSON_GetObjectItemCaseSensitive(fallback, "preferred_set_id")) return 0;
+    expected = otc__json_parse(text, strlen(text));
+    if (!expected) return 0;
+    valid = subset_equal(off, expected) && subset_equal(vintage, otc__jget(expected, "vintage")) && subset_equal(prov, otc__jget(expected, "provenance"));
+    /* Nested vintages/provenance allow additive metadata, so compare their prescribed subset separately. */
+    if (!valid) {
+        const cJSON *x;
+        valid = cJSON_IsObject(off);
+        cJSON_ArrayForEach(x, expected) if (strcmp(x->string, "vintage") && strcmp(x->string, "provenance") && !cJSON_Compare(cJSON_GetObjectItemCaseSensitive(off, x->string), x, 1)) valid = 0;
+        valid = valid && subset_equal(vintage, otc__jget(expected, "vintage")) && subset_equal(prov, otc__jget(expected, "provenance"));
+    }
+    cJSON_Delete(expected);
+    if (!valid || !hashes(otc__jget(prov, "input_sha256")) || !digest_string(otc__jget(prov, "acceptance_report_sha256"))) return 0;
+    { const char *eq = otc__jstr(vintage, "reference_2020_equivalence");
+      const cJSON *sha = cJSON_GetObjectItemCaseSensitive(vintage, "reference_2020_equivalence_sha256");
+      if (!eq || (strcmp(eq, "not_checked") && strcmp(eq, "matched_at_publisher_precision") && strcmp(eq, "disagrees"))) return 0;
+      if (!strcmp(eq, "not_checked") ? sha != NULL : !digest_string(sha)) return 0; }
+    { const cJSON *cross = otc__jget(prov, "id_crosswalk"), *binding = otc__jget(prov, "reference_binding");
+      const char *legacy = !strcmp(id, "noaa-2020-atlantic-table2-2513") ? "TEC2869" : "TWC0509";
+      const char *noaa = !strcmp(id, "noaa-2020-atlantic-table2-2513") ? "8661070" : "9414290";
+      if (!hashes(otc__jget(cross, "evidence_sha256")) || !hashes(otc__jget(binding, "evidence_sha256")) || !otc__jstr_is(otc__jstr_item(cross, "legacy_id"), legacy) || !otc__jstr_is(otc__jstr_item(cross, "status"), "inferred") || !cJSON_IsFalse(otc__jget(cross, "modern_alias_verified")) || !otc__jstr_is(otc__jstr_item(binding, "noaa_id"), noaa) || !otc__jstr_is(otc__jstr_item(binding, "station_id"), otc__jstr(off, "reference_station_id")) || !otc__jstr_is(otc__jstr_item(binding, "mapping_status"), "primary_name_position")) return 0; }
+    text = otc__jstr(prov, "raw_values_json");
+    if (!text) return 0;
+    raw = otc__json_parse(text, strlen(text));
+    valid = cJSON_IsObject(raw);
+    cJSON_Delete(raw);
+    return valid;
+}
+
+size_t otc_offsets_qc_flag_count(const otc_offsets_t *offsets)
+{
+    return offsets && offsets->struct_size >= sizeof *offsets ? offsets->qc_flags_count : 0;
+}
+otc_status otc_offsets_qc_flag_at(const otc_offsets_t *offsets, size_t index, const otc_qc_flag **out)
+{
+    if (out) *out = NULL;
+    if (!out || !offsets || offsets->struct_size < sizeof *offsets || index >= offsets->qc_flags_count) return OTC_E_INVALID_ARGUMENT;
+    *out = &offsets->qc_flags[index]; return OTC_OK;
 }

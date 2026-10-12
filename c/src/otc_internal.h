@@ -192,6 +192,9 @@ otc_height_adjusted_type otc__parse_height_adjusted_type(const char *s);
 otc_dropped_reason otc__parse_dropped_reason(const char *s);
 otc_qc_flag_kind otc__parse_qc_flag(const char *s);
 
+otc_fallback_reason_t otc__parse_fallback_reason(const char *s);
+otc_source_role otc__parse_source_role(const char *s);
+otc_source_disposition otc__parse_source_disposition(const char *s);
 /* ----------------------------------------------------------------- release */
 
 struct otc_convention {
@@ -208,6 +211,7 @@ struct otc_licence {
 /* The size of otc_open_options before K-NC added commercial_only: the smallest
  * struct_size the library takes (spec 6.4, K-NC DR106). */
 #define OTC__OPEN_OPTIONS_MIN offsetof(otc_open_options, commercial_only)
+otc_status otc__open_policy_options(const otc_open_options *opts, otc_error *err);
 /* opts->commercial_only when struct_size covers it, else false. */
 #define OTC__COMMERCIAL_ONLY(opts)                                                                          \
     ((opts) && (opts)->struct_size >= offsetof(otc_open_options, commercial_only) + sizeof(bool)            \
@@ -275,6 +279,9 @@ typedef struct otc__entry {
     char              *offsets_ref_licence;
     char             **sources;         /* sources of sets with constants (qc_status ok or flagged) */
     size_t             n_sources;
+    cJSON             *sets_json; /* owned compact discovery metadata */
+    cJSON             *own_offsets;
+    cJSON             *current_offsets;
     uint64_t           offset;
     size_t             length;
     uint64_t           view;            /* index_used: the hash of the entry's status, references and sets */
@@ -318,6 +325,8 @@ struct otc_release {
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
     bool            commercial_only;   /* the open option (spec 4.2, K-NC DR106) */
+    bool            commercial_upstream;
+    bool            historical_excluded;
     otc__kvlist     source_counts;
     otc__kvlist     qc_counts;
     /* the only mutable state after open: the last failure on this handle */
@@ -344,10 +353,15 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
  * (PK-R2-07). */
 otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
                                   uint64_t view, cJSON **out);
+int otc__historical_valid(const cJSON *offsets);
 int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */
 
+struct otc_fallback { const cJSON *json; };
+struct otc_source_record { const cJSON *json; const otc_release *rel; };
+struct otc_historical_offset_vintage { const cJSON *json; };
+struct otc_historical_offset_provenance { const cJSON *json; };
 struct otc_qc_flag { const cJSON *json; };
 struct otc_time_base_evidence { const cJSON *json; };
 struct otc_time_base {
@@ -381,11 +395,19 @@ struct otc_set {
     int                     has_tb;
     otc_provenance_build    build;
     int                     has_build;
+    otc_fallback            fallback;
     bool                    recommended;
     bool                    no_constants;
 };
 
 struct otc_station {
+    otc_source_record *source_records;
+    size_t n_source_records;
+    otc_qc_flag *offset_flags;
+    size_t n_offset_flags;
+    otc_fallback offset_fallback;
+    otc_historical_offset_vintage offset_vintage;
+    otc_historical_offset_provenance offset_provenance;
     cJSON            *root;
     const otc_release *rel;
     otc_kind          kind;
