@@ -132,6 +132,26 @@
   {
    "defect": null,
    "expect": "load",
+   "latest": "20991231.7",
+   "note": "the prediction release (prediction spec 6.5): astro tables A (2000-2030) and B (2020-2100), the stations of the prediction cases, including the designed close-root and New Year stations",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict"
+  },
+  {
+   "defect": null,
+   "expect": "load",
+   "latest": "20991231.2",
+   "note": "knc plus the additions of the commercial_only prediction cases (prediction spec 6.5): chart datums on OTC-T-0185/a-noaa and OTC-T-0181/x-nc, equal offsets at OTC-T-0186/0187/0188/0190, subordinate current stations OTC-T-0191 and OTC-T-0192. Never opened in the same cache as knc (same release)",
+   "releases": [
+    "20991231.2"
+   ],
+   "root": "knc-predict"
+  },
+  {
+   "defect": null,
+   "expect": "load",
    "expect_by_release": {
     "20991231.3": {
      "error": "unsupported_format"
@@ -156,6 +176,87 @@
     "20991231.2"
    ],
    "root": "nogz"
+  },
+  {
+   "defect": "table otc-test-predict-a is not in astro_tables, so predict-greenwich-v1 names a table that is absent, and predict-local-utc1-v1 has no astro_table_id (schema-invalid; it loads, and fails when it predicts: no_astro_table)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/no-astro-table"
+  },
+  {
+   "defect": "table otc-test-predict-a has no M4 row; OTC-P-0001/noaa uses M4",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/unsupported-constituent"
+  },
+  {
+   "defect": "table otc-test-predict-a's M2 row has speed_deg_per_hour -28.9841042",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/astro-negative-speed"
+  },
+  {
+   "defect": "table otc-test-predict-a's MN4 row, which no set uses, has speed_deg_per_hour -57.4238337",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/astro-negative-speed-unused"
+  },
+  {
+   "defect": "table otc-test-predict-a's M2 row has a v0u_deg array one entry short (30 values for 31 years)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/astro-short-v0u"
+  },
+  {
+   "defect": "OTC-P-0005's M2 amplitude_m is -1.0 (below the schema's minimum 0)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/extremes-negative-amplitude"
+  },
+  {
+   "defect": "OTC-P-0059's current_offsets entry names reference station OTC-P-9999, which is not in the release (a build-check fault; format 1.0 keeps current_offsets raw, so an SDK loads it, spec 4.9 step 1)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/current-reference-missing"
+  },
+  {
+   "defect": "OTC-P-0059's current_offsets entry names reference station OTC-P-0097, a tombstone (a build-check fault; format 1.0 keeps current_offsets raw, so an SDK loads it, spec 4.9 step 1)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/current-reference-removed"
+  },
+  {
+   "defect": "format 1.1: height_adjusted_type X (read as other) at OTC-P-0035 (equal offsets), OTC-P-0030 (differing offsets) and OTC-P-0049 (whose reference has no noaa set)",
+   "expect": "load",
+   "latest": "20991231.7",
+   "releases": [
+    "20991231.7"
+   ],
+   "root": "predict-bad/unknown-adjusted-type"
   },
   {
    "defect": "every station data file differs from its SHA-256 in OTC_20991231.sha256 and the pointer (same size, one byte changed)",
