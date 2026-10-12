@@ -25,7 +25,11 @@ public final class Release {
     public var sourceVersions:[String:String] { meta["release"]["source_versions"].object.compactMapValues(\.string) }
     public var buildCommit:String? { meta["release"]["build_commit"].string }
     public var changelogUrl:String? { meta["release"]["changelog_url"].string }
-    public var citation:String { "OpenTideConstants (\(datestamp)), tidal constants, \(conceptDoi.map { "doi:\($0)" } ?? "https://data.opentideconstants.org/OTC_\(datestamp).json"), CC BY 4.0." }
+    public var citation:String {
+        let link=conceptDoi.flatMap { $0.isEmpty ? nil : "https://doi.org/\($0)" } ?? "https://data.opentideconstants.org/OTC_\(datestamp).json"
+        let version=zenodoVersionDoi.flatMap { $0.isEmpty ? nil : " (version DOI: https://doi.org/\($0))" } ?? ""
+        return "OpenTideConstants contributors (\(datestamp.prefix(4))). OpenTideConstants, release \(datestamp) [Data set]. \(link)\(version)"
+    }
     internal init(meta:JSONValue,entries:[IndexEntry],documents:[String:JSONValue],jsonl:URL?,indexPath:URL?,files:[FileInfo],commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String)throws {
         self.meta=meta;self.entries=entries;self.documents=documents;self.jsonl=jsonl;self.indexPath=indexPath;self.files=files;self.commercialOnly=commercialOnly;self.commercialBasis=commercialBasis;self.historicalOffsetsPolicy=historicalOffsetsPolicy
         guard ["strict","as_published_upstream"].contains(commercialBasis),["fallback","exclude"].contains(historicalOffsetsPolicy) else { throw OpenTideConstantsError.invalidArgument("invalid policy") }
@@ -183,10 +187,17 @@ public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,
     internal func own(_ s:Station)throws { guard let actual=try station(stationId:s.stationId),actual.raw==s.raw else { throw OpenTideConstantsError.invalidArgument("foreign station") } }
     public func referenceStation(station:Station)throws->Station? { try checkOpen();try own(station);guard station.isSubordinate,let id=station.subordinateOffsets?.referenceStationId else { return nil };return try self.station(stationId:id) }
     public func subordinatesOf(station:Station)throws->[Station] { try checkOpen();try own(station);return try entries.filter { $0.status=="active" && $0.summary["type"].string=="subordinate" && $0.summary["reference_station_id"].string==station.stationId }.map { try requireStation(stationId:$0.id) } }
+    private func tideSourceLicences(_ entry:IndexEntry)->[String] {
+        if let setId=effective(entry),let selected=entry.sets.first(where: { $0["set_id"].string==setId }),let id=selected["licence_id"].string { return [id] }
+        guard let reference=byId[entry.summary["reference_station_id"].string ?? ""],let selected=reference.sets.first(where: { $0["source"].string=="noaa" && $0["quantity"].string=="water_level" && ["ok","flagged"].contains($0["qc_status"].string ?? "") }),let id=selected["licence_id"].string else { return [] }
+        var ids=[id]
+        if let offsetsId=entry.summary["offsets_licence_id"].string { ids.append(offsetsId) }
+        return ids.allSatisfy { licById[$0]?.commercialUse==true } ? ids : []
+    }
     public func attribution(stations:[Station]?=nil)throws->String {
         try checkOpen();var ids=Set<String>()
         if stations?.isEmpty != false { ids=Set(licById.values.filter { !commercialOnly || $0.commercialUse }.map(\.licenceId)) }
-        else { for s in stations! { try own(s);if let rec=s.recommendedSet { ids.insert(rec.licence.licenceId) };var entry=byId[s.stationId]!,seen=Set<String>();for _ in 0..<16 { guard seen.insert(entry.id).inserted else { break };if let id=entry.summary["offsets_licence_id"].string { ids.insert(id) };guard let ref=byId[entry.summary["reference_station_id"].string ?? ""] else { break };if let rid=effective(ref),let cs=ref.sets.first(where: { $0["set_id"].string==rid }),let id=cs["licence_id"].string { ids.insert(id);break };entry=ref } } }
+        else { for s in stations! { try own(s);if commercialOnly { ids.formUnion(tideSourceLicences(byId[s.stationId]!));continue };if let rec=s.recommendedSet { ids.insert(rec.licence.licenceId) };var entry=byId[s.stationId]!,seen=Set<String>();for _ in 0..<16 { guard seen.insert(entry.id).inserted else { break };if let id=entry.summary["offsets_licence_id"].string { ids.insert(id) };guard let ref=byId[entry.summary["reference_station_id"].string ?? ""] else { break };if let rid=effective(ref),let cs=ref.sets.first(where: { $0["set_id"].string==rid }),let id=cs["licence_id"].string { ids.insert(id);break };entry=ref } } }
         if commercialOnly { ids=Set(ids.filter { licById[$0]?.commercialUse==true }) }
         var seen=Set<String>(),parts:[String]=[]
         for id in ids.sorted() { let l=licById[id]!;if let p=l.raw["provider"].string { if seen.insert(p).inserted { parts.append("\(p): \(l.attribution)") } } else { parts.append(l.attribution) } }
