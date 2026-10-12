@@ -52,7 +52,7 @@ int main(void)
         otc_station_free(station); station=NULL;
     }
     for (i=0;i<2;i++) {
-        otc_offsets_t offsets;
+        otc_offsets_t offsets = { .struct_size = sizeof offsets };
         assert(otc_require_station(rel,ids[i],&station)==OTC_OK);
         assert(otc_station_offsets(station,&offsets)==OTC_OK);
         assert(otc_extremes(rel,station,&opts,start,stop,points,16,&n)==OTC_OK);
@@ -75,7 +75,7 @@ int main(void)
         otc_open_options_init(&open); open.historical_offsets_policy="exclude";
         assert(otc_open_file(path,&open,&rel)==OTC_OK);
         for (i=0;i<2;i++) {
-            otc_offsets_t offsets;
+            otc_offsets_t offsets = { .struct_size = sizeof offsets };
             unsigned combination;
             assert(otc_require_station(rel,ids[i],&station)==OTC_OK);
             assert(otc_station_offsets(station,&offsets)==OTC_OK);
