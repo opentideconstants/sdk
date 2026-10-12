@@ -131,15 +131,19 @@ public final class OpenTideConstants {
         let retain=Set(try cache.cached().prefix(Int(min(keep,Int64(Int.max)))))
         var removed:[String]=[]
         for stamp in candidates where !protected.contains(stamp) && !retain.contains(stamp) {
-            let path=try cache.releaseDir(stamp),token=try await cache.takeLock(path,wait:false)
-            guard token != nil else { continue }
-            defer { cache.releaseLock(path,token) }
             do {
+                let path=try cache.releaseDir(stamp),token=try await cache.takeLock(path,wait:false)
+                guard token != nil else { continue }
+                defer { cache.releaseLock(path,token) }
                 let verified=FileManager.default.fileExists(atPath:path.appendingPathComponent(".verified").path)
                 for child in try FileManager.default.contentsOfDirectory(at:path,includingPropertiesForKeys:nil) where child.lastPathComponent != ".lock" { try FileManager.default.removeItem(at:child) }
                 cache.releaseLock(path,token);try? FileManager.default.removeItem(at:path)
                 if verified { removed.append(stamp) }
-            } catch { throw OpenTideConstantsError.cache("cannot prune \(stamp)",["removed":.array(removed.map(JSONValue.string))]) }
+            } catch {
+                var fields=(error as? OpenTideConstantsError)?.fields ?? [:]
+                fields["removed"] = .array(removed.map(JSONValue.string))
+                throw OpenTideConstantsError.cache("cannot prune \(stamp)",fields)
+            }
         }
         return removed
     }
@@ -253,7 +257,18 @@ private struct ClientIO:@unchecked Sendable {
             try check(directory.appendingPathComponent(name),sha:row["sha256"].string,size:row["size"].integer,hash:verifyOnOpen)
         }
         let metadata=files ?? marker["files"].object.keys.sorted().map { name -> FileInfo in var row=marker["files"][name].object;row["name"] = .string(name);return FileInfo(.object(row)) }
-        return try read(directory.appendingPathComponent(names[0]),files:metadata,from:.cache)
+        let path=directory.appendingPathComponent(names[0])
+        do {
+            let loaded=try read(path,files:metadata,from:.cache)
+            loaded.release.zenodoVersionDoi=marker["zenodo_version_doi"].string
+            return loaded
+        } catch let error as OpenTideConstantsError {
+            if error.code=="invalid_release",mode == .eager,path.pathExtension=="json",error.fields["file"]==nil {
+                var fields=error.fields;fields["file"] = .string(path.path)
+                throw OpenTideConstantsError.invalidRelease(error.message,fields)
+            }
+            throw error
+        }
     }
     func usableCached(_ stamp:String)throws->Loaded? {
         do { return try cached(stamp) }
@@ -392,7 +407,9 @@ private struct ClientIO:@unchecked Sendable {
         let names=mode == .stream ? [jsonl,meta]:[json]
         for name in names { guard rows[name] != nil else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) } }
         try Cache.atomic(shaBytes,directory.appendingPathComponent("OTC_\(stamp).sha256"))
-        var verified:[String:JSONValue]=(try cache.verified(stamp))?["files"].object ?? [:]
+        var verified:[String:JSONValue]=((try cache.verified(stamp))?["files"].object ?? [:]).filter { name,_ in
+            name != "OTC_\(stamp).sha256" && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
+        }
         for name in names {
             let temporary=directory.appendingPathComponent(".tmp-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at:temporary) }
