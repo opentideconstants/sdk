@@ -177,6 +177,23 @@ class AliasSystem(_StrEnum):
     OTHER = "other"
 
 
+class SourceRole(_StrEnum):
+    GAUGE_STATION = "gauge_station"
+    PUBLISHED_HARMONIC_RECORD = "published_harmonic_record"
+    MODEL = "model"
+    REFERENCE = "reference"
+    OTHER = "other"
+
+
+class SourceDisposition(_StrEnum):
+    METADATA_ONLY = "metadata_only"
+    NOT_FITTED = "not_fitted"
+    LICENCE_RESTRICTED = "licence_restricted"
+    UNAVAILABLE = "unavailable"
+    RETAINED = "retained"
+    OTHER = "other"
+
+
 class Mode(_StrEnum):
     EAGER = "eager"
     STREAM = "stream"
@@ -208,6 +225,7 @@ ENUMS = {
     "phase_reference": PhaseReference, "nodal_handling": NodalHandling, "canary_status": CanaryStatus,
     "height_adjusted_type": HeightAdjustedType, "dropped_reason": DroppedReason, "qc_flag": QcFlagName,
     "fallback_reason": FallbackReason,
+    "source_role": SourceRole, "source_disposition": SourceDisposition,
     "time_base_code": TimeBaseCode, "decision_tier": DecisionTier, "decision_outcome": DecisionOutcome, "alias_system": AliasSystem, "mode": Mode,
     "on_network_error": OnNetworkError, "format": Format, "match": Match,
 }

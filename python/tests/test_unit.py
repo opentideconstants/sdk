@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import json
 import os
+import operator
 import sys
 import tempfile
 import unittest
@@ -638,6 +639,129 @@ class FallbackTest(RepeatedIdsTest):
                 self.assert_invalid(self.write(edit))
         self.assert_invalid(self.write(lambda d: d.__setitem__("recommended_is_fallback", "true")))
         self.assert_invalid(self.write(lambda d: d.__setitem__("recommended_is_fallback", 1)))
+
+
+class SourceRecordTest(RepeatedIdsTest):
+    """Typed source identities retain original strings and distinct licence references."""
+
+    def source_record(self):
+        return {'source': 'ticon', 'source_version': '4', 'source_record_id': 'original-record',
+                'role': 'published_harmonic_record', 'disposition': 'retained', 'detail': 'Original source retained',
+                'licence_id': 'noaa', 'published_set_ids': ['OTC-T-0001/noaa'],
+                'provenance': {'input_sha256': ['0' * 64], 'inventory_sha256': '1' * 64}}
+
+    def labelled(self, record=None, edit_meta=None):
+        return self.write(lambda station: station.__setitem__('source_records',
+                          [self.source_record() if record is None else record]), edit_meta)
+
+    def test_old_release_empty_default(self):
+        for mode in ('eager', 'stream'):
+            with otc.OpenTideConstants(file=self.write(), mode=mode) as client:
+                self.assertEqual(client.require_station('OTC-T-0001').source_records, ())
+
+    def test_known_fields_and_distinct_licences(self):
+        record = self.source_record()
+        meta = json.loads((FIXTURES / 'knc/OTC_20991231.2.meta.json').read_text())
+        restricted = next(row for row in meta['licences'] if not row['commercial_use'])
+        record['licence_id'] = restricted['licence_id']
+        record['upstream_licence_id'] = 'noaa'
+        for mode in ('eager', 'stream'):
+            with otc.OpenTideConstants(file=self.labelled(record, lambda m: m['licences'].append(restricted)),
+                                      mode=mode, commercial_only=True) as client:
+                source = client.require_station('OTC-T-0001').source_records[0]
+                self.assertIsInstance(source, otc.SourceRecord)
+                self.assertIs(source.role, otc.SourceRole.PUBLISHED_HARMONIC_RECORD)
+                self.assertIs(source.disposition, otc.SourceDisposition.RETAINED)
+                self.assertEqual(source.licence, client.release.licence(record['licence_id']))
+                self.assertEqual(source.upstream_licence, client.release.licence('noaa'))
+                assert source.licence is not None and source.upstream_licence is not None
+                self.assertFalse(source.licence.commercial_use)
+                self.assertTrue(source.upstream_licence.commercial_use)
+                self.assertEqual(source.raw, freeze(record))
+                self.assertEqual(source.published_set_ids, ('OTC-T-0001/noaa',))
+                self.assertEqual(source.original_metadata, {})
+                self.assertIsNone(source.original_harmonics)
+
+    def test_nested_payload_and_record_immutable(self):
+        record = self.source_record()
+        row = [''] * 18
+        row[2], row[3], row[4] = 'T3', '-999', '-16.80374'
+        record['original_metadata'] = {'datum_information': 'unknown'}
+        record['original_harmonics'] = {'format': 'ticon-4-csv', 'columns': ['cell'] * 18, 'rows': [row],
+                                        'future_payload': {'original': ['unchanged']}}
+        for mode in ('eager', 'stream'):
+            with otc.OpenTideConstants(file=self.labelled(record), mode=mode) as client:
+                station = client.require_station('OTC-T-0001')
+                source = station.source_records[0]
+                assert source.original_harmonics is not None
+                self.assertEqual(source.original_harmonics['rows'], (tuple(row),))
+                with self.assertRaises(dataclasses.FrozenInstanceError):
+                    setattr(source, 'detail', 'changed')
+                with self.assertRaises(dataclasses.FrozenInstanceError):
+                    setattr(station, 'source_records', ())
+                for mapping, key in ((source.original_metadata, 'datum_information'),
+                                     (source.provenance, 'inventory_sha256'), (source.raw, 'source')):
+                    self.assertRaises(TypeError, operator.setitem, mapping, key, 'changed')
+                with self.assertRaises(TypeError):
+                    operator.setitem(source.original_harmonics['rows'][0], 4, 'normalized')
+                with self.assertRaises(TypeError):
+                    operator.setitem(source.original_harmonics['future_payload']['original'], 0, 'changed')
+
+    def test_higher_minor_unknown_enums_and_fields_retained(self):
+        record = self.source_record()
+        record.update(role='future_role', disposition='future_disposition', future={'notes': ['preserved']})
+        for mode in ('eager', 'stream'):
+            with otc.OpenTideConstants(file=self.labelled(record, lambda m: m.__setitem__('format_version', '1.1')),
+                                      mode=mode) as client:
+                source = client.require_station('OTC-T-0001').source_records[0]
+                self.assertIs(source.role, otc.SourceRole.OTHER)
+                self.assertIs(source.disposition, otc.SourceDisposition.OTHER)
+                self.assertEqual(source.raw, freeze(record))
+
+    def test_null_licence_identity_explicit_lookup(self):
+        record = self.source_record()
+        record.update(source='dmi', role='gauge_station', disposition='metadata_only', licence_id=None,
+                      published_set_ids=[])
+        def edit(station):
+            station.update(type='reference', constant_sets=[], recommended_set_id=None, source_records=[record])
+        for mode in ('eager', 'stream'):
+            with otc.OpenTideConstants(file=self.write(edit), mode=mode, commercial_only=True) as client:
+                station = client.require_station('OTC-T-0001')
+                alias = station.aliases['noaa'][0]
+                found = client.station_by_alias('noaa', alias)
+                assert found is not None
+                self.assertEqual(found.station_id, station.station_id)
+                self.assertEqual(station.constant_sets(), ())
+                self.assertIsNone(station.kind)
+                self.assertIsNone(station.recommended_set)
+                self.assertIsNone(station.source_records[0].licence)
+                self.assertIsNone(station.source_records[0].upstream_licence)
+                self.assertNotIn(station.station_id, [s.station_id for s in client.stations(
+                    include_flagged=True, include_fallback=True)])
+
+    def test_stated_unresolved_licences_are_invalid_release(self):
+        for key in ('licence_id', 'upstream_licence_id'):
+            record = self.source_record()
+            record[key] = 'missing-terms'
+            for mode in ('eager', 'stream'):
+                with self.subTest(key=key, mode=mode), self.assertRaisesRegex(
+                        otc.InvalidReleaseError, 'original-record.*' + key + '.*missing-terms'):
+                    otc.OpenTideConstants(file=self.labelled(record), mode=mode).close()
+
+    def test_malformed_known_source_record_types_rejected(self):
+        for key, value in (('source', 7), ('role', []), ('disposition', None), ('detail', False),
+                           ('licence_id', 5), ('published_set_ids', ['set', 1]), ('provenance', []), ('provenance', {}),
+                           ('original_metadata', []), ('original_harmonics', [])):
+            record = self.source_record()
+            record[key] = value
+            with self.subTest(key=key):
+                self.assert_invalid(self.labelled(record))
+        for value in (None, {}, [], [None]):
+            self.assert_invalid(self.write(lambda station: station.__setitem__('source_records', value)))
+        for field, value in (('columns', [1]), ('rows', [[0] * 18])):
+            record = self.source_record()
+            record['original_harmonics'] = {field: value}
+            self.assert_invalid(self.labelled(record))
 
 
 class MalformedInputTest(RepeatedIdsTest):

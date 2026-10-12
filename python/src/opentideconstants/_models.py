@@ -155,6 +155,46 @@ def check_licence(d):
                 raise InvalidReleaseError(f"licence {lid!r}: a licence with commercial_use false needs {k}")
 
 
+@dataclass(frozen=True, slots=True, eq=False)  # holds frozen mappings: identity equality and hash
+class SourceRecord:
+    """Original source material and its terms, separate from predictive constituents."""
+    source: str
+    source_version: str
+    source_record_id: str
+    role: E.SourceRole
+    disposition: E.SourceDisposition
+    detail: str
+    licence_id: Optional[str]
+    upstream_licence_id: Optional[str]
+    published_set_ids: Tuple[str, ...]
+    provenance: Mapping[str, Any]
+    original_metadata: Mapping[str, Any]
+    original_harmonics: Optional[Mapping[str, Any]]
+    licence: Optional[Licence]
+    upstream_licence: Optional[Licence]
+    raw: Mapping[str, Any] = field(repr=False, compare=False)
+
+    @classmethod
+    def _parse(cls, d, licences):
+        references = []
+        for key in ('licence_id', 'upstream_licence_id'):
+            identifier = d.get(key)
+            licence = None if identifier is None else licences.get(identifier)
+            if identifier is not None and licence is None:
+                raise InvalidReleaseError(f"source record {d['source_record_id']}: {key} {identifier!r} does not resolve")
+            references.append(licence)
+        provenance = freeze(d['provenance'])
+        metadata = freeze(d.get('original_metadata', {}))
+        harmonics = freeze(d.get('original_harmonics'))
+        raw = freeze(d)
+        assert isinstance(provenance, Mapping) and isinstance(metadata, Mapping)
+        assert harmonics is None or isinstance(harmonics, Mapping)
+        assert isinstance(raw, Mapping)
+        return cls(d['source'], d['source_version'], d['source_record_id'], E.SourceRole(d['role']),
+                   E.SourceDisposition(d['disposition']), d['detail'], d['licence_id'], d.get('upstream_licence_id'),
+                   tuple(d['published_set_ids']), provenance, metadata, harmonics, references[0], references[1], raw)
+
+
 @dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Constituent:
     name: str
@@ -433,6 +473,7 @@ class Station:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     _sets: Tuple[ConstantSet, ...] = field(default=(), repr=False, compare=False)
     recommended_is_fallback: Optional[bool] = None
+    source_records: Tuple[SourceRecord, ...] = ()
 
     def __hash__(self):  # CR D16: hashable by id; == still compares the fields
         return hash(self.station_id)
@@ -503,7 +544,7 @@ def _is_finite(v) -> bool:
 # The same table is in the Ruby, TypeScript and C SDKs.
 _STATION_TYPES = {"name": "T", "country": "T", "timezone": "T", "type": "T", "recommended_set_id": "T", "status": "T",
                   "constant_sets": "L", "validation": "L", "subordinate_offsets": "O", "current_offsets": "A",
-                  "recommended_is_fallback": "B"}
+                  "recommended_is_fallback": "B", "source_records": "L"}
 _OFFSET_TYPES = {"reference_station_id": "T", "licence_id": "T", "height_adjusted_type": "T",
                  "time_offset_high_min": "N", "time_offset_low_min": "N", "height_offset_high": "N", "height_offset_low": "N"}
 _VALIDATION_TYPES = {"set_id": "T", "reference_source": "T", "reference_station": "T", "window": "T",
@@ -527,6 +568,14 @@ _CORRECTION_TYPES = {"from": "T", "to": "T"}
 _EVIDENCE_TYPES = {"comparator_kind": "T", "comparator_id": "T", "detail": "T", "distance_km": "N", "lag_min": "N"}
 _PROVENANCE_TYPES = {"adapter_version": "T", "carried_from_release": "T", "selection_reason": "T",
                      "input_sha256": "S", "decision": "O"}
+_SOURCE_RECORD_TYPES = {"source": "T", "source_version": "T", "source_record_id": "T", "role": "T",
+                        "disposition": "T", "detail": "T", "licence_id": "T", "upstream_licence_id": "T",
+                        "published_set_ids": "S", "provenance": "O", "original_metadata": "O", "original_harmonics": "O"}
+_SOURCE_PROVENANCE_TYPES = {"input_sha256": "S", "inventory_sha256": "T"}
+_ORIGINAL_HARMONIC_TYPES = {"format": "T", "columns": "S", "rows": "A", "annotations": "L",
+                           "amplitude_unit": "T", "amplitude_unit_basis": "T", "phase_unit": "T",
+                           "phase_convention": "T", "amplitude_uncertainty_unit": "T",
+                           "amplitude_uncertainty_unit_basis": "T"}
 
 
 def _type_ok(v, t) -> bool:
@@ -560,6 +609,32 @@ def check_station_types(d) -> None:
     the load with invalid_release in eager and stream mode, never a value read as null or a raw error later."""
     sid = d.get("station_id")
     _check_types(d, _STATION_TYPES, f"station {sid}")
+    if 'source_records' in d and (not isinstance(d['source_records'], list) or not d['source_records']):
+        raise InvalidReleaseError(f"station {sid}: source_records must be a nonempty array")
+    for source in d.get('source_records') or ():
+        what = f"station {sid}: source record {source.get('source_record_id')}"
+        _check_types(source, _SOURCE_RECORD_TYPES, what)
+        for key in ('source', 'source_version', 'source_record_id', 'role', 'disposition', 'detail'):
+            if not isinstance(source.get(key), str) or not source[key]:
+                raise InvalidReleaseError(f"{what}: {key} must be a nonempty string")
+        if 'licence_id' not in source or not isinstance(source.get('published_set_ids'), list):
+            raise InvalidReleaseError(f"{what}: licence_id and published_set_ids are required")
+        if not isinstance(source.get('provenance'), dict):
+            raise InvalidReleaseError(f"{what}: provenance must be an object")
+        _check_types(source['provenance'], _SOURCE_PROVENANCE_TYPES, f"{what}: provenance")
+        if not isinstance(source['provenance'].get('input_sha256'), list) or not isinstance(
+                source['provenance'].get('inventory_sha256'), str):
+            raise InvalidReleaseError(f"{what}: provenance requires input_sha256 and inventory_sha256")
+        if 'original_metadata' in source and not isinstance(source['original_metadata'], dict):
+            raise InvalidReleaseError(f"{what}: original_metadata must be an object")
+        harmonics = source.get('original_harmonics')
+        if harmonics is not None:
+            _check_types(harmonics, _ORIGINAL_HARMONIC_TYPES, f"{what}: original_harmonics")
+            if 'rows' in harmonics and (not isinstance(harmonics['rows'], list) or not all(
+                    isinstance(row, list) and all(isinstance(cell, str) for cell in row) for row in harmonics['rows'])):
+                raise InvalidReleaseError(f"{what}: original_harmonics.rows must contain arrays of strings")
+            for annotation in harmonics.get('annotations') or ():
+                _check_types(annotation, {'row': 'I', 'reason': 'T', 'detail': 'T'}, f"{what}: annotation")
     if d.get("subordinate_offsets") is not None:
         _check_types(d["subordinate_offsets"], _OFFSET_TYPES, f"station {sid}: subordinate_offsets")
     for v in d.get("validation") or ():
@@ -650,7 +725,8 @@ def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
             d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, "active" if d.get("status") is None else d.get("status")),
             None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
-            ordered, recommended_is_fallback=d.get("recommended_is_fallback"))
+            ordered, recommended_is_fallback=d.get("recommended_is_fallback"),
+            source_records=tuple(SourceRecord._parse(source, licences) for source in d.get('source_records') or ()))
     except InvalidReleaseError:
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as e:

@@ -1850,6 +1850,15 @@
      "type": "boolean",
      "nullable": true,
      "note": "Release annotation: true when its recommendation selects a labelled fallback; null when absent."
+    },
+    {
+     "name": "source_records",
+     "kind": "field",
+     "type": "SourceRecord[]",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
     }
    ]
   },
@@ -4156,6 +4165,149 @@
      ]
     }
    ]
+  },
+  "SourceRecord": {
+   "c": null,
+   "description": "Immutable original source identity and harmonic payload, separate from predictive constants.",
+   "members": [
+    {
+     "name": "source",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "source_version",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "source_record_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "role",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "languages": [
+      "python"
+     ],
+     "enum": "source_role"
+    },
+    {
+     "name": "disposition",
+     "kind": "field",
+     "type": "enum",
+     "nullable": false,
+     "languages": [
+      "python"
+     ],
+     "enum": "source_disposition"
+    },
+    {
+     "name": "detail",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "licence_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "upstream_licence_id",
+     "kind": "field",
+     "type": "string",
+     "nullable": true,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "published_set_ids",
+     "kind": "field",
+     "type": "string[]",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "provenance",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "original_metadata",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "original_harmonics",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": true,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "licence",
+     "kind": "attribute",
+     "type": "Licence",
+     "nullable": true,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "upstream_licence",
+     "kind": "attribute",
+     "type": "Licence",
+     "nullable": true,
+     "languages": [
+      "python"
+     ]
+    },
+    {
+     "name": "raw",
+     "kind": "field",
+     "type": "map<string,any>",
+     "nullable": false,
+     "languages": [
+      "python"
+     ]
+    }
+   ]
   }
  },
  "enums": {
@@ -4315,6 +4467,19 @@
    "licence_reading",
    "datum_gate_failed",
    "not_in_otc_input"
+  ],
+  "source_role": [
+   "gauge_station",
+   "published_harmonic_record",
+   "model",
+   "reference"
+  ],
+  "source_disposition": [
+   "metadata_only",
+   "not_fitted",
+   "licence_restricted",
+   "unavailable",
+   "retained"
   ]
  },
  "errors": [
@@ -4816,7 +4981,8 @@
     "DatumInfo",
     "DatumLevel",
     "Ranges",
-    "Fallback"
+    "Fallback",
+    "SourceRecord"
    ],
    "members": [
     "Release.heights",
@@ -4834,7 +5000,9 @@
     "extreme_type",
     "current_event_type",
     "prediction_method",
-    "fallback_reason"
+    "fallback_reason",
+    "source_role",
+    "source_disposition"
    ],
    "errors": [
     "no_constants",
@@ -4871,7 +5039,8 @@
     "DatumInfo",
     "DatumLevel",
     "Ranges",
-    "Fallback"
+    "Fallback",
+    "SourceRecord"
    ],
    "members": [
     "Release.heights",
@@ -4889,7 +5058,9 @@
     "extreme_type",
     "current_event_type",
     "prediction_method",
-    "fallback_reason"
+    "fallback_reason",
+    "source_role",
+    "source_disposition"
    ],
    "errors": [
     "no_constants",
@@ -4919,7 +5090,8 @@
     "CurrentEvent",
     "DatumInfo",
     "DatumLevel",
-    "Fallback"
+    "Fallback",
+    "SourceRecord"
    ],
    "members": [
     "Release.heights",
@@ -4936,7 +5108,9 @@
     "extreme_type",
     "current_event_type",
     "prediction_method",
-    "fallback_reason"
+    "fallback_reason",
+    "source_role",
+    "source_disposition"
    ],
    "errors": [
     "no_constants",

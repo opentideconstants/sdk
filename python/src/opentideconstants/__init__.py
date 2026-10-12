@@ -24,13 +24,13 @@ from ._client import DEFAULT_BASE_URL, OpenTideConstants, __version__
 from ._enums import (AliasSystem, CanaryStatus, DecisionOutcome, DecisionTier, DroppedReason, FallbackReason, Format,
                      HeightAdjustedType, Kind, LoadedFrom, Match, Mode, NodalHandling, OnNetworkError,
                      PhaseReference, QcFlagName, QcStatus, Quantity, RemovedReason, SourceType, StationStatus,
-                     StationType, TimeBaseCode)
+                     StationType, TimeBaseCode, SourceRole, SourceDisposition)
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
                       ReaderTooOldError, ReleaseNotFoundError, StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._models import (ConstantSet, Constituent, Convention, Datum, DroppedConstituent, Fallback, FileInfo, Licence, Nearby,
                       Provenance, ProvenanceBuild, QcFlag, RecordSpan, ReleaseInfo, Station, Stats, SubordinateOffsets,
-                      TimeBase, Tombstone, UpdateResult, Validation)
+                      TimeBase, Tombstone, UpdateResult, Validation, SourceRecord)
 from ._release import SUPPORTED_FORMAT_MAJORS, SUPPORTED_FORMAT_VERSION, Release
 
 CACHE_LAYOUT_VERSION = "v1"
@@ -42,13 +42,14 @@ __all__ = [
     "ReleaseInfo", "FileInfo", "Station", "Tombstone", "ConstantSet", "Constituent", "Convention", "Licence",
     "Provenance", "ProvenanceBuild", "TimeBase", "QcFlag", "DroppedConstituent", "Validation",
     "SubordinateOffsets", "Nearby", "UpdateResult",
-    "RecordSpan", "Datum", "Stats", "Fallback",
+    "RecordSpan", "Datum", "Stats", "Fallback", "SourceRecord",
     # enums
     "Kind", "StationType", "StationStatus", "RemovedReason", "SourceType", "Quantity", "QcStatus", "LoadedFrom",
     "PhaseReference",
     "NodalHandling", "CanaryStatus", "HeightAdjustedType", "DroppedReason", "QcFlagName", "TimeBaseCode",
     "DecisionTier",
     "DecisionOutcome", "AliasSystem", "Mode", "OnNetworkError", "Format", "Match", "FallbackReason",
+    "SourceRole", "SourceDisposition",
     # errors
     "OpenTideConstantsError", "NetworkError", "ReleaseNotFoundError", "OfflineError", "ChecksumError",
     "UnsupportedFormatError", "ReaderTooOldError", "InvalidReleaseError", "StationNotFoundError",
