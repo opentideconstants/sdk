@@ -38,6 +38,8 @@ FOLD = ROOT / "name_fold.json"
 SUITE_VERSION = "1.0"
 EARTH_R_KM = 6371.0088
 TOL = 1e-6
+PREDICT_CALLS = ROOT / "tools" / "predict_calls.json"
+PREDICT_EXPECTED = ROOT / "tools" / "predict_expected.json"
 
 FIX = "${fixtures}"
 SRV = "${server}"
@@ -3536,7 +3538,138 @@ GROUPS = {
 }
 
 
+def prediction_inputs():
+    """Load the independent, science-checked pin for the authored prediction calls."""
+    if not PREDICT_EXPECTED.is_file():
+        raise SystemExit(f"{PREDICT_EXPECTED}: missing predict_expected.json from the independent KP1-H oracle")
+    calls = json.loads(PREDICT_CALLS.read_bytes())
+    pin = json.loads(PREDICT_EXPECTED.read_bytes())
+    if pin.get("calls_sha256") != file_sha(PREDICT_CALLS):
+        raise SystemExit(f"{PREDICT_EXPECTED}: the independent expectations are for another predict_calls.json")
+    cases = calls.get("cases") or []
+    if len(cases) != 119 or sum(len(c["steps"]) for c in cases) != 253:
+        raise SystemExit(f"{PREDICT_CALLS}: expected all 119 authored cases and 253 authored steps")
+    if pin.get("calls_version") != calls["calls_version"]:
+        raise SystemExit(f"{PREDICT_EXPECTED}: another calls_version")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(pin.get("oracle_commit", ""))):
+        raise SystemExit(f"{PREDICT_EXPECTED}: missing full independent oracle_commit")
+    if any(not re.fullmatch(r"[0-9a-f]{64}", str(pin.get(k, "")))
+           for k in ("strict_source_sha256", "crosscheck_sha256")):
+        raise SystemExit(f"{PREDICT_EXPECTED}: missing independent strict-source or crosscheck binding")
+    fixture_hashes = pin.get("fixture_sha256") or {}
+    inputs = {f"{c['root']}/OTC_{c['release']}.json" for c in cases}
+    if set(fixture_hashes) != inputs:
+        raise SystemExit(f"{PREDICT_EXPECTED}: the fixture pins do not cover exactly the authored roots")
+    for name in sorted(inputs):
+        if fixture_hashes[name] != file_sha(FIXTURES / name):
+            raise SystemExit(f"{PREDICT_EXPECTED}: fixture changed: {name}")
+    authored = calls.get("band_coverage") or {}
+    coverage = pin.get("band_coverage") or {}
+    identity = lambda r: (r["case_id"], r["step"], r["root"])
+    needed = {identity(r) for r in authored.get("deferred", [])}
+    proved = coverage.get("proved_deferred_steps") or []
+    if (pin.get("scientific_gate_ready") is not True or coverage.get("scientific_gate_ready") is not True
+            or coverage.get("deferred_steps_remaining") != [] or len(needed) != 8 or len(proved) != len(needed)
+            or len(coverage.get("authored_deferred_steps") or []) != len(needed)
+            or {identity(r) for r in coverage.get("authored_deferred_steps", [])} != needed
+            or {identity(r) for r in proved} != needed or any(r.get("bands") != [1, 2, 3, 4] for r in proved)):
+        raise SystemExit(f"{PREDICT_EXPECTED}: scientific gate is not ready: every authored deferred band step needs native proof")
+    expected_cases = pin.get("cases") or []
+    indexed = {c["id"]: c for c in expected_cases}
+    if len(indexed) != len(expected_cases) or set(indexed) != {c["id"] for c in cases}:
+        raise SystemExit(f"{PREDICT_EXPECTED}: missing, duplicate or extra authored case expectations")
+    for c in cases:
+        if len(indexed[c["id"]].get("steps", [])) != len(c["steps"]):
+            raise SystemExit(f"{PREDICT_EXPECTED}: {c['id']}: every authored step needs its own provenance")
+        if indexed[c["id"]].get("band_exception") != c.get("band_exception"):
+            raise SystemExit(f"{PREDICT_EXPECTED}: {c['id']}: the named exception differs from the authored declaration")
+    return calls, pin, indexed
+
+
+def _prediction_outcome(cid, index, outcome, items):
+    """Check hand-written count/time/type requirements against independent strict items."""
+    selected = [x for x in items if x.get("type") in outcome["types"]] if "types" in outcome else items
+    if "count" in outcome and len(selected) != outcome["count"]:
+        raise SystemExit(f"{cid} step {index}: strict items disagree with the hand-written count")
+    if "items" in outcome:
+        fields = set().union(*(x.keys() for x in outcome["items"])) if outcome["items"] else set()
+        actual = [{k: x.get(k) for k in fields} for x in selected]
+        if actual != outcome["items"]:
+            raise SystemExit(f"{cid} step {index}: strict items disagree with the hand-written time/type outcome")
+
+
+def prediction_cases():
+    """Lower the intermediate calls; numeric expectations come only from KP1-H."""
+    calls, pin, indexed = prediction_inputs()
+    out = []
+    for c in calls["cases"]:
+        cid = c["id"]
+        steps, provenance = [], []
+        records = indexed[cid]["steps"]
+        for i, authored in enumerate(c["steps"]):
+            observed = records[i]
+            source = observed.get("source")
+            st = copy.deepcopy(authored)
+            for k in ("strict", "outcome", "compare", "local", "same_items_as_step", "swap_of"):
+                st.pop(k, None)
+            if "expect_if_missing" in st:
+                pairs = st["expect_if_missing"]
+                if not isinstance(pairs, list) or any(not isinstance(x, list) or len(x) != 2 for x in pairs):
+                    raise SystemExit(f"{cid} step {i}: authored conditional expectations need ordered pairs")
+                if len({x[0] for x in pairs}) != len(pairs):
+                    raise SystemExit(f"{cid} step {i}: duplicate conditional feature")
+                st["expect_if_missing"] = dict(pairs)
+            if source in ("strict", "strict_reuse", "negative_mirror"):
+                items = observed.get("items")
+                if not isinstance(items, list) or "prediction" not in (st.get("expect") or {}):
+                    raise SystemExit(f"{cid} step {i}: strict items need the authored prediction metadata")
+                if "outcome" in authored:
+                    _prediction_outcome(cid, i, authored["outcome"], items)
+                if "same_items_as_step" in authored and items != records[authored["same_items_as_step"]].get("items"):
+                    raise SystemExit(f"{cid} step {i}: same_items_as_step differs from the pinned strict result")
+                if "swap_of" in authored:
+                    ref = authored["swap_of"]
+                    mirrored = copy.deepcopy(indexed[ref["case"]]["steps"][ref["step"]]["items"])
+                    for x in mirrored:
+                        x["type"] = {"high": "low", "low": "high"}[x["type"]]
+                        x["height_m"] = -x["height_m"]
+                    if items != mirrored or source != "negative_mirror":
+                        raise SystemExit(f"{cid} step {i}: negative mirror must copy strict times, swap types and negate heights")
+                st["expect"]["prediction"]["items"] = copy.deepcopy(items)
+            elif source == "strict_refusal":
+                error = observed.get("error")
+                code = error.get("code") if isinstance(error, dict) else error
+                if code != (st.get("expect") or {}).get("error"):
+                    raise SystemExit(f"{cid} step {i}: independent refusal differs from the hand-written error")
+            elif source == "authored_interface":
+                if observed.get("expect") != authored.get("expect"):
+                    raise SystemExit(f"{cid} step {i}: authored interface expectations were changed by the oracle")
+                if authored.get("strict") or "swap_of" in authored:
+                    raise SystemExit(f"{cid} step {i}: a scientific step cannot be labelled authored_interface")
+            else:
+                raise SystemExit(f"{cid} step {i}: unrecognised independent expectation source {source!r}")
+            steps.append(st)
+            provenance.append({"authored_step": i, "source": source,
+                               "authored_controls": {k: copy.deepcopy(authored[k]) for k in
+                                  ("strict", "outcome", "compare", "local", "same_items_as_step", "swap_of") if k in authored}})
+        ready = mcase(cid, c["title"], c["spec"], steps, root=c["root"], release=c["release"],
+                      requires=copy.deepcopy(c["requires"]))
+        if c.get("open_args"):
+            ready["matrix"]["open_args"] = copy.deepcopy(c["open_args"])
+        for k in ("runners", "note", "band_exception"):
+            if k in c:
+                ready[k] = copy.deepcopy(c[k])
+        ready["scientific_gate_ready"] = True
+        ready["prediction_provenance"] = {"calls_sha256": pin["calls_sha256"], "oracle_commit": pin["oracle_commit"],
+                                           "expected_sha256": file_sha(PREDICT_EXPECTED),
+                                           "strict_source_sha256": pin["strict_source_sha256"],
+                                           "crosscheck_sha256": pin["crosscheck_sha256"], "steps": provenance}
+        out.append(ready)
+    return out
+
+
 def build(outdir: Path, crossdir: Path):
+    predictions = prediction_cases()
     R2, R1 = Rel("good", "20991231.2"), Rel("good", "20991231")
     crossdir.mkdir(parents=True, exist_ok=True)
     cross = group_cross(R2)
@@ -3561,6 +3694,19 @@ def build(outdir: Path, crossdir: Path):
             seen.add(c["id"])
         doc = {"suite_version": SUITE_VERSION, "group": name,
                "description": "Generated by conformance/tools/build_cases.py from conformance/fixtures; do not edit.",
+               "cases": cases}
+        (outdir / f"{name}.json").write_bytes((json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+    prediction_groups = {}
+    for c in predictions:
+        if c["id"] in seen:
+            raise SystemExit(f"duplicate case id {c['id']}")
+        seen.add(c["id"])
+        name = c["id"].split("/", 1)[0]
+        name = name if name.startswith("predict-") else f"predict-{name}"
+        prediction_groups.setdefault(name, []).append(c)
+    for name, cases in prediction_groups.items():
+        doc = {"suite_version": SUITE_VERSION, "group": name,
+               "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
                "cases": cases}
         (outdir / f"{name}.json").write_bytes((json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
     return len(seen) - len(cross)

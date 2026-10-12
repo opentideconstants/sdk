@@ -1,0 +1,141 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-reference-set-file-order",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-reference-set-file-order",
+   "title": "the reference set is the first usable noaa water-level set in file order (the flagged one), not the recommended gesla-fit set, the no_constants set or the later ok set",
+   "spec": "4.8 step 1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0043",
+      "stop": "2010-03-03T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0042",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0042/noaa-b-flagged",
+       "station_id": "OTC-P-0043",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T03:30:49Z",
+         "type": "high",
+         "height_m": 1.9781177983874072,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T10:07:12Z",
+         "type": "low",
+         "height_m": 0.20130618176042916,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T15:45:27Z",
+         "type": "high",
+         "height_m": 1.5980474530044602,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-01T22:03:19Z",
+         "type": "low",
+         "height_m": 0.08758833580520635,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T04:18:01Z",
+         "type": "high",
+         "height_m": 1.9914708995366592,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T10:58:18Z",
+         "type": "low",
+         "height_m": 0.15614271346991193,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T16:39:43Z",
+         "type": "high",
+         "height_m": 1.5888229564673613,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-03-02T22:53:07Z",
+         "type": "low",
+         "height_m": 0.13265971555191375,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "ca79d6ac51f16caabc48d060be3c01f2a6ac9a09e0cd98913fd1fb1f3b2fc996",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "fc17665a90ea076086961840d33a960796da5cf68ca3d6b9e1e276dc7ef534db",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 0.95,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0043"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0042/noaa-b-flagged"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

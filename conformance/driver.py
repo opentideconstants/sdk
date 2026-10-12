@@ -40,6 +40,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -305,7 +306,7 @@ def is_matcher(v):
     return isinstance(v, dict) and len(v) == 1 and next(iter(v)).startswith("$")
 
 
-def match(exp, act, tol, path="result"):
+def match(exp, act, tol, path="result", event_time_tolerance_s=0):
     """Return a list of mismatch messages (empty = match). Objects must have exactly the expected keys."""
     if act is _MISSING:
         return [f"{path}: missing"]
@@ -323,13 +324,13 @@ def match(exp, act, tol, path="result"):
             return [] if isinstance(act, (list, str, dict)) and len(act) >= arg else [f"{path}: expected length >= {arg}"]
         if op == "$any_of":
             for m in arg:
-                if not match(m, act, tol, path):
+                if not match(m, act, tol, path, event_time_tolerance_s):
                     return []
             return [f"{path}: {json.dumps(act)[:200]} matches none of {json.dumps(arg)[:200]}"]
         if op == "$all":
             out = []
             for m in arg:
-                out += match(m, act, tol, path)
+                out += match(m, act, tol, path, event_time_tolerance_s)
             return out
         raise CaseError(f"unknown matcher {op}")
     if isinstance(exp, dict):
@@ -337,7 +338,7 @@ def match(exp, act, tol, path="result"):
             return [f"{path}: expected an object, got {_type_name(act)} {json.dumps(act)[:80]}"]
         out = []
         for k in exp:
-            out += match(exp[k], act.get(k, _MISSING), tol, f"{path}.{k}")
+            out += match(exp[k], act.get(k, _MISSING), tol, f"{path}.{k}", event_time_tolerance_s)
         extra = sorted(set(act) - set(exp))
         if extra:
             out.append(f"{path}: unexpected keys {extra}")
@@ -349,8 +350,20 @@ def match(exp, act, tol, path="result"):
             return [f"{path}: expected {len(exp)} items, got {len(act)}: {json.dumps(act)[:200]}"]
         out = []
         for i, (e, a) in enumerate(zip(exp, act)):
-            out += match(e, a, tol, f"{path}[{i}]")
+            out += match(e, a, tol, f"{path}[{i}]", event_time_tolerance_s)
         return out
+    if event_time_tolerance_s and re.fullmatch(r"result\.prediction\.items\[[0-9]+\]\.time", path):
+        # Pair by the existing exact list position; no nearest-event or reorder matching.
+        pattern = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"
+        if isinstance(exp, str) and isinstance(act, str) and re.fullmatch(pattern, exp) and re.fullmatch(pattern, act):
+            try:
+                a = datetime.strptime(exp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                b = datetime.strptime(act, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                if abs((a - b).total_seconds()) <= event_time_tolerance_s:
+                    return []
+            except ValueError:
+                pass
+        return [f"{path}: expected paired UTC time {exp!r}, got {act!r} (tolerance {event_time_tolerance_s}s)"]
     if isinstance(exp, bool) or exp is None or isinstance(exp, str):
         return [] if (type(exp) is type(act) and exp == act) else [f"{path}: expected {json.dumps(exp)}, got {json.dumps(act)}"]
     if isinstance(exp, (int, float)):
@@ -427,12 +440,62 @@ def expect_shape_problems(expect):
     return [f"{stray} need an \"error\" in the same expectation"] if stray else []
 
 
-def evaluate(expect, reply):
+def prediction_case_tolerance(case):
+    """Validate the two r29 named band-3 declarations; every other case stays exact."""
+    if not case:
+        return 0
+    provenance = case.get("prediction_provenance")
+    if provenance is not None or "scientific_gate_ready" in case:
+        if case.get("scientific_gate_ready") is not True or not isinstance(provenance, dict):
+            raise CaseError("prediction scientific gate is not ready")
+        for key, length in (("calls_sha256", 64), ("expected_sha256", 64), ("oracle_commit", 40)):
+            if not re.fullmatch(r"[0-9a-f]{%d}" % length, str(provenance.get(key, ""))):
+                raise CaseError(f"prediction scientific gate is missing {key}")
+        records = provenance.get("steps")
+        step_count = len(case.get("steps", [])) - (1 if "@" in case.get("id", "") and case.get("matrix") else 0)
+        sources = {"strict", "strict_reuse", "negative_mirror", "strict_refusal", "authored_interface"}
+        if not isinstance(records, list) or len(records) != step_count or not records or any(
+                not isinstance(row, dict) or row.get("authored_step") != i or row.get("source") not in sources
+                for i, row in enumerate(records)):
+            raise CaseError("prediction scientific gate needs every authored step's provenance")
+    declaration = case.get("band_exception")
+    if declaration is None:
+        return 0
+    cid = case.get("id", "").split("@", 1)[0]
+    named = {"predict-extremes/single-constituent": ("predict", 1.0),
+             "predict-extremes/negative-amplitude": ("predict-bad/extremes-negative-amplitude", -1.0)}
+    if cid not in named or provenance is None:
+        raise CaseError("band exception is allowed only for the two pinned r29 M2 cases")
+    root, amplitude = named[cid]
+    required = {"case_id": cid, "root": root, "release": "20991231.7", "set_id": "OTC-P-0005/noaa",
+                "astro_table_id": "otc-test-predict-a", "start": "2010-03-01T00:00:00Z",
+                "stop": "2010-03-31T00:00:00Z", "amplitude_m": amplitude, "phase_deg": 20.903277,
+                "band": 3, "event_time_tolerance_s": 1}
+    if (not isinstance(declaration, dict) or set(declaration) != set(required) | {"reason"}
+            or any(type(declaration[k]) is not type(v) or declaration[k] != v for k, v in required.items())
+            or not isinstance(declaration.get("reason"), str) or not declaration["reason"].strip()):
+        raise CaseError("band exception differs from the exact r29 named declaration")
+    matrix = case.get("matrix") or {}
+    steps = [st for st in case.get("steps", []) if st.get("op") == "extremes"]
+    if matrix.get("root") != root or matrix.get("release") != required["release"] or len(steps) != 1:
+        raise CaseError("band exception belongs to another fixture or operation")
+    step = steps[0]
+    args = step.get("args") or {}
+    prediction = (step.get("expect") or {}).get("prediction") or {}
+    if (args != {"station_id": "OTC-P-0005", "start": required["start"], "stop": required["stop"]}
+            or any(prediction.get(k) != required[k] for k in ("release", "set_id", "astro_table_id"))
+            or len(prediction.get("items") or []) != 116):
+        raise CaseError("band exception needs the pinned 116-event M2 window and metadata")
+    return 1
+
+
+def evaluate(expect, reply, case=None):
     """Compare a runner reply with a step expectation; return mismatch messages."""
     bad = expect_shape_problems(expect)
     if bad:
         raise CaseError(bad[0])
     tol = expect.get("tolerance", DEFAULT_TOL)
+    event_time_tolerance_s = prediction_case_tolerance(case)
     bad = reply_problems(reply)
     if bad:
         return bad
@@ -462,7 +525,7 @@ def evaluate(expect, reply):
     for k, v in expect.items():
         if k in RESERVED_EXPECT:
             continue
-        out += match(v, result.get(k, _MISSING), tol, f"result.{k}")
+        out += match(v, result.get(k, _MISSING), tol, f"result.{k}", event_time_tolerance_s)
     return out
 
 
@@ -780,6 +843,10 @@ def check_cases(cases):
         ids.add(cid)
         compared = 0
         problems += requires_problems(c)
+        try:
+            prediction_case_tolerance(c)
+        except CaseError as e:
+            problems.append(f"{cid}: {e}")
         try:
             case_timeout(c)
         except CaseError as e:
@@ -1231,7 +1298,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                 if not reply["ok"] else [])
         else:
             stats["steps_compared"] += 1
-            problems = evaluate(subst(expect, ctx), reply)
+            problems = evaluate(subst(expect, ctx), reply, case=case)
         if problems:
             stats["steps_failed"] += 1
             f = {"step": i, "op": st["op"], "args": msg["args"], "problems": problems}
