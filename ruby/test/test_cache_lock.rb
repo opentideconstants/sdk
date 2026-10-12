@@ -162,9 +162,10 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
-    # R18x: prune never removes a release that the caller still holds from
-    # before an update (spec §4.3 update: "stays valid").
-    def test_prune_keeps_a_release_held_from_before_an_update
+    # R13-A1: prune protects only the current release directory. On POSIX,
+    # an earlier held stream release still reads its removed files.
+    def test_prune_removes_an_earlier_held_release_and_keeps_the_current_one
+        posix_only
         over = {}
         srv = serve(File.join(FIXTURES, "good"), over)
         old_ptr = JSON.parse(File.read(fixture("good", "OTC_index.json")))["releases"].find { |e| e["datestamp"] == "20991231" }
@@ -173,11 +174,31 @@ class CacheLockTest < Minitest::Test
         c = OTC.new(base_url: srv.url("/"), cache_dir: cache, mode: :stream)
         held = c.release
         assert_equal "20991231", held.datestamp
+        original = held.station("OTC-T-0021")
+        before = original.raw
         over.delete("OTC_latest-f1.json")
         assert c.update!.updated
-        assert_equal [], c.prune(keep: 0)
-        assert File.file?(File.join(cache, "v1", "releases", "20991231", ".verified"))
-        refute_nil held.station("OTC-T-0001")
+        assert_equal %w[20991231], c.prune(keep: 0)
+        refute File.exist?(File.join(cache, "v1", "releases", "20991231"))
+        assert File.file?(File.join(cache, "v1", "releases", "20991231.2", ".verified"))
+        assert_equal %w[20991231.2], c.cached_releases
+        assert_nil c.station("OTC-T-0021")
+        assert_equal before, held.station("OTC-T-0021").raw
+    ensure
+        c&.close
+    end
+
+    # A file client does not own the cache copy with the same datestamp.
+    def test_prune_from_a_file_does_not_protect_a_matching_cache_release
+        srv = serve
+        cache, cached = two_cached(srv)
+        cached.close
+        c = OTC.new(file: fixture("good", "OTC_20991231.2.jsonl"), cache_dir: cache, mode: :stream)
+        before = c.station("OTC-T-0001").raw
+        assert_equal %w[20991231.2 20991231], c.prune(keep: 0)
+        assert_equal [], c.cached_releases
+        assert File.file?(fixture("good", "OTC_20991231.2.jsonl"))
+        assert_equal before, c.station("OTC-T-0001").raw
     ensure
         c&.close
     end

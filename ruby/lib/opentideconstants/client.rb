@@ -228,15 +228,15 @@ class OpenTideConstants
     end
 
     # Removes all but the newest keep releases from the cache. It never
-    # removes the loaded release, a release this client loaded before an
-    # update that the caller still holds, or a release that another process
-    # holds the lock of. It also removes release directories that never got
-    # a .verified (failed downloads) and that no one holds. Returns the
+    # removes the current loaded release or a release locked by another
+    # process. Earlier held releases can keep reading on POSIX after their
+    # directories are removed (§4.3 R13-A1). It also removes incomplete
+    # release directories that no one holds. Returns the
     # datestamps removed, newest first; CacheError when one cannot be removed.
     def prune(keep: 3)
         check_open!
         raise InvalidArgumentError, "keep must be an Integer >= 0" unless keep.is_a?(Integer) && keep >= 0
-        protect = held_datestamps
+        protect = @file ? [] : [@release.datestamp]
         removed = []
         begin
             cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.each do |d|
