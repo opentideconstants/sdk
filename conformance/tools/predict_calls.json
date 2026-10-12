@@ -7407,7 +7407,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -7488,7 +7488,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -7569,7 +7569,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -7665,7 +7665,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -7748,7 +7748,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -7978,7 +7978,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -8072,7 +8072,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -8246,7 +8246,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -8361,7 +8361,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]
@@ -8470,7 +8470,7 @@
        "tz_version": {
         "$any_of": [
          {
-          "$regex": "^[0-9]{4}[a-z]$"
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
          },
          null
         ]

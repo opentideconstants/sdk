@@ -25,6 +25,8 @@ from _util import CONF
 
 sys.path.insert(0, str(CONF / "tools"))
 import build_fixtures as bf  # noqa: E402
+sys.path.insert(0, str(CONF))
+import driver  # noqa: E402
 
 FIX = CONF / "fixtures"
 LEAF = 360 / 512
@@ -686,6 +688,17 @@ def test_every_spec_case_is_exactly_one_call(calls):
     assert sorted(set(spelled_ids) - set(SPEC_CASES)) == sorted(EXTRA_CASES)
     assert {c["id"].removeprefix("not-built/") for c in calls["cases"] if c["id"].startswith("not-built/")} == set(NOT_BUILT)
     assert not set(spelled_ids) & REMOVED
+
+
+@pytest.mark.parametrize("token,accepted", [
+    (None, True), ("2026d", True), ("2026d-rearguard", True),
+    ("2026d-vanguard", False), ("2026d-rearguard-extra", False),
+    ("2026D", False), ("2026dd", False), ("", False), (2026, False),
+    ("2026d\n", False), ("2026d-rearguard\n", False),
+])
+def test_timezone_version_predicate_preserves_only_the_bounded_source_forms(token, accepted):
+    """Use the real case comparator; the source token and its exact end must survive unchanged."""
+    assert (not driver.match(bf.TZ_VERSION, token, driver.DEFAULT_TOL, "tz_version")) == accepted
 
 
 def test_calls_use_k2_interface(calls, doc):

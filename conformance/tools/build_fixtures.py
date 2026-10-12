@@ -2194,7 +2194,7 @@ def _series(start, stop, step):
 PREDICTION_KEYS = ("station_id", "timezone", "method", "set_id", "convention_id", "astro_table_id", "reference_station_id",
                    "reference_bin", "datum", "datum_name", "datum_kind", "datum_uncertainty_m", "bin_number",
                    "omitted_event_types", "tz", "tz_version", "release", "algorithm")
-TZ_VERSION = {"$any_of": [{"$regex": "^[0-9]{4}[a-z]$"}, None]}
+TZ_VERSION = {"$any_of": [{"$regex": r"^[0-9]{4}[a-z](?:-rearguard)?$(?![\s\S])"}, None]}
 SLACKS = ["slack_before_flood", "slack_before_ebb"]
 
 
