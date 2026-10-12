@@ -179,6 +179,10 @@ internal extension Reader {
             var m=doc.object;m.removeValue(forKey:"stations");meta = .object(m)
             for d in doc["stations"].array { guard let id=d["station_id"].string else { throw OpenTideConstantsError.invalidRelease("station_id missing") };entries.append(IndexEntry.make(d));docs[id]=d }
         }
+        let created = meta["release"]["created"]
+        guard created.isNull || created.string != nil else {
+            throw OpenTideConstantsError.invalidRelease("created has the wrong type")
+        }
         let fv=meta["format_version"].string ?? ""
         guard fv.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.invalidRelease("invalid format version") }
         guard fv.split(separator:".").first=="1" else { throw OpenTideConstantsError.unsupportedFormat("unsupported format \(fv)") }

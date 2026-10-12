@@ -1,6 +1,20 @@
 import XCTest
 @testable import OpenTideConstants
 final class ReaderTests: XCTestCase {
+    func testCreatedTypeActualFormats() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("conformance/fixtures/bad/created-not-string")
+        for (name, mode) in [("OTC_20991231.json", Mode.eager), ("OTC_20991231.json.gz", .eager), ("OTC_20991231.jsonl", .eager), ("OTC_20991231.jsonl", .stream)] {
+            XCTAssertThrowsError(try Reader.load(root.appendingPathComponent(name), mode: mode, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback"), "\(name) \(mode)") { error in
+                guard let native = error as? OpenTideConstantsError else { return XCTFail("unexpected error \(error)") }
+                XCTAssertEqual(native.code, "invalid_release")
+                XCTAssertEqual(native.message, "created has the wrong type")
+                print("CREATED_TYPE name=\(name) mode=\(mode) code=\(native.code)")
+            }
+        }
+    }
     func testDuplicateConventionActualFormats() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
