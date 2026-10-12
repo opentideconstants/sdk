@@ -101,7 +101,7 @@ private enum HeldPrediction {
     static func station(_ station: Station?) -> JSONValue {
         guard let station else { return .null }
         var raw = station.raw.object
-        raw["aliases"] = station.raw["aliases"].isNull ? .object([:]) : station.raw["aliases"]
+        raw["aliases"] = .object(station.aliases.mapValues { .array($0.map(JSONValue.string)) })
         raw["kind"] = station.kind.map { .string($0.rawValue) } ?? .null
         raw["recommended_set_id"] = station.recommendedSet.map { .string($0.setId) } ?? .null
         raw["is_reference"] = .bool(station.isReference)
@@ -118,6 +118,15 @@ private enum HeldPrediction {
     }
     static func licence(_ value: Licence) -> JSONValue {
         .object(["licence_id": plain(value.licenceId), "spdx": plain(value.spdx), "provider": plain(value.provider), "citation": plain(value.citation), "attribution": plain(value.attribution), "url": plain(value.url), "commercial_use": plain(value.commercialUse), "restriction": plain(value.restriction), "terms_url": plain(value.termsUrl)])
+    }
+    static func convention(_ value: Convention) -> JSONValue {
+        .object(["convention_id": plain(value.conventionId), "phase_reference": plain(value.phaseReference), "utc_offset_hours": plain(value.utcOffsetHours), "v0_model": plain(value.v0Model), "nodal_handling": plain(value.nodalHandling), "nodal_formula_ids": plain(value.nodalFormulaIds), "constituent_table_version": plain(value.constituentTableVersion), "tables_sha256": plain(value.tablesSha256), "canary": plain(value.canary)])
+    }
+    static func tombstone(_ value: Tombstone) -> JSONValue {
+        .object(["station_id": plain(value.stationId), "name": plain(value.name), "status": plain(value.status), "removed_in": plain(value.removedIn), "removed_reason": plain(value.removedReason), "merged_into": plain(value.mergedInto), "detail": plain(value.detail)])
+    }
+    static func stats(_ value: Stats) -> JSONValue {
+        .object(["type": .object(value.type.mapValues(JSONValue.integer)), "kind": .object(value.kind.mapValues(JSONValue.integer)), "country": .object(value.country.mapValues(JSONValue.integer)), "source": .object(value.source.mapValues(JSONValue.integer)), "qc_status": .object(value.qcStatus.mapValues(JSONValue.integer))])
     }
     static func constituent(_ value: Constituent) -> JSONValue {
         .object(["name": plain(value.name), "source_name": plain(value.sourceName), "doodson": plain(value.doodson), "speed_deg_per_hour": plain(value.speedDegPerHour), "amplitude_m": plain(value.amplitudeM), "phase_deg": plain(value.phaseDeg), "amp_uncertainty_m": plain(value.ampUncertaintyM), "phase_uncertainty_deg": plain(value.phaseUncertaintyDeg), "kept_reason": plain(value.keptReason)])
@@ -192,18 +201,18 @@ private enum HeldPrediction {
                         if q["on"].string == nil { value = op == "require_station" ? try client.requireStation(stationId: id) : try client.station(stationId: id) }
                         else { value = op == "require_station" ? try r.requireStation(stationId: id) : try r.station(stationId: id) }
                         result = .object(["station": station(value)])
-                    case "tombstone": result = .object(["tombstone": try r.tombstone(stationId: id)?.raw ?? .null])
+                    case "tombstone": result = .object(["tombstone": try r.tombstone(stationId: id).map(tombstone) ?? .null])
                     case "station_by_alias": result = .object(["station_id": try r.stationByAlias(system: args["system"].string ?? "", aliasId: args["alias_id"].string ?? "").map { .string($0.stationId) } ?? .null])
                     case "station_count": result = .object([op: .integer(Int64(try r.stationCount))])
                     case "tombstone_count": result = .object([op: .integer(Int64(try r.tombstoneCount))])
                     case "citation": result = .object([op: .string(r.citation)])
-                    case "stats": result = .object([op: plain(try r.stats)])
+                    case "stats": result = .object([op: stats(try r.stats)])
                     case "constituent_names": result = .object(["names": .array(try r.constituentNames.map(JSONValue.string))])
                     case "release_files": result = .object(["files": .array(r.files.map { $0.raw })])
                     case "release_metadata": result = .object(["datestamp": .string(r.datestamp), "created": plain(r.created), "format_version": .string(r.formatVersion), "concept_doi": plain(r.conceptDoi), "zenodo_version_doi": plain(r.zenodoVersionDoi), "source_versions": .object(r.sourceVersions.mapValues(JSONValue.string)), "build_commit": plain(r.buildCommit), "changelog_url": plain(r.changelogUrl)])
-                    case "conventions": result = .object([op: .array(try r.conventions.map { $0.raw })])
+                    case "conventions": result = .object([op: .array(try r.conventions.map(convention))])
                     case "licences": result = .object([op: .array(try r.licences.map(licence))])
-                    case "convention": result = .object([op: try r.convention(conventionId: args["convention_id"].string ?? "")?.raw ?? .null])
+                    case "convention": result = .object([op: try r.convention(conventionId: args["convention_id"].string ?? "").map(convention) ?? .null])
                     case "licence": result = .object([op: try r.licence(licenceId: args["licence_id"].string ?? "").map(licence) ?? .null])
                     case "recommended_set", "constant_sets", "constant_set", "station_validation", "subordinate_offsets", "constituents", "constituent", "provenance", "set_validation":
                         let value: Station?
