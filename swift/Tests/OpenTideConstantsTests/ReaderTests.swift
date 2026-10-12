@@ -1,6 +1,86 @@
 import XCTest
 @testable import OpenTideConstants
 final class ReaderTests: XCTestCase {
+    func testActualNullableProvenance() throws {
+        guard let directory = ProcessInfo.processInfo.environment["OTC_PROVENANCE_CONTROLS"] else {
+            throw OpenTideConstantsError.invalidArgument("real provenance controls environment required")
+        }
+        let root = URL(fileURLWithPath: directory)
+        let identities = [
+            ("OTC-000180a3", "OTC-000180a3/gesla-fit/idsl_panormos-ids-grc-cmems"),
+            ("OTC-000cb5d3", "OTC-000cb5d3/ticon-4/funafuti-67440-tuv-bom"),
+            ("OTC-03cf7f34", "OTC-03cf7f34/jma/B3")
+        ]
+        var originals: [String: JSONValue] = [:]
+        try eachLine(root.appendingPathComponent("original.jsonl")) { data, _ in
+            let row = try JSONValue.parse(data)
+            if let id = row["station_id"].string { originals[id] = row }
+        }
+        for state in ["present", "absent", "null", "empty", "newer-minor"] {
+            let url = root.appendingPathComponent("\(state).jsonl")
+            var sourceRows: [String: JSONValue] = [:]
+            try eachLine(url) { data, _ in
+                let row = try JSONValue.parse(data)
+                if let id = row["station_id"].string { sourceRows[id] = row }
+            }
+            let release = try Reader.load(url, mode: .stream, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")
+            defer { release.close() }
+            if state == "newer-minor" { XCTAssertEqual(release.formatVersion, "1.99") }
+            var retained: [(Station, Provenance, JSONValue, JSONValue)] = []
+            for (stationId, setId) in identities {
+                let label = "\(stationId)/\(setId) state=\(state)"
+                let original = try XCTUnwrap(originals[stationId])
+                let source = try XCTUnwrap(sourceRows[stationId])
+                let originalSet = try XCTUnwrap(original["constant_sets"].array.first { $0["set_id"].string == setId })
+                let sourceSet = try XCTUnwrap(source["constant_sets"].array.first { $0["set_id"].string == setId })
+                let station = try XCTUnwrap(release.station(stationId: stationId))
+                let set = try XCTUnwrap(station.constantSet(setId: setId))
+                let provenance = try XCTUnwrap(set.provenance)
+                XCTAssertEqual(station.raw, source, label)
+                XCTAssertEqual(set.raw, sourceSet, label)
+                XCTAssertEqual(provenance.raw, sourceSet["provenance"], label)
+                switch state {
+                case "absent":
+                    XCTAssertNil(provenance.raw.object["input_sha256"], label)
+                    XCTAssertNil(provenance.inputSha256, "\(label): absent input_sha256 must project to nil")
+                case "null":
+                    XCTAssertEqual(provenance.raw.object["input_sha256"], .null, label)
+                    XCTAssertNil(provenance.inputSha256, "\(label): null input_sha256 must project to nil")
+                case "empty":
+                    XCTAssertEqual(provenance.raw["input_sha256"], .array([]), label)
+                    XCTAssertEqual(try XCTUnwrap(provenance.inputSha256), [], label)
+                default:
+                    let expected = originalSet["provenance"]["input_sha256"].array.compactMap(\.string)
+                    XCTAssertFalse(expected.isEmpty, label)
+                    XCTAssertEqual(provenance.inputSha256, expected, label)
+                }
+                var restoredSets = source["constant_sets"].array
+                let setIndex = try XCTUnwrap(restoredSets.firstIndex { $0["set_id"].string == setId })
+                var restoredProvenance = provenance.raw.object
+                restoredProvenance["input_sha256"] = originalSet["provenance"]["input_sha256"]
+                if state == "newer-minor" {
+                    let unknown: JSONValue = .object(["null": .null, "ordered": .array([.bool(true), .integer(9007199254740991), .string("retained")])])
+                    XCTAssertEqual(provenance.raw["s0_n_unknown"], unknown, label)
+                    restoredProvenance.removeValue(forKey: "s0_n_unknown")
+                }
+                var restoredSet = restoredSets[setIndex].object
+                restoredSet["provenance"] = .object(restoredProvenance)
+                restoredSets[setIndex] = .object(restoredSet)
+                var restoredStation = station.raw.object
+                restoredStation["constant_sets"] = .array(restoredSets)
+                XCTAssertEqual(JSONValue.object(restoredStation), original, "\(label): all unrelated original raw keys and numbers must survive")
+                print("PROVENANCE_VALUE \(label) projection=\(String(describing: provenance.inputSha256)) raw_key=\(provenance.raw.object["input_sha256"] == nil ? "missing" : provenance.raw["input_sha256"].isNull ? "null" : "array") raw_equal=\(station.raw == source) original_restored=\(JSONValue.object(restoredStation) == original)")
+                retained.append((station, provenance, source, sourceSet["provenance"]))
+            }
+            release.close()
+            for (station, provenance, source, sourceProvenance) in retained {
+                XCTAssertEqual(station.raw, source, "\(state): station survives close")
+                XCTAssertEqual(provenance.raw, sourceProvenance, "\(state): provenance survives close")
+                if state == "absent" || state == "null" { XCTAssertNil(provenance.inputSha256, "\(state): nil projection survives close") }
+            }
+            print("PROVENANCE_LIFETIME state=\(state) retained=\(retained.count) raw_preserved=true")
+        }
+    }
     func testActualIteratorClosedError() throws {
         guard let path = ProcessInfo.processInfo.environment["OTC_CORE_NATIVE_JSONL"] else {
             throw OpenTideConstantsError.invalidArgument("real subset environment required")

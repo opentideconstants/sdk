@@ -78,7 +78,7 @@ public struct Provenance: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
     public var adapterVersion: String? { raw["adapter_version"].string }
-    public var inputSha256: [String]? { raw["input_sha256"].array.compactMap(\.string) }
+    public var inputSha256: [String]? { raw["input_sha256"].isNull ? nil : raw["input_sha256"].array.compactMap(\.string) }
     public var selectionReason: String? { raw["selection_reason"].string }
     public var decision: JSONValue? { raw["decision"].isNull ? nil : raw["decision"] }
     public var build: ProvenanceBuild? { raw["build"].isNull ? nil : ProvenanceBuild(raw["build"]) }
