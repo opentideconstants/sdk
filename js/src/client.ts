@@ -316,13 +316,46 @@ export class OpenTideConstants {
         return new OpenTideConstants(ctx, node, rel, from, extra);
     }
 
+    /** Node cached verification hashes exact file bytes with one bounded positional reader at a time. */
+    static #cachedReadHash(ctx: Ctx, node: NodeMod | null):
+        ((rel: string) => Promise<{ digest: string; bytesRead: number } | null>) | undefined {
+        const store = ctx.store;
+        if (!node || !store) return undefined;
+        return async (rel) => {
+            const file = store.describe(rel);
+            try {
+                // Only cached hashing opts into the private native strict-close hook; ordinary readers keep close().
+                const reader = node.openLineReader(file) as ReturnType<NodeMod["openLineReader"]> & { closeStrict(): void };
+                try {
+                    const sha = node.createSha256State();
+                    let bytesRead = 0;
+                    for (;;) {
+                        const chunk = reader.read(bytesRead, 65536);
+                        if (chunk.length === 0) break;
+                        sha.update(chunk);
+                        bytesRead += chunk.length;
+                    }
+                    return { digest: sha.digest(), bytesRead };
+                } finally {
+                    // As with readFileSync, a close failure overrides a read failure before the cache error is wrapped.
+                    reader.closeStrict();
+                }
+            } catch (e) {
+                const cause = e instanceof FileError && e.cause !== undefined ? e.cause : e;
+                if (typeof cause === "object" && cause !== null && "code" in cause
+                    && (cause.code === "ENOENT" || cause.code === "ENOTDIR")) return null;
+                throw new CacheError(`cannot read ${file}`, { path: file, cause });
+            }
+        };
+    }
+
     /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
     static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean,
         pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
         const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles);
         if (verify) {
             try {
-                await verifyCached(ctx, d);
+                await verifyCached(ctx, d, false, OpenTideConstants.#cachedReadHash(ctx, node));
             } catch (e) {
                 rel._close();
                 throw e;
@@ -878,7 +911,7 @@ get release(): Release {
             }
             return true;
         }
-        return verifyCached(this.#ctx, this.#release.datestamp, true);
+        return verifyCached(this.#ctx, this.#release.datestamp, true, OpenTideConstants.#cachedReadHash(this.#ctx, this.#node));
     }
 
     /**

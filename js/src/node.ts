@@ -111,7 +111,7 @@ function isErrno(e: unknown, code: string): boolean {
 }
 
 /** A positional line reader over an open file (stream mode, spec 6.2). */
-export function openLineReader(file: string): { read: (offset: number, length: number) => Uint8Array; close: () => void } {
+export function openLineReader(file: string): { read: (offset: number, length: number) => Uint8Array; close: () => void; closeStrict: () => void } {
     let fd: number | null;
     try {
         fd = fs.openSync(file, "r");
@@ -140,6 +140,12 @@ export function openLineReader(file: string): { read: (offset: number, length: n
             if (fd !== null) {
                 try { fs.closeSync(fd); } catch { /* already closed */ }
                 fd = null;
+            }
+        },
+        closeStrict() {
+            if (fd !== null) {
+                try { fs.closeSync(fd); }
+                finally { fd = null; }
             }
         },
     };
