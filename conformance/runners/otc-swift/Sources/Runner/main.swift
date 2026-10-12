@@ -116,6 +116,34 @@ private enum HeldPrediction {
     static func releaseInfo(_ info: ReleaseInfo) -> JSONValue {
         .object(["datestamp": .string(info.datestamp), "format_version": .string(info.formatVersion), "concept_doi": plain(info.conceptDoi), "zenodo_version_doi": plain(info.zenodoVersionDoi), "content_sha256": .string(info.contentSha256), "files": .array(info.files.sorted { $0.name < $1.name }.map { file in .object(["name": .string(file.name), "url": plain(file.url), "size": plain(file.size), "sha256": plain(file.sha256)]) })])
     }
+    static func licence(_ value: Licence) -> JSONValue {
+        .object(["licence_id": plain(value.licenceId), "spdx": plain(value.spdx), "provider": plain(value.provider), "citation": plain(value.citation), "attribution": plain(value.attribution), "url": plain(value.url), "commercial_use": plain(value.commercialUse), "restriction": plain(value.restriction), "terms_url": plain(value.termsUrl)])
+    }
+    static func constituent(_ value: Constituent) -> JSONValue {
+        .object(["name": plain(value.name), "source_name": plain(value.sourceName), "doodson": plain(value.doodson), "speed_deg_per_hour": plain(value.speedDegPerHour), "amplitude_m": plain(value.amplitudeM), "phase_deg": plain(value.phaseDeg), "amp_uncertainty_m": plain(value.ampUncertaintyM), "phase_uncertainty_deg": plain(value.phaseUncertaintyDeg), "kept_reason": plain(value.keptReason)])
+    }
+    static func validation(_ value: Validation) -> JSONValue {
+        var fields: [String: JSONValue] = ["set_id": plain(value.setId), "reference_source": plain(value.referenceSource), "reference_station": plain(value.referenceStation), "reference_distance_km": plain(value.referenceDistanceKm), "window": plain(value.window), "time_mae_min": plain(value.timeMaeMin), "time_p95_min": plain(value.timeP95Min), "time_bias_min": plain(value.timeBiasMin), "height_mae_m": plain(value.heightMaeM), "range_error_m": plain(value.rangeErrorM), "missed_events": plain(value.missedEvents), "extra_events": plain(value.extraEvents)]
+        fields["previous_release"] = value.previousRelease.map { previous in
+            .object(Dictionary(uniqueKeysWithValues: ["time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"].map { ($0, previous[$0]) }))
+        } ?? .null
+        return .object(fields)
+    }
+    static func timeBase(_ value: TimeBase) -> JSONValue {
+        .object(["code": plain(value.code), "reason": plain(value.reason), "declared": plain(value.declared), "published": plain(value.published), "correction": plain(value.correction), "months_dropped": plain(value.monthsDropped), "decided_in": plain(value.decidedIn), "decided_build_commit": plain(value.decidedBuildCommit), "evidence": .array(value.evidence.array.map { evidence in .object(Dictionary(uniqueKeysWithValues: ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"].map { ($0, evidence[$0]) })) })])
+    }
+    static func constantSet(_ value: ConstantSet) -> JSONValue {
+        let span = value.recordSpan.map { .object(["start": plain($0.start), "end": plain($0.end), "good_samples": plain($0.goodSamples)]) as JSONValue } ?? .null
+        let datum = value.datum.map { .object(["msl_offset_m": plain($0.mslOffsetM), "named": plain($0.named)]) as JSONValue } ?? .null
+        return .object(["set_id": plain(value.setId), "source": plain(value.source), "source_type": plain(value.sourceType), "quantity": plain(value.quantity), "source_record_id": plain(value.sourceRecordId), "source_version": plain(value.sourceVersion), "record_span": span, "datum": datum, "qc_status": plain(value.qcStatus), "qc_flags": .array(value.qcFlags.map { .object(["flag": plain($0.flag), "reason": plain($0.reason), "values": plain($0.values)]) }), "dropped_constituents": .array(value.droppedConstituents.map { .object(["name": plain($0.name), "dropped_reason": plain($0.droppedReason), "detail": plain($0.detail)]) }), "time_base": value.timeBase.map(timeBase) ?? .null, "is_recommended": plain(value.isRecommended), "convention_id": plain(value.convention.conventionId), "licence_id": plain(value.licence.licenceId), "constituent_count": plain(value.constituents.count)])
+    }
+    static func provenance(_ value: Provenance) -> JSONValue {
+        let build = value.build.map { .object(["build_commit": plain($0.buildCommit), "built_at": plain($0.builtAt), "fetched_at": plain($0.fetchedAt), "run_id": plain($0.runId), "tool_versions": plain($0.toolVersions)]) as JSONValue } ?? .null
+        return .object(["adapter_version": plain(value.adapterVersion), "input_sha256": plain(value.inputSha256), "selection_reason": plain(value.selectionReason), "decision": plain(value.decision), "carried_from_release": plain(value.carriedFromRelease), "build": build])
+    }
+    static func offsets(_ value: SubordinateOffsets) -> JSONValue {
+        .object(["reference_station_id": plain(value.referenceStationId), "time_offset_high_min": plain(value.timeOffsetHighMin), "time_offset_low_min": plain(value.timeOffsetLowMin), "height_offset_high": plain(value.heightOffsetHigh), "height_offset_low": plain(value.heightOffsetLow), "height_adjusted_type": plain(value.heightAdjustedType), "licence_id": plain(value.licenceId)])
+    }
     static func main() async {
         emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "localtime_module", "localtime"].map(JSONValue.string))])]))
         var client: OpenTideConstants?
@@ -174,9 +202,25 @@ private enum HeldPrediction {
                     case "release_files": result = .object(["files": .array(r.files.map { $0.raw })])
                     case "release_metadata": result = .object(["datestamp": .string(r.datestamp), "created": plain(r.created), "format_version": .string(r.formatVersion), "concept_doi": plain(r.conceptDoi), "zenodo_version_doi": plain(r.zenodoVersionDoi), "source_versions": .object(r.sourceVersions.mapValues(JSONValue.string)), "build_commit": plain(r.buildCommit), "changelog_url": plain(r.changelogUrl)])
                     case "conventions": result = .object([op: .array(try r.conventions.map { $0.raw })])
-                    case "licences": result = .object([op: .array(try r.licences.map { $0.raw })])
+                    case "licences": result = .object([op: .array(try r.licences.map(licence))])
                     case "convention": result = .object([op: try r.convention(conventionId: args["convention_id"].string ?? "")?.raw ?? .null])
-                    case "licence": result = .object([op: try r.licence(licenceId: args["licence_id"].string ?? "")?.raw ?? .null])
+                    case "licence": result = .object([op: try r.licence(licenceId: args["licence_id"].string ?? "").map(licence) ?? .null])
+                    case "recommended_set", "constant_sets", "constant_set", "station_validation", "subordinate_offsets", "constituents", "constituent", "provenance", "set_validation":
+                        let value: Station?
+                        if q["on"].string == nil { value = try client.station(stationId: id) }
+                        else { value = try r.station(stationId: id) }
+                        if op == "recommended_set" { result = .object(["set_id": value?.recommendedSet.map { .string($0.setId) } ?? .null]) }
+                        else if op == "constant_sets" { result = .object(["set_ids": try value.map { .array($0.constantSets(includeNoConstants: try boolean(args, "include_no_constants")).map { .string($0.setId) }) } ?? .null]) }
+                        else if op == "station_validation" { result = .object(["validation": value.map { .array($0.validation.map(validation)) } ?? .null]) }
+                        else if op == "subordinate_offsets" { result = .object(["offsets": value?.subordinateOffsets.map(offsets) ?? .null]) }
+                        else {
+                            let set = value?.constantSet(setId: try string(args, "set_id") ?? "")
+                            if op == "constant_set" { result = .object(["set": set.map(constantSet) ?? .null]) }
+                            else if op == "constituents" { result = .object(["constituents": set.map { .array($0.constituents.map(constituent)) } ?? .null]) }
+                            else if op == "constituent" { result = .object(["constituent": set?.constituent(name: try string(args, "name") ?? "").map(constituent) ?? .null]) }
+                            else if op == "set_validation" { result = .object(["validation": set.map { .array($0.validation.map(validation)) } ?? .null]) }
+                            else { result = .object(["provenance": set.map { provenance($0.provenance) } ?? .null, "raw": set?.provenance.raw ?? .null]) }
+                        }
                     case "attribution":
                         let stations: [Station]?
                         if args.object.keys.contains("station_ids") { stations = try args["station_ids"].array.map { value in guard let station = try r.station(stationId: value.string ?? "") else { throw OpenTideConstantsError.invalidArgument("invalid station") }; return station } }
