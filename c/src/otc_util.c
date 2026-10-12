@@ -36,6 +36,18 @@ const char *otc_status_code(otc_status status)
     case OTC_E_NOT_BUILT: return "not_built";
     case OTC_E_UNSUPPORTED_CONVENTION: return "unsupported_convention";
     case OTC_E_READER_TOO_OLD: return "reader_too_old";
+    case OTC_E_NO_CONSTANTS: return "no_constants";
+    case OTC_E_QUANTITY_MISMATCH: return "quantity_mismatch";
+    case OTC_E_NO_ASTRO_TABLE: return "no_astro_table";
+    case OTC_E_UNSUPPORTED_CONSTITUENT: return "unsupported_constituent";
+    case OTC_E_TIME_OUT_OF_RANGE: return "time_out_of_range";
+    case OTC_E_DATUM_UNAVAILABLE: return "datum_unavailable";
+    case OTC_E_BIN_NOT_FOUND: return "bin_not_found";
+    case OTC_E_EXTREMES_ONLY: return "extremes_only";
+    case OTC_E_LOCAL_TIME_UNAVAILABLE: return "local_time_unavailable";
+    case OTC_E_UNKNOWN_TIME_ZONE: return "unknown_time_zone";
+    case OTC_E_REFERENCE_UNAVAILABLE: return "reference_unavailable";
+    case OTC_E_HISTORICAL_OFFSETS_EXCLUDED: return "historical_offsets_excluded";
     }
     return "unknown";
 }
@@ -1397,4 +1409,40 @@ otc_status otc__open_policy_options(const otc_open_options *opts, otc_error *err
         return OTC_E_INVALID_ARGUMENT;
     }
     return OTC_OK;
+}
+
+/* Prediction uses the same validated Gregorian calendar as release timestamps. */
+int64_t otc__year_start(int year) { return days_from_civil(year, 1, 1) * 86400LL; }
+int otc__year(double seconds)
+{
+    long long y;
+    int m, d;
+    if (!isfinite(seconds) || seconds < -62135596800.0 || seconds >= 253402300800.0) return 0;
+    civil_from_days((long long)floor(seconds / 86400.0), &y, &m, &d);
+    return (int)y;
+}
+int otc__instant(const char *text, int64_t *out)
+{
+    char utc[21];
+    int y, m, d, h, mi, sec;
+    const char *zone;
+    if (!text || strlen(text) < 20 || !(zone = strpbrk(text + 19, "Zz+-")) || !*zone || !otc__utc_time(text, utc)) return 0;
+    if (!digits_at(utc, 4, &y) || !digits_at(utc + 5, 2, &m) || !digits_at(utc + 8, 2, &d)
+        || !digits_at(utc + 11, 2, &h) || !digits_at(utc + 14, 2, &mi) || !digits_at(utc + 17, 2, &sec)) return 0;
+    *out = days_from_civil(y, m, d) * 86400LL + h * 3600LL + mi * 60LL + sec;
+    return 1;
+}
+int otc__time_text(int64_t t, char out[21])
+{
+    long long y, days, rem;
+    int m, d;
+    char tmp[64];
+    if (!otc__year((double)t)) return 0;
+    days = (long long)floor((double)t / 86400.0);
+    rem = t - days * 86400LL;
+    civil_from_days(days, &y, &m, &d);
+    snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02dZ", (int)y, m, d,
+        (int)(rem / 3600), (int)(rem / 60 % 60), (int)(rem % 60));
+    memcpy(out, tmp, 21);
+    return 1;
 }

@@ -331,6 +331,7 @@ struct otc_release {
     otc__kvlist     qc_counts;
     /* the only mutable state after open: the last failure on this handle */
     otc__mutex      lock;
+    struct otc_astro_tab *astro; /* lazy validated table wrappers, release-owned */
     otc_status      last_status;
     char            last_message[512];
 };
@@ -354,6 +355,7 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
 otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
                                   uint64_t view, cJSON **out);
 int otc__historical_valid(const cJSON *offsets);
+int otc__ordinary_path(const otc_release *rel, const otc__entry *e);
 int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e);
 
 /* ---------------------------------------------------------------- stations */
@@ -433,4 +435,23 @@ struct otc_tombstone {
 #define OTC__REC_FROM_LINE (-2L)
 otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out);
 
+/* Native prediction internals. Terms and events retain source order. */
+#define OTC__RAD (3.14159265358979323846 / 180.0)
+struct otc_astro_tab { const otc_release *rel; const cJSON *raw; int first, last; struct otc_astro_tab *next; };
+int otc__year(double seconds);
+int64_t otc__year_start(int year);
+int otc__instant(const char *text, int64_t *out);
+int otc__time_text(int64_t t, char out[21]);
+double otc__angle(double value);
+otc_status otc__astro_row(const otc_astro_tab *tab, const char *name, const cJSON **out);
+otc_status otc__astro_index(const otc_astro_tab *tab, int year, int *out);
+typedef struct otc__term { const cJSON *row; double speed, amplitude, phase, scaled, argument, omega; } otc__term;
+typedef struct otc__sum { const otc_astro_tab *table; otc__term *terms; size_t n; double mean; int year; double origin; } otc__sum;
+typedef struct otc__event { double t; int kind; double value; size_t sequence; } otc__event;
+typedef struct otc__events { otc__event *items; size_t n, cap; } otc__events;
+otc_status otc__sum_init(otc__sum *sum, const otc_astro_tab *table, const cJSON *constituents, const char *amplitude, const char *phase, double mean, double multiplier, double shift);
+void otc__sum_clear(otc__sum *sum);
+otc_status otc__sum_value(otc__sum *sum, double seconds, int year, int derivative, double *out);
+otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack, otc__events *out);
+void otc__events_clear(otc__events *events);
 #endif /* OTC_INTERNAL_H */

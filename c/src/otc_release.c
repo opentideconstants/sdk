@@ -221,6 +221,7 @@ void otc_close(otc_release *rel)
     if (!rel) return;
     otc__file_close(rel->file);
     free(rel->path);
+    while (rel->astro) { otc_astro_tab *next = rel->astro->next; free(rel->astro); rel->astro = next; }
     cJSON_Delete(rel->meta);
     free(rel->conv);
     free(rel->lic);

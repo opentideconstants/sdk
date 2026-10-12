@@ -30,6 +30,10 @@ PARTS = [
     "vendor/cjson/cJSON.h",
     "vendor/sha256/sha-256.h",
     "src/otc_internal.h",
+    "src/otc_astro.c",
+    "src/otc_harmonic.c",
+    "src/otc_predict.c",
+    "src/otc_tz.c",
     "src/otc_util.c",
     "src/otc_release.c",
     "src/otc_query.c",
@@ -51,6 +55,12 @@ PRELUDE = """/*
  * Dave Gamble and cJSON contributors) and amosnier/sha-2 (Unlicense / 0BSD);
  * see c/vendor/README.md in https://github.com/opentideconstants/sdk.
  */
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE 1
+#endif
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -63,8 +73,15 @@ PRELUDE = """/*
 #ifndef CJSON_HIDE_SYMBOLS
 #define CJSON_HIDE_SYMBOLS
 #endif
+#ifndef OTC_WITH_PREDICT
+#define OTC_WITH_PREDICT 1
+#endif
+#ifndef OTC_WITH_LOCALTIME
+#define OTC_WITH_LOCALTIME 1
+#endif
 #include "opentideconstants.h"
 """
+
 
 
 FETCH_ONLY = "src/otc_fetch.c"   # the otc_fetch module (libcurl) is not in the bundle; the stub is
@@ -154,7 +171,22 @@ def main():
             elif m and name in names:
                 sys.exit(f"amalgamate: {part}:{n}: {line.strip()} includes a part that comes later in PARTS; "
                          "move it before this one")
+            elif m and part == "src/otc_tz.c" and name in ("otc_tz_rename.h", "localtime.c"):
+                def expand_tz(path):
+                    expanded = []
+                    for nested in read(path).splitlines():
+                        include = LOCAL_INCLUDE.match(nested)
+                        if include:
+                            child = path.parent / include.group(1)
+                            if child.name not in ("private.h", "tzfile.h", "tzdir.h"):
+                                sys.exit(f"amalgamate: unexpected tzcode include {child}")
+                            expanded.append(expand_tz(child))
+                        else:
+                            expanded.append(nested)
+                    return "\n".join(expanded)
+                lines.append(expand_tz((C / part).parent / m.group(1)))
             elif m or ANY_LOCAL_INCLUDE.match(line):
+
                 sys.exit(f"amalgamate: {part}:{n}: {line.strip()} names a file that is not in the amalgamation")
             else:
                 lines.append(line)

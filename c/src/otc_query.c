@@ -105,6 +105,9 @@ static int historical_table_ok(const otc_release *rel, const cJSON *conv, const 
     return 1;
 }
 
+int otc__ordinary_path(const otc_release *rel, const otc__entry *e)
+{ return e && ordinary_paths(rel, NULL, e); }
+
 static int historical_path(const otc_release *rel, const otc__entry *e)
 {
     const cJSON *off = e->own_offsets, *s, *datum, *conv;

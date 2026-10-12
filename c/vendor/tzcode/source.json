@@ -1,0 +1,12 @@
+{
+  "version": "2026e",
+  "url": "https://data.iana.org/time-zones/releases/tzcode2026e.tar.gz",
+  "archive_sha256": "cc3d27ca2a0d8399504551b920970d80af83bfb9c216e8082a15491921935d54",
+  "files": {
+    "LICENSE": "0613408568889f5739e5ae252b722a2659c02002839ad970a63dc5e9174b27cf",
+    "private.h": "dcf3a0041cebf13bebdf4c8e4d1163b7fb4751a16b9f9ebde2cbf79e63b3b4ff",
+    "localtime.c": "cf0dcbb03cdd04beb0c0fc771a5f7fd0550145cf0a54cdd31fc9a03a1b7861b1",
+    "tzdir.h": "b2b828246e9b67b9ae04e21d82d65bddc02d2a812584ddc7089f8af466ecda2d",
+    "tzfile.h": "449eceb0318327d7e885c9ab537a88084c98f03735758e4cf3e9ad1ebae79a1c"
+  }
+}

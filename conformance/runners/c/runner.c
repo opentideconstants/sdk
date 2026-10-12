@@ -33,7 +33,14 @@
 #include <pthread.h>
 #endif
 
+#ifndef OTC_RUNNER_PREDICT
+#define OTC_RUNNER_PREDICT 0
+#endif
+#ifndef OTC_RUNNER_LOCALTIME
+#define OTC_RUNNER_LOCALTIME 0
+#endif
 #ifndef OTC_RUNNER_FETCH
+
 #define OTC_RUNNER_FETCH 0
 #endif
 
@@ -62,6 +69,7 @@ static int fault(const char *name)
 
 #define MAX_HELD 16
 static otc_release *g_current;
+static cJSON *g_prediction; /* protocol snapshot, immutable while query threads run */
 static char *g_current_path;
 static struct { char *name; otc_release *rel; char *path; } g_held[MAX_HELD];
 static size_t g_n_held;
@@ -1078,6 +1086,314 @@ static void stats_map(cJSON *o, const char *key, const otc_stats *s,
     cJSON_AddItemToObject(o, key, m);
 }
 
+/* Native protocol times are parsed by integer fields, so fractions floor even
+ * before 1970 and long fractional strings never round over a second. */
+static int p_digits(const char *p, int n, int *out)
+{
+    int i; *out = 0;
+    for (i = 0; i < n; i++) { if (p[i] < '0' || p[i] > '9') return 0; *out = *out * 10 + p[i] - '0'; }
+    return 1;
+}
+static int64_t p_days(int year, int month, int day)
+{
+    int64_t era, yoe, doy;
+    year -= month <= 2;
+    era = (year >= 0 ? year : year - 399) / 400;
+    yoe = year - era * 400; doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    return era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+}
+static int p_time(const char *text, int64_t *out)
+{
+    int y, m, d, h, mi, sec, oh = 0, om = 0, sign = 0, days;
+    const char *p;
+    static const int months[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (!text || strlen(text) < 20 || !p_digits(text,4,&y) || text[4]!='-' || !p_digits(text+5,2,&m) || text[7]!='-' || !p_digits(text+8,2,&d) || (text[10]!='T' && text[10]!='t') || !p_digits(text+11,2,&h) || text[13]!=':' || !p_digits(text+14,2,&mi) || text[16]!=':' || !p_digits(text+17,2,&sec)) return 0;
+    if (y < 1 || m < 1 || m > 12 || h > 23 || mi > 59 || sec > 59) return 0;
+    days = months[m-1] + (m==2 && (y%4==0 && (y%100!=0 || y%400==0)));
+    if (d < 1 || d > days) return 0;
+    p=text+19;
+    if (*p=='.') { p++; if (*p<'0' || *p>'9') return 0; while (*p>='0' && *p<='9') p++; }
+    if (*p=='Z' || *p=='z') p++;
+    else if (*p=='+' || *p=='-') {
+        sign=*p=='-' ? -1 : 1;
+        if (strlen(p)!=6 || !p_digits(p+1,2,&oh) || p[3]!=':' || !p_digits(p+4,2,&om) || oh>23 || om>59) return 0;
+        p+=6;
+    } else return 0;
+    if (*p) return 0;
+    *out=p_days(y,m,d)*86400+h*3600+mi*60+sec-sign*(oh*3600+om*60);
+    return *out>=INT64_C(-62135596800) && *out<INT64_C(253402300800);
+}
+static cJSON *p_stamp(int64_t t)
+{
+    int64_t z=(int64_t)floor((double)t/86400.0), rem=t-z*86400, era, doe, yoe, y, doy, mp;
+    int m,d;
+    char text[64];
+    z+=719468; era=(z>=0 ? z : z-146096)/146097; doe=z-era*146097;
+    yoe=(doe-doe/1460+doe/36524-doe/146096)/365; y=yoe+era*400;
+    doy=doe-(365*yoe+yoe/4-yoe/100); mp=(5*doy+2)/153;
+    d=(int)(doy-(153*mp+2)/5+1); m=(int)(mp+(mp<10 ? 3 : -9)); y+=m<=2;
+    snprintf(text,sizeof text,"%04d-%02d-%02dT%02d:%02d:%02dZ",(int)y,m,d,(int)(rem/3600),(int)(rem/60%60),(int)(rem%60));
+    return cJSON_CreateString(text);
+}
+static cJSON *p_metadata(const otc_prediction_info *info)
+{
+    cJSON *o=cJSON_CreateObject(), *omitted;
+    size_t i;
+#define FIELD(name) cJSON_AddItemToObject(o,#name,j_cstr(info->name))
+    FIELD(station_id); FIELD(timezone); FIELD(set_id); FIELD(convention_id); FIELD(astro_table_id); FIELD(reference_station_id);
+    FIELD(datum); FIELD(datum_name); FIELD(datum_kind); FIELD(release); FIELD(algorithm);
+    cJSON_AddItemToObject(o,"method",j_cstr(otc_prediction_method_name(info->method)));
+    cJSON_AddItemToObject(o,"datum_uncertainty_m",j_num(info->datum_uncertainty_m));
+    cJSON_AddItemToObject(o,"reference_bin",info->reference_bin ? cJSON_CreateNumber((double)info->reference_bin) : cJSON_CreateNull());
+    cJSON_AddItemToObject(o,"bin_number",info->bin_number ? cJSON_CreateNumber((double)info->bin_number) : cJSON_CreateNull());
+    omitted=info->has_omitted_event_types ? cJSON_CreateArray() : cJSON_CreateNull();
+    if (info->has_omitted_event_types) for (i=0;i<4;i++) if (info->omitted_event_types & (1u<<i)) cJSON_AddItemToArray(omitted,j_cstr(otc_current_event_type_name((otc_current_event_type_t)i)));
+    cJSON_AddItemToObject(o,"omitted_event_types",omitted);
+    cJSON_AddNullToObject(o,"tz"); cJSON_AddNullToObject(o,"tz_version");
+    if (info->historical_offsets) {
+        FIELD(offset_id); FIELD(offset_source); FIELD(offset_source_version); FIELD(current_validity); FIELD(current_accuracy);
+        FIELD(reference_set_id); FIELD(reference_source_version); FIELD(reference_2020_equivalence); FIELD(source_note);
+        cJSON_AddBoolToObject(o,"historical_offsets",1);
+    }
+#undef FIELD
+    return o;
+}
+static int p_operation(const char *op)
+{
+    return !strcmp(op,"heights") || !strcmp(op,"heights_at") || !strcmp(op,"extremes") || !strcmp(op,"currents") || !strcmp(op,"current_events");
+}
+/* C exposes statuses and last-error text. The protocol projects the canonical
+ * payload from that native error, never from expected conformance values. */
+static void p_status(reply *r, otc_release *rel, otc_status status)
+{
+    char message[512] = {0};
+    size_t needed=0;
+    int year,first,last;
+    otc_status read=otc_last_error(rel,message,sizeof message,&needed);
+    set_status(r,status,"prediction");
+    if (read==OTC_OK && message[0]) snprintf(r->message,sizeof r->message,"%s",message);
+    if (status==OTC_E_TIME_OUT_OF_RANGE && sscanf(message,"year %d is outside the astro table (%d to %d)",&year,&first,&last)==3) {
+        r->fields=cJSON_CreateObject(); cJSON_AddNumberToObject(r->fields,"first_year",first); cJSON_AddNumberToObject(r->fields,"last_year",last);
+    } else if (status==OTC_E_UNSUPPORTED_CONSTITUENT && !strncmp(message,"unsupported constituent ",24)) {
+        r->fields=cJSON_CreateObject(); cJSON_AddStringToObject(r->fields,"constituent",message+24);
+    } else if (status==OTC_E_DATUM_UNAVAILABLE && !strncmp(message,"datum is missing ",17)) {
+        r->fields=cJSON_CreateObject(); cJSON_AddStringToObject(r->fields,"missing",message+17);
+    } else if (status==OTC_E_REFERENCE_UNAVAILABLE && !strncmp(message,"reference ",10)) {
+        char *end=strstr(message+10," has no usable set");
+        if (end) { *end='\0'; r->fields=cJSON_CreateObject(); cJSON_AddStringToObject(r->fields,"reference_station_id",message+10); }
+    }
+}
+
+static void op_prediction(request *q, reply *r)
+{
+    otc_station_t *station=NULL;
+    otc_predict_opts opts;
+    otc_prediction_info info;
+    otc_status rc;
+    size_t count=0, i, cap=0;
+    int64_t start=0,stop=0,*times=NULL;
+    void *rows=NULL;
+    cJSON *items=NULL,*prediction=NULL;
+    const cJSON *array,*item;
+    double d;
+    const char *id=arg_str(&q->a,"station_id");
+    otc_predict_opts_init(&opts); otc_prediction_info_init(&info); opts.info=&info;
+    opts.set_id=arg_str(&q->a,"set_id"); opts.offset_id=arg_str(&q->a,"offset_id"); opts.datum=arg_str(&q->a,"datum");
+    d=arg_num(&q->a,"bin_number",0);
+    if (d<0 || d>9007199254740991.0 || floor(d)!=d) q->a.bad=1;
+    else opts.bin_number=(int64_t)d;
+    d=arg_num(&q->a,"step_s",600);
+    if (d<=0 || d>9007199254740991.0 || floor(d)!=d) q->a.bad=1;
+    else opts.step_s=(int64_t)d;
+    if (!strcmp(q->op,"heights_at")) {
+        array=cJSON_GetObjectItemCaseSensitive(q->a.obj,"times");
+        if (!cJSON_IsArray(array)) q->a.bad=1;
+        else {
+            count=(size_t)cJSON_GetArraySize(array);
+            times=calloc(count ? count : 1,sizeof *times);
+            if (!times) { set_status(r,OTC_E_NOMEM,"times"); goto done; }
+            i=0; cJSON_ArrayForEach(item,array) if (!cJSON_IsString(item) || !p_time(item->valuestring,&times[i++])) { q->a.bad=1; break; }
+        }
+    } else if (!p_time(arg_str(&q->a,"start"),&start) || !p_time(arg_str(&q->a,"stop"),&stop)) q->a.bad=1;
+    if (q->a.bad || !id) { set_error(r,"invalid_argument","invalid prediction arguments"); goto done; }
+    rc=otc_require_station(q->rel,id,&station);
+    if (rc!=OTC_OK) { set_status(r,rc,"otc_require_station"); goto done; }
+    if (!strcmp(q->op,"heights_at")) {
+        cap=count; rows=calloc(cap ? cap : 1,sizeof(otc_height_t));
+        rc=rows ? otc_heights_at(q->rel,station,&opts,times,count,rows) : OTC_E_NOMEM;
+    } else {
+#define CALL(function,type) do { rc=function(q->rel,station,&opts,start,stop,NULL,0,&count); if (rc==OTC_OK || rc==OTC_E_BUFFER_TOO_SMALL) { cap=count; rows=calloc(cap ? cap : 1,sizeof(type)); rc=rows ? function(q->rel,station,&opts,start,stop,rows,cap,&count) : OTC_E_NOMEM; } } while (0)
+        if (!strcmp(q->op,"heights")) CALL(otc_heights,otc_height_t);
+        else if (!strcmp(q->op,"extremes")) CALL(otc_extremes,otc_extreme_t);
+        else if (!strcmp(q->op,"currents")) CALL(otc_currents,otc_current_t);
+        else CALL(otc_current_events,otc_current_event_t);
+#undef CALL
+    }
+    if (rc!=OTC_OK) { p_status(r,q->rel,rc); goto done; }
+    prediction=p_metadata(&info); items=cJSON_CreateArray();
+    for (i=0;i<count;i++) {
+        cJSON *row=cJSON_CreateObject();
+        int64_t t;
+        if (!strcmp(q->op,"heights") || !strcmp(q->op,"heights_at")) { otc_height_t *v=rows; t=v[i].t; cJSON_AddNumberToObject(row,"height_m",v[i].height_m); }
+        else if (!strcmp(q->op,"extremes")) { otc_extreme_t *v=rows; t=v[i].t; cJSON_AddNumberToObject(row,"height_m",v[i].height_m); cJSON_AddItemToObject(row,"type",j_cstr(otc_extreme_type_name(v[i].type))); }
+        else if (!strcmp(q->op,"currents")) {
+            otc_current_t *v=rows; t=v[i].t;
+            cJSON_AddNumberToObject(row,"velocity_major_ms",v[i].velocity_major_ms); cJSON_AddNumberToObject(row,"velocity_minor_ms",v[i].velocity_minor_ms);
+            cJSON_AddNumberToObject(row,"speed_ms",v[i].speed_ms); cJSON_AddItemToObject(row,"direction_deg",j_num(v[i].direction_deg));
+        } else { otc_current_event_t *v=rows; t=v[i].t; cJSON_AddNumberToObject(row,"velocity_ms",v[i].velocity_ms); cJSON_AddItemToObject(row,"direction_deg",j_num(v[i].direction_deg)); cJSON_AddItemToObject(row,"type",j_cstr(otc_current_event_type_name(v[i].type))); }
+        cJSON_AddItemToObject(row,"time",p_stamp(t)); cJSON_AddNullToObject(row,"local_time"); cJSON_AddNullToObject(row,"utc_offset_s");
+        cJSON_AddItemToArray(items,row);
+    }
+    cJSON_AddItemToObject(prediction,"items",items); items=NULL;
+    cJSON_AddItemToObject(r->result,"prediction",prediction); prediction=NULL;
+done:
+    cJSON_Delete(items); cJSON_Delete(prediction); free(rows); free(times); otc_station_free(station); otc_prediction_info_clear(&info);
+}
+
+static void op_local(request *q, reply *r)
+{
+    const char *zone=arg_str(&q->a,"tz");
+    otc_tz *tz=NULL;
+    otc_status rc;
+    cJSON *prediction, *items, *item;
+    char version[128];
+    size_t needed=0;
+    if (q->a.bad || !g_prediction) { set_error(r,"invalid_argument","no prediction or invalid zone"); return; }
+    if (!zone || !strcmp(zone,"station")) { const cJSON *z=cJSON_GetObjectItemCaseSensitive(g_prediction,"timezone"); zone=cJSON_IsString(z) ? z->valuestring : NULL; }
+    rc=otc_tz_open(zone,&tz);
+        if (rc!=OTC_OK) {
+        set_status(r,rc,"otc_tz_open");
+        if (rc==OTC_E_LOCAL_TIME_UNAVAILABLE) {
+            const char *directory=getenv("TZDIR");
+            char message[600];
+            snprintf(message,sizeof message,"zone directory %s cannot be read; install a TZif database",directory && *directory ? directory : "/usr/share/zoneinfo");
+            set_error(r,otc_status_code(rc),message);
+        }
+
+        if (rc==OTC_E_UNKNOWN_TIME_ZONE) { r->fields=cJSON_CreateObject(); cJSON_AddItemToObject(r->fields,"zone",j_cstr(zone)); }
+        return;
+    }
+
+    prediction=cJSON_Duplicate(g_prediction,1);
+    if (!prediction) { otc_tz_close(tz); set_status(r,OTC_E_NOMEM,"prediction snapshot"); return; }
+    items=cJSON_GetObjectItemCaseSensitive(prediction,"items");
+    cJSON_ArrayForEach(item,items) {
+        const cJSON *time=cJSON_GetObjectItemCaseSensitive(item,"time");
+        int64_t t;
+        otc_local_t local;
+        if (!cJSON_IsString(time) || !p_time(time->valuestring,&t)) { rc=OTC_E_INVALID_ARGUMENT; break; }
+        rc=otc_tz_local(tz,t,&local); if (rc!=OTC_OK) break;
+        cJSON_ReplaceItemInObjectCaseSensitive(item,"local_time",cJSON_CreateString(local.local_time));
+        cJSON_ReplaceItemInObjectCaseSensitive(item,"utc_offset_s",cJSON_CreateNumber(local.utc_offset_s));
+    }
+    otc_tz_close(tz);
+    if (rc!=OTC_OK) { cJSON_Delete(prediction); set_status(r,rc,"otc_tz_local"); return; }
+    cJSON_ReplaceItemInObjectCaseSensitive(prediction,"tz",j_cstr(zone));
+    rc=otc_tz_version(version,sizeof version,&needed);
+    cJSON_ReplaceItemInObjectCaseSensitive(prediction,"tz_version",rc==OTC_OK ? j_cstr(version) : cJSON_CreateNull());
+    cJSON_AddItemToObject(r->result,"prediction",prediction);
+}
+static cJSON *datum_object(request *q, const otc_station_t *station, const char *set_id, int ranges, otc_status *status)
+{
+    otc_datum_info info;
+    otc_datum_level *levels=NULL;
+    size_t n=0,i,j;
+    cJSON *result=NULL, *array;
+    const char *flags[]={"time_base_unverified","time_base_disputed","sampling_assumed","truncated_lows","gaps","segment","short_record","no_qualified_control","microtidal","provisional"};
+    *status=otc_datums(q->rel,station,set_id,&info,NULL,0,&n);
+    if (*status==OTC_E_NOT_FOUND) { *status=OTC_OK; return cJSON_CreateNull(); }
+    if (*status!=OTC_OK && *status!=OTC_E_BUFFER_TOO_SMALL) return NULL;
+    levels=calloc(n ? n : 1,sizeof *levels);
+    if (!levels) { *status=OTC_E_NOMEM; return NULL; }
+    *status=otc_datums(q->rel,station,set_id,&info,levels,n,&n);
+    if (*status!=OTC_OK) { free(levels); return NULL; }
+    result=cJSON_CreateObject();
+    if (ranges) {
+        cJSON_AddItemToObject(result,"mn",j_num(info.mn)); cJSON_AddItemToObject(result,"gt",j_num(info.gt));
+        cJSON_AddItemToObject(result,"dhq",j_num(info.dhq)); cJSON_AddItemToObject(result,"dlq",j_num(info.dlq));
+    } else {
+        cJSON_AddItemToObject(result,"set_id",j_cstr(info.set_id)); cJSON_AddItemToObject(result,"zero",j_cstr(info.zero));
+        cJSON_AddItemToObject(result,"zero_name",j_cstr(info.zero_name)); cJSON_AddItemToObject(result,"chart_datum",j_cstr(info.chart_datum));
+        cJSON_AddItemToObject(result,"msl_offset_m",j_num(info.msl_offset_m)); array=cJSON_CreateArray();
+        for (i=0;i<n;i++) {
+            otc_datum_level *l=&levels[i]; cJSON *level=cJSON_CreateObject(), *epoch, *span, *flag_array=cJSON_CreateArray();
+#define DSTR(field) cJSON_AddItemToObject(level,#field,j_cstr(l->field))
+            DSTR(key); DSTR(kind); DSTR(method); DSTR(source_name); DSTR(control_station_id); DSTR(control_set_id); DSTR(control_source_id); DSTR(uncertainty_basis);
+#undef DSTR
+            cJSON_AddNumberToObject(level,"value_m",l->value_m); cJSON_AddItemToObject(level,"above_chart_m",j_num(l->above_chart_m)); cJSON_AddItemToObject(level,"uncertainty_m",j_num(l->uncertainty_m));
+            epoch=l->epoch_start || l->epoch_end || l->epoch_name ? cJSON_CreateObject() : cJSON_CreateNull();
+            if (cJSON_IsObject(epoch)) { cJSON_AddItemToObject(epoch,"start",j_cstr(l->epoch_start)); cJSON_AddItemToObject(epoch,"end",j_cstr(l->epoch_end)); cJSON_AddItemToObject(epoch,"name",j_cstr(l->epoch_name)); }
+            span=l->data_start || l->data_end || l->data_months>=0 ? cJSON_CreateObject() : cJSON_CreateNull();
+            if (cJSON_IsObject(span)) { cJSON_AddItemToObject(span,"start",j_cstr(l->data_start)); cJSON_AddItemToObject(span,"end",j_cstr(l->data_end)); cJSON_AddItemToObject(span,"months",j_count(l->data_months)); }
+            cJSON_AddItemToObject(level,"epoch",epoch); cJSON_AddItemToObject(level,"data_span",span);
+            for (j=0;j<10;j++) if (l->flags & (1u<<j)) cJSON_AddItemToArray(flag_array,j_cstr(flags[j]));
+            cJSON_AddItemToObject(level,"flags",flag_array); cJSON_AddItemToArray(array,level);
+        }
+        cJSON_AddItemToObject(result,"levels",array);
+    }
+    free(levels); return result;
+}
+static void op_datums(request *q, reply *r)
+{
+    otc_station_t *station=NULL;
+    otc_status rc;
+    cJSON *result;
+    const char *id=arg_str(&q->a,"station_id"), *set_id=arg_str(&q->a,"set_id");
+    bool all=arg_bool(&q->a,"all_sets",false);
+    if (q->a.bad || !id) { set_error(r,"invalid_argument","datum arguments"); return; }
+    rc=otc_require_station(q->rel,id,&station);
+    if (rc!=OTC_OK) { set_status(r,rc,"otc_require_station"); return; }
+    if (all && !strcmp(q->op,"datums")) {
+        size_t i,n=otc_station_set_count(station,true);
+        result=cJSON_CreateArray();
+        for (i=0;i<n;i++) {
+            const otc_set *set=NULL; int bad=0; cJSON *sid;
+            rc=otc_station_set_at(station,true,i,&set);
+            if (rc!=OTC_OK) break;
+            sid=s_set_id(set,&bad);
+            if (bad || !cJSON_IsString(sid)) { cJSON_Delete(sid); rc=OTC_E_INVALID_ARGUMENT; break; }
+            cJSON *datum=datum_object(q,station,sid->valuestring,0,&rc); cJSON_Delete(sid);
+            if (rc!=OTC_OK) break;
+            cJSON_AddItemToArray(result,datum);
+        }
+    } else result=datum_object(q,station,set_id,!strcmp(q->op,"ranges"),&rc);
+    otc_station_free(station);
+    if (rc!=OTC_OK) { cJSON_Delete(result); set_status(r,rc,"otc_datums"); return; }
+    cJSON_AddItemToObject(r->result,!strcmp(q->op,"ranges") ? "ranges" : "datums",result);
+}
+static int astro_operation(const char *op)
+{
+    return !strcmp(op,"astro_table") || !strcmp(op,"valid_range") || !strcmp(op,"equilibrium_argument") || !strcmp(op,"node_factor") || !strcmp(op,"equilibrium_for_year") || !strcmp(op,"node_factor_for_year");
+}
+static void op_astro(request *q, reply *r)
+{
+    const otc_astro_tab *table=NULL;
+    const char *id=arg_str(&q->a,"id"), *name=arg_str(&q->a,"name");
+    otc_status rc;
+    double value=NAN,year;
+    int first,last;
+    int64_t t=0;
+    if (q->a.bad) { set_error(r,"invalid_argument","astro arguments"); return; }
+    rc=otc_astro_table(q->rel,id,&table);
+    if (rc==OTC_E_NOT_FOUND && !strcmp(q->op,"astro_table")) { cJSON_AddNullToObject(r->result,"astro_table"); return; }
+    if (rc!=OTC_OK) { p_status(r,q->rel,rc); return; }
+    if (!strcmp(q->op,"astro_table") || !strcmp(q->op,"valid_range")) {
+        rc=otc_astro_valid_range(table,&first,&last);
+        if (rc==OTC_OK) {
+            cJSON *v=cJSON_CreateObject(); cJSON_AddNumberToObject(v,"first_year",first); cJSON_AddNumberToObject(v,"last_year",last);
+
+            if (!strcmp(q->op,"astro_table")) cJSON_AddItemToObject(r->result,"astro_table",v); else { cJSON_Delete(v); cJSON_AddNumberToObject(r->result,"first_year",first); cJSON_AddNumberToObject(r->result,"last_year",last); }
+        }
+    } else if (strstr(q->op,"for_year")) {
+        year=arg_num(&q->a,"year",NAN);
+        if (!isfinite(year) || floor(year)!=year || year<INT_MIN || year>INT_MAX) rc=OTC_E_INVALID_ARGUMENT;
+        else rc=!strcmp(q->op,"equilibrium_for_year") ? otc_astro_equilibrium_for_year(table,name,(int)year,&value) : otc_astro_node_factor_for_year(table,name,(int)year,&value);
+    } else if (!p_time(arg_str(&q->a,"at"),&t)) rc=OTC_E_INVALID_ARGUMENT;
+    else rc=!strcmp(q->op,"equilibrium_argument") ? otc_astro_equilibrium_argument(table,name,t,&value) : otc_astro_node_factor(table,name,t,&value);
+    if (rc!=OTC_OK) p_status(r,q->rel,rc);
+    else if (strcmp(q->op,"astro_table") && strcmp(q->op,"valid_range")) cJSON_AddItemToObject(r->result,"value",j_num(value));
+}
+
 static void op_query(request *q, reply *r)
 {
     const char *op = q->op;
@@ -1087,7 +1403,11 @@ static void op_query(request *q, reply *r)
     cJSON *o = cJSON_CreateObject();
     r->result = o;
 
-    if (!strcmp(op, "loaded_from")) {
+    if (p_operation(op)) { op_prediction(q, r);
+    } else if (!strcmp(op,"to_local")) { op_local(q,r);
+    } else if (!strcmp(op,"datums") || !strcmp(op,"ranges")) { op_datums(q,r);
+    } else if (astro_operation(op)) { op_astro(q,r);
+    } else if (!strcmp(op, "loaded_from")) {
         cJSON_AddItemToObject(o, "loaded_from", j_enum(otc_loaded_from_name(otc_release_loaded_from(R))));
     } else if (!strcmp(op, "last_error")) {
         /* client.last_error: the failure of the last automatic update (C69), else the error behind loaded_from
@@ -2098,10 +2418,18 @@ int main(void)
     int threads = t ? atoi(t) : 1;
     size_t i;
     g_fault = getenv("OTC_RUNNER_FAULT");
-    printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s]}}\n",
-           OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
-           OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\", \"require_checksum\", \"https_proxy\""
-                            : "\"fs\", \"stream\", \"require_checksum\"");
+    {
+        const char *predict=OTC_RUNNER_PREDICT ? ", \"predict\"" : "";
+        const char *module="", *local="";
+        otc_tz *probe=NULL;
+        if (OTC_RUNNER_PREDICT && OTC_RUNNER_LOCALTIME) {
+            module=", \"localtime_module\", \"tzdir_env\"";
+            if (otc_tz_open("UTC",&probe)==OTC_OK) { local=", \"localtime\""; otc_tz_close(probe); }
+        }
+        printf("{\"hello\": {\"runner\": \"%s\", \"version\": \"%s\", \"features\": [%s%s%s%s]}}\n",
+            OTC_RUNNER_FETCH ? "c-fetch" : "c", OTC_VERSION,
+            OTC_RUNNER_FETCH ? "\"fs\", \"fetch\", \"stream\", \"require_checksum\", \"https_proxy\"" : "\"fs\", \"stream\", \"require_checksum\"",predict,module,local);
+    }
     fflush(stdout);
     while ((got = read_line(stdin, &line)) != 0) {
         char *out;
@@ -2116,6 +2444,16 @@ int main(void)
         free(line);
         fputs(out ? out : "{\"ok\": false, \"error\": {\"code\": \"uncaught:NoMemory\", \"message\": \"\"}}", stdout);
         fputc('\n', stdout);
+        {
+            cJSON *response=cJSON_Parse(out);
+            cJSON *prediction=cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(response,"result"),"prediction");
+            if (prediction && cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(prediction,"tz"))) {
+                cJSON *snapshot=cJSON_Duplicate(prediction,1);
+                if (snapshot) { cJSON_Delete(g_prediction); g_prediction=snapshot; }
+            }
+            cJSON_Delete(response);
+        }
+
         fflush(stdout);
         cJSON_free(out);
     }
@@ -2129,5 +2467,6 @@ int main(void)
         free(g_held[i].path);
     }
     client_free();
+    cJSON_Delete(g_prediction);
     return 0;
 }
