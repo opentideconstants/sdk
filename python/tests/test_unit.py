@@ -499,7 +499,7 @@ class LockAndPruneTest(unittest.TestCase):
         finally:
             srv.close()
 
-    def test_prune_keeps_a_release_the_caller_still_holds(self):
+    def test_prune_removes_an_earlier_held_release_but_keeps_current(self):
         idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
         script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
         srv = _Server(script=script)
@@ -507,11 +507,15 @@ class LockAndPruneTest(unittest.TestCase):
             with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream") as c:
                 old = c.release
                 self.assertEqual(old.datestamp, "20991231")
+                old_raw = old.station("OTC-T-0001").raw
                 del script["/OTC_latest-f1.json"]
                 self.assertTrue(c.update().updated)
-                self.assertEqual(c.prune(keep=0), ())
-                self.assertTrue((self.cache / "v1" / "releases" / "20991231" / ".verified").is_file())
-                self.assertEqual(old.station("OTC-T-0001").station_id, "OTC-T-0001")
+                self.assertEqual(c.release.datestamp, "20991231.2")
+                self.assertEqual(c.prune(keep=0), ("20991231",))
+                self.assertFalse((self.cache / "v1" / "releases" / "20991231").exists())
+                self.assertTrue((self.cache / "v1" / "releases" / "20991231.2" / ".verified").is_file())
+                self.assertEqual(c.cached_releases(), ("20991231.2",))
+                self.assertEqual(old.station("OTC-T-0001").raw, old_raw)
         finally:
             srv.close()
 

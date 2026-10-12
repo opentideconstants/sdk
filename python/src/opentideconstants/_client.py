@@ -1047,8 +1047,8 @@ class OpenTideConstants:
         self._check_open()
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
             raise InvalidArgumentError("keep must be a non-negative integer")
-        # never the loaded release, nor one that the caller still holds from before an update (spec §4.3)
-        keep_ds = {r.datestamp for r in list(self._handed_out) if not r._closed}
+        # Protect only the current release loaded by this client (spec §4.3, R13-A1).
+        keep_ds = set()
         if self._release is not None:
             keep_ds.add(self._release.datestamp)
         removed = []
