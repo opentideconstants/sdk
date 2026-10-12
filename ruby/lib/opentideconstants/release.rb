@@ -730,6 +730,10 @@ class OpenTideConstants
             index_aliases(sid, raw["aliases"])
             Array(raw["source_records"]).each { |r| SourceRecord.new(r, licences: @licence_by_id) }
             eff = @commercial_only ? effective_set(rec, sets) : rec
+            # Keep the reader's discovery fields, not the full fits. The names
+            # were collected above; materialize reads the complete line on demand.
+            summaries = Reader.index_entry(raw, pos, len).fetch("sets")
+            summaries.each { |cs| cs.delete("constituents") }
             Entry.new(station_id: sid, name: raw["name"], folded: Fold.fold(raw["name"].to_s), lat: raw["lat"],
                       lon: raw["lon"], type: Util.enum(raw["type"], ENUMS[:station_type]), country: raw["country"],
                       kind: rec && quantity_kind(rec["quantity"]), sources: sources.freeze,
@@ -740,7 +744,7 @@ class OpenTideConstants
                       eff_source_type: eff && Util.enum(eff["source_type"], ENUMS[:source_type]),
                       offsets_ref_licence_id: sets.find { |cs| offsets_reference_set?(cs) }&.fetch("licence_id"),
                       aliases: (raw["aliases"].is_a?(Hash) ? raw["aliases"].transform_values { |v| Array(v) } : {}),
-                      sets: sets, offsets: off, current_offsets: raw["current_offsets"] || [],
+                      sets: summaries, offsets: off, current_offsets: raw["current_offsets"] || [],
                       pos: pos, len: len, station: nil)
         end
 

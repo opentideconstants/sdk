@@ -25,6 +25,32 @@ class CoreNativeTest < Minitest::Test
         assert_equal 10002, self.class.client.stations(include_flagged: true, include_fallback: true).size
         assert_equal 16038, self.class.client.release.station_count
     end
+    def test_stream_index_retains_discovery_summaries_and_reads_full_native_records
+        client = self.class.client
+        entries = client.release.instance_variable_get(:@entries)
+        retained = entries.select do |entry|
+            entry.sets.any? { |set| set.key?("constituents") || set.key?("provenance") || set.key?("time_base") || set.key?("dropped_constituents") }
+        end
+        assert_equal 0, retained.size, "stream entries retain full fit fields: #{retained.first(3).map(&:station_id)}"
+
+        ids = %w[OTC-a6c00a3f OTC-000180a3 OTC-000cb5d3 OTC-00bdf4b5]
+        expected = {}
+        File.foreach(H4) do |line|
+            raw = JSON.parse(line)
+            expected[raw["station_id"]] = raw if ids.include?(raw["station_id"])
+            break if expected.size == ids.size
+        end
+        assert_equal ids.sort, expected.keys.sort
+        GC.start(full_mark: true, immediate_sweep: true)
+        GC.compact if GC.respond_to?(:compact)
+        expected.each do |id, raw|
+            station = client.require_station(id)
+            assert_equal raw, station.raw, id
+            assert_equal raw["constant_sets"], station.constant_sets(include_no_constants: true).map(&:raw), id
+            assert_equal raw["source_records"], station.source_records.map(&:raw), id
+            assert_equal raw["recommended_set_id"], station.recommended_set.set_id, id
+        end
+    end
     def test_raw_source_cells
         count = 0
         fit = 0
