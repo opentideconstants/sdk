@@ -749,11 +749,17 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
 }
 
-/** Read a cache directory into a SyncDir (the browser, where storage is async). */
-export async function prefetchDir(store: CacheStore, d: string, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
+/** Read the selected cached format into a SyncDir (the browser, where storage is async). */
+export async function prefetchDir(store: CacheStore, d: string, mode: Mode, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
     const dir = relDir(d);
+    const n = names(d);
+    const present = new Set(await store.list(dir));
+    // Provenance comes from the pointer or .verified, so unused cached originals need no body read.
+    const selected = mode === "stream" ? [n.meta, n.jsonl, "index-v1.json"]
+        : present.has(n.json) ? [n.json] : [n.meta, n.jsonl];
     const files = new Map<string, Uint8Array>();
-    for (const name of await store.list(dir)) {
+    for (const name of selected) {
+        if (!present.has(name)) continue;
         const b = await store.read(`${dir}/${name}`);
         if (b) files.set(name, b);
     }

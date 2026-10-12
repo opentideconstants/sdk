@@ -403,7 +403,7 @@ export class OpenTideConstants {
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
-        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn);
         return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
     }
 

@@ -117,6 +117,92 @@ test('native browser all immutable vectors and actual Intl localization',async()
     } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
 });
 
+test('native browser cache prefetch reads only the selected format',async()=>{
+    const fixture=process.env.OTC_BROWSER_CACHE_NATIVE_DIR??(process.env.OTC_HISTORY_BROWSER_JSON?path.dirname(process.env.OTC_HISTORY_BROWSER_JSON):null);
+    assert.ok(fixture,'lossless actual H4 JSON/JSONL/META fixture required');
+    const root=fileURLToPath(new URL('../..',import.meta.url)),dist=process.env.OTC_BROWSER_SDK_DIR??path.join(root,'js/dist');
+    const parsed=JSON.parse(fs.readFileSync(path.join(fixture,'OTC_20261011.json'),'utf8'));
+    const date=parsed.release.datestamp,stem=`OTC_${date}`,digest=b=>createHash('sha256').update(b).digest('hex');
+    const contents=Object.fromEntries(['json','jsonl','meta.json'].map(ext=>[`${stem}.${ext}`,fs.readFileSync(path.join(fixture,`${stem}.${ext}`))]));
+    contents[`${stem}.sha256`]=Buffer.from(Object.entries(contents).map(([name,bytes])=>`${digest(bytes)}  ${name}\n`).join(''));
+    const files=Object.entries(contents).map(([name,bytes])=>({name,sha256:digest(bytes),size:bytes.length}));
+    const server=createServer((request,response)=>{
+        const pathname=new URL(request.url,'http://localhost').pathname;
+        if(pathname==='/'){response.setHeader('content-type','text/html');response.end('<!doctype html>');return;}
+        if(pathname.startsWith('/sdk/')){response.setHeader('content-type','text/javascript');response.end(fs.readFileSync(path.join(dist,path.normalize(pathname.slice(5)))));return;}
+        const name=path.basename(pathname);
+        if(name==='OTC_latest-f1.json'||name==='OTC_latest.json'){response.end(JSON.stringify({...parsed.release,format_version:parsed.format_version,files}));return;}
+        if(contents[name]){response.end(contents[name]);return;}
+        response.statusCode=404;response.end();
+    });
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+    let browser;
+    try {
+        browser=await chromium.launch({headless:true});
+        const page=await browser.newPage(),origin=`http://127.0.0.1:${server.address().port}`;await page.goto(origin);
+        const observed=await page.evaluate(async({origin,date,stem,originals,targets})=>{
+            const {OpenTideConstants}=await import('/sdk/index.js');
+            const options={baseUrl:origin+'/',cacheDir:'native-cache-prefetch',verifyOnOpen:false};
+            const offline={...options,release:date,offline:true};
+            const key=name=>`https://opentideconstants-cache.invalid/v1/releases/${date}/${name}`;
+            const cache=await caches.open('opentideconstants-v1:'+options.cacheDir);
+            const predictions=async client=>{
+                const results=[];
+                for(const id of ['OTC-a6c00a3f','OTC-28c56e20','OTC-541f1a73']) {
+                    const value=await client.extremes(id,{start:new Date('2026-10-11T00:00:00Z'),stop:new Date('2026-10-12T00:00:00Z'),datum:'chart'});
+                    results.push({id,items:value.items.map(item=>({...item,time:item.time.toISOString()})),offset_id:value.offset_id??null});
+                }
+                return results;
+            };
+            const eager=await OpenTideConstants.open({...options,mode:'eager'});
+            const expected=await predictions(eager),expectedFiles=eager.release.files;eager.close();
+            const warmed=await OpenTideConstants.open({...options,mode:'stream'});warmed.close();
+            const inventory=async()=>(await Promise.all((await cache.keys()).filter(request=>request.url.includes(`/releases/${date}/`)&&!request.url.endsWith('/index-v1.json')).map(async request=>{
+                const bytes=await(await cache.match(request)).arrayBuffer();
+                const sha=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+                return {name:request.url.split('/').at(-1),size:bytes.byteLength,sha256:sha};
+            }))).sort((a,b)=>a.name.localeCompare(b.name));
+            const before=await inventory(),reads=[],responseKeys=new WeakMap();
+            const originalMatch=Cache.prototype.match,originalArrayBuffer=Response.prototype.arrayBuffer;
+            Cache.prototype.match=async function(request,...args){const response=await originalMatch.call(this,request,...args);if(response)responseKeys.set(response,typeof request==='string'?request:request.url);return response;};
+            Response.prototype.arrayBuffer=async function(...args){const bytes=await originalArrayBuffer.apply(this,args);const url=responseKeys.get(this);if(url)reads.push({name:url.split('/').at(-1),size:bytes.byteLength});return bytes;};
+            const capture=async mode=>{const offset=reads.length,client=await OpenTideConstants.open({...offline,mode});return {client,offset};};
+            const controls={};
+            let actual,actualFiles,streamReads;
+            try {
+                const opened=await capture('stream'),client=opened.client;
+                actual=await predictions(client);actualFiles=client.release.files;
+                controls.raw=targets.every(target=>JSON.stringify(client.requireStation(target.station_id).raw)===JSON.stringify(target));
+                controls.ownOffsets=['OTC-28c56e20','OTC-541f1a73'].every(id=>client.requireStation(id).subordinateOffsets.offset_id===targets.find(t=>t.station_id===id).subordinate_offsets.offset_id);
+                controls.labels=['OTC-28c56e20','OTC-541f1a73'].every(id=>client.requireStation(id).subordinateOffsets.vintage.current_accuracy==='unverified');
+                streamReads=reads.slice(opened.offset);client.close();
+                try{client.stations();controls.close=false;}catch(error){controls.close=error.code==='io';}
+                const eagerOpen=await capture('eager');controls.eager=JSON.stringify(await predictions(eagerOpen.client))===JSON.stringify(expected);eagerOpen.client.close();
+                controls.eagerReads=reads.slice(eagerOpen.offset);
+                const index=JSON.parse(await(await cache.match(key('index-v1.json'))).text());delete index.discovery_index_version;
+                await cache.put(key('index-v1.json'),new Response(JSON.stringify(index)));
+                const stale=await capture('stream');controls.stale=JSON.stringify(await predictions(stale.client))===JSON.stringify(expected);stale.client.close();
+                await cache.delete(key(`${stem}.json`));
+                const fallback=await capture('eager');controls.fallback=JSON.stringify(await predictions(fallback.client))===JSON.stringify(expected);fallback.client.close();
+                controls.fallbackReads=reads.slice(fallback.offset);
+                await cache.put(key(`${stem}.json`),new Response(new Uint8Array(originals[`${stem}.json`])));
+                const verified=await OpenTideConstants.open({...offline,mode:'stream'}),offset=reads.length;controls.verify=await verified.verify();verified.close();controls.verifyReads=reads.slice(offset);
+            } finally {Cache.prototype.match=originalMatch;Response.prototype.arrayBuffer=originalArrayBuffer;}
+            return {before,after:await inventory(),expected,actual,expectedFiles,actualFiles,streamReads,controls};
+        },{origin,date,stem,originals:Object.fromEntries(Object.entries(contents).map(([name,bytes])=>[name,[...bytes]])),targets:parsed.stations});
+        if(process.env.OTC_BROWSER_CACHE_PROOF)fs.writeFileSync(process.env.OTC_BROWSER_CACHE_PROOF,JSON.stringify({fixture,files,...observed},null,2)+'\n');
+        assert.deepEqual(observed.actual,observed.expected,'three actual predictions preserve values');
+        assert.deepEqual(observed.actualFiles,observed.expectedFiles.filter(f=>f.name!==`${stem}.sha256`),'cached provenance retains verified formats');
+        assert.deepEqual(observed.after,observed.before,'every original cache body remains unchanged');
+        for(const name of ['raw','ownOffsets','labels','close','eager','stale','fallback','verify'])assert.equal(observed.controls[name],true,name);
+        assert.ok(observed.controls.verifyReads.some(r=>r.name===`${stem}.json`),'explicit verification still hashes unused cached formats');
+        console.log(JSON.stringify({streamReads:observed.streamReads,eagerReads:observed.controls.eagerReads,fallbackReads:observed.controls.fallbackReads,predictionStations:observed.actual.map(r=>r.id),originalsRetained:observed.after.length}));
+        assert.deepEqual(observed.streamReads.filter(r=>![`${stem}.meta.json`,`${stem}.jsonl`,'index-v1.json','.verified'].includes(r.name)),[],'stream must not materialize unused cache bodies');
+        assert.deepEqual(observed.controls.eagerReads.filter(r=>![`${stem}.json`,'.verified'].includes(r.name)),[],'eager must prefer JSON without reading sibling formats');
+        assert.deepEqual(observed.controls.fallbackReads.filter(r=>![`${stem}.meta.json`,`${stem}.jsonl`,'.verified'].includes(r.name)),[],'eager JSONL fallback must not read unused bodies');
+    } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('native closed precedence, repeated UTC instants and immutable local values',async()=>{
     const local=await sdk.OpenTideConstants.open({file:process.env.OTC_PREDICT_NATIVE_JSON});
     const time=new Date('2010-03-01T00:00:00.999Z');
