@@ -176,6 +176,21 @@ public final class OpenTideConstants {
     public func referenceStation(station:Station)throws->Station? { try queryRelease().referenceStation(station:station) }
     public func subordinatesOf(station:Station)throws->[Station] { try queryRelease().subordinatesOf(station:station) }
     public func attribution(stations:[Station]?=nil)throws->String { try queryRelease().attribution(stations:stations) }
+    public func heights(station:Station,start:Date,stop:Date,stepS:Int64=600,datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->HeightSeries { try queryRelease().heights(station:station,start:start,stop:stop,stepS:stepS,datum:datum,setId:setId,offsetId:offsetId) }
+    public func heights(stationId:String,start:Date,stop:Date,stepS:Int64=600,datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->HeightSeries { try queryRelease().heights(stationId:stationId,start:start,stop:stop,stepS:stepS,datum:datum,setId:setId,offsetId:offsetId) }
+    public func heightsAt(station:Station,times:[Date],datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->HeightSeries { try queryRelease().heightsAt(station:station,times:times,datum:datum,setId:setId,offsetId:offsetId) }
+    public func heightsAt(stationId:String,times:[Date],datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->HeightSeries { try queryRelease().heightsAt(stationId:stationId,times:times,datum:datum,setId:setId,offsetId:offsetId) }
+    public func extremes(station:Station,start:Date,stop:Date,datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->ExtremeList { try queryRelease().extremes(station:station,start:start,stop:stop,datum:datum,setId:setId,offsetId:offsetId) }
+    public func extremes(stationId:String,start:Date,stop:Date,datum:String?=nil,setId:String?=nil,offsetId:String?=nil)throws->ExtremeList { try queryRelease().extremes(stationId:stationId,start:start,stop:stop,datum:datum,setId:setId,offsetId:offsetId) }
+    public func currents(station:Station,start:Date,stop:Date,stepS:Int64=600,binNumber:Int64?=nil,setId:String?=nil)throws->CurrentSeries { try queryRelease().currents(station:station,start:start,stop:stop,stepS:stepS,binNumber:binNumber,setId:setId) }
+    public func currents(stationId:String,start:Date,stop:Date,stepS:Int64=600,binNumber:Int64?=nil,setId:String?=nil)throws->CurrentSeries { try queryRelease().currents(stationId:stationId,start:start,stop:stop,stepS:stepS,binNumber:binNumber,setId:setId) }
+    public func currentEvents(station:Station,start:Date,stop:Date,binNumber:Int64?=nil,setId:String?=nil)throws->CurrentEventList { try queryRelease().currentEvents(station:station,start:start,stop:stop,binNumber:binNumber,setId:setId) }
+    public func currentEvents(stationId:String,start:Date,stop:Date,binNumber:Int64?=nil,setId:String?=nil)throws->CurrentEventList { try queryRelease().currentEvents(stationId:stationId,start:start,stop:stop,binNumber:binNumber,setId:setId) }
+    public func datums(station:Station,setId:String?=nil,allSets:Bool=false)throws->DatumsResult { try queryRelease().datums(station:station,setId:setId,allSets:allSets) }
+    public func datums(stationId:String,setId:String?=nil,allSets:Bool=false)throws->DatumsResult { try queryRelease().datums(stationId:stationId,setId:setId,allSets:allSets) }
+    public func ranges(station:Station,setId:String?=nil)throws->Ranges { try queryRelease().ranges(station:station,setId:setId) }
+    public func ranges(stationId:String,setId:String?=nil)throws->Ranges { try queryRelease().ranges(stationId:stationId,setId:setId) }
+    public func astroTable(id:String?=nil)throws->AstroTable? { try queryRelease().astroTable(id:id) }
 }
 
 private struct ClientIO:@unchecked Sendable {
