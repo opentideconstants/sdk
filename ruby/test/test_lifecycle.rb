@@ -9,6 +9,87 @@ class LifecycleTest < Minitest::Test
         JSON.generate(JSON.parse(File.read(fixture("good", "OTC_index.json")))["releases"].find { |e| e["datestamp"] == "20991231" })
     end
 
+    def test_release_getter_checks_the_interval_and_preserves_the_held_release
+        over = { "OTC_latest-f1.json" => [200, {}, older_pointer] }
+        srv = serve(File.join(FIXTURES, "good"), over)
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, mode: :stream, auto_update: true, update_interval: 3600)
+        held = c.release
+        before = held.station("OTC-T-0021").raw
+        over.delete("OTC_latest-f1.json")
+        asked = srv.requests.size
+        assert_same held, c.release
+        assert_equal asked, srv.requests.size, "release checked before the interval"
+        c.instance_variable_set(:@last_check, c.send(:monotonic) - 7200)
+        current = c.release
+        assert_equal "20991231.2", current.datestamp
+        refute_same held, current
+        assert_same current, c.release
+        assert_equal "20991231", held.datestamp
+        assert_equal before, held.station("OTC-T-0021").raw
+        assert_nil current.station("OTC-T-0021")
+    ensure
+        c&.close
+    end
+
+    def test_release_getter_preserves_auto_off_pinned_file_and_offline_guards
+        over = { "OTC_latest-f1.json" => [200, {}, older_pointer] }
+        srv = serve(File.join(FIXTURES, "good"), over)
+        offline_cache = tmpdir
+        OTC.new(base_url: srv.url("/"), cache_dir: offline_cache).close
+        clients = [
+            OTC.new(base_url: srv.url("/"), cache_dir: tmpdir),
+            OTC.new(release: "20991231", base_url: srv.url("/"), cache_dir: tmpdir, auto_update: true),
+            OTC.new(file: fixture("good", "OTC_20991231.jsonl"), base_url: srv.url("/"), auto_update: true),
+            OTC.new(base_url: srv.url("/"), cache_dir: offline_cache, offline: true, auto_update: true)
+        ]
+        held = clients.map(&:release)
+        over.delete("OTC_latest-f1.json")
+        asked = srv.requests.size
+        clients.zip(held).each do |c, rel|
+            c.instance_variable_set(:@last_check, c.send(:monotonic) - 7200)
+            assert_same rel, c.release
+            assert_equal "20991231", c.release.datestamp
+        end
+        assert_equal asked, srv.requests.size, "a guarded release getter reached the server"
+    ensure
+        clients&.each(&:close)
+    end
+
+    def test_closed_release_getter_keeps_metadata_without_checking_for_update
+        over = { "OTC_latest-f1.json" => [200, {}, older_pointer] }
+        srv = serve(File.join(FIXTURES, "good"), over)
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, auto_update: true)
+        held = c.release
+        c.close
+        over.delete("OTC_latest-f1.json")
+        c.instance_variable_set(:@last_check, c.send(:monotonic) - 7200)
+        asked = srv.requests.size
+        assert_same held, c.release
+        assert_equal "20991231", c.release.datestamp
+        assert_equal asked, srv.requests.size
+    ensure
+        c&.close
+    end
+
+    def test_release_getter_contains_update_failure_and_retains_identity
+        over = { "OTC_latest-f1.json" => [200, {}, older_pointer] }
+        srv = serve(File.join(FIXTURES, "good"), over)
+        c = OTC.new(base_url: srv.url("/"), cache_dir: tmpdir, auto_update: true, update_interval: 3600)
+        held = c.release
+        before = held.station("OTC-T-0021").raw
+        over["OTC_latest-f1.json"] = [404, {}, ""]
+        over["OTC_latest.json"] = [404, {}, ""]
+        c.instance_variable_set(:@last_check, c.send(:monotonic) - 7200)
+        assert_same held, c.release
+        assert_equal "release_not_found", c.last_error&.code
+        assert_equal before, c.release.station("OTC-T-0021").raw
+        asked = srv.requests.size
+        assert_same held, c.release
+        assert_equal asked, srv.requests.size, "failed getter retried before the interval"
+    ensure
+        c&.close
+    end
+
     # R24: an automatic update that fails sets last_error, and the query
     # still answers; a non-SDK error in it never escapes the query.
     def test_auto_update_failure_is_recorded_and_contained

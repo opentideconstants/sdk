@@ -10,8 +10,12 @@ class OpenTideConstants
     MODES = %w[eager stream].freeze
     ON_NETWORK_ERROR = %w[use_cache raise].freeze
 
-    # The release the client has loaded.
-    attr_reader :release
+    # The current release, with an interval check when automatic updates apply.
+    # After close the stored release metadata stays readable without an update.
+    def release
+        maybe_auto_update
+        @release
+    end
     # Where the release came from: :download, :cache, :cache_after_error, :file or :file_unverified.
     attr_reader :loaded_from
     # The error behind loaded_from :cache_after_error, or the error of the
