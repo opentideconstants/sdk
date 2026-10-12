@@ -78,7 +78,8 @@ class FormatOneTest < Minitest::Test
     def test_stats_sources_count_usable_sets_only
         c = open("v1", "20991231.3")
         stats = c.release.stats
-        n_sets = c.stations.sum { |s| s.constant_sets(include_no_constants: true).size }
+        doc = JSON.parse(File.read(File.join(FIXTURES, "v1", "OTC_20991231.3.json")))
+        n_sets = doc.fetch("stations").sum { |s| Array(s["constant_sets"]).size }
         assert_equal n_sets, stats.qc_status.values.sum
         assert stats.qc_status.fetch(:no_constants).positive?
         assert_equal n_sets - stats.qc_status.fetch(:no_constants), stats.source.values.sum

@@ -25,7 +25,7 @@ end
 SDK_ERROR = OpenTideConstants::Error
 
 class Runner
-    FILTERS = %w[country type kind source source_type].freeze
+    FILTERS = %w[country type kind source source_type include_flagged include_fallback].freeze
 
     def initialize
         @client = nil
