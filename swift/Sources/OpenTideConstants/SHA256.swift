@@ -29,6 +29,12 @@ internal struct SHA256 {
     static func digest(_ data:Data)->String { var h=Self();h.update(data);return h.finalize() }
     static func file(_ url:URL)throws->String {
         guard let f=try? FileHandle(forReadingFrom:url) else { throw OpenTideConstantsError.io("cannot hash \(url.path)") };defer { try? f.close() }
-        var h=Self();while let data=try f.read(upToCount:1048576),!data.isEmpty { h.update(data) };return h.finalize()
+        var h=Self()
+        while try autoreleasepool(invoking: { ()throws->Bool in
+            guard let data=try f.read(upToCount:1048576),!data.isEmpty else { return false }
+            h.update(data)
+            return true
+        }) {}
+        return h.finalize()
     }
 }
