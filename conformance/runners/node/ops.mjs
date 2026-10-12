@@ -3,7 +3,7 @@
 // Plain JavaScript with no imports, so the same file runs in Node (runner.mjs) and in a
 // browser page (browser-runner.mjs). It calls only the public API of the SDK module it is given.
 
-const FILTERS = ["country", "type", "kind", "source", "source_type"];
+const FILTERS = ["country", "type", "kind", "source", "source_type", "include_flagged", "include_fallback"];
 
 function camel(name) {
     return name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
@@ -181,10 +181,10 @@ function finite(v) {
     return v;
 }
 
-const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path", "removed"];
+const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path", "removed", "constituent", "first_year", "last_year", "missing", "zone", "reference_station_id"];
 
 export function makeRunner(sdk) {
-    const state = { client: null, held: {} };
+    const state = { client: null, held: {}, prediction: null };
 
     const client = () => {
         if (!state.client) throw new Error("no client is open");
@@ -199,14 +199,53 @@ export function makeRunner(sdk) {
         return st ? st.constantSet(a.set_id) : null;
     };
 
-    const ops = {
+function encPrediction(result) {
+    if(result===null)return null;
+    const names=['station_id','timezone','method','set_id','convention_id','astro_table_id','reference_station_id','reference_bin','datum','datum_name','datum_kind','datum_uncertainty_m','bin_number','omitted_event_types','tz','tz_version','release','algorithm'];
+    const out=Object.fromEntries(names.map(k=>[k,result[k]===undefined?null:result[k]]));
+    out.items=result.items.map(item=>Object.fromEntries(Object.entries(item).map(([k,v])=>[k,k==='time'?iso(v):v])));
+    return out;
+}
+function encDatum(info) {
+    if(info===null)return null;
+    if(Array.isArray(info))return info.map(encDatum);
+    return {...pick(info,['set_id','zero','zero_name','chart_datum','msl_offset_m']),levels:info.levels.map(l=>pick(l,['key','value_m','above_chart_m','kind','method','source_name','epoch','data_span','control_station_id','control_set_id','control_source_id','uncertainty_m','uncertainty_basis','flags']))};
+}
+async function prediction(op,a,msg) {
+    const t=target(msg),station=t.station(a.station_id);
+    if(!station)return {prediction:null};
+    const options=opts(a,['start','stop','step_s','datum','set_id','offset_id','bin_number']);
+    for(const name of ['start','stop'])if(name in options)options[name]=new Date(options[name]);
+    const result=await (op==='heights_at'?t.heightsAt(station,a.times.map(v=>new Date(v)),options):t[camel(op)](station,options));
+    state.prediction=result;return {prediction:encPrediction(result)};
+}
+const ops = {
+    heights: (a,msg)=>prediction('heights',a,msg),
+    heights_at: (a,msg)=>prediction('heights_at',a,msg),
+    extremes: (a,msg)=>prediction('extremes',a,msg),
+    currents: (a,msg)=>prediction('currents',a,msg),
+    current_events: (a,msg)=>prediction('current_events',a,msg),
+    to_local(a) {
+        if(!state.prediction)throw new Error('no previous prediction');
+        const result=Object.hasOwn(a,'tz')?state.prediction.toLocal(a.tz):state.prediction.toLocal();
+        state.prediction=result;return {prediction:encPrediction(result)};
+    },
+    datums(a,msg) {const t=target(msg),station=t.station(a.station_id);return {datums:station?encDatum(t.datums(station,opts(a,['set_id','all_sets']))):null};},
+    ranges(a,msg) {const t=target(msg),station=t.station(a.station_id);return {ranges:station?pick(t.ranges(station,opts(a,['set_id'])),['mn','gt','dhq','dlq']):null};},
+    async astro_table(a,msg) {const table=await release(msg).astroTable(a.id);return {astro_table:table?{first_year:table.validRange[0],last_year:table.validRange[1]}:null};},
+    async valid_range(a,msg) {const table=await release(msg).astroTable(a.id);return table?{first_year:table.validRange[0],last_year:table.validRange[1]}:{first_year:null,last_year:null};},
+    async equilibrium_argument(a,msg) {const table=await release(msg).astroTable(a.id);return {value:table?table.equilibriumArgument(a.name,new Date(a.at)):null};},
+    async node_factor(a,msg) {const table=await release(msg).astroTable(a.id);return {value:table?table.nodeFactor(a.name,new Date(a.at)):null};},
+    async equilibrium_for_year(a,msg) {const table=await release(msg).astroTable(a.id);return {value:table?table.equilibriumForYear(a.name,a.year):null};},
+    async node_factor_for_year(a,msg) {const table=await release(msg).astroTable(a.id);return {value:table?table.nodeFactorForYear(a.name,a.year):null};},
+
         async open(a) {
             if (state.client) {
                 await state.client.close();
                 state.client = null;
             }
             const o = opts(a, ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file",
-                "user_agent", "on_network_error", "auto_update", "update_interval", "verify_on_open", "commercial_only"]);
+                "user_agent", "on_network_error", "auto_update", "update_interval", "verify_on_open", "commercial_only", "commercial_basis", "historical_offsets_policy"]);
             state.client = await sdk.OpenTideConstants.open(o);
             const r = state.client.release;
             return { loaded_from: state.client.loadedFrom, datestamp: r.datestamp, format_version: r.format_version };

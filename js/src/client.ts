@@ -1,7 +1,9 @@
+/// <reference lib="esnext.disposable" preserve="true" />
+import type * as prediction from './predict/engine.js';
+import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,Ranges} from './predict/results.js';
 // Symbol.dispose and Symbol.asyncDispose below: the published client.d.ts keeps
 // this lib reference, so a consumer without ESNext.Disposable or @types/node
 // still typechecks it (R2-248).
-/// <reference lib="esnext.disposable" preserve="true" />
 import {
     checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
 } from "./constants.js";
@@ -14,7 +16,7 @@ import {
     CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
     OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
-import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
+import { headerFromMeta, parseSha256, releaseFromJson, releaseFromJsonl, scanJsonlReader, splitReleaseName } from "./loader.js";
 import type { BlockingResult, NodeMod } from "./node-api.js";
 import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
@@ -206,6 +208,10 @@ export class OpenTideConstants {
         const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
         // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
+        const commercialBasis = options.commercialBasis ?? "strict";
+        if (!["strict", "as_published_upstream"].includes(commercialBasis) || options.commercialBasis === null) throw new InvalidArgumentError("commercialBasis must be strict or as_published_upstream");
+        const historicalOffsetsPolicy = options.historicalOffsetsPolicy ?? "fallback";
+        if (!["fallback", "exclude"].includes(historicalOffsetsPolicy) || options.historicalOffsetsPolicy === null) throw new InvalidArgumentError("historicalOffsetsPolicy must be fallback or exclude");
         const commercialOnly: unknown = options.commercialOnly;
         if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
             throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
@@ -259,12 +265,12 @@ export class OpenTideConstants {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
             proxy, caFile,
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
-            onNetworkError, logger: options.logger ?? null, mode, commercialOnly: commercialOnly === true,
+            onNetworkError, logger: options.logger ?? null, mode, commercialBasis, historicalOffsetsPolicy, commercialOnly: commercialOnly === true,
         };
         const extra = { lastError: null as OpenTideConstantsError | null, pinned: release !== "latest", file: null as FileSource | null, cacheRoot, autoUpdate, interval };
 
         if (file !== null && node) {
-            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly);
+            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly, ctx.commercialBasis ?? "strict", ctx.historicalOffsetsPolicy ?? "fallback");
             return new OpenTideConstants(ctx, node, rel, from, { ...extra, pinned: true, file: src });
         }
         const store = ctx.store;
@@ -310,13 +316,46 @@ export class OpenTideConstants {
         return new OpenTideConstants(ctx, node, rel, from, extra);
     }
 
+    /** Node cached verification hashes exact file bytes with one bounded positional reader at a time. */
+    static #cachedReadHash(ctx: Ctx, node: NodeMod | null):
+        ((rel: string) => Promise<{ digest: string; bytesRead: number } | null>) | undefined {
+        const store = ctx.store;
+        if (!node || !store) return undefined;
+        return async (rel) => {
+            const file = store.describe(rel);
+            try {
+                // Only cached hashing opts into the private native strict-close hook; ordinary readers keep close().
+                const reader = node.openLineReader(file) as ReturnType<NodeMod["openLineReader"]> & { closeStrict(): void };
+                try {
+                    const sha = node.createSha256State();
+                    let bytesRead = 0;
+                    for (;;) {
+                        const chunk = reader.read(bytesRead, 65536);
+                        if (chunk.length === 0) break;
+                        sha.update(chunk);
+                        bytesRead += chunk.length;
+                    }
+                    return { digest: sha.digest(), bytesRead };
+                } finally {
+                    // As with readFileSync, a close failure overrides a read failure before the cache error is wrapped.
+                    reader.closeStrict();
+                }
+            } catch (e) {
+                const cause = e instanceof FileError && e.cause !== undefined ? e.cause : e;
+                if (typeof cause === "object" && cause !== null && "code" in cause
+                    && (cause.code === "ENOENT" || cause.code === "ENOTDIR")) return null;
+                throw new CacheError(`cannot read ${file}`, { path: file, cause });
+            }
+        };
+    }
+
     /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
     static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean,
         pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
         const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles);
         if (verify) {
             try {
-                await verifyCached(ctx, d);
+                await verifyCached(ctx, d, false, OpenTideConstants.#cachedReadHash(ctx, node));
             } catch (e) {
                 rel._close();
                 throw e;
@@ -397,13 +436,13 @@ export class OpenTideConstants {
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
-        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
-        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn);
+        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
     static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void,
-        commercialOnly: boolean): { rel: Release; from: LoadedFrom; src: FileSource } {
+        commercialOnly: boolean, commercialBasis: "strict" | "as_published_upstream", historicalOffsetsPolicy: "fallback" | "exclude"): { rel: Release; from: LoadedFrom; src: FileSource } {
         const path = node.nodePath;
         const full = path.resolve(file);
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
@@ -418,6 +457,44 @@ export class OpenTideConstants {
         const stem = `OTC_${parts.datestamp}`;
         const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
         const shaPath = path.join(dir, `${stem}.sha256`);
+        if (kind === "jsonl" && mode === "stream") {
+            const lr = node.openLineReader(full);
+            try {
+                const metaName = `${stem}.meta.json`;
+                const meta = node.readFileOrIo(path.join(dir, metaName));
+                let header: ReturnType<typeof headerFromMeta> | null = null;
+                let headerError: unknown | null = null;
+                try { header = headerFromMeta(meta); } catch (e) { headerError = e; }
+                // Hash exactly the bytes used to build the index, through this one owned descriptor. Saved
+                // validation errors must wait for JSONL and META authentication, as with the eager byte path.
+                const hash = node.createSha256State();
+                const scanned = scanJsonlReader(header, lr.read, (chunk) => hash.update(chunk));
+                const actualSha = hash.digest();
+                const shaBytes = node.readIfExists(shaPath);
+                let files: FileInfo[];
+                let from: LoadedFrom;
+                if (shaBytes) {
+                    const rows = parseSha256(shaBytes, shaPath);
+                    needRows(full, dataNames, rows, `${stem}.sha256`, path);
+                    checkBytes(name, actualSha, scanned.bytesRead, rows.get(name) ?? null, null);
+                    checkBytes(metaName, node.sha256Sync(meta), meta.length, rows.get(metaName) ?? null, null);
+                    files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
+                    from = "file";
+                } else {
+                    files = dataNames.map((n) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: null }));
+                    from = "file_unverified";
+                }
+                files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+                if (headerError !== null) throw headerError;
+                if (scanned.error !== null) throw scanned.error;
+                const rel = releaseFromJsonl(meta, null, { eager: false, files, preparedIndex: { entries: scanned.entries },
+                    reader: lr.read, close: lr.close, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+                return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
+            } catch (e) {
+                lr.close();
+                throw e;
+            }
+        }
         const bytes = new Map<string, Uint8Array>();
         for (const n of dataNames) bytes.set(n, node.readFileOrIo(path.join(dir, n)));
         const shaBytes = node.readIfExists(shaPath);
@@ -442,17 +519,7 @@ export class OpenTideConstants {
         let rel: Release;
         if (kind === "jsonl") {
             const meta = bytes.get(`${stem}.meta.json`) as Uint8Array;
-            if (mode === "stream") {
-                const lr = node.openLineReader(full);
-                try {
-                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn, commercialOnly });
-                } catch (e) {
-                    lr.close();
-                    throw e;
-                }
-            } else {
-                rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly });
-            }
+            rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
         } else {
             let json = data;
             if (kind === "json.gz") {
@@ -463,7 +530,7 @@ export class OpenTideConstants {
                 }
                 if (jsonSha !== null) checkJsonBytes(full, node.sha256Sync(json), jsonSha);
             }
-            rel = releaseFromJson(json, files, null, warn, commercialOnly);
+            rel = releaseFromJson(json, files, null, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
         }
         return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
     }
@@ -512,7 +579,7 @@ export class OpenTideConstants {
             const v = vb ? parseVerified(vb, res.datestamp) : null;
             if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
             const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
-                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null);
+                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {
@@ -557,7 +624,15 @@ export class OpenTideConstants {
     // ------------------------------------------------------------------ release management (spec 4.3)
 
     /** The loaded release. After close it stays readable: the closed Release, whose metadata stays readable (CR2 DR32). */
-    get release(): Release {
+async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { return this.#current().heights(station,options); }
+async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { return this.#current().heightsAt(station,times,options); }
+async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { return this.#current().extremes(station,options); }
+async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { return this.#current().currents(station,options); }
+async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { return this.#current().currentEvents(station,options); }
+datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { return this.#current().datums(station,options); }
+ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { return this.#current().ranges(station,options); }
+get release(): Release {
+
         return this.#closed ? this.#release : this.#current();
     }
 
@@ -836,7 +911,7 @@ export class OpenTideConstants {
             }
             return true;
         }
-        return verifyCached(this.#ctx, this.#release.datestamp, true);
+        return verifyCached(this.#ctx, this.#release.datestamp, true, OpenTideConstants.#cachedReadHash(this.#ctx, this.#node));
     }
 
     /**

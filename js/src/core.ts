@@ -6,7 +6,7 @@ import {
 } from "./errors.js";
 import { daysInMonth, isObject } from "./json.js";
 import {
-    checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl,
+    checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl, scanJsonlReader,
     type LineReader, type StreamIndex,
 } from "./loader.js";
 import type { CacheStore, HttpResponse, Platform, Unlock } from "./platform.js";
@@ -27,6 +27,8 @@ export interface Ctx {
     mode: Mode;
     /** The open option of spec 4.2 (K-NC DR106), applied to every release the client loads. */
     commercialOnly: boolean;
+    commercialBasis?: "strict" | "as_published_upstream";
+    historicalOffsetsPolicy?: "fallback" | "exclude";
 }
 
 /** A latest-pointer or index entry, with absolute file URLs. */
@@ -671,7 +673,7 @@ export interface SyncDir {
 
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined,
-    commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null): Release {
+    commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalOffsetsPolicy: "fallback" | "exclude" = "fallback"): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
     const byName = (a: FileInfo, b: FileInfo) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -689,8 +691,8 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         return b;
     };
     if (mode === "eager") {
-        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly);
-        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly });
+        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
+        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
     }
     const meta = sized(n.meta);
     const want = verified.files[n.jsonl]?.size;
@@ -712,21 +714,6 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
             /* a stale or broken index is rebuilt below */
         }
     }
-    let jsonl: Uint8Array | null = null;
-    if (!index) {
-        jsonl = sized(n.jsonl);
-        const { entries } = indexJsonl(header, jsonl, false);
-        index = { entries };
-        // .verified gives the .jsonl digest the index records; without it there is no index to write
-        if (jsonlSha !== null) {
-            // the index only saves work: a failure to write it is logged, not raised (spec 6.2)
-            try {
-                dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, jsonl.length, SDK_ID))));
-            } catch (e) {
-                warn(`cannot write index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
-            }
-        }
-    }
     const dropIndex = () => {
         try {
             dir.removeIndex();
@@ -735,23 +722,59 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         }
     };
     const lr = dir.lineReader(n.jsonl);
-    if (lr) {
-        try {
-            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly });
-        } catch (e) {
-            lr.close();
-            throw e;
+    try {
+        let jsonl: Uint8Array | null = null;
+        if (!index) {
+            let bytesRead: number;
+            let entries: StreamIndex["entries"];
+            if (lr) {
+                const scanned = scanJsonlReader(header, lr.read, () => undefined);
+                // The handle may see a file changed after stat; preserve the cached size check before parse errors.
+                if (scanned.bytesRead !== have) {
+                    throw new ChecksumError(`${n.jsonl}: size ${scanned.bytesRead}, expected ${have}`,
+                        { file: n.jsonl, expected: jsonlSha, actual: null });
+                }
+                if (scanned.error !== null) throw scanned.error;
+                entries = scanned.entries;
+                bytesRead = scanned.bytesRead;
+            } else {
+                jsonl = sized(n.jsonl);
+                entries = indexJsonl(header, jsonl, false).entries;
+                bytesRead = jsonl.length;
+            }
+            index = { entries };
+            // .verified gives the .jsonl digest the index records; without it there is no index to write
+            if (jsonlSha !== null) {
+                // the index only saves work: a failure to write it is logged, not raised (spec 6.2)
+                try {
+                    dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, bytesRead, SDK_ID))));
+                } catch (e) {
+                    warn(`cannot write index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
+                }
+            }
         }
+        if (lr) {
+            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+        }
+        const bytes = jsonl ?? sized(n.jsonl);
+        return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+    } catch (e) {
+        lr?.close();
+        throw e;
     }
-    const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly });
 }
 
-/** Read a cache directory into a SyncDir (the browser, where storage is async). */
-export async function prefetchDir(store: CacheStore, d: string, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
+/** Read the selected cached format into a SyncDir (the browser, where storage is async). */
+export async function prefetchDir(store: CacheStore, d: string, mode: Mode, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
     const dir = relDir(d);
+    const n = names(d);
+    const present = new Set(await store.list(dir));
+    // Provenance comes from the pointer or .verified, so unused cached originals need no body read.
+    const selected = mode === "stream" ? [n.meta, n.jsonl, "index-v1.json"]
+        : present.has(n.json) ? [n.json] : [n.meta, n.jsonl];
     const files = new Map<string, Uint8Array>();
-    for (const name of await store.list(dir)) {
+    for (const name of selected) {
+        if (!present.has(name)) continue;
         const b = await store.read(`${dir}/${name}`);
         if (b) files.set(name, b);
     }
@@ -799,7 +822,8 @@ async function cachedPointerSha256(ctx: Ctx, d: string): Promise<string[]> {
  * that a cached pointer lists for it, when one lists it (CR2 DR45); verify fetches nothing, so a mismatch is
  * checksum_mismatch and the file stays.
  */
-export async function verifyCached(ctx: Ctx, d: string, againstPointer = false): Promise<true> {
+export async function verifyCached(ctx: Ctx, d: string, againstPointer = false,
+    readHash?: (rel: string) => Promise<{ digest: string; bytesRead: number } | null>): Promise<true> {
     const store = ctx.store;
     if (!store) throw new OfflineError("no cache");
     const dir = relDir(d);
@@ -825,12 +849,18 @@ export async function verifyCached(ctx: Ctx, d: string, againstPointer = false):
         if (name === n.sha) continue;
         const file = store.describe(`${dir}/${name}`);
         const expected = rows.get(name) ?? null;
-        const b = present.has(name) ? await store.read(`${dir}/${name}`) : null;
-        if (!b) {
+        let actual: string | null = null;
+        if (present.has(name)) {
+            if (readHash) actual = (await readHash(`${dir}/${name}`))?.digest ?? null;
+            else {
+                const b = await store.read(`${dir}/${name}`);
+                if (b) actual = await ctx.platform.sha256(b);
+            }
+        }
+        if (actual === null) {
             if (needed.includes(name)) throw new FileError(`cannot read ${file}: it is missing from the cache`, { path: file });
             continue;
         }
-        const actual = await ctx.platform.sha256(b);
         if (actual !== expected) {
             await store.remove(`${dir}/${name}`).catch((e: unknown) => log(ctx, "warn", `cannot delete ${file}: ${String(e)}`));
             throw new ChecksumError(`${name}: SHA-256 ${actual}, expected ${expected ?? "(not listed)"}`, { file, expected, actual });

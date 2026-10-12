@@ -26,6 +26,8 @@ foreach(_otc_part MAJOR MINOR PATCH)
 endforeach()
 project(opentideconstants VERSION ${OTC_HEADER_VERSION} LANGUAGES C)
 
+option(OTC_WITH_PREDICT "Build native predictions" ON)
+option(OTC_WITH_LOCALTIME "Build local time conversion" ON)
 option(OTC_WITH_FETCH "Build the otc_fetch module (needs libcurl)" OFF)
 # The conformance runner lives outside c/ (conformance/runners/c), so it is built
 # by default only when c/ is the top-level project of the repository; a project
@@ -46,6 +48,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
 set(OTC_SOURCES
+    src/otc_tz.c
+    src/otc_astro.c
+    src/otc_harmonic.c
+    src/otc_predict.c
     src/otc_util.c
     src/otc_release.c
     src/otc_query.c
@@ -117,6 +123,12 @@ target_include_directories(opentideconstants
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE src vendor/cjson vendor/sha256)
 target_compile_definitions(opentideconstants PRIVATE CJSON_HIDE_SYMBOLS OTC_BUILDING)
+if(OTC_WITH_PREDICT)
+    target_compile_definitions(opentideconstants PRIVATE OTC_WITH_PREDICT=1)
+endif()
+if(OTC_WITH_LOCALTIME AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    target_compile_definitions(opentideconstants PRIVATE OTC_WITH_LOCALTIME=1)
+endif()
 if(BUILD_SHARED_LIBS)
     # only the OTC_API functions are exported: the internal otc__* helpers and the
     # renamed cJSON / SHA-256 stay inside, so they can change without an ABI change (B4-5)
@@ -141,7 +153,7 @@ if(MSVC)
 else()
     set(OTC_WARNINGS -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes)
 endif()
-set_source_files_properties(src/otc_util.c src/otc_release.c src/otc_query.c src/otc_station.c
+set_source_files_properties(src/otc_astro.c src/otc_harmonic.c src/otc_predict.c src/otc_util.c src/otc_release.c src/otc_query.c src/otc_station.c
     src/otc_fetch_stub.c src/otc_fetch.c PROPERTIES COMPILE_OPTIONS "${OTC_WARNINGS}")
 
 # Sanitizers (C73): compiled into this project's own targets only (PRIVATE), so a
@@ -176,7 +188,12 @@ if(OTC_BUILD_RUNNER)
         # The runner says hello as "c-fetch" (conformance/README.md, Profiles).
         target_compile_definitions(otc_runner PRIVATE OTC_RUNNER_FETCH=1)
     endif()
+    target_compile_definitions(otc_runner PRIVATE OTC_RUNNER_PREDICT=$<BOOL:${OTC_WITH_PREDICT}>)
+    if(OTC_WITH_LOCALTIME AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+        target_compile_definitions(otc_runner PRIVATE OTC_RUNNER_LOCALTIME=1)
+    endif()
     target_link_libraries(otc_runner PRIVATE opentideconstants Threads::Threads)
+
     otc_sanitize(otc_runner)
     if(NOT WIN32)
         target_link_libraries(otc_runner PRIVATE m)
@@ -196,6 +213,13 @@ if(OTC_BUILD_TESTS)
         otc_sanitize(otc_test_static)
         target_include_directories(otc_test_static PUBLIC include PRIVATE src vendor/cjson vendor/sha256)
         target_compile_definitions(otc_test_static PRIVATE CJSON_HIDE_SYMBOLS)
+        if(OTC_WITH_PREDICT)
+            target_compile_definitions(otc_test_static PRIVATE OTC_WITH_PREDICT=1)
+        endif()
+        if(OTC_WITH_LOCALTIME AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+            target_compile_definitions(otc_test_static PRIVATE OTC_WITH_LOCALTIME=1)
+        endif()
+
         target_link_libraries(otc_test_static PRIVATE Threads::Threads)
         if(OTC_WITH_FETCH)
             target_link_libraries(otc_test_static PRIVATE CURL::libcurl)
@@ -215,7 +239,14 @@ if(OTC_BUILD_TESTS)
             PUBLIC include PRIVATE src vendor/cjson vendor/sha256)
         target_compile_definitions(otc_test_fast_locks PRIVATE CJSON_HIDE_SYMBOLS
             OTC_LOCK_STALE_MS=600 OTC_LOCK_POLL_MS=50)
+        if(OTC_WITH_PREDICT)
+            target_compile_definitions(otc_test_fast_locks PRIVATE OTC_WITH_PREDICT=1)
+        endif()
+        if(OTC_WITH_LOCALTIME AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+            target_compile_definitions(otc_test_fast_locks PRIVATE OTC_WITH_LOCALTIME=1)
+        endif()
         target_link_libraries(otc_test_fast_locks PRIVATE Threads::Threads CURL::libcurl)
+
         if(NOT WIN32)
             target_link_libraries(otc_test_fast_locks PRIVATE m)
         endif()
@@ -257,6 +288,12 @@ if(OTC_BUILD_TESTS)
         # a test that skips itself exits 77 (TEST_SKIP_RC in c/tests/otc_test.h): ctest shows it as
         # "Skipped", not "Passed"
         set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+        # Mandatory full-source acceptance is local, with sealed H4 inputs.
+        # CI uses only the committed public vector data for portable tests.
+        if(name STREQUAL "test_core_native" OR name STREQUAL "test_noaa_historical")
+            set_tests_properties(${name} PROPERTIES LABELS source_acceptance)
+        endif()
+
     endforeach()
 endif()
 

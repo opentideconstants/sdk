@@ -58,17 +58,23 @@ jobs:
         if: runner.os != 'Windows'
         run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
       # The C library's own tests (c/tests); they use POSIX calls, so not on Windows
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
       - name: C library tests (c/tests)
+
         if: runner.os != 'Windows'
-        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
+      - name: All immutable native prediction vectors
+        run: python conformance/tools/run_vectors.py --runner ${{ matrix.runner }} --no-expected-failures
       - name: Conformance suite (profile c, no otc_fetch)
-        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c
+
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
       - name: Conformance suite, every query in 8 threads
         env: { OTC_RUNNER_THREADS: "8" }
-        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
 
   # The otc_fetch module (libcurl): the runner says hello as c-fetch, so every
-  # download, network, cache and update case runs. --profile c-fetch makes the
+  # download, network, cache and update case runs. --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }} makes the
   # driver fail if the runner does not claim fetch, instead of skipping those cases.
   conformance-fetch:
     name: fetch ${{ matrix.os }} ${{ matrix.cc }}
@@ -108,14 +114,19 @@ jobs:
         if: runner.os != 'Windows'
         run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
       # The C library's own tests (c/tests), the test_fetch_* ones against the fixture server; not on Windows (POSIX calls)
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
       - name: C library tests (c/tests)
         if: runner.os != 'Windows'
-        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
+      - name: All immutable native prediction vectors
+        run: python conformance/tools/run_vectors.py --runner ${{ matrix.runner }} --no-expected-failures
       - name: Conformance suite (profile c-fetch)
-        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c-fetch
+
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }}
       - name: Conformance suite, every query in 8 threads
         env: { OTC_RUNNER_THREADS: "8" }
-        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile c-fetch
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }}
 
   sanitizers:
     name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }} fetch=${{ matrix.fetch }}
@@ -151,8 +162,10 @@ jobs:
       - run: sudo sysctl vm.mmap_rnd_bits=28
       - run: mkdir -p san
       # c/tests under the same sanitizer (the out-of-memory tests replace malloc, so CMake leaves them out here)
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
       - name: C library tests (c/tests)
-        run: cd c/build && OTC_TEST_PYTHON=python ctest --output-on-failure
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
       - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
         env: { OTC_RUNNER_THREADS: "8" }
@@ -181,10 +194,13 @@ jobs:
       # The driver ignores the runner's exit status at close, so every Valgrind report
       # goes to a log file per process; the job fails if any of them is not empty.
       - run: mkdir -p vg
-      # c/tests under Valgrind, except the out-of-memory tests (they replace malloc).
+      # Portable c/tests under Valgrind. Full-H4 source_acceptance is a mandatory local gate.
+      # Out-of-memory tests replace the allocator and are excluded from Valgrind.
       # A test that skips itself exits 77 (TEST_SKIP_RC in c/tests/otc_test.h, ctest's
       # SKIP_RETURN_CODE): it is listed as skipped, not failed. Any other non-zero
       # exit fails the step; 99 is a Valgrind error.
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
       - name: C library tests (c/tests) under Valgrind
         env:
           OTC_TEST_PYTHON: python
@@ -195,7 +211,7 @@ jobs:
           ran=0
           for t in test_*; do
             [ -f "$t" ] && [ -x "$t" ] || continue
-            case $t in *_oom*) continue ;; esac
+            case $t in *_oom*|test_core_native|test_noaa_historical) continue ;; esac
             log="$GITHUB_WORKSPACE/vg/ctest-$t-%p.log"
             rc=0
             case $t in
@@ -339,17 +355,29 @@ jobs:
         run: git show HEAD:c/supported-formats.json | cmp - dist/supported-formats.json
       - name: Build with only cc -std=c99
         run: $CC -std=c99 -c dist/opentideconstants.c -o dist/otc.o
+      - name: Vendored tzcode bytes and licence stay pinned
+        run: |
+          ruby -rjson -rdigest <<'RUBY'
+          source = JSON.parse(File.read('c/vendor/tzcode/source.json'))
+          source.fetch('files').each do |name, expected|
+              path = File.join('c/vendor/tzcode', name)
+              abort "tzcode bytes changed: #{name}" unless Digest::SHA256.file(path).hexdigest == expected
+          end
+          RUBY
+      - name: Native tzcode symbols stay namespaced
+        run: ruby c/tools/check_exports.sh dist/otc.o
       - name: Every global symbol of the bundle starts with otc_ (nm)
+
         run: python c/tools/gen_sources.py --symbols dist/otc.o
       - name: No warnings with -Wall -Wextra -pedantic
         run: $CC -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
       - name: The runner on the amalgamation passes the suite
         run: |
-          $CC -std=c99 -pthread -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
-          python conformance/driver.py --runner dist/otc_runner --profile c
+          $CC -std=c99 -pthread -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS -DOTC_RUNNER_PREDICT=1 -DOTC_RUNNER_LOCALTIME=1 conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
+          python conformance/driver.py --runner dist/otc_runner --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
       - name: The runner on the amalgamation passes the suite, every query in 8 threads
         env: { OTC_RUNNER_THREADS: "8" }
-        run: python conformance/driver.py --runner dist/otc_runner --profile c
+        run: python conformance/driver.py --runner dist/otc_runner --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
       - name: Vendored files match their recorded SHA-256
         run: |
           cd c && shasum -a 256 -c <<'SUMS'
@@ -360,3 +388,21 @@ jobs:
           c2173d83813a0c29fcc3345ce489766efeadee6a52ca927ecd0f917a120df9fb  vendor/sha256/sha-256.h
           506de94a03e23bbc34e32a8b628b56688ac7c33672982388822816887727f1ac  vendor/sha256/LICENSE.md
           SUMS
+
+  prediction-options:
+    name: native prediction=${{ matrix.predict }} localtime=OFF
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        predict: ["ON", "OFF"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - run: cmake -S c -B c/build -DOTC_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_PREDICT=${{ matrix.predict }} -DOTC_WITH_LOCALTIME=OFF
+      - run: cmake --build c/build --parallel
+      - name: Authenticated native vector input
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - run: ctest --test-dir c/build -LE source_acceptance --output-on-failure
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.predict == 'ON' && 'c-no-localtime' || 'c-no-predict' }} --no-expected-failures

@@ -8,7 +8,7 @@ The JavaScript/TypeScript SDK for [OpenTideConstants](https://opentideconstants.
 
 ## Browsers
 
-The same package runs in a browser, for read-only use: it fetches releases over CORS and reads them (it needs fetch, WebCrypto, `DecompressionStream` and Cache Storage). A browser has no file system, so these are not available there and fail with the `unsupported` error code:
+The same package runs in a browser. It reads releases and predicts tides and currents using native JavaScript. It fetches releases over CORS (it needs fetch, WebCrypto, `DecompressionStream` and Cache Storage). A browser has no file system, so these are not available there and fail with the `unsupported` error code:
 
 - `cachedReleases()` and `prune()` (the local cache list);
 - `autoUpdate`;
@@ -51,4 +51,35 @@ try {
 
 Method and option names are camelCase; data fields keep the schema's snake_case (`amplitude_m`, `qc_flags`). Errors are subclasses of `OpenTideConstantsError` and carry a stable `code`.
 
-The full guide: https://opentideconstants.org. Code licence: MIT. The data is CC BY 4.0.
+## Predictions
+
+```js
+const otc = await OpenTideConstants.open({ file: "data/OTC_20261011.jsonl" });
+try {
+    const station = otc.stationByAlias("noaa", "9414290");
+    if (station) {
+        const result = await otc.extremes(station.station_id, {
+            start: new Date("2026-10-11T00:00:00Z"),
+            stop: new Date("2026-10-12T00:00:00Z"),
+            datum: "chart"
+        });
+        console.log(result.items, result.toLocal(station.timezone));
+    }
+} finally {
+    otc.close();
+}
+```
+
+`heights`, `heightsAt`, `extremes`, `currents` and `currentEvents` return promises for immutable results. `datums` and `ranges` are synchronous. `release.astroTable()` returns a promise. Times use UTC `Date` values; fractional seconds are floored. A window includes `start` and excludes `stop`.
+
+Results retain the selected set, convention, astro table, datum and reference identifiers. Historical NOAA offsets also retain their source, vintage and reference labels. Their current accuracy is `unverified`; their current validity is `unestablished`. Unequal tide corrections support extrema only. Open with `historicalOffsetsPolicy: "exclude"` to exclude these offsets from discovery and prediction, including explicit selectors.
+
+`toLocal(zone)` returns a new result. It leaves the UTC instants unchanged and adds wall times and UTC offsets. Node reports its native time-zone database version. Browsers report `null` when that version is unavailable.
+
+`station.source_records` retains source records, provenance, dispositions and licence information, including records that cannot support a prediction. Inspect each record's licence and upstream licence before use. `commercialOnly` enforces the selected data's stated permissions; the SDK does not grant new permissions.
+
+## Development checks
+
+`npm run test:unit` runs the portable reader tests. `npm run test:native` is a separate mandatory acceptance gate that requires the actual release inputs. It fails when inputs are absent. Set `OTC_CORE_NATIVE_JSON`, `OTC_CORE_NATIVE_JSONL`, `OTC_CORE_NATIVE_META`, `OTC_PREDICT_NATIVE_JSON`, `OTC_HISTORY_NATIVE_JSON`, `OTC_HISTORY_NATIVE_JSONL`, `OTC_HISTORY_BROWSER_JSON` and `OTC_HISTORY_REFERENCE_REPORT` to the pinned artifacts. The browser historical input is a lossless subset of the same release. Restricted release artifacts are not bundled or fetched from an invented public URL. CI also checks the bundled immutable prediction vectors.
+
+The full guide: https://opentideconstants.org. Code licence: MIT. Data permissions are recorded per source.

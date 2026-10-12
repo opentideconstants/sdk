@@ -12,7 +12,7 @@ class OpenTideConstants
     # line in the .jsonl file) and builds a Station when a query needs it.
     class Release
         EARTH_RADIUS_KM = 6371.0088
-        FILTER_KEYS = %i[country type kind source source_type].freeze
+        FILTER_KEYS = %i[country type kind source source_type include_flagged include_fallback].freeze
         # The qc_status values of a set with constants.
         USABLE_QC = %i[ok flagged].freeze
         # The reference links a walk follows (spec §6.2 kind, §4.6 attribution).
@@ -27,7 +27,7 @@ class OpenTideConstants
         Entry = Struct.new(:station_id, :name, :folded, :lat, :lon, :type, :country, :kind, :sources,
                            :rec_source_type, :rec_licence_id, :offsets_licence_id, :reference_id,
                            :eff_id, :eff_source_type, :eff_licence_id, :offsets_ref_licence_id,
-                           :aliases, :pos, :len, :station, :view, keyword_init: true)
+                           :aliases, :pos, :len, :station, :view, :sets, :offsets, :current_offsets, keyword_init: true)
         # The source of every subordinate_offsets in format 1.0 (spec §4.2, K-NC DR106).
         OFFSETS_SOURCE = "noaa"
 
@@ -49,9 +49,12 @@ class OpenTideConstants
         # load (CR2 DR8).
         # commercial_only: the open option of spec §4.2 (K-NC DR106).
         def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
-                       logger: nil, commercial_only: false)
+                       logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
             @mode = mode
             @commercial_only = commercial_only
+            @commercial_basis = commercial_basis.to_s
+            @historical_offsets_policy = historical_offsets_policy.to_s
+            @meta = meta
             @logger = logger
             @io = io
             @on_bad_index = on_bad_index
@@ -146,6 +149,11 @@ class OpenTideConstants
         end
 
         # ---- release-level values
+
+        def historical_offsets_policy
+            check_open!
+            @historical_offsets_policy.to_sym
+        end
 
         def conventions
             check_open!
@@ -525,19 +533,26 @@ class OpenTideConstants
             raise InvalidArgumentError, "unknown filter #{unknown.first}" unless unknown.empty?
             f = {}
             filters.each do |k, v|
+                if %i[include_flagged include_fallback].include?(k)
+                    raise InvalidArgumentError, "#{k} must be true or false" unless v == true || v == false
+                    f[k] = v
+                    next
+                end
                 next if v.nil?
                 raise InvalidArgumentError, "filter #{k} must be a String or Symbol" unless v.is_a?(String) || v.is_a?(Symbol)
                 f[k] = v.to_s
             end
-            return @entries if f.empty?
+
             # A field that is null matches no filter value, also not "".
             same = ->(value, want) { !value.nil? && value.to_s == want }
             @entries.select do |e|
                 (!f.key?(:country) || same.call(e.country, f[:country])) &&
                     (!f.key?(:type) || same.call(e.type, f[:type])) &&
                     (!f.key?(:kind) || same.call(e.kind, f[:kind])) &&
-                    (!f.key?(:source) || e.sources.include?(f[:source])) &&
-                    (!f.key?(:source_type) || same.call(e.eff_source_type, f[:source_type]))
+                    eligible_paths(e, f.fetch(:include_flagged, false), f.fetch(:include_fallback, false)).any? do |cs|
+                        (!f.key?(:source) || same.call(cs["source"], f[:source])) &&
+                            (!f.key?(:source_type) || same.call(cs["source_type"], f[:source_type]))
+                    end
             end
         end
 
@@ -606,7 +621,7 @@ class OpenTideConstants
                                     licence: @licence_by_id.fetch(cs["licence_id"]),
                                     validation: set_validation, recommended: !rec_id.nil? && cs["set_id"] == rec_id)
             end
-            Station.new(raw, sets: sets, kind: kind, validation: all_validation, origin: self)
+            Station.new(raw, sets: sets, kind: kind, validation: all_validation, origin: self, licences: @licence_by_id)
         end
 
         # Checks every station and builds the indexes. In stream mode no
@@ -713,7 +728,12 @@ class OpenTideConstants
                 raise InvalidReleaseError, "station #{sid}: offsets licence #{off['licence_id'].inspect} does not resolve"
             end
             index_aliases(sid, raw["aliases"])
+            Array(raw["source_records"]).each { |r| SourceRecord.new(r, licences: @licence_by_id) }
             eff = @commercial_only ? effective_set(rec, sets) : rec
+            # Keep the reader's discovery fields, not the full fits. The names
+            # were collected above; materialize reads the complete line on demand.
+            summaries = Reader.index_entry(raw, pos, len).fetch("sets")
+            summaries.each { |cs| cs.delete("constituents") }
             Entry.new(station_id: sid, name: raw["name"], folded: Fold.fold(raw["name"].to_s), lat: raw["lat"],
                       lon: raw["lon"], type: Util.enum(raw["type"], ENUMS[:station_type]), country: raw["country"],
                       kind: rec && quantity_kind(rec["quantity"]), sources: sources.freeze,
@@ -724,6 +744,7 @@ class OpenTideConstants
                       eff_source_type: eff && Util.enum(eff["source_type"], ENUMS[:source_type]),
                       offsets_ref_licence_id: sets.find { |cs| offsets_reference_set?(cs) }&.fetch("licence_id"),
                       aliases: (raw["aliases"].is_a?(Hash) ? raw["aliases"].transform_values { |v| Array(v) } : {}),
+                      sets: summaries, offsets: off, current_offsets: raw["current_offsets"] || [],
                       pos: pos, len: len, station: nil)
         end
 
@@ -732,14 +753,73 @@ class OpenTideConstants
         # commercial use; otherwise the first set in file order of the same
         # typed quantity, qc_status ok, with a commercial licence; then the same
         # with flagged; otherwise nil. A set with no quantity never matches.
+        def commercial_set?(cs)
+            return false if @commercial_basis == "strict" && cs.dig("fallback", "reason") == "licence_reading"
+            @licence_by_id[cs["licence_id"]]&.commercial_use == true
+        end
+
+        def set_eligible?(cs, flagged, fallback, offsets_licence = nil)
+            return false unless cs && %w[ok flagged].include?(cs["qc_status"])
+            if cs["fallback"]
+                return false unless fallback
+            else
+                return false if cs["qc_status"] != "ok" && !flagged
+            end
+            return false if offsets_licence && !@licence_by_id.key?(offsets_licence)
+            return true unless @commercial_only
+            commercial_set?(cs) && (!offsets_licence || @licence_by_id[offsets_licence].commercial_use == true)
+        end
+
+        def eligible_paths(e, flagged, fallback, historical: true)
+            paths = e.sets.select { |cs| set_eligible?(cs, flagged, fallback) }
+            ref = @by_id[e.reference_id]
+            off = e.offsets || {}
+            if off["offset_id"]
+                paths << off if historical && historical_discovery?(e)
+            elsif ref
+                cs = ref.sets.find { |v| offsets_reference_set?(v) }
+                paths << cs if set_eligible?(cs, flagged, fallback, e.offsets_licence_id)
+            end
+            e.current_offsets.each do |co|
+                parent = @by_id[co["reference_station_id"]]
+                n = co["reference_bin"]
+                own = co["bin"]
+                next unless parent && [n, own].all? { |i| i.is_a?(Numeric) && i == i.to_i && i.between?(1, 2**53 - 1) }
+                cs = parent.sets.find { |v| v["quantity"] == "current" && %w[ok flagged].include?(v["qc_status"]) && Array(v["current_bins"]).any? { |b| (b.is_a?(Hash) ? b["bin"] : b) == n } }
+                paths << cs if set_eligible?(cs, flagged, fallback, co["licence_id"])
+            end
+            paths
+        end
+
+        def historical_discovery?(e)
+            return false if @historical_offsets_policy == "exclude"
+            return false if e.sets.any? { |cs| cs["set_id"] == e.eff_id && %w[ok flagged].include?(cs["qc_status"]) }
+            return false unless eligible_paths(e, false, false, historical: false).empty?
+            off = e.offsets
+            ref = @by_id[off["reference_station_id"]]
+            return false unless ref
+            cs = ref.sets.find { |v| offsets_reference_set?(v) }
+            binding = off.dig("provenance", "reference_binding")
+            return false unless cs && cs["qc_status"] == "ok" && cs["fallback"].nil? && cs["source_record_id"] == binding["noaa_id"]
+            return false if @commercial_only && (!commercial_set?(cs) || @licence_by_id[off["licence_id"]]&.commercial_use != true)
+            conv = @convention_by_id[cs["convention_id"]]
+            return false unless conv && conv.v0_model == "schureman_tcd" && conv.nodal_handling == :f_u_at_prediction
+            datum = cs["datum"] || {}
+            return false unless datum["chart_datum"] == "mllw" && datum["msl_offset_m"] && datum.dig("named", "mllw") == 0.0 && datum.dig("basis", "mllw", "kind") == "published"
+            tables = @meta["astro_tables"]
+            table = Array(tables).find { |a| a["astro_table_id"] == conv.raw["astro_table_id"] && (conv.tables_sha256.nil? || a["tables_sha256"] == conv.tables_sha256) && a["v0_model"] == conv.v0_model }
+            return false unless table
+            true
+        end
+
         def effective_set(rec, sets)
-            return rec if rec.nil? || @licence_by_id[rec["licence_id"]].commercial_use == true
+            return rec if rec.nil? || commercial_set?(rec)
             q = Util.enum(rec["quantity"], ENUMS[:quantity])
             return nil if q.nil?
             %i[ok flagged].each do |status|
                 found = sets.find do |cs|
                     Util.enum(cs["qc_status"], ENUMS[:qc_status]) == status && Util.enum(cs["quantity"], ENUMS[:quantity]) == q &&
-                        @licence_by_id[cs["licence_id"]].commercial_use == true
+                        commercial_set?(cs)
                 end
                 return found if found
             end
@@ -762,10 +842,12 @@ class OpenTideConstants
         # same table is in the Python, TypeScript and C SDKs.
         STATION_TYPES = { "name" => :t, "country" => :t, "timezone" => :t, "type" => :t, "recommended_set_id" => :t,
                           "status" => :t, "constant_sets" => :l, "validation" => :l, "subordinate_offsets" => :o,
-                          "current_offsets" => :a }.freeze
+                          "current_offsets" => :a, "source_records" => :l, "recommended_is_fallback" => :b }.freeze
         OFFSET_TYPES = { "reference_station_id" => :t, "licence_id" => :t, "height_adjusted_type" => :t,
                          "time_offset_high_min" => :n, "time_offset_low_min" => :n, "height_offset_high" => :n,
-                         "height_offset_low" => :n }.freeze
+                         "height_offset_low" => :n, "offset_id" => :t, "source" => :t, "source_type" => :t,
+                         "source_version" => :t, "source_record_id" => :t, "qc_status" => :t, "qc_flags" => :l,
+                         "fallback" => :o, "vintage" => :o, "provenance" => :o }.freeze
         VALIDATION_TYPES = { "set_id" => :t, "reference_source" => :t, "reference_station" => :t, "window" => :t,
                              "reference_distance_km" => :n, "time_mae_min" => :n, "time_p95_min" => :n,
                              "time_bias_min" => :n, "height_mae_m" => :n, "range_error_m" => :n,
@@ -773,7 +855,7 @@ class OpenTideConstants
         SET_TYPES = { "set_id" => :t, "source" => :t, "source_type" => :t, "quantity" => :t, "source_record_id" => :t,
                       "source_version" => :t, "convention_id" => :t, "licence_id" => :t, "qc_status" => :t,
                       "constituents" => :l, "dropped_constituents" => :l, "qc_flags" => :l, "record_span" => :o,
-                      "datum" => :o, "time_base" => :o, "provenance" => :o, "current_bins" => :a }.freeze
+                      "datum" => :o, "time_base" => :o, "provenance" => :o, "current_bins" => :a, "fallback" => :o }.freeze
         SPAN_TYPES = { "good_samples" => :i }.freeze
         DATUM_TYPES = { "msl_offset_m" => :n, "named" => :o }.freeze
         CONSTITUENT_TYPES = { "name" => :t, "source_name" => :t, "doodson" => :t, "kept_reason" => :t,
@@ -801,6 +883,7 @@ class OpenTideConstants
         def self.type_ok?(v, type)
             return true if v.nil?
             case type
+            when :b then v == true || v == false
             when :t then v.is_a?(String)
             when :n then real?(v)
             when :i then real?(v) && v == v.to_i
@@ -821,11 +904,97 @@ class OpenTideConstants
         # field that the SDK reads has the type of the format, also the nested
         # ones, so a malformed station fails the load with invalid_release in
         # eager and stream mode alike, never a raw error at the first query.
+        HISTORICAL_PROFILES = Util.deep_freeze({"noaa-2020-atlantic-table2-2513"=>{"source"=>"noaa", "source_type"=>"official", "source_version"=>"annual-tide-tables-2020", "source_record_id"=>"annual-tide-tables-2020/atlantic/Table2/2513", "qc_status"=>"flagged", "reference_station_id"=>"OTC-a6c00a3f", "height_adjusted_type"=>"R", "time_offset_high_min"=>4, "time_offset_low_min"=>15, "height_offset_high"=>0.84, "height_offset_low"=>1.0, "datum"=>{"basis"=>{"mllw"=>{"kind"=>"published", "method"=>"source", "source_name"=>"MLLW"}}, "chart_datum"=>"mllw", "named"=>{"mllw"=>0.0}, "zero"=>"chart_datum"}, "vintage"=>{"publication_year"=>2020, "source_lifecycle"=>"retired", "current_validity"=>"unestablished", "current_accuracy"=>"unverified", "removal_events"=>[{"evidence_sha256"=>"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61", "name"=>"Lockwoods Folly Inlet (r)", "operation"=>"Removed", "source_clock_timestamp"=>"2026-02-18T14:09:46", "source_timezone"=>nil}]}, "provenance"=>{"source_manifest_sha256"=>"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", "book"=>"atlantic", "annual_table_row"=>2513, "printed_page"=>345, "pdf_page"=>351, "raw_row_text"=>"  2513     Lockwoods Folly Inlet . . . . . . . . . . . . . . . . . . . . . . .         33° 55'     78° 14'     +0 04      +0 15     *0.84     *1.00    4.2    4.8     2.3", "id_crosswalk"=>{"evidence_sha256"=>["a411769769c0ada0966c4fb7cd8f107637631790377fd474460efd0c1551c6d1", "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61"], "legacy_id"=>"TEC2869", "modern_alias_verified"=>false, "status"=>"inferred"}, "reference_binding"=>{"evidence_sha256"=>["a411769769c0ada0966c4fb7cd8f107637631790377fd474460efd0c1551c6d1", "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61"], "mapping_status"=>"primary_name_position", "noaa_id"=>"8661070", "station_id"=>"OTC-a6c00a3f"}}}, "noaa-2020-pacific-table2-517"=>{"source"=>"noaa", "source_type"=>"official", "source_version"=>"annual-tide-tables-2020", "source_record_id"=>"annual-tide-tables-2020/pacific/Table2/517", "qc_status"=>"flagged", "reference_station_id"=>"OTC-ee4593cd", "height_adjusted_type"=>"A", "time_offset_high_min"=>-35, "time_offset_low_min"=>-31, "height_offset_high"=>-0.06096, "height_offset_low"=>0.0, "datum"=>{"basis"=>{"mllw"=>{"kind"=>"published", "method"=>"source", "source_name"=>"MLLW"}}, "chart_datum"=>"mllw", "named"=>{"mllw"=>0.0}, "zero"=>"chart_datum"}, "vintage"=>{"publication_year"=>2020, "source_lifecycle"=>"retired", "current_validity"=>"unestablished", "current_accuracy"=>"unverified", "removal_events"=>[{"evidence_sha256"=>"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61", "name"=>"San Francisco Bar (r)", "operation"=>"Removed", "source_clock_timestamp"=>"2026-02-18T14:09:50", "source_timezone"=>nil}, {"evidence_sha256"=>"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61", "name"=>"San Francisco Bar", "operation"=>"Removed", "source_clock_timestamp"=>"2026-07-06T11:17:37", "source_timezone"=>nil}]}, "provenance"=>{"source_manifest_sha256"=>"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", "book"=>"pacific", "annual_table_row"=>517, "printed_page"=>284, "pdf_page"=>302, "raw_row_text"=>"   517     San Francisco Bar . . . . . . . . . . . . . . . . . . . . . . . . .         37° 46'     122° 38'     -0 35       -0 31      -0.2        0.0    3.9    5.6     3.0", "id_crosswalk"=>{"evidence_sha256"=>["5164fe5fca308a44dfe9a5968191f0b0d69e3b6242cefde977577063fa037e64", "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61"], "legacy_id"=>"TWC0509", "modern_alias_verified"=>false, "status"=>"inferred"}, "reference_binding"=>{"evidence_sha256"=>["5164fe5fca308a44dfe9a5968191f0b0d69e3b6242cefde977577063fa037e64", "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61"], "mapping_status"=>"primary_name_position", "noaa_id"=>"9414290", "station_id"=>"OTC-ee4593cd"}}}})
+        def self.check_historical_offsets!(off, what)
+            return unless off
+            raise InvalidReleaseError, "#{what}: subordinate_offsets must be an object" unless off.is_a?(Hash)
+            check_types!(off, OFFSET_TYPES, "#{what}: subordinate_offsets")
+            historical = off.key?("offset_id") || off.dig("fallback", "reason") == "historical_offsets" || Array(off["qc_flags"]).any? { |f| f.is_a?(Hash) && f["flag"] == "fallback:historical_offsets" }
+            return unless historical
+            fail_field = ->(key) { raise InvalidReleaseError, "#{what}: invalid or missing historical #{key}" }
+            expected = HISTORICAL_PROFILES[off["offset_id"]]
+            fail_field.call("offset_id") unless expected
+            expected.each do |key, value|
+                next if %w[vintage provenance].include?(key)
+                fail_field.call(key) unless off[key] == value
+            end
+            text = ->(value) { value.is_a?(String) && !value.strip.empty? }
+            digest = ->(value) { value.is_a?(String) && value.match?(/\A[a-f0-9]{64}\z/) }
+            hashes = ->(values) { values.is_a?(Array) && !values.empty? && values.uniq.size == values.size && values.all? { |v| digest.call(v) } }
+            fail_field.call("licence_id") unless text.call(off["licence_id"])
+            flags = off["qc_flags"]
+            fail_field.call("qc_flags") unless flags.is_a?(Array) && flags.size == 1 && flags[0].is_a?(Hash) && flags[0]["flag"] == "fallback:historical_offsets" && text.call(flags[0]["reason"])
+            fallback = off["fallback"]
+            fail_field.call("fallback") unless fallback.is_a?(Hash) && fallback["reason"] == "historical_offsets" && %w[basis otc_finding].all? { |k| text.call(fallback[k]) } && !fallback.key?("preferred_set_id")
+            vintage = off["vintage"]
+            fail_field.call("vintage") unless vintage.is_a?(Hash)
+            expected["vintage"].each { |key, value| fail_field.call("vintage.#{key}") unless vintage[key] == value }
+            equivalence = vintage["reference_2020_equivalence"]
+            fail_field.call("reference_2020_equivalence") unless %w[not_checked matched_at_publisher_precision disagrees].include?(equivalence)
+            if equivalence == "not_checked"
+                fail_field.call("reference_2020_equivalence_sha256") if vintage.key?("reference_2020_equivalence_sha256")
+            else
+                fail_field.call("reference_2020_equivalence_sha256") unless digest.call(vintage["reference_2020_equivalence_sha256"])
+            end
+            prov = off["provenance"]
+            fail_field.call("provenance") unless prov.is_a?(Hash)
+            expected["provenance"].each do |key, value|
+                next if %w[id_crosswalk reference_binding].include?(key)
+                fail_field.call("provenance.#{key}") unless prov[key] == value
+            end
+            fail_field.call("provenance hashes") unless hashes.call(prov["input_sha256"]) && digest.call(prov["acceptance_report_sha256"])
+            %w[id_crosswalk reference_binding].each do |key|
+                nested = prov[key]
+                fail_field.call(key) unless nested.is_a?(Hash) && hashes.call(nested["evidence_sha256"])
+                expected["provenance"][key].each do |k,v|
+                    next if k == "evidence_sha256"
+                    fail_field.call("#{key}.#{k}") unless nested[k] == v
+                end
+            end
+            begin
+                fail_field.call("raw_values_json") unless text.call(prov["raw_values_json"]) && JSON.parse(prov["raw_values_json"]).is_a?(Hash)
+            rescue JSON::ParserError
+                fail_field.call("raw_values_json")
+            end
+        end
+
+        def self.check_source_records!(raw, what)
+            return unless raw.key?("source_records")
+            records = raw["source_records"]
+            raise InvalidReleaseError, "#{what}: source_records must be a nonempty array" unless records.is_a?(Array) && !records.empty?
+            records.each do |r|
+                raise InvalidReleaseError, "#{what}: source record is not an object" unless r.is_a?(Hash)
+                check_types!(r, {"source"=>:t,"source_version"=>:t,"source_record_id"=>:t,"role"=>:t,"disposition"=>:t,"detail"=>:t,"licence_id"=>:t,"upstream_licence_id"=>:t,"published_set_ids"=>:s,"provenance"=>:o,"original_metadata"=>:o,"original_harmonics"=>:o}, what)
+                %w[source source_version source_record_id role disposition detail].each do |k|
+                    raise InvalidReleaseError, "#{what}: source record #{k} must be nonempty" unless r[k].is_a?(String) && !r[k].empty?
+                end
+                unless r.key?("licence_id") && r["published_set_ids"].is_a?(Array) && r["provenance"].is_a?(Hash)
+                    raise InvalidReleaseError, "#{what}: source record missing licence/published_set_ids/provenance"
+                end
+                check_types!(r["provenance"], {"input_sha256"=>:s,"inventory_sha256"=>:t}, what)
+                unless r["provenance"]["input_sha256"].is_a?(Array) && r["provenance"]["inventory_sha256"].is_a?(String)
+                    raise InvalidReleaseError, "#{what}: source record provenance missing input_sha256/inventory_sha256"
+                end
+                if r.key?("original_metadata") && !r["original_metadata"].is_a?(Hash)
+                    raise InvalidReleaseError, "#{what}: original_metadata must be an object"
+                end
+                h=r["original_harmonics"]
+                next unless h
+                check_types!(h, {"format"=>:t,"columns"=>:s,"rows"=>:a,"annotations"=>:l,"amplitude_unit"=>:t,"amplitude_unit_basis"=>:t,"phase_unit"=>:t,"phase_convention"=>:t,"amplitude_uncertainty_unit"=>:t,"amplitude_uncertainty_unit_basis"=>:t}, what)
+                if h.key?("rows") && !(h["rows"].is_a?(Array) && h["rows"].all? { |row| row.is_a?(Array) && row.all?(String) })
+                    raise InvalidReleaseError, "#{what}: original_harmonics rows must contain arrays of strings"
+                end
+                Array(h["annotations"]).each { |a| check_types!(a, {"row"=>:i,"reason"=>:t,"detail"=>:t}, what) }
+            end
+        end
+
         def self.check_station!(raw)
             sid = raw["station_id"]
             what = "station #{sid}"
             raise InvalidReleaseError, "#{what}: name is not a string" unless raw["name"].is_a?(String)
             check_types!(raw, STATION_TYPES, what)
+            check_source_records!(raw, what)
+            check_historical_offsets!(raw["subordinate_offsets"], what)
             unless real?(raw["lat"]) && raw["lat"].between?(-90, 90)
                 raise InvalidReleaseError, "#{what}: lat is not a number in [-90, 90]"
             end
@@ -841,6 +1010,7 @@ class OpenTideConstants
             raise InvalidReleaseError, "#{station}: a set has no set_id" unless cs["set_id"].is_a?(String)
             what = "#{station}: set #{cs['set_id']}"
             check_types!(cs, SET_TYPES, what)
+            check_types!(cs["fallback"], {"reason" => :t, "basis" => :t, "otc_finding" => :t, "preferred_set_id" => :t}, what) if cs["fallback"]
             { "record_span" => SPAN_TYPES, "datum" => DATUM_TYPES, "time_base" => TIME_BASE_TYPES,
               "provenance" => PROVENANCE_TYPES }.each do |k, table|
                 check_types!(cs[k], table, "#{what}: #{k}") if cs[k]

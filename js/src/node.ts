@@ -22,6 +22,11 @@ export function sha256Sync(bytes: Uint8Array): string {
     return createHash("sha256").update(bytes).digest("hex");
 }
 
+function createSha256State(): { update(bytes: Uint8Array): void; digest(): string } {
+    const hash = createHash("sha256");
+    return { update: (bytes) => { hash.update(bytes); }, digest: () => hash.digest("hex") };
+}
+
 export function gunzipSync(bytes: Uint8Array): Uint8Array {
     return zlib.gunzipSync(bytes);
 }
@@ -106,7 +111,7 @@ function isErrno(e: unknown, code: string): boolean {
 }
 
 /** A positional line reader over an open file (stream mode, spec 6.2). */
-export function openLineReader(file: string): { read: (offset: number, length: number) => Uint8Array; close: () => void } {
+export function openLineReader(file: string): { read: (offset: number, length: number) => Uint8Array; close: () => void; closeStrict: () => void } {
     let fd: number | null;
     try {
         fd = fs.openSync(file, "r");
@@ -135,6 +140,12 @@ export function openLineReader(file: string): { read: (offset: number, length: n
             if (fd !== null) {
                 try { fs.closeSync(fd); } catch { /* already closed */ }
                 fd = null;
+            }
+        },
+        closeStrict() {
+            if (fd !== null) {
+                try { fs.closeSync(fd); }
+                finally { fd = null; }
             }
         },
     };
@@ -757,6 +768,6 @@ import(url).catch((e) => {
 
 /** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
 export const nodeApi: NodeMod = {
-    nodePlatform, nodePath, sha256Sync, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
+    nodePlatform, nodePath, sha256Sync, createSha256State, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
     openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeAllInto, runBlocking,
 };

@@ -105,7 +105,19 @@ typedef enum otc_status {
     OTC_E_NOMEM = 16,
     OTC_E_NOT_BUILT = 17,
     OTC_E_UNSUPPORTED_CONVENTION = 18, /* phase 2 */
-    OTC_E_READER_TOO_OLD = 19          /* release.min_reader_version is newer than OTC_FORMAT_VERSION */
+    OTC_E_READER_TOO_OLD = 19,
+    OTC_E_NO_CONSTANTS = 20,
+    OTC_E_QUANTITY_MISMATCH = 21,
+    OTC_E_NO_ASTRO_TABLE = 22,
+    OTC_E_UNSUPPORTED_CONSTITUENT = 23,
+    OTC_E_TIME_OUT_OF_RANGE = 24,
+    OTC_E_DATUM_UNAVAILABLE = 25,
+    OTC_E_BIN_NOT_FOUND = 26,
+    OTC_E_EXTREMES_ONLY = 27,
+    OTC_E_LOCAL_TIME_UNAVAILABLE = 28,
+    OTC_E_UNKNOWN_TIME_ZONE = 29,
+    OTC_E_REFERENCE_UNAVAILABLE = 30,
+    OTC_E_HISTORICAL_OFFSETS_EXCLUDED = 31
 } otc_status;
 
 /* The stable error code of a status ("checksum_mismatch", ...); "ok" for OTC_OK. */
@@ -179,6 +191,7 @@ typedef enum otc_dropped_reason {
 typedef enum otc_qc_flag_kind {
     OTC_QC_FLAG_UNSET = 0, OTC_QC_FLAG_TIME_BASE, OTC_QC_FLAG_BROKEN_RECORD, OTC_QC_FLAG_MICROTIDAL,
     OTC_QC_FLAG_NON_TIDAL_SIGNAL, OTC_QC_FLAG_SHORT_RECORD, OTC_QC_FLAG_SIBLING_DISAGREEMENT, OTC_QC_FLAG_CARRIED_OVER,
+    OTC_QC_FLAG_FALLBACK_TIME_BASE_DISPUTED, OTC_QC_FLAG_FALLBACK_TIME_BASE_UNRESOLVED, OTC_QC_FLAG_FALLBACK_REFUSED_FIT, OTC_QC_FLAG_FALLBACK_SHORT_RECORD_UNCALIBRATED, OTC_QC_FLAG_FALLBACK_SHORT_RECORD_LONG_PERIOD, OTC_QC_FLAG_FALLBACK_PUBLISHED_FULL_LIST, OTC_QC_FLAG_FALLBACK_RELIABILITY_WITHHELD, OTC_QC_FLAG_FALLBACK_LICENCE_READING, OTC_QC_FLAG_FALLBACK_DATUM_GATE_FAILED, OTC_QC_FLAG_FALLBACK_NOT_IN_OTC_INPUT, OTC_QC_FLAG_FALLBACK_HISTORICAL_OFFSETS,
     OTC_QC_FLAG_OTHER
 } otc_qc_flag_kind;
 typedef enum otc_decision_tier {
@@ -227,6 +240,13 @@ OTC_API const char *otc_height_adjusted_type_name(otc_height_adjusted_type v);
 OTC_API const char *otc_dropped_reason_name(otc_dropped_reason v);
 OTC_API const char *otc_qc_flag_kind_name(otc_qc_flag_kind v);
 
+typedef enum otc_fallback_reason { OTC_FALLBACK_REASON_UNSET = 0, OTC_FALLBACK_REASON_TIME_BASE_DISPUTED, OTC_FALLBACK_REASON_TIME_BASE_UNRESOLVED, OTC_FALLBACK_REASON_REFUSED_FIT, OTC_FALLBACK_REASON_SHORT_RECORD_UNCALIBRATED, OTC_FALLBACK_REASON_SHORT_RECORD_LONG_PERIOD, OTC_FALLBACK_REASON_PUBLISHED_FULL_LIST, OTC_FALLBACK_REASON_RELIABILITY_WITHHELD, OTC_FALLBACK_REASON_LICENCE_READING, OTC_FALLBACK_REASON_DATUM_GATE_FAILED, OTC_FALLBACK_REASON_NOT_IN_OTC_INPUT, OTC_FALLBACK_REASON_HISTORICAL_OFFSETS, OTC_FALLBACK_REASON_OTHER } otc_fallback_reason_t;
+OTC_API const char *otc_fallback_reason_name(otc_fallback_reason_t value);
+typedef enum otc_source_role { OTC_SOURCE_ROLE_UNSET = 0, OTC_SOURCE_ROLE_GAUGE_STATION, OTC_SOURCE_ROLE_PUBLISHED_HARMONIC_RECORD, OTC_SOURCE_ROLE_MODEL, OTC_SOURCE_ROLE_REFERENCE, OTC_SOURCE_ROLE_OTHER } otc_source_role;
+OTC_API const char *otc_source_role_name(otc_source_role value);
+typedef enum otc_source_disposition { OTC_SOURCE_DISPOSITION_UNSET = 0, OTC_SOURCE_DISPOSITION_METADATA_ONLY, OTC_SOURCE_DISPOSITION_NOT_FITTED, OTC_SOURCE_DISPOSITION_LICENCE_RESTRICTED, OTC_SOURCE_DISPOSITION_UNAVAILABLE, OTC_SOURCE_DISPOSITION_RETAINED, OTC_SOURCE_DISPOSITION_OTHER } otc_source_disposition;
+OTC_API const char *otc_source_disposition_name(otc_source_disposition value);
+
 /* ----------------------------------------------------------------- handles */
 
 typedef struct otc_release otc_release;           /* caller-owned: otc_close */
@@ -246,6 +266,10 @@ typedef struct otc_release_info otc_release_info; /* made by otc_fetch only */
 typedef struct otc_time_base otc_time_base_t;     /* borrowed from the station */
 typedef struct otc_time_base_evidence otc_time_base_evidence; /* borrowed from the station */
 typedef struct otc_provenance_build otc_provenance_build; /* borrowed from the station */
+typedef struct otc_fallback otc_fallback;
+typedef struct otc_source_record otc_source_record;
+typedef struct otc_historical_offset_vintage otc_historical_offset_vintage;
+typedef struct otc_historical_offset_provenance otc_historical_offset_provenance;
 typedef otc_set otc_set_provenance;               /* the provenance accessors take the set */
 
 /* ------------------------------------------------------------ open / close */
@@ -266,6 +290,8 @@ typedef struct otc_open_options {
      * changes nothing. Added after the fields above: a caller whose
      * struct_size ends before it gets false. */
     bool        commercial_only;
+    const char *commercial_basis; /* NULL/strict or as_published_upstream */
+    const char *historical_offsets_policy; /* NULL/fallback or exclude */
 } otc_open_options;
 OTC_API void otc_open_options_init(otc_open_options *opts);
 
@@ -294,6 +320,7 @@ OTC_API otc_status otc_verify_file(const char *path, const char *sha256_path, ot
 
 /* --------------------------------------------------------- release metadata */
 
+OTC_API otc_status otc_release_historical_offsets_policy(const otc_release *rel, char *buf, size_t len, size_t *needed);
 OTC_API otc_loaded_from otc_release_loaded_from(const otc_release *rel);
 OTC_API otc_status otc_release_datestamp(const otc_release *rel, char *buf, size_t len, size_t *needed);
 /* release.created in UTC, "YYYY-MM-DDTHH:MM:SSZ" (whole seconds), as the other SDKs give it. */
@@ -405,6 +432,8 @@ typedef struct otc_filter {
     const char *kind;         /* "tide" | "current" */
     const char *source;       /* the station has a usable set from this source */
     const char *source_type;  /* of the recommended set: "official" | "gauge" | "model" */
+    bool        include_flagged;
+    bool        include_fallback;
     bool        match_exact;  /* otc_search only: exact matches of the folded name */
 } otc_filter;
 OTC_API void otc_filter_init(otc_filter *filter);
@@ -501,8 +530,22 @@ typedef struct otc_offsets_t {
     double                   height_offset_low;
     otc_height_adjusted_type height_adjusted_type;
     const char              *licence_id;      /* NULL if absent */
+    const char *offset_id;
+    const char *source;
+    otc_source_type source_type;
+    const char *source_version;
+    const char *source_record_id;
+    otc_qc_status qc_status;
+    const otc_qc_flag *qc_flags;
+    size_t qc_flags_count;
+    const otc_fallback *fallback;
+    const otc_historical_offset_vintage *vintage;
+    const otc_historical_offset_provenance *provenance;
 } otc_offsets_t;
+
 OTC_API otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out);
+OTC_API size_t otc_offsets_qc_flag_count(const otc_offsets_t *offsets);
+OTC_API otc_status otc_offsets_qc_flag_at(const otc_offsets_t *offsets, size_t index, const otc_qc_flag **out);
 
 /* Validation rows (spec 4.6). Missing numbers NaN, missing counts -1, missing strings NULL. */
 typedef struct otc_previous_release_t {
@@ -677,6 +720,136 @@ OTC_API otc_status otc_set_constituent_at(const otc_set *set, size_t i, const ot
 OTC_API otc_status otc_set_constituent(const otc_set *set, const char *name, const otc_constituent_t **out);
 /* The constituent at index i of the set, as the file gives it. */
 OTC_API otc_status otc_constituent_raw_json(const otc_set *set, size_t i, char *buf, size_t len, size_t *needed);
+
+
+OTC_API int otc_station_recommended_is_fallback(const otc_station_t *station); /* -1 absent */
+OTC_API otc_status otc_set_fallback(const otc_set *set, const otc_fallback **out);
+OTC_API size_t otc_station_source_record_count(const otc_station_t *station);
+OTC_API otc_status otc_station_source_record_at(const otc_station_t *station, size_t index, const otc_source_record **out);
+OTC_API otc_fallback_reason_t otc_fallback_reason(const otc_fallback *value);
+OTC_API otc_status otc_fallback_basis(const otc_fallback *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_fallback_otc_finding(const otc_fallback *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_fallback_preferred_set_id(const otc_fallback *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_fallback_raw_json(const otc_fallback *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_source(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_source_version(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_source_record_id(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_source_role otc_source_record_role(const otc_source_record *value);
+OTC_API otc_source_disposition otc_source_record_disposition(const otc_source_record *value);
+OTC_API otc_status otc_source_record_detail(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_licence_id(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_upstream_licence_id(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_published_set_ids_json(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API size_t otc_source_record_published_set_id_count(const otc_source_record *value);
+OTC_API otc_status otc_source_record_published_set_id_at(const otc_source_record *value, size_t index, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_provenance_json(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_original_metadata_json(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_original_harmonics_json(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_source_record_licence(const otc_source_record *value, const otc_licence **out);
+OTC_API otc_status otc_source_record_upstream_licence(const otc_source_record *value, const otc_licence **out);
+OTC_API otc_status otc_source_record_raw_json(const otc_source_record *value, char *buf, size_t len, size_t *needed);
+OTC_API double otc_historical_offset_vintage_publication_year(const otc_historical_offset_vintage *value);
+OTC_API otc_status otc_historical_offset_vintage_source_lifecycle(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_vintage_removal_events_json(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_vintage_current_validity(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_vintage_current_accuracy(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_vintage_reference_2020_equivalence(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_vintage_reference_2020_equivalence_sha256(const otc_historical_offset_vintage *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_source_manifest_sha256(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_input_sha256_json(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API size_t otc_historical_offset_provenance_input_sha256_count(const otc_historical_offset_provenance *value);
+OTC_API otc_status otc_historical_offset_provenance_input_sha256_at(const otc_historical_offset_provenance *value, size_t index, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_book(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API double otc_historical_offset_provenance_annual_table_row(const otc_historical_offset_provenance *value);
+OTC_API double otc_historical_offset_provenance_printed_page(const otc_historical_offset_provenance *value);
+OTC_API double otc_historical_offset_provenance_pdf_page(const otc_historical_offset_provenance *value);
+OTC_API otc_status otc_historical_offset_provenance_raw_row_text(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_raw_values_json(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_id_crosswalk_json(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_reference_binding_json(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+OTC_API otc_status otc_historical_offset_provenance_acceptance_report_sha256(const otc_historical_offset_provenance *value, char *buf, size_t len, size_t *needed);
+
+typedef struct otc_tz otc_tz;
+typedef struct otc_local_t { int64_t t; int32_t utc_offset_s; char local_time[32]; } otc_local_t;
+OTC_API otc_status otc_tz_open(const char *zone, otc_tz **out);
+OTC_API otc_status otc_tz_local(const otc_tz *tz, int64_t t, otc_local_t *out);
+OTC_API void otc_tz_close(otc_tz *tz);
+OTC_API otc_status otc_tz_version(char *buf, size_t len, size_t *needed);
+typedef struct otc_datum_info {
+    const char *set_id, *zero, *zero_name, *chart_datum;
+    bool has_msl_offset;
+    double msl_offset_m;
+    double mn, gt, dhq, dlq; /* NaN unless both levels have the same kind and epoch */
+} otc_datum_info;
+typedef struct otc_datum_level {
+    const char *key;
+    double value_m, above_chart_m;
+    bool has_above_chart;
+    const char *kind, *method, *source_name;
+    const char *epoch_start, *epoch_end, *epoch_name;
+    const char *data_start, *data_end;
+    int64_t data_months;
+    const char *control_station_id, *control_set_id, *control_source_id;
+    bool has_uncertainty;
+    double uncertainty_m;
+    const char *uncertainty_basis;
+    uint32_t flags; /* datum_basis.flags schema enum order */
+} otc_datum_level;
+/* Datum strings borrow from st; ranges require matching kind and epoch. */
+OTC_API otc_status otc_datums(otc_release *rel, const otc_station_t *st, const char *set_id, otc_datum_info *info, otc_datum_level *out, size_t cap, size_t *count);
+/* Native prediction. Output timestamps are UTC seconds; intervals are half-open. */
+typedef struct otc_astro_tab otc_astro_tab;
+typedef enum otc_prediction_method { OTC_PREDICTION_METHOD_HARMONIC, OTC_PREDICTION_METHOD_FOLDED_OFFSETS, OTC_PREDICTION_METHOD_OFFSETS, OTC_PREDICTION_METHOD_OTHER, OTC_PREDICTION_METHOD_UNSET = -1 } otc_prediction_method;
+typedef enum otc_extreme_type_t { OTC_EXTREME_TYPE_HIGH, OTC_EXTREME_TYPE_LOW, OTC_EXTREME_TYPE_OTHER, OTC_EXTREME_TYPE_UNSET = -1 } otc_extreme_type_t;
+typedef enum otc_current_event_type_t { OTC_CURRENT_EVENT_TYPE_MAX_FLOOD, OTC_CURRENT_EVENT_TYPE_MAX_EBB, OTC_CURRENT_EVENT_TYPE_SLACK_BEFORE_FLOOD, OTC_CURRENT_EVENT_TYPE_SLACK_BEFORE_EBB, OTC_CURRENT_EVENT_TYPE_OTHER, OTC_CURRENT_EVENT_TYPE_UNSET = -1 } otc_current_event_type_t;
+typedef struct otc_height_t { int64_t t; double height_m; } otc_height_t;
+typedef struct otc_extreme_t { int64_t t; otc_extreme_type_t type; double height_m; } otc_extreme_t;
+typedef struct otc_current_t { int64_t t; double velocity_major_ms, velocity_minor_ms, speed_ms, direction_deg; } otc_current_t;
+typedef struct otc_current_event_t { int64_t t; otc_current_event_type_t type; double velocity_ms, direction_deg; } otc_current_event_t;
+/* Initialise once, clear after use. Strings remain valid until clear or the next
+ * prediction using this info, independently of the station/release lifetime. */
+typedef struct otc_prediction_info {
+    size_t struct_size;
+    const char *station_id, *timezone;
+    otc_prediction_method method;
+    const char *set_id, *convention_id, *astro_table_id, *reference_station_id;
+    int64_t reference_bin, bin_number; /* 0 means absent */
+    const char *datum, *datum_name, *datum_kind;
+    double datum_uncertainty_m; /* NaN means absent */
+    uint32_t omitted_event_types; /* bit i = otc_current_event_type_t i */
+    bool has_omitted_event_types;
+    const char *release, *algorithm;
+    const char *offset_id, *offset_source, *offset_source_version;
+    bool historical_offsets;
+    const char *current_validity, *current_accuracy, *reference_set_id;
+    const char *reference_source_version, *reference_2020_equivalence, *source_note;
+    void *_storage;
+} otc_prediction_info;
+typedef struct otc_predict_opts {
+    size_t struct_size;
+    int64_t step_s;
+    const char *datum, *set_id;
+    int64_t bin_number;
+    otc_prediction_info *info;
+    const char *offset_id;
+} otc_predict_opts;
+OTC_API void otc_predict_opts_init(otc_predict_opts *opts);
+OTC_API void otc_prediction_info_init(otc_prediction_info *info);
+OTC_API void otc_prediction_info_clear(otc_prediction_info *info);
+OTC_API const char *otc_prediction_method_name(otc_prediction_method value);
+OTC_API const char *otc_extreme_type_name(otc_extreme_type_t value);
+OTC_API const char *otc_current_event_type_name(otc_current_event_type_t value);
+OTC_API otc_status otc_heights(otc_release *rel, const otc_station_t *st, const otc_predict_opts *opts, int64_t start, int64_t stop, otc_height_t *out, size_t cap, size_t *count);
+OTC_API otc_status otc_heights_at(otc_release *rel, const otc_station_t *st, const otc_predict_opts *opts, const int64_t *times, size_t n, otc_height_t *out);
+OTC_API otc_status otc_extremes(otc_release *rel, const otc_station_t *st, const otc_predict_opts *opts, int64_t start, int64_t stop, otc_extreme_t *out, size_t cap, size_t *count);
+OTC_API otc_status otc_currents(otc_release *rel, const otc_station_t *st, const otc_predict_opts *opts, int64_t start, int64_t stop, otc_current_t *out, size_t cap, size_t *count);
+OTC_API otc_status otc_current_events(otc_release *rel, const otc_station_t *st, const otc_predict_opts *opts, int64_t start, int64_t stop, otc_current_event_t *out, size_t cap, size_t *count);
+OTC_API otc_status otc_astro_table(otc_release *rel, const char *id, const otc_astro_tab **out);
+OTC_API otc_status otc_astro_valid_range(const otc_astro_tab *tab, int *first, int *last);
+OTC_API otc_status otc_astro_equilibrium_argument(const otc_astro_tab *tab, const char *name, int64_t t, double *out);
+OTC_API otc_status otc_astro_node_factor(const otc_astro_tab *tab, const char *name, int64_t t, double *out);
+OTC_API otc_status otc_astro_equilibrium_for_year(const otc_astro_tab *tab, const char *name, int year, double *out);
+OTC_API otc_status otc_astro_node_factor_for_year(const otc_astro_tab *tab, const char *name, int year, double *out);
 
 /* ------------------------------------------------- the optional otc_fetch module
  * Declared always. In a build without -DOTC_WITH_FETCH=ON every otc_fetch_*

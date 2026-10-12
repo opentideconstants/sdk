@@ -54,7 +54,7 @@ class OpenTideConstants
         end
 
         # Opens a local file given with file: (spec §4.2, §4.3.1).
-        def open_file(path, mode:, logger: nil, commercial_only: false)
+        def open_file(path, mode:, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
             raise InvalidArgumentError, "file must be a String path" unless path.is_a?(String) && !path.empty?
             path = File.expand_path(path)
             prefix, d, ext = parse_name(path)
@@ -82,10 +82,10 @@ class OpenTideConstants
                 end
                 json_sha256 = ext == "json.gz" ? rows["#{prefix}.json"] : nil
                 [load(path, mode: mode, files: files, checks: checks, verify: true, logger: logger,
-                      commercial_only: commercial_only, json_sha256: json_sha256), :file]
+                      commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy, json_sha256: json_sha256), :file]
             else
                 files = read.map { |p| FileInfo.new(name: File.basename(p), url: nil, size: File.size(p), sha256: nil) }
-                [load(path, mode: mode, files: files, checks: {}, logger: logger, commercial_only: commercial_only),
+                [load(path, mode: mode, files: files, checks: {}, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy),
                  :file_unverified]
             end
         end
@@ -130,40 +130,40 @@ class OpenTideConstants
         # json_sha256: for a .json.gz, the .json row that the decompressed
         # bytes must match (spec §5.3, CR3 DR77).
         def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
-                 on_bad_index: nil, logger: nil, commercial_only: false, json_sha256: nil)
+                 on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, json_sha256: nil)
             _, _, ext = parse_name(path)
             expect = ->(p) { verify ? checks[p] : nil }
             case ext
             when "json"
                 doc = parse_json(read_text(path, expect.call(path)))
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger,
-                                    commercial_only: commercial_only)
+                                    commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
             when "json.gz"
                 text = gunzip(path, expect.call(path))
                 check_json_bytes!(path, text, json_sha256) if json_sha256
                 doc = parse_json(text)
                 eager_from_doc(doc, files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger,
-                                    commercial_only: commercial_only)
+                                    commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
             when "jsonl"
                 meta_path = files_read(path)[1]
                 meta = parse_json(read_text(meta_path, expect.call(meta_path)))
                 Release.check_format!(meta)
                 load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
                                        zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path),
-                                       on_bad_index: on_bad_index, logger: logger, commercial_only: commercial_only)
+                                       on_bad_index: on_bad_index, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
         end
 
-        def eager_from_doc(doc, files:, checks:, zenodo_version_doi: nil, logger: nil, commercial_only: false)
+        def eager_from_doc(doc, files:, checks:, zenodo_version_doi: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
             Release.check_format!(doc)
             stations = doc["stations"]
             raise InvalidReleaseError, "stations missing" unless stations.is_a?(Array)
             meta = doc.reject { |k, _| k == "stations" }
             Release.new(meta: meta, stations: stations.map { |s| [s, nil, nil] }, mode: :eager,
                         files: files, checks: checks, zenodo_version_doi: zenodo_version_doi, logger: logger,
-                        commercial_only: commercial_only)
+                        commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
         end
 
         # index: the entries of a fresh index-v1.json (spec §6.2); the stations
@@ -171,7 +171,7 @@ class OpenTideConstants
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
         def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
-                       expected_sha256: nil, on_bad_index: nil, logger: nil, commercial_only: false)
+                       expected_sha256: nil, on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
             io = File.open(path, "rb")
             if expected_sha256
                 digest = Digest::SHA256.new
@@ -205,7 +205,7 @@ class OpenTideConstants
             begin
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
                                   io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi,
-                                  on_bad_index: index && on_bad_index, logger: logger, commercial_only: commercial_only)
+                                  on_bad_index: index && on_bad_index, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
             ensure
                 io.close if mode != :stream || rel.nil?
             end
@@ -231,6 +231,8 @@ class OpenTideConstants
                     kind = { "water_level" => "tide", "current" => "current" }.fetch(cs["quantity"], "other")
                 end
                 SET_KEYS.to_h { |k| [k, str.call(cs, k)] }.merge(
+                    "fallback" => cs["fallback"], "current_bins" => Array(cs["current_bins"]).map { |b| b.is_a?(Hash) ? b["bin"] : b },
+                    "source_record_id" => cs["source_record_id"], "source_version" => cs["source_version"], "datum" => cs["datum"],
                     "constituents" => Array(cs["constituents"]).filter_map { |c| c["name"] if c.is_a?(Hash) && c["name"].is_a?(String) }
                 )
             end
@@ -245,7 +247,8 @@ class OpenTideConstants
               "name" => name, "name_folded" => name && Fold.fold(name), "country" => str.call(raw, "country"),
               "type" => str.call(raw, "type"), "lat" => num.call("lat"), "lon" => num.call("lon"), "kind" => kind,
               "aliases" => aliases, "reference_station_id" => str.call(off, "reference_station_id"),
-              "offsets_licence_id" => str.call(off, "licence_id"), "recommended_set_id" => rec_id, "sets" => sets }
+              "offsets_licence_id" => str.call(off, "licence_id"), "recommended_set_id" => rec_id, "sets" => sets,
+              "subordinate_offsets" => raw["subordinate_offsets"], "current_offsets" => raw.fetch("current_offsets", []) }
         end
 
         # The keys of an index entry that a line read through the index must
@@ -254,7 +257,8 @@ class OpenTideConstants
         def line_view(e)
             sets = e["sets"].is_a?(Array) ? e["sets"] : []
             [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
-             sets.map { |cs| SET_KEYS.map { |k| cs[k] } + [cs["constituents"]] }]
+             sets.map { |cs| SET_KEYS.map { |k| cs[k] } + [cs["constituents"], cs["fallback"], cs["current_bins"], cs["source_record_id"], cs["source_version"], cs["datum"]] },
+             e["subordinate_offsets"], e["current_offsets"]]
         end
 
         # v as an Integer when it is a JSON integer or a number with an
@@ -270,9 +274,14 @@ class OpenTideConstants
             return false unless ENTRY_STR.all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(String)) }
             return false unless %w[lat lon].all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(Numeric)) }
             return false unless e["aliases"].is_a?(Hash) && e["aliases"].values.all? { |v| v.is_a?(Array) && v.all?(String) }
+            return false unless e.key?("subordinate_offsets") && (e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash))
+            return false unless e["current_offsets"].is_a?(Array) && e["current_offsets"].all?(Hash)
             return false unless e["sets"].is_a?(Array)
             e["sets"].all? do |cs|
                 cs.is_a?(Hash) && SET_KEYS.all? { |k| cs.key?(k) && (cs[k].nil? || cs[k].is_a?(String)) } &&
+                    cs.key?("fallback") && (cs["fallback"].nil? || cs["fallback"].is_a?(Hash)) &&
+                    cs["current_bins"].is_a?(Array) && cs["current_bins"].all? { |b| b.is_a?(Numeric) && b.finite? && b == b.to_i && b.between?(1, 2**53 - 1) } &&
+                    %w[source_record_id source_version datum].all? { |k| cs.key?(k) } &&
                     cs["constituents"].is_a?(Array) && cs["constituents"].all?(String)
             end
         end
@@ -295,10 +304,8 @@ class OpenTideConstants
             raw["constant_sets"] = e["sets"].map do |cs|
                 cs.reject { |k, _| k == "constituents" }.merge("constituents" => cs["constituents"].map { |n| { "name" => n } })
             end
-            if e["reference_station_id"] || e["offsets_licence_id"]
-                raw["subordinate_offsets"] = { "reference_station_id" => e["reference_station_id"],
-                                               "licence_id" => e["offsets_licence_id"] }
-            end
+            raw["subordinate_offsets"] = e["subordinate_offsets"]
+            raw["current_offsets"] = e["current_offsets"]
             raw
         end
 

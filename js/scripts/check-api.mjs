@@ -22,7 +22,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const root = new URL("..", import.meta.url);
-const API = JSON.parse(readFileSync(new URL("../conformance/api.json", root), "utf8"));
+const manifestFlag = process.argv.indexOf("--manifest");
+const manifestPath = manifestFlag < 0 ? new URL("../conformance/api.json", root) : process.argv[manifestFlag + 1];
+if (manifestFlag >= 0 && !manifestPath) throw new Error("--manifest requires an explicit manifest file");
+const API = JSON.parse(readFileSync(manifestPath, "utf8"));
 const distDir = fileURLToPath(new URL("dist", root));
 
 const camel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
@@ -351,7 +354,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         for (const p of problems) console.error(`  - ${p}`);
         rc = 1;
     } else {
-        console.log(`API manifest check OK: ${checked} names compared with conformance/api.json (suite ${API.suite_version})`);
+        console.log(`API manifest check OK: ${checked} names compared with ${manifestFlag < 0 ? "conformance/api.json" : manifestPath} (suite ${API.suite_version})`);
     }
     if (!process.argv.includes("--no-self-test")) {
         const bad = selfTest(problems);

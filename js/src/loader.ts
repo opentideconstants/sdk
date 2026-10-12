@@ -89,7 +89,7 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
 
 /** @internal A release from the full `.json` document (eager). */
 export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
-    warn: (message: string) => void = () => undefined, commercialOnly = false): Release {
+    warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback"): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -98,7 +98,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -153,11 +153,92 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
 /** @internal Reads one line by offset and length. */
 export type LineReader = (offset: number, length: number) => Uint8Array;
 
+/**
+ * @internal Index a positional reader while its exact chunks are authenticated by the caller. Validation errors
+ * are saved so the caller can check JSONL and META checksums first. I/O failures still escape immediately.
+ * Only the unfinished line and station summaries survive each chunk; no complete-file buffer is retained.
+ */
+export function scanJsonlReader(header: ReleaseHeader | null, read: LineReader, onChunk: (bytes: Uint8Array) => void): {
+    entries: IndexEntry[]; bytesRead: number; error: unknown | null;
+} {
+    const entries: IndexEntry[] = [];
+    const convs = new Set(header?.conventions.map((c) => String(c["convention_id"])));
+    const lics = new Set(header?.licences.map((l) => String(l["licence_id"])));
+    let bytesRead = 0;
+    let lineStart = 0;
+    let lineNo = 0;
+    let fragments: Uint8Array[] = [];
+    let pendingLength = 0;
+    let error: unknown | null = null;
+    const line = (last: Uint8Array): void => {
+        lineNo++;
+        let bytes: Uint8Array;
+        if (fragments.length === 0) bytes = last;
+        else {
+            bytes = new Uint8Array(pendingLength + last.length);
+            let offset = 0;
+            for (const fragment of fragments) { bytes.set(fragment, offset); offset += fragment.length; }
+            bytes.set(last, offset);
+        }
+        fragments = [];
+        pendingLength = 0;
+        const length = bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
+        const body = bytes.subarray(0, length);
+        if (!isBlank(body) && header) {
+            const doc = parseJson(body, `line ${lineNo} of the .jsonl file`) as Json;
+            entries.push(indexDoc(doc, header, lineStart, length, convs, lics));
+        }
+    };
+    for (;;) {
+        const chunk = read(bytesRead, 65536);
+        if (chunk.length === 0) break;
+        onChunk(chunk);
+        const offset = bytesRead;
+        bytesRead += chunk.length;
+        if (error !== null || header === null) continue;
+        try {
+            let start = 0;
+            for (;;) {
+                const end = chunk.indexOf(0x0a, start);
+                if (end < 0) break;
+                line(chunk.subarray(start, end));
+                start = end + 1;
+                lineStart = offset + start;
+            }
+            if (start < chunk.length) {
+                const fragment = chunk.subarray(start);
+                fragments.push(fragment);
+                pendingLength += fragment.length;
+            }
+        } catch (e) {
+            error = e;
+            fragments = [];
+            pendingLength = 0;
+        }
+    }
+    if (error === null && header !== null) {
+        try {
+            if (pendingLength > 0) line(new Uint8Array());
+            checkLinks(entries);
+            resolveKinds(entries);
+        } catch (e) { error = e; }
+    }
+    return { entries, bytesRead, error };
+}
+
+// Keep fallback bytes outside the lexical context shared by the returned station source.
+// An external positional reader must not retain the buffer used only to build the index.
+function bufferLineReader(bytes: Uint8Array): LineReader {
+    return (offset, length) => bytes.subarray(offset, offset + length);
+}
+
 /** @internal A release from `.jsonl` + `.meta.json`. Eager keeps every document; stream reads lines on demand. */
 export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: {
     eager: boolean;
     files: readonly FileInfo[];
     index?: StreamIndex | null;
+    /** Fresh entries validated while authenticating the same direct-file bytes; never a cached index. */
+    preparedIndex?: StreamIndex | null;
     reader?: LineReader | null;
     close?: () => void;
     zenodoVersionDoi?: string | null;
@@ -167,12 +248,16 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     warn?: (message: string) => void;
     /** The open option of spec 4.2 (K-NC DR106). */
     commercialOnly?: boolean;
+    commercialBasis?: "strict" | "as_published_upstream";
+    historicalOffsetsPolicy?: "fallback" | "exclude";
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
     let docs: JsonObject[] = [];
     if (opts.index && !opts.eager) {
         entries = opts.index.entries;
+    } else if (opts.preparedIndex && !opts.eager) {
+        entries = opts.preparedIndex.entries;
     } else {
         if (!jsonl) throw new InvalidReleaseError("the .jsonl file is missing");
         ({ entries, docs } = indexJsonl(header, jsonl, opts.eager));
@@ -181,7 +266,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     if (opts.eager) {
         source = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
     } else {
-        const read: LineReader = opts.reader ?? ((o, l) => (jsonl as Uint8Array).subarray(o, o + l));
+        const read: LineReader = opts.reader ?? bufferLineReader(jsonl as Uint8Array);
         const fromIndex = Boolean(opts.index);
         const convs = new Set(header.conventions.map((c) => String(c["convention_id"])));
         const lics = new Set(header.licences.map((l) => String(l["licence_id"])));
@@ -219,7 +304,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false, opts.commercialBasis ?? "strict", opts.historicalOffsetsPolicy ?? "fallback");
 }
 
 /**

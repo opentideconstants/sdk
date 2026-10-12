@@ -117,3 +117,39 @@ def test_real_event_pairing_and_utc_shape_are_exact(mutation):
     else:
         items[0]["time"] = items[0]["time"].replace("Z", ".1Z" if mutation == "fractional" else "+00:00")
     assert vectors.compare_prediction(row, actual)
+
+
+@pytest.mark.parametrize("features,mode", [(["eager", "stream"], "eager"), (["stream"], "stream")])
+def test_native_vector_input_projection_is_authenticated_and_lossless(tmp_path, features, mode):
+    document, release, _ = vectors.load_bundle(BUNDLE)
+    assert callable(getattr(vectors, "materialize_release", None)), "missing native stream input projection"
+    path, opened_mode = vectors.materialize_release(BUNDLE, document, release, tmp_path, features)
+    original = tmp_path / f"OTC_{release['release']['datestamp']}.json"
+    assert opened_mode == mode
+    assert original.read_bytes() == (BUNDLE / "vectors-release.json").read_bytes()
+    assert vectors.sha256(original) == document["release_sha256"]
+    if mode == "eager":
+        assert path == original
+    else:
+        assert path == original.with_suffix(".jsonl")
+        metadata = json.loads(original.with_suffix(".meta.json").read_text())
+        reconstructed = dict(metadata, stations=[json.loads(line) for line in path.read_text().splitlines()])
+        assert json.dumps(reconstructed, sort_keys=True) == json.dumps(release, sort_keys=True)
+    for line in original.with_suffix(".sha256").read_text().splitlines():
+        digest, name = line.split("  ")
+        assert vectors.sha256(tmp_path / name) == digest
+    expected_names = {original.name} if mode == "eager" else {original.name, path.name, original.with_suffix(".meta.json").name}
+    assert {line.split("  ")[1] for line in original.with_suffix(".sha256").read_text().splitlines()} == expected_names
+
+
+def test_vector_input_copy_refuses_a_source_changed_after_bundle_authentication(tmp_path):
+    document, release, _ = vectors.load_bundle(BUNDLE)
+    bundle = tmp_path / "bundle"
+    shutil.copytree(BUNDLE, bundle)
+    with (bundle / "vectors-release.json").open("ab") as file:
+        file.write(b" ")
+    destination = tmp_path / "opened"
+    destination.mkdir()
+    assert callable(getattr(vectors, "materialize_release", None)), "missing native stream input projection"
+    with pytest.raises(vectors.VectorError, match="vector input changed"):
+        vectors.materialize_release(bundle, document, release, destination, ["stream"])

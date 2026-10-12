@@ -158,7 +158,7 @@ class BadArgumentTest < Minitest::Test
                 station_in(d, "OTC-T-0002")["recommended_set_id"] = nil # no recommended set: kind is null
             end
             c = OTC.new(file: path, mode: mode)
-            null.each { |k, test| assert(c.stations.any?(&test), "#{ext} #{mode}: no station with a null #{k}") }
+            null.each { |k, test| assert(c.stations(include_flagged: true, include_fallback: true).any?(&test), "#{ext} #{mode}: no station with a null #{k}") }
             %i[country type kind source source_type].each do |k|
                 assert_equal [], c.stations(k => "").map(&:station_id), "#{k} (#{ext}, #{mode})"
             end

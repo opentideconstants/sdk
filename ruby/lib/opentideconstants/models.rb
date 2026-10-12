@@ -70,6 +70,12 @@ class OpenTideConstants
     end
 
     ENUMS = {
+        fallback_reason: ["time_base_disputed", "time_base_unresolved", "refused_fit", "short_record_uncalibrated", "short_record_long_period", "published_full_list", "reliability_withheld", "licence_reading", "datum_gate_failed", "not_in_otc_input", "historical_offsets"],
+        source_role: ["gauge_station", "published_harmonic_record", "model", "reference"],
+        source_disposition: ["metadata_only", "not_fitted", "licence_restricted", "unavailable", "retained"],
+        extreme_type: ["high", "low"],
+        current_event_type: ["max_flood", "max_ebb", "slack_before_flood", "slack_before_ebb"],
+        prediction_method: ["harmonic", "folded_offsets", "offsets"],
         kind: %w[tide current],
         station_type: %w[reference subordinate],
         station_status: %w[active removed],
@@ -81,7 +87,7 @@ class OpenTideConstants
         nodal_handling: %w[f_u_at_prediction none],
         height_adjusted_type: %w[R A],
         dropped_reason: %w[rayleigh noise long_period_rule non_tidal_rule convention other],
-        qc_flag: %w[time_base broken_record microtidal non_tidal_signal short_record sibling_disagreement carried_over],
+        qc_flag: ["time_base", "broken_record", "microtidal", "non_tidal_signal", "short_record", "sibling_disagreement", "carried_over", "fallback:time_base_disputed", "fallback:time_base_unresolved", "fallback:refused_fit", "fallback:short_record_uncalibrated", "fallback:short_record_long_period", "fallback:published_full_list", "fallback:reliability_withheld", "fallback:licence_reading", "fallback:datum_gate_failed", "fallback:not_in_otc_input", "fallback:historical_offsets"],
         time_base_code: %w[verified corrected unverified disputed],
         alias_system: %w[noaa gesla ticon xtide kartverket slackwater webcaltides linz shom pegelonline rws mi dmi smhi fmi
                           uhslc]
@@ -324,9 +330,68 @@ class OpenTideConstants
         end
     end
 
+    class Fallback
+        attr_reader :reason, :basis, :otc_finding, :preferred_set_id, :raw
+        def initialize(raw)
+            @raw = Util.deep_freeze(raw)
+            @reason = Util.enum(raw["reason"], ENUMS[:fallback_reason])
+            @basis = raw["basis"]
+            @otc_finding = raw["otc_finding"]
+            @preferred_set_id = raw["preferred_set_id"]
+            freeze
+        end
+    end
+
+    class SourceRecord
+        attr_reader :source, :source_version, :source_record_id, :role, :disposition, :detail,
+                    :licence_id, :upstream_licence_id, :published_set_ids, :provenance, :original_metadata,
+                    :original_harmonics, :licence, :upstream_licence, :raw
+        def initialize(raw, licences:)
+            @raw = Util.deep_freeze(raw)
+            %w[source source_version source_record_id detail licence_id upstream_licence_id provenance original_harmonics].each do |key|
+                instance_variable_set("@#{key}", raw[key])
+            end
+            @role = Util.enum(raw["role"], ENUMS[:source_role])
+            @disposition = Util.enum(raw["disposition"], ENUMS[:source_disposition])
+            @published_set_ids = raw["published_set_ids"].freeze
+            @original_metadata = raw.fetch("original_metadata", {}.freeze)
+            @licence = licences[@licence_id]
+            @upstream_licence = licences[@upstream_licence_id]
+            [@licence_id, @upstream_licence_id].compact.each do |id|
+                raise InvalidReleaseError, "source record #{@source_record_id}: licence #{id} does not resolve" unless licences.key?(id)
+            end
+            freeze
+        end
+    end
+
+    class HistoricalOffsetVintage
+        attr_reader :publication_year, :source_lifecycle, :removal_events, :current_validity, :current_accuracy,
+                    :reference_2020_equivalence, :reference_2020_equivalence_sha256
+        def initialize(raw)
+            Util.deep_freeze(raw)
+            %w[publication_year source_lifecycle removal_events current_validity current_accuracy reference_2020_equivalence reference_2020_equivalence_sha256].each do |key|
+                instance_variable_set("@#{key}", raw[key])
+            end
+            freeze
+        end
+    end
+
+    class HistoricalOffsetProvenance
+        attr_reader :source_manifest_sha256, :input_sha256, :book, :annual_table_row, :printed_page, :pdf_page,
+                    :raw_row_text, :raw_values_json, :id_crosswalk, :reference_binding, :acceptance_report_sha256
+        def initialize(raw)
+            Util.deep_freeze(raw)
+            %w[source_manifest_sha256 input_sha256 book annual_table_row printed_page pdf_page raw_row_text raw_values_json id_crosswalk reference_binding acceptance_report_sha256].each do |key|
+                instance_variable_set("@#{key}", raw[key])
+            end
+            freeze
+        end
+    end
+
     class SubordinateOffsets
         attr_reader :reference_station_id, :time_offset_high_min, :time_offset_low_min, :height_offset_high,
-                    :height_offset_low, :height_adjusted_type, :licence_id
+                    :height_offset_low, :height_adjusted_type, :licence_id, :offset_id, :source, :source_type,
+                    :source_version, :source_record_id, :qc_status, :qc_flags, :fallback, :vintage, :provenance
 
         def initialize(raw)
             Util.deep_freeze(raw)
@@ -337,6 +402,13 @@ class OpenTideConstants
             @height_offset_low = raw["height_offset_low"]
             @height_adjusted_type = Util.enum(raw["height_adjusted_type"], ENUMS[:height_adjusted_type])
             @licence_id = raw["licence_id"]
+            %w[offset_id source source_version source_record_id].each { |key| instance_variable_set("@#{key}", raw[key]) }
+            @source_type = Util.enum(raw["source_type"], ENUMS[:source_type])
+            @qc_status = Util.enum(raw["qc_status"], ENUMS[:qc_status])
+            @qc_flags = Array(raw["qc_flags"]).map { |f| QcFlag.new(f) }.freeze
+            @fallback = raw["fallback"] && Fallback.new(raw["fallback"])
+            @vintage = raw["vintage"] && HistoricalOffsetVintage.new(raw["vintage"])
+            @provenance = raw["provenance"] && HistoricalOffsetProvenance.new(raw["provenance"])
             freeze
         end
     end
@@ -345,10 +417,11 @@ class OpenTideConstants
     class ConstantSet
         attr_reader :set_id, :source, :source_type, :quantity, :source_record_id, :source_version, :record_span,
                     :datum, :qc_status, :qc_flags, :dropped_constituents, :time_base, :convention, :licence, :provenance,
-                    :validation, :constituents, :raw
+                    :validation, :constituents, :fallback, :raw
 
         def initialize(raw, convention:, licence:, validation:, recommended:)
             @raw = Util.deep_freeze(raw)
+            @fallback = raw["fallback"] && Fallback.new(raw["fallback"])
             @set_id = raw["set_id"]
             @source = raw["source"]
             @source_type = Util.enum(raw["source_type"], ENUMS[:source_type])
@@ -384,12 +457,14 @@ class OpenTideConstants
     # An active station (spec §4.4).
     class Station
         attr_reader :station_id, :name, :country, :lat, :lon, :type, :kind, :timezone, :aliases, :status,
-                    :recommended_set, :subordinate_offsets, :validation, :raw
+                    :recommended_set, :subordinate_offsets, :validation, :recommended_is_fallback, :source_records, :raw
 
         # origin: the Release that built it (attribution checks that a Station
         # is from its own release, spec §4.6).
-        def initialize(raw, sets:, kind:, validation:, origin: nil)
+        def initialize(raw, sets:, kind:, validation:, origin: nil, licences: {})
             @raw = Util.deep_freeze(raw)
+            @recommended_is_fallback = raw["recommended_is_fallback"]
+            @source_records = Array(raw["source_records"]).map { |r| SourceRecord.new(r, licences: licences) }.freeze
             @origin = origin
             @station_id = raw["station_id"]
             @name = raw["name"]

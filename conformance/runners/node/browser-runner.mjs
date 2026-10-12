@@ -130,7 +130,7 @@ if (loaded.isNodeVisible) {
 }
 const version = loaded.version;
 
-out({ hello: { runner: "typescript-browser", version, origin, features: ["fetch", "json", "eager", "stream"] } });
+out({ hello: { runner: "typescript-browser", version, origin, features: ["fetch", "json", "eager", "stream", "predict", "localtime_module", "localtime"] } });
 
 let pageGone = null;
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });

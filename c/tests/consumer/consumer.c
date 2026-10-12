@@ -12,8 +12,8 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "usage: consumer FIXTURE.jsonl CACHE_DIR FETCH(0|1)\n");
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr, "usage: consumer FIXTURE.jsonl CACHE_DIR FETCH(0|1) [PREDICTION_STATION_ID]\n");
         return 2;
     }
     int fetch = strcmp(argv[3], "1") == 0;
@@ -29,7 +29,25 @@ int main(int argc, char **argv) {
         return 1;
     }
     size_t stations = otc_release_station_count(rel);
+    if (argc == 5) {
+        otc_station_t *station = NULL;
+        otc_predict_opts prediction;
+        otc_prediction_info info;
+        otc_height_t point;
+        const int64_t t = INT64_C(946684800);
+        otc_predict_opts_init(&prediction);
+        otc_prediction_info_init(&info);
+        prediction.info = &info;
+        s = otc_require_station(rel, argv[4], &station);
+        if (s != OTC_OK) return 1;
+        s = otc_heights_at(rel, station, &prediction, &t, 1, &point);
+        if (s != OTC_OK || point.t != t || !info.station_id || strcmp(info.station_id,argv[4])) return 1;
+        printf("installed public C prediction %s %.17g\n",info.station_id,point.height_m);
+        otc_station_free(station);
+        otc_prediction_info_clear(&info);
+    }
     otc_close(rel);
+
     if (stations == 0) {
         fprintf(stderr, "the fixture has no stations\n");
         return 1;

@@ -37,6 +37,7 @@ export interface NodeMod {
     nodePlatform(): Platform;
     nodePath: NodePath;
     sha256Sync(bytes: Uint8Array): string;
+    createSha256State(): { update(bytes: Uint8Array): void; digest(): string };
     gunzipSync(bytes: Uint8Array): Uint8Array;
     defaultCacheRoot(): string;
     writeAtomicSync(file: string, bytes: Uint8Array): void;

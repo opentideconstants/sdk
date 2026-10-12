@@ -2,6 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as otc from "../dist/index.js";
+import { Session } from "node:inspector";
+import { releaseFromJsonl } from "../dist/loader.js";
 
 test("datestamps order by date, then counter", async () => {
     const { compareDatestamps } = await import("../dist/constants.js");
@@ -291,11 +293,11 @@ test("T15: prune(null) is not a raw TypeError, and prune on a read-only release 
 test("T41/T18/T95/D4: usableIndex rejects out-of-bounds, unordered, wrongly folded, wrongly kinded and unresolved entries", async () => {
     const { usableIndex } = await import("../dist/release.js");
     const set = (o) => ({ set_id: "S/a", source: "x", source_type: "gauge", quantity: "water_level", qc_status: "ok",
-        convention_id: "c1", licence_id: "l1", constituents: ["M2"], ...o });
+        fallback: null, current_bins: [], convention_id: "c1", licence_id: "l1", constituents: ["M2"], ...o });
     const entry = (o) => ({ offset: 0, length: 10, station_id: "S", status: "active", name: "Ålesund", name_folded: "alesund",
         country: null, type: "reference", lat: 1, lon: 2, kind: "tide", aliases: {}, reference_station_id: null,
-        offsets_licence_id: null, recommended_set_id: "S/a", sets: [set({})], ...o });
-    const doc = (stations) => ({ index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations });
+        offsets_licence_id: null, recommended_set_id: "S/a", sets: [set({})], current_offsets: [], subordinate_offsets: null, ...o });
+    const doc = (stations) => ({ discovery_index_version: 1, index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations });
     const use = (stations) => usableIndex(doc(stations), "20991231", "ab", 100, new Set(["c1"]), new Set(["l1"]));
     assert.ok(use([entry({})]), "the good index is usable");
     assert.equal(use([entry({ offset: 95 })]), null, "offset + length past jsonl_size");
@@ -347,6 +349,52 @@ test("R2-008: attribution never drops a licence it cannot find: invalid_release,
 });
 
 const GOOD = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+
+function readFixtureLine(offset, length) {
+    const fd = fs.openSync(path.join(GOOD, "OTC_20991231.2.jsonl"), "r");
+    try {
+        const bytes = new Uint8Array(length);
+        const count = fs.readSync(fd, bytes, 0, length, offset);
+        return bytes.subarray(0, count);
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+function retainedFixture(reader) {
+    const jsonl = Uint8Array.from(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.jsonl")));
+    const meta = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.meta.json"));
+    return {
+        bytes: new WeakRef(jsonl),
+        release: releaseFromJsonl(meta, jsonl, { eager: false, files: [], reader }),
+    };
+}
+
+async function collectInspectorGarbage() {
+    const session = new Session();
+    session.connect();
+    try {
+        await new Promise(setImmediate);
+        await new Promise((resolve, reject) => {
+            session.post("HeapProfiler.collectGarbage", (error) => error ? reject(error) : resolve());
+        });
+    } finally {
+        session.disconnect();
+    }
+}
+
+for (const [name, reader, retained] of [["positional file reader", readFixtureLine, false], ["byte-backed browser fallback", null, true]]) {
+    test(`stream ${name} retains only its required input bytes`, async () => {
+        const { release, bytes } = retainedFixture(reader);
+        await collectInspectorGarbage();
+        assert.equal(bytes.deref() !== undefined, retained, "whole JSONL input retention");
+        const documents = fs.readFileSync(path.join(GOOD, "OTC_20991231.2.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+        for (const document of documents) {
+            const station = document.status === "removed" ? release.tombstone(document.station_id) : release.station(document.station_id);
+            assert.deepEqual(station.raw, document, "on-demand record and provenance remain complete after GC");
+        }
+    });
+}
 
 test("T21: iterStations checks its filters when called, not at the first next()", async () => {
     const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.jsonl"), cacheDir: tmpdir() });
@@ -872,8 +920,8 @@ test("CR2 DR9 / DR10: usableIndex rejects an entry with no byte for the previous
     const { usableIndex } = await import("../dist/release.js");
     const entry = (o) => ({ offset: 0, length: 10, station_id: "S", status: "removed", name: null, name_folded: null,
         country: null, type: null, lat: null, lon: null, kind: null, aliases: {}, reference_station_id: null,
-        offsets_licence_id: null, recommended_set_id: null, sets: [], ...o });
-    const doc = (stations, o) => ({ index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations, ...o });
+        offsets_licence_id: null, recommended_set_id: null, sets: [], current_offsets: [], subordinate_offsets: null, ...o });
+    const doc = (stations, o) => ({ discovery_index_version: 1, index_version: 1, datestamp: "20991231", jsonl: "OTC_20991231.jsonl", jsonl_sha256: "ab", jsonl_size: 100, stations, ...o });
     const use = (stations, o = {}) => usableIndex(doc(stations, o), "20991231", "ab", 100, new Set(), new Set());
     assert.ok(use([entry({}), entry({ station_id: "T", offset: 11 })]), "the next line starts after the line end");
     assert.equal(use([entry({}), entry({ station_id: "T", offset: 10 })]), null, "no byte for the line end");

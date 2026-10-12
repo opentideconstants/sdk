@@ -139,4 +139,69 @@ class OpenTideConstants
     class InvalidArgumentError < Error
         CODE = "invalid_argument".freeze
     end
+    class NoConstantsError < Error
+        CODE = "no_constants".freeze
+    end
+    class QuantityMismatchError < Error
+        CODE = "quantity_mismatch".freeze
+    end
+    class UnsupportedConventionError < Error
+        CODE = "unsupported_convention".freeze
+    end
+    class NoAstroTableError < Error
+        CODE = "no_astro_table".freeze
+    end
+    class UnsupportedConstituentError < Error
+        CODE = "unsupported_constituent".freeze
+        attr_reader :constituent
+        def initialize(message = nil, constituent: nil)
+            super(message)
+            @constituent = constituent
+        end
+    end
+    class TimeOutOfRangeError < Error
+        CODE = "time_out_of_range".freeze
+        attr_reader :first_year, :last_year
+        def initialize(message = nil, first_year: nil, last_year: nil)
+            super(message)
+            @first_year = first_year
+            @last_year = last_year
+        end
+    end
+    class DatumUnavailableError < Error
+        CODE = "datum_unavailable".freeze
+        attr_reader :missing
+        def initialize(message = nil, missing: nil)
+            super(message)
+            @missing = missing
+        end
+    end
+    class BinNotFoundError < Error
+        CODE = "bin_not_found".freeze
+    end
+    class ExtremesOnlyError < Error
+        CODE = "extremes_only".freeze
+    end
+    class LocalTimeUnavailableError < Error
+        CODE = "local_time_unavailable".freeze
+    end
+    class UnknownTimeZoneError < Error
+        CODE = "unknown_time_zone".freeze
+        attr_reader :zone
+        def initialize(message = nil, zone: nil)
+            super(message)
+            @zone = zone
+        end
+    end
+    class ReferenceUnavailableError < Error
+        CODE = "reference_unavailable".freeze
+        attr_reader :reference_station_id
+        def initialize(message = nil, reference_station_id: nil)
+            super(message)
+            @reference_station_id = reference_station_id
+        end
+    end
+    class HistoricalOffsetsExcludedError < Error
+        CODE = "historical_offsets_excluded".freeze
+    end
 end

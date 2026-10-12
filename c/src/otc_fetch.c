@@ -444,6 +444,10 @@ static void cache_open_options(const fctx *c, otc_open_options *oo)
         oo->require_checksum = c->oo->require_checksum;
         oo->log_fn = c->oo->log_fn;
         oo->log_user_data = c->oo->log_user_data;
+        if (c->oo->struct_size >= sizeof *c->oo) {
+            oo->commercial_basis = c->oo->commercial_basis;
+            oo->historical_offsets_policy = c->oo->historical_offsets_policy;
+        }
         oo->commercial_only = OTC__COMMERCIAL_ONLY(c->oo);   /* the caller's, when its struct has it (K-NC DR106) */
     }
     oo->error = c->err;
@@ -2183,7 +2187,13 @@ static void write_stream_index(fctx *c, const char *ds, const otc_release *rel)
     d = rel_dir(c, ds);
     p = d ? path2(d, "index-v1.json") : NULL;
     doc = p ? otc__index_doc(rel, sha, SDK_ID) : NULL;
-    if (doc) txt = cJSON_PrintUnformatted(doc);
+    if (doc) {
+        size_t needed = 0;
+        if (otc__copy_json(doc, NULL, 0, &needed) == OTC_OK && needed) {
+            txt = (char *)cJSON_malloc(needed);
+            if (txt && otc__copy_json(doc, txt, needed, &needed) != OTC_OK) { cJSON_free(txt); txt = NULL; }
+        }
+    }
     if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
         logf_(c, 2, "cannot write the stream index %s", p ? p : ds);
         if (c->err) otc_error_init(c->err);
@@ -2879,6 +2889,7 @@ otc_status otc_fetch_open(const otc_fetch_options *fopts, const char *release, c
     /* a struct from before K-NC (no commercial_only) is still taken (spec 6.4, K-NC DR106) */
     if (st == OTC_OK && oopts && oopts->struct_size < OTC__OPEN_OPTIONS_MIN)
         st = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "otc_open_options: struct_size is too small");
+    if (st == OTC_OK) st = otc__open_policy_options(oopts, c.err);
     if (st == OTC_OK) c.oo = oopts;   /* require_checksum and log_fn apply to the open of the cached file (C25) */
     if (st == OTC_OK) st = resolve(&c, release, &rel, &lf, &ds, &last, msg, sizeof msg, &pfiles, &n_pfiles);
     if (st == OTC_OK) {

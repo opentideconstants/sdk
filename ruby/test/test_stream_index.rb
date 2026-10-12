@@ -80,7 +80,8 @@ class StreamIndexTest < Minitest::Test
                 c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
                 # Rebuilt at open: the index on disk is the one a fresh build writes.
                 assert_equal built, JSON.parse(File.read(index_path(cache))), "the stale index was not rebuilt at open"
-                assert_equal 20, c.stations.size
+                assert_equal 20, c.release.station_count
+                assert_equal 18, c.stations.size
                 assert(c.stations.all? { |s| s.is_a?(OTC::Station) })
             ensure
                 c&.close
