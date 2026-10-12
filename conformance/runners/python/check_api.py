@@ -15,13 +15,16 @@ constructor. Python-specific mappings used here:
 - base_url defaults to None, which means OPENTIDECONSTANTS_BASE_URL or DEFAULT_BASE_URL (spec §4.2);
 - an error class's fields are the keyword-only arguments of its constructor.
 
-No phase 2 name may exist yet: no reserved operation on the client, the Release or any public class, no
-Astro, and no reserved error class or code. After the check the script runs its own mutation self-test
-(each mutation of the package must be caught); --no-self-test skips it.
+A name in api.json pending_port.python (prediction spec 5, not ported to Python yet) is not required and
+must not exist: no pending object's class, no pending member on its object (nor on the client, for a member
+forwarded to it), no pending enum's class, and no pending error class or code. Every pending name must be a
+manifest name that applies to Python. After the check the script runs its own mutation self-test (each
+mutation of the package or of the manifest must be caught); --no-self-test skips it.
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import enum
 import inspect
 import json
@@ -68,10 +71,41 @@ def init_fields(cls):
     return {p.name for p in params if p.kind == inspect.Parameter.KEYWORD_ONLY}
 
 
+def pending_names(api, problems):
+    """The names api.json pending_port.python lists, as (objects, members, enums, errors): members are
+    (object, name) pairs. A pending name that is not a manifest name for Python is a problem."""
+    pend = api.get("pending_port", {}).get("python")
+    if not isinstance(pend, dict):
+        problems.append("api.json has no pending_port.python")
+        return set(), set(), set(), set()
+    unknown = sorted(set(pend) - {"objects", "members", "enums", "errors"})
+    if unknown:
+        problems.append(f"pending_port.python: unknown key(s) {unknown}")
+    objects = set(pend.get("objects", []))
+    members = set()
+    for o in sorted(objects - set(api["objects"])):
+        problems.append(f"pending_port.python: object {o} is not a manifest object")
+    for qn in pend.get("members", []):
+        oname, _, name = qn.partition(".")
+        ms = [m for m in api["objects"].get(oname, {}).get("members", []) if m.get("name") == name]
+        if not ms or "python" not in ms[0].get("languages", ["python"]):
+            problems.append(f"pending_port.python: member {qn} is not a manifest member for Python")
+        members.add((oname, name))
+    enums = set(pend.get("enums", []))
+    for e in sorted(enums - set(api["enums"])):
+        problems.append(f"pending_port.python: enum {e} is not a manifest enum")
+    errors = set(pend.get("errors", []))
+    py_codes = {e["code"] for e in api["errors"] if e["class"] and "python" in e["languages"]}
+    for c in sorted(errors - py_codes):
+        problems.append(f"pending_port.python: error {c} is not a manifest error with a Python class")
+    return objects, members, enums, errors
+
+
 def check(otc, api):
     """The problems of the package otc against the manifest, and the number of public names."""
     problems = []
     expected_all = {"__version__"}
+    pend_objects, pend_members, pend_enums, pend_errors = pending_names(api, problems)
 
     # errors
     base_name = api["error_base_class"]["python"]
@@ -80,7 +114,7 @@ def check(otc, api):
     if base is None:
         problems.append(f"missing base error class {base_name}")
     for e in api["errors"]:
-        if e["class"] is None or "python" not in e["languages"]:
+        if e["class"] is None or "python" not in e["languages"] or e["code"] in pend_errors:
             continue
         expected_all.add(e["class"])
         cls = getattr(otc, e["class"], None)
@@ -97,7 +131,8 @@ def check(otc, api):
             problems.append(f"{e['class']}: cannot read its constructor's signature")
         elif fields != want_fields:
             problems.append(f"{e['class']} fields: missing {sorted(want_fields - fields)}, extra {sorted(fields - want_fields)}")
-    names_by_code = {e["code"]: e["class"] for e in api["errors"] if e["class"] and "python" in e["languages"]}
+    names_by_code = {e["code"]: e["class"] for e in api["errors"]
+                     if e["class"] and "python" in e["languages"] and e["code"] not in pend_errors}
     for n in dir(otc):
         c = getattr(otc, n)
         if inspect.isclass(c) and base is not None and issubclass(c, base) and c is not base:
@@ -106,6 +141,8 @@ def check(otc, api):
 
     # enums
     for ename, values in api["enums"].items():
+        if ename in pend_enums:
+            continue
         cname = ENUM_CLASS.get(ename, camel(ename))
         expected_all.add(cname)
         cls = getattr(otc, cname, None)
@@ -132,15 +169,18 @@ def check(otc, api):
 
     # objects
     filters = api["filters"]
-    forwarded = [m for m in api["objects"]["Release"]["members"] if m.get("forwarded_to_client")]
+    forwarded = [m for m in api["objects"]["Release"]["members"]
+                 if m.get("forwarded_to_client") and ("Release", m["name"]) not in pend_members]
     for oname, obj in api["objects"].items():
+        if oname in pend_objects:
+            continue
         cname = CLASS_NAME.get(oname, oname)
         expected_all.add(cname)
         cls = getattr(otc, cname, None)
         if cls is None:
             problems.append(f"missing class {cname}")
             continue
-        members = list(obj["members"])
+        members = [m for m in obj["members"] if (oname, m["name"]) not in pend_members]
         if oname == "Client":
             members += forwarded
         want = set()
@@ -197,26 +237,33 @@ def check(otc, api):
         if extra:
             problems.append(f"{cname}: extra public names {sorted(extra)}")
 
-    # reserved phase 2 names must not exist yet: not on the client, the Release or any public class (an
-    # operation of the Client is forwarded from the Release), not as a module attribute, and no class of
-    # another reserved object (Astro)
+    # pending names (pending_port.python) must not exist yet: a pending object's class, a pending member on its
+    # object (and on the client, for a member forwarded to it), a pending enum's class, a pending error class or
+    # an error class with a pending code
     public_classes = [getattr(otc, n) for n in dir(otc) if not n.startswith("_") and inspect.isclass(getattr(otc, n))]
-    for op in api["reserved_phase2"]["operations"]:
-        if op["object"] != "Client" and hasattr(otc, op["object"]):
-            problems.append(f"{op['object']}: reserved for phase 2")
-        if hasattr(otc, op["name"]):
-            problems.append(f"{op['name']}: reserved for phase 2")
-        for cls in public_classes:
-            if op["name"] in public_names(cls):
-                problems.append(f"{cls.__name__}.{op['name']}: reserved for phase 2")
-    if hasattr(otc, "predict"):
-        problems.append("predict is reserved for phase 2")
-    for e in api["reserved_phase2"].get("errors", []):
+    for oname in sorted(pend_objects):
+        if hasattr(otc, CLASS_NAME.get(oname, oname)):
+            problems.append(f"{CLASS_NAME.get(oname, oname)}: pending for Python (pending_port), must not exist yet")
+    release_forwarded = {m["name"] for m in api["objects"]["Release"]["members"] if m.get("forwarded_to_client")}
+    for oname, name in sorted(pend_members):
+        owners = [oname] + (["Client"] if oname == "Release" and name in release_forwarded else [])
+        for owner in owners:
+            cls = getattr(otc, CLASS_NAME.get(owner, owner), None)
+            if cls is not None and pyname(name) in public_names(cls):
+                problems.append(f"{CLASS_NAME.get(owner, owner)}.{pyname(name)}: pending for Python (pending_port), "
+                                f"must not exist yet")
+    for ename in sorted(pend_enums):
+        cname = ENUM_CLASS.get(ename, camel(ename))
+        if hasattr(otc, cname):
+            problems.append(f"{cname}: pending for Python (pending_port), must not exist yet")
+    for e in api["errors"]:
+        if e["code"] not in pend_errors or not e["class"]:
+            continue
         if hasattr(otc, e["class"]):
-            problems.append(f"{e['class']}: reserved for phase 2")
+            problems.append(f"{e['class']}: pending for Python (pending_port), must not exist yet")
         for cls in public_classes:
             if base is not None and issubclass(cls, base) and getattr(cls, "code", None) == e["code"]:
-                problems.append(f"{cls.__name__}: has the phase 2 code {e['code']!r}")
+                problems.append(f"{cls.__name__}: has the pending code {e['code']!r}")
 
     # __all__
     got_all = set(otc.__all__)
@@ -265,19 +312,31 @@ def _stations_no_source_type(self, *, country=None, type=None, kind=None, source
     return ()
 
 
-def _heights(self, station, from_, to, step_s, datum):
+def _heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None):
     return ()
+
+
+def _pending(lang_fn):
+    """A manifest mutation of pending_port.python (on a copy)."""
+    def f(api):
+        api = copy.deepcopy(api)
+        lang_fn(api["pending_port"]["python"])
+        return api
+    return f
 
 
 MUTATIONS = [
     # (name, apply(otc) -> undo, a substring of the problem it must cause)
-    ("reserved-op-on-release", lambda o: _set(o.Release, "heights", _heights), "Release.heights: reserved"),
-    ("reserved-op-on-station", lambda o: _set(o.Station, "extremes", _heights), "Station.extremes: reserved"),
-    ("reserved-module-function", lambda o: _set(o, "node_factor", lambda *a: None), "node_factor: reserved"),
-    ("reserved-astro-object", lambda o: _set(o, "Astro", type("Astro", (), {})), "Astro: reserved"),
-    ("reserved-error-class", lambda o: _set(o, "UnsupportedConventionError",
-                                            _error_class(o, "UnsupportedConventionError", "unsupported_convention")),
-     "UnsupportedConventionError: reserved"),
+    ("pending-op-on-release", lambda o: _set(o.Release, "heights", _heights), "Release.heights: pending"),
+    ("pending-op-on-client", lambda o: _set(o.OpenTideConstants, "extremes", _heights),
+     "OpenTideConstants.extremes: pending"),
+    ("pending-object", lambda o: _set(o, "AstroTable", type("AstroTable", (), {})), "AstroTable: pending"),
+    ("pending-enum", lambda o: _set(o, "ExtremeType", type("ExtremeType", (), {})), "ExtremeType: pending"),
+    ("pending-error-class", lambda o: _set(o, "UnsupportedConventionError",
+                                           _error_class(o, "UnsupportedConventionError", "unsupported_convention")),
+     "UnsupportedConventionError: pending"),
+    ("pending-error-code", lambda o: _set(o, "NoConstants", _error_class(o, "NoConstants", "no_constants")),
+     "NoConstants: has the pending code 'no_constants'"),
     ("wrong-default", lambda o: _set(o.OpenTideConstants, "prune", _prune_keep_4), "prune(keep): default 4"),
     ("unchecked-filter", lambda o: _set(o.Release, "stations", _stations_no_source_type), "Release.stations: arguments"),
     ("no-SUPPORTED_FORMAT_VERSION", lambda o: _del(o, "SUPPORTED_FORMAT_VERSION"), "missing constant SUPPORTED_FORMAT_VERSION"),
@@ -293,10 +352,60 @@ MUTATIONS = [
 ]
 
 
+API_MUTATIONS = [
+    # (name, manifest mutation, a substring of the problem it must cause)
+    ("pending-member-dropped", _pending(lambda p: p["members"].remove("Release.heights")), "Release: missing method heights"),
+    ("pending-forwarded-dropped", _pending(lambda p: p["members"].remove("Release.extremes")),
+     "OpenTideConstants: missing method extremes"),
+    ("pending-object-dropped", _pending(lambda p: p["objects"].remove("AstroTable")), "missing class AstroTable"),
+    ("pending-enum-dropped", _pending(lambda p: p["enums"].remove("extreme_type")), "missing (str, Enum) class ExtremeType"),
+    ("pending-error-dropped", _pending(lambda p: p["errors"].remove("no_constants")), "missing error class NoConstantsError"),
+    ("pending-unknown-member", _pending(lambda p: p["members"].append("Release.frobnicate")),
+     "pending_port.python: member Release.frobnicate is not a manifest member"),
+    ("pending-unknown-object", _pending(lambda p: p["objects"].append("Astro")), "pending_port.python: object Astro"),
+    ("pending-unknown-error", _pending(lambda p: p["errors"].append("not_found")), "pending_port.python: error not_found"),
+    ("pending-unknown-key", _pending(lambda p: p.__setitem__("functions", [])), "pending_port.python: unknown key(s)"),
+]
+
+
+# The pending name each pending mutation needs: once a port has removed it from pending_port.python (the SDK has the
+# name now), that mutation does not apply and is skipped.
+NEEDS_PENDING = {
+    "pending-op-on-release": ("members", "Release.heights"), "pending-op-on-client": ("members", "Release.extremes"),
+    "pending-object": ("objects", "AstroTable"), "pending-enum": ("enums", "extreme_type"),
+    "pending-error-class": ("errors", "unsupported_convention"), "pending-error-code": ("errors", "no_constants"),
+    "pending-member-dropped": ("members", "Release.heights"), "pending-forwarded-dropped": ("members", "Release.extremes"),
+    "pending-object-dropped": ("objects", "AstroTable"), "pending-enum-dropped": ("enums", "extreme_type"),
+    "pending-error-dropped": ("errors", "no_constants"),
+}
+
+
+def applicable(name, api):
+    kind, pname = NEEDS_PENDING.get(name, (None, None))
+    return kind is None or pname in api.get("pending_port", {}).get("python", {}).get(kind, [])
+
+
 def self_test(otc, api):
+    """The failures of the self-test, and the number of mutations that do not apply (their name is ported)."""
     base, _ = check(otc, api)
     failures = []
+    skipped = 0
+    for name, mutate, expect in API_MUTATIONS:
+        if not applicable(name, api):
+            skipped += 1
+            continue
+        try:
+            got, _ = check(otc, mutate(api))
+        except Exception as e:  # a crash is a failure of the checker
+            failures.append(f"{name}: the check crashed: {type(e).__name__}: {e}")
+            continue
+        new = [p for p in got if p not in base]
+        if not any(expect in p for p in new):
+            failures.append(f"{name}: not caught (wanted a problem with {expect!r}; new problems {new})")
     for name, apply, expect in MUTATIONS:
+        if not applicable(name, api):
+            skipped += 1
+            continue
         undo = apply(otc)
         try:
             got, _ = check(otc, api)
@@ -311,7 +420,7 @@ def self_test(otc, api):
     after, _ = check(otc, api)
     if after != base:
         failures.append(f"a mutation was not undone: {sorted(set(after) ^ set(base))}")
-    return failures
+    return failures, skipped
 
 
 def main():
@@ -330,10 +439,12 @@ def main():
     print(f"API manifest check (suite {api['suite_version']}): {n_names} public names, {len(problems)} problems")
     rc = 1 if problems else 0
     if not a.no_self_test:
-        failures = self_test(otc, api)
+        failures, skipped = self_test(otc, api)
         for f in failures:
             print("SELF-TEST", f)
-        print(f"self-test: {len(MUTATIONS) - len(failures)} of {len(MUTATIONS)} mutations caught")
+        n = len(MUTATIONS) + len(API_MUTATIONS) - skipped
+        print(f"self-test: {n - len(failures)} of {n} mutations caught"
+              + (f" ({skipped} not applicable: their name is no longer pending)" if skipped else ""))
         rc = rc or (1 if failures else 0)
     return rc
 

@@ -51,10 +51,34 @@ FIXTURES = HERE / "fixtures"
 CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy",
+            "predict", "localtime_module", "localtime", "tzdir_env"]
 # The features of Python, Ruby and TypeScript on Node. require_checksum is the C open option (otc_open_options), which
 # no other SDK has (CR2 DR34). https_proxy: a proxy reached over TLS (CR2 DR39); Ruby's Net::HTTP has none.
 LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
+# Prediction (prediction spec 6.5): predict (prediction is built), localtime_module (the local-time module is built),
+# localtime (zone rules are usable at run time); tzdir_env (C only: otc_tz_open reads TZDIR).
+PREDICT_FEATURES = ["predict", "localtime_module", "localtime"]
+# A feature that implies another: zone rules are usable only when the local-time module is built, so a case or an
+# expect_if_missing that names localtime also covers localtime_module, and a runner may not claim one without the other.
+IMPLIED = {"localtime": {"localtime_module"}}
+# Runners the case-level runners filter never skips: the RED runners, which must fail every case (README "null runner").
+RED_RUNNERS = {"null", "almost"}
+
+
+def with_implied(features):
+    """The features and every feature they imply (IMPLIED)."""
+    out = set(features)
+    for f in list(out):
+        out |= IMPLIED.get(f, set())
+    return out
+
+
+def runner_skips(case, runner, profile):
+    """Whether a case's runners filter (a list of runner or profile names) leaves this runner out. The RED runners
+    (null, almost) run every case."""
+    names = case.get("runners")
+    return names is not None and runner not in RED_RUNNERS and runner not in names and profile not in names
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
@@ -88,7 +112,23 @@ OPS = {
     "provenance": ["station_id", "set_id"], "set_validation": ["station_id", "set_id"],
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
+    # prediction (prediction spec 5.2; README "Operations")
+    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id"],
+    "heights_at": ["station_id", "times", "datum", "set_id"],
+    "extremes": ["station_id", "start", "stop", "datum", "set_id"],
+    "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id"],
+    "current_events": ["station_id", "start", "stop", "bin_number", "set_id"],
+    "datums": ["station_id", "set_id", "all_sets"], "ranges": ["station_id", "set_id"],
+    "astro_table": ["id"],
+    "equilibrium_argument": ["id", "name", "at"], "node_factor": ["id", "name", "at"],
+    "equilibrium_for_year": ["id", "name", "year"], "node_factor_for_year": ["id", "name", "year"],
+    "valid_range": ["id"],
+    "to_local": ["tz"],
 }
+# The ops that need prediction built (README "Hello": predict), and to_local, which also needs the local-time module
+# and usable zone rules.
+PREDICT_OPS = {"heights", "heights_at", "extremes", "currents", "current_events", "astro_table", "equilibrium_argument",
+               "node_factor", "equilibrium_for_year", "node_factor_for_year", "valid_range", "to_local"}
 PLACEHOLDERS = {"fixtures", "server", "server_alias", "server_tls", "tls_ca", "proxy", "tmp", "cache"}
 # The fields of each driver action (README "Driver steps"): {action: (required {field: type}, optional {field: type})}.
 # Any other field is a typo, and a typo of an assertion field (count, absent) would make the step assert nothing.
@@ -118,12 +158,47 @@ REQUEST_SOURCES = {"server", "tripwire", "proxy", "any"}
 SERVER_ALIAS = "otc-fixture.invalid"
 # The features each SDK must claim (spec: Python, Ruby and TypeScript on Node have every feature).
 # The profile is the hello's "runner" name, or --profile.
+# Prediction spec 6.5: the base profiles have predict, localtime_module and localtime (C also tzdir_env); the -no-tz
+# profiles run Python without tzdata and Ruby without tzinfo; c-no-localtime is C with -DOTC_WITH_LOCALTIME=OFF (and C
+# on Windows); c-no-predict is C with -DOTC_WITH_PREDICT=OFF.
+_C = ["fs", "stream", "require_checksum"]
 PROFILES = {
-    "python": LANG_FEATURES + ["https_proxy"], "ruby": LANG_FEATURES, "typescript": LANG_FEATURES + ["https_proxy"],
-    "typescript-browser": ["fetch", "json", "eager", "stream"],
-    "c": ["fs", "stream", "require_checksum"], "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"],
+    "python": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES, "ruby": LANG_FEATURES + PREDICT_FEATURES,
+    "typescript": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES,
+    "typescript-browser": ["fetch", "json", "eager", "stream"] + PREDICT_FEATURES,
+    "c": _C + PREDICT_FEATURES + ["tzdir_env"],
+    "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"] + PREDICT_FEATURES + ["tzdir_env"],
+    "python-no-tz": LANG_FEATURES + ["https_proxy", "predict", "localtime_module"],
+    "ruby-no-tz": LANG_FEATURES + ["predict", "localtime_module"],
+    "c-no-localtime": _C + ["predict"],
+    "c-no-predict": list(_C),
     "none": [],
 }
+# Profile features an SDK does not have yet (the driver's side of api.json pending_port): they are not required, and a
+# runner must not claim them. A port removes its profiles' entries in the change that makes its runner claim them.
+PENDING_FEATURES = {
+    "python": PREDICT_FEATURES, "ruby": PREDICT_FEATURES, "typescript": PREDICT_FEATURES,
+    "typescript-browser": PREDICT_FEATURES, "c": PREDICT_FEATURES + ["tzdir_env"],
+    "c-fetch": PREDICT_FEATURES + ["tzdir_env"], "python-no-tz": ["predict", "localtime_module"],
+    "ruby-no-tz": ["predict", "localtime_module"], "c-no-localtime": ["predict"],
+}
+
+
+def profile_problem(profile, features):
+    """The handshake problem of a runner that claims these features under this profile, or None: a required feature it
+    lacks, or a feature that is still pending for the profile (PENDING_FEATURES)."""
+    pending = set(PENDING_FEATURES.get(profile, []))
+    lacking = sorted(set(PROFILES[profile]) - pending - set(features))
+    if lacking:
+        return f"(profile {profile}) does not claim the required features {lacking}; it claims {sorted(features)}"
+    unmet = sorted(f"{f} without {g}" for f in set(features) for g in IMPLIED.get(f, set()) if g not in features)
+    if unmet:
+        return f"(profile {profile}) claims {', '.join(unmet)}, which it implies"
+    early = sorted(pending & set(features))
+    if early:
+        return (f"(profile {profile}) claims {early}, which driver.py PENDING_FEATURES lists as pending for {profile}: "
+                f"remove them there in the change that ports them")
+    return None
 
 
 class CaseError(Exception):
@@ -134,7 +209,8 @@ class CaseError(Exception):
 
 EXPECTED_FAILURES = HERE / "expected-failures.json"
 # The runner names an entry may list: the profiles (a hello's "runner"), and "cross" for a --cross run.
-XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "c", "c-fetch", "cross"}
+XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "c", "c-fetch", "python-no-tz", "ruby-no-tz",
+              "c-no-localtime", "c-no-predict", "cross"}
 # The --cross names the CI and the gates use; a cross entry's case pattern must match one of these expansions.
 CROSS_NAMES = ["python", "ruby", "typescript", "c"]
 
@@ -502,6 +578,9 @@ def structure_problems(c):
             out.append(f"{cid}: {k} must be a list of strings")
     if "roles" in c and not (isinstance(c["roles"], dict) and all(isinstance(v, list) for v in c["roles"].values())):
         out.append(f"{cid}: roles must be an object of feature lists")
+    if "runners" in c and not (isinstance(c["runners"], list) and c["runners"]
+                               and all(isinstance(r, str) for r in c["runners"])):
+        out.append(f"{cid}: runners must be a non-empty list of runner names")
     return out
 
 
@@ -515,10 +594,14 @@ def api_errors(api_path):
     """op name -> the error codes api.json lists for it, from the members of the objects a runner op calls."""
     api = json.loads(Path(api_path).read_text(encoding="utf-8"))
     out = {}
-    for obj in ("Client", "Release", "Station", "ConstantSet"):
+    # AstroTable: the astro ops; HeightSeries: to_local (every result kind has the same to_local)
+    for obj in ("Client", "Release", "Station", "ConstantSet", "AstroTable", "HeightSeries"):
         for m in api["objects"][obj]["members"]:
             if "errors" in m:
                 out.setdefault(m["name"], set()).update(m["errors"])
+    # an astro op first gets its table with astro_table(id) (README "Operations"), so it may also give that op's errors
+    for m in api["objects"]["AstroTable"]["members"]:
+        out.setdefault(m["name"], set()).update(out.get("astro_table", set()))
     return out
 
 
@@ -582,6 +665,10 @@ def step_needs(st):
         need.add("fetch")
     if op == "download":
         need.add("fs")
+    if op in PREDICT_OPS:
+        need.add("predict")
+    if op == "to_local":
+        need |= {"localtime_module", "localtime"}
     return need
 
 
@@ -589,14 +676,14 @@ def requires_problems(c):
     """K55/K56: every feature a runner step uses must be in the case's requires (for its role), or be covered by an
     expect_if_missing of that step or an earlier one (a runner without the feature stops there)."""
     out = []
-    base = set(c.get("requires", []))
+    base = with_implied(c.get("requires", []))
     roles = c.get("roles") or {"main": []}
-    covered = {r: base | set(f) for r, f in roles.items()}
+    covered = {r: base | with_implied(f) for r, f in roles.items()}
     for i, st in enumerate(c.get("steps", [])):
         if "op" not in st or "matrix_open" in st:   # a matrix_open step becomes the variant's open (expand)
             continue
         who = st.get("as", "main") if c.get("roles") else "main"
-        eim = set(st.get("expect_if_missing") or {})
+        eim = with_implied(st.get("expect_if_missing") or {})
         for role in ([who] if isinstance(who, str) else who):
             if role not in covered:
                 continue
@@ -766,6 +853,11 @@ def check_cases(cases):
                     problems.append(f"{where}: unknown feature {f!r}")
         for exp in [c.get("open_expect")] if isinstance(c.get("open_expect"), dict) else []:
             problems += [f"{cid} open_expect: {p}" for p in tolerance_problems(exp)]
+        for r in c.get("runners") or []:
+            if r not in XF_RUNNERS - {"cross"}:
+                problems.append(f"{cid}: runners names an unknown runner {r!r} (one of {sorted(XF_RUNNERS - {'cross'})})")
+        if c.get("runners") is not None and c.get("roles"):
+            problems.append(f"{cid}: a cross-SDK case (roles) cannot have runners")
         if compared == 0 and not c.get("matrix"):
             problems.append(f"{cid}: no runner step with an expectation")
         for f in c.get("requires", []):
@@ -1496,10 +1588,9 @@ def main():
             return 2
         features = set(hello["features"])
         profile = a.profile or (hello.get("runner") if hello.get("runner") in PROFILES else "none")
-        lacking = sorted(set(PROFILES[profile]) - features)
-        if lacking:
-            print(f"runner {hello.get('runner')!r} (profile {profile}) does not claim the required features {lacking}; "
-                  f"it claims {sorted(features)}", file=sys.stderr)
+        problem = profile_problem(profile, features)
+        if problem:
+            print(f"runner {hello.get('runner')!r} {problem}", file=sys.stderr)
             return 2
         hellos[name] = (cmd, features, hello, profile)
     if a.cross:
@@ -1549,6 +1640,12 @@ def main():
     try:
         for c in cases:
             missing = [] if a.cross else [f for f in c.get("requires", []) if f not in features]
+            if not a.cross and not missing and runner_skips(c, hello.get("runner"), profile):
+                counts["SKIP"] += 1
+                report.append({"id": c["id"], "status": "SKIP", "runners": c["runners"]})
+                if a.verbose:
+                    print(f"SKIP  {c['id']}  (runners {c['runners']} leave out {hello.get('runner')}, profile {profile})")
+                continue
             if missing:
                 counts["SKIP"] += 1
                 report.append({"id": c["id"], "status": "SKIP", "missing_features": missing})
