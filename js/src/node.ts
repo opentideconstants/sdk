@@ -22,6 +22,11 @@ export function sha256Sync(bytes: Uint8Array): string {
     return createHash("sha256").update(bytes).digest("hex");
 }
 
+function createSha256State(): { update(bytes: Uint8Array): void; digest(): string } {
+    const hash = createHash("sha256");
+    return { update: (bytes) => { hash.update(bytes); }, digest: () => hash.digest("hex") };
+}
+
 export function gunzipSync(bytes: Uint8Array): Uint8Array {
     return zlib.gunzipSync(bytes);
 }
@@ -757,6 +762,6 @@ import(url).catch((e) => {
 
 /** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
 export const nodeApi: NodeMod = {
-    nodePlatform, nodePath, sha256Sync, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
+    nodePlatform, nodePath, sha256Sync, createSha256State, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
     openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeAllInto, runBlocking,
 };

@@ -1,7 +1,13 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { syncBuiltinESMExports } from 'node:module';
 import * as sdk from '../dist/index.js';
+import * as streamLoader from '../dist/loader.js';
+import * as nodeRuntime from '../dist/node.js';
+import { checkBytes } from '../dist/core.js';
 
 const file = process.env.OTC_CORE_NATIVE_JSON;
 const jsonl = process.env.OTC_CORE_NATIVE_JSONL;
@@ -158,4 +164,359 @@ test('actual source typed provenance and licence links for at least three origin
         if (checked>=3) break;
     }
     assert.ok(checked>=3,'actual fixture must supply at least three source records');
+});
+
+// Native file controls use an original H4 document and its unchanged META.
+let streamFixture;
+function nativeStreamFixture() {
+    if (streamFixture) return streamFixture;
+    assert.ok(jsonl, 'actual pinned H4 JSONL path required');
+    const meta = fs.readFileSync(jsonl.replace(/\.jsonl$/, '.meta.json'));
+    const reader = nodeRuntime.openLineReader(jsonl);
+    const fragments = [];
+    let offset = 0;
+    try {
+        for (;;) {
+            const chunk = reader.read(offset, 65536);
+            assert.ok(chunk.length, 'actual H4 first station required');
+            const end = chunk.indexOf(10);
+            fragments.push(chunk.subarray(0, end < 0 ? chunk.length : end));
+            offset += chunk.length;
+            if (end >= 0) break;
+        }
+    } finally { reader.close(); }
+    const station = JSON.parse(Buffer.concat(fragments).toString('utf8'));
+    streamFixture = { meta, header: streamLoader.headerFromMeta(meta), station };
+    return streamFixture;
+}
+
+function withNativeStreamFile(bytes, body) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'otc-native-stream-'));
+    const file = path.join(dir, 'OTC_20261011.jsonl');
+    fs.writeFileSync(file, bytes);
+    const reader = nodeRuntime.openLineReader(file);
+    try { return body(reader, file); }
+    finally { reader.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+function scanNativeStream(bytes, header = nativeStreamFixture().header, readTransform) {
+    return withNativeStreamFile(bytes, reader => {
+        assert.equal(typeof streamLoader.scanJsonlReader, 'function', 'private incremental scanner required');
+        assert.equal(typeof nodeRuntime.nodeApi.createSha256State, 'function', 'private incremental SHA required');
+        const state = nodeRuntime.nodeApi.createSha256State();
+        const reads = [];
+        const result = streamLoader.scanJsonlReader(header, (offset, length) => {
+            const chunk = readTransform ? readTransform(reader, offset, length) : reader.read(offset, length);
+            reads.push({ offset, requested: length, received: chunk.length });
+            return chunk;
+        }, chunk => state.update(chunk));
+        return { ...result, digest: state.digest(), reads };
+    });
+}
+
+test('native Node direct stream scanner exact chunks, offsets, UTF8, CRLF, blank and final line', () => {
+    const { header, station } = nativeStreamFixture();
+    const document = { ...station, name: 'é🐬' + station.name };
+    const line = Buffer.from(JSON.stringify(document));
+    const padding = (65535 - line.indexOf(Buffer.from('é'))) % 65536;
+    for (const ending of ['\n', '\r\n', '', '\r']) {
+        const bytes = Buffer.concat([Buffer.from(' '.repeat(padding)), line, Buffer.from(ending + '\n \t\v\f\r\n')]);
+        const expected = streamLoader.indexJsonl(header, bytes, false);
+        const result = scanNativeStream(bytes, header);
+        assert.equal(result.error, null);
+        assert.deepEqual(result.entries, expected.entries);
+        assert.equal(result.bytesRead, bytes.length);
+        assert.equal(result.digest, nodeRuntime.sha256Sync(bytes));
+        assert.ok(result.reads.length >= 2);
+        assert.ok(result.reads.every(r => r.requested === 65536));
+        console.log(JSON.stringify({ control: 'chunk-boundary', ending, bytes: result.bytesRead, sha256: result.digest, entries: result.entries.length }));
+    }
+    const long = Buffer.from(' '.repeat(200000) + JSON.stringify(station));
+    assert.deepEqual(scanNativeStream(long).entries, streamLoader.indexJsonl(header, long, false).entries);
+    for (const ending of ['', '\r', '\n', '\r\n']) {
+        const final = Buffer.from(JSON.stringify(station) + ending);
+        const result = scanNativeStream(final);
+        assert.equal(result.error, null);
+        assert.deepEqual(result.entries, streamLoader.indexJsonl(header, final, false).entries);
+        assert.equal(result.digest, nodeRuntime.sha256Sync(final));
+    }
+    assert.deepEqual(scanNativeStream(Buffer.alloc(0)).entries, []);
+});
+
+for (const [label, suffix] of [
+    ['malformed', '{broken'], ['invalid UTF8', Buffer.from([0xc3, 0x28])],
+    ['lone surrogate', '{"station_id":"\\ud800"}'], ['NUL', '\0'], ['NBSP', '\u00a0'],
+]) {
+    test(`native Node direct stream scanner deferred ${label} still hashes every native byte`, () => {
+        const { header } = nativeStreamFixture();
+        const bytes = Buffer.concat([Buffer.from('\n \t\r\n'), Buffer.from(suffix), Buffer.from('\n' + ' '.repeat(150000))]);
+        let expected;
+        try { streamLoader.indexJsonl(header, bytes, false); } catch (error) { expected = error; }
+        assert.ok(expected, 'existing full-byte parser must reject this real-file control');
+        const result = scanNativeStream(bytes);
+        assert.equal(result.error?.code, expected.code);
+        assert.equal(result.error?.message, expected.message);
+        assert.equal(result.bytesRead, bytes.length);
+        assert.equal(result.digest, nodeRuntime.sha256Sync(bytes));
+        console.log(JSON.stringify({ control: label, bytes: result.bytesRead, sha256: result.digest, error: result.error.message }));
+    });
+}
+
+test('native Node direct stream scanner unresolved reference matches the existing native fixture', () => {
+    const fixture = new URL('../../conformance/fixtures/bad/unresolved-reference-station/OTC_20991231.jsonl', import.meta.url);
+    const meta = fs.readFileSync(new URL('./OTC_20991231.meta.json', fixture));
+    const header = streamLoader.headerFromMeta(meta);
+    const bytes = fs.readFileSync(fixture);
+    let expected;
+    try { streamLoader.indexJsonl(header, bytes, false); } catch (error) { expected = error; }
+    assert.ok(expected);
+    const result = scanNativeStream(bytes, header);
+    assert.equal(result.error?.message, expected.message);
+    assert.equal(result.digest, nodeRuntime.sha256Sync(bytes));
+});
+
+test('native Node direct stream scanner null header completes exact hashing', () => {
+    const bytes = Buffer.from('{broken\n' + ' '.repeat(150000));
+    const result = scanNativeStream(bytes, null);
+    assert.equal(result.error, null);
+    assert.equal(result.bytesRead, bytes.length);
+    assert.equal(result.digest, nodeRuntime.sha256Sync(bytes));
+});
+
+test('native Node direct stream reader completes short OS reads on the same FD', () => {
+    const bytes = Buffer.from(JSON.stringify(nativeStreamFixture().station) + '\n');
+    const original = fs.readSync;
+    const descriptors = new Set();
+    fs.readSync = (fd, buffer, offset, length, position) => {
+        descriptors.add(fd);
+        return original(fd, buffer, offset, Math.min(17, length), position);
+    };
+    syncBuiltinESMExports();
+    try {
+        const result = scanNativeStream(bytes);
+        assert.equal(result.error, null);
+        assert.equal(result.bytesRead, bytes.length);
+        assert.equal(result.digest, nodeRuntime.sha256Sync(bytes));
+        assert.equal(descriptors.size, 1);
+        console.log(JSON.stringify({ control: 'short OS reads', bytes: result.bytesRead, sha256: result.digest, descriptors: descriptors.size }));
+    } finally { fs.readSync = original; syncBuiltinESMExports(); }
+});
+
+for (const code of ['EIO', 'EBADF']) {
+    test(`native Node direct stream reader ${code} is io and closes the owned FD`, () => {
+        const bytes = Buffer.from(JSON.stringify(nativeStreamFixture().station) + '\n');
+        const original = fs.readSync;
+        let descriptor;
+        try {
+            withNativeStreamFile(bytes, reader => {
+                fs.readSync = fd => { descriptor = fd; throw Object.assign(new Error(code), { code }); };
+                syncBuiltinESMExports();
+                assert.throws(() => streamLoader.scanJsonlReader(nativeStreamFixture().header, reader.read, () => undefined), e => e.code === 'io' && e.cause?.code === code);
+            });
+            assert.throws(() => fs.fstatSync(descriptor), e => e.code === 'EBADF');
+        } finally { fs.readSync = original; syncBuiltinESMExports(); }
+    });
+}
+
+test('native Node direct stream reader close error retains existing idempotent semantics', () => {
+    const original = fs.closeSync;
+    let calls = 0;
+    withNativeStreamFile(Buffer.from('{}\n'), reader => {
+        fs.closeSync = fd => { original(fd); calls++; throw Object.assign(new Error('close EIO'), { code: 'EIO' }); };
+        syncBuiltinESMExports();
+        try { reader.close(); reader.close(); }
+        finally { fs.closeSync = original; syncBuiltinESMExports(); }
+        assert.equal(calls, 1);
+        assert.throws(() => reader.read(0, 1), e => e.code === 'io');
+    });
+});
+
+function authenticateNativeStreamControl({ malformed = false, invalidHeader = false, badJsonl = false, badMeta = false,
+    missing = null, truncated = false, wrongSize = false } = {}) {
+    const fixture = nativeStreamFixture();
+    const bytes = Buffer.from(malformed ? '{broken\n' + ' '.repeat(150000) : JSON.stringify(fixture.station) + '\n');
+    const metaDocument = JSON.parse(fixture.meta.toString('utf8'));
+    if (invalidHeader) metaDocument.format_version = 'invalid';
+    const meta = Buffer.from(JSON.stringify(metaDocument));
+    return withNativeStreamFile(bytes, (reader, file) => {
+        const metaPath = file.replace(/\.jsonl$/, '.meta.json');
+        const shaPath = file.replace(/\.jsonl$/, '.sha256');
+        const jsonlName = path.basename(file), metaName = path.basename(metaPath);
+        fs.writeFileSync(metaPath, meta);
+        const expectedJsonl = badJsonl ? '0'.repeat(64) : nodeRuntime.sha256Sync(bytes);
+        const expectedMeta = badMeta ? '0'.repeat(64) : nodeRuntime.sha256Sync(meta);
+        fs.writeFileSync(shaPath, (missing === 'jsonl' ? '' : `${expectedJsonl}  ${jsonlName}\n`)
+            + (missing === 'meta' ? '' : `${expectedMeta}  ${metaName}\n`));
+        if (truncated) fs.truncateSync(file, bytes.length - 3);
+        const actualMeta = nodeRuntime.readFileOrIo(metaPath);
+        const rows = streamLoader.parseSha256(nodeRuntime.readFileOrIo(shaPath));
+        let header = null, headerError = null;
+        try { header = streamLoader.headerFromMeta(actualMeta); } catch (error) { headerError = error; }
+        const state = nodeRuntime.nodeApi.createSha256State();
+        const scan = streamLoader.scanJsonlReader(header, reader.read, chunk => state.update(chunk));
+        const digest = state.digest();
+        const checks = () => {
+            checkBytes(jsonlName, digest, scan.bytesRead, rows.get(jsonlName) ?? null, wrongSize ? bytes.length + 1 : null);
+            checkBytes(metaName, nodeRuntime.sha256Sync(actualMeta), actualMeta.length, rows.get(metaName) ?? null, null);
+            if (headerError) throw headerError;
+            if (scan.error) throw scan.error;
+        };
+        let error = null;
+        try { checks(); } catch (caught) { error = caught; }
+        assert.equal(digest, nodeRuntime.sha256Sync(fs.readFileSync(file)), 'hashed bytes must be the actual native file bytes');
+        console.log(JSON.stringify({ control: 'authentication boundary', bytes: scan.bytesRead, sha256: digest,
+            meta_sha256: nodeRuntime.sha256Sync(actualMeta), error: error && { code: error.code, file: error.file, message: error.message } }));
+        return { ...scan, digest, error };
+    });
+}
+
+for (const [label, options, code, fileSuffix] of [
+    ['valid', {}, null, null],
+    ['bad JSONL SHA before malformed', { badJsonl: true, malformed: true }, 'checksum_mismatch', '.jsonl'],
+    ['META SHA before malformed', { badMeta: true, malformed: true }, 'checksum_mismatch', '.meta.json'],
+    ['saved malformed after both SHA', { malformed: true }, 'invalid_release', null],
+    ['JSONL SHA before invalid header', { badJsonl: true, invalidHeader: true }, 'checksum_mismatch', '.jsonl'],
+    ['META SHA before invalid header', { badMeta: true, invalidHeader: true }, 'checksum_mismatch', '.meta.json'],
+    ['saved invalid header after both SHA', { invalidHeader: true }, 'invalid_release', null],
+    ['missing JSONL row', { missing: 'jsonl' }, 'checksum_mismatch', '.jsonl'],
+    ['missing META row', { missing: 'meta' }, 'checksum_mismatch', '.meta.json'],
+    ['premature EOF with original SHA', { truncated: true }, 'checksum_mismatch', '.jsonl'],
+    ['actual byte size', { wrongSize: true }, 'checksum_mismatch', '.jsonl'],
+]) {
+    test(`native Node direct stream authentication ${label}`, () => {
+        const result = authenticateNativeStreamControl(options);
+        assert.equal(result.error?.code ?? null, code);
+        if (fileSuffix) assert.ok(result.error.file.endsWith(fileSuffix));
+        if (!code) assert.equal(result.entries.length, 1);
+        if (label === 'actual byte size') assert.match(result.error.message, /size .* expected/);
+    });
+}
+
+test('native Node direct stream public avoids the whole-file JSONL read', async () => {
+    const original = fs.readFileSync;
+    let wholeFileReads = 0;
+    fs.readFileSync = (file, ...args) => {
+        if (String(file) === jsonl) wholeFileReads++;
+        return original(file, ...args);
+    };
+    syncBuiltinESMExports();
+    let opened;
+    try {
+        opened = await sdk.OpenTideConstants.open({ file: jsonl, mode: 'stream' });
+        assert.equal(wholeFileReads, 0, 'direct stream must not materialize the entire JSONL');
+        assert.equal(opened.loadedFrom, 'file');
+        assert.equal(opened.requireStation('OTC-a6c00a3f').station_id, 'OTC-a6c00a3f');
+    } finally { fs.readFileSync = original; syncBuiltinESMExports(); opened?.close(); }
+});
+
+async function withNativePublicStream(options, body) {
+    const { meta, station } = nativeStreamFixture();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'otc-public-stream-'));
+    const file = path.join(dir, 'OTC_20261011.jsonl');
+    const metaPath = file.replace(/\.jsonl$/, '.meta.json');
+    const bytes = Buffer.from(options.malformed ? '{broken\n' + ' '.repeat(150000) : JSON.stringify(station) + '\r\n');
+    const metadata = JSON.parse(meta.toString('utf8'));
+    if (options.invalidHeader) metadata.format_version = 'invalid';
+    const metaBytes = Buffer.from(JSON.stringify(metadata));
+    fs.writeFileSync(file, bytes);
+    fs.writeFileSync(metaPath, metaBytes);
+    if (!options.unverified) {
+        const sha = (options.missing === 'jsonl' ? '' : `${options.badJsonl ? '0'.repeat(64) : nodeRuntime.sha256Sync(bytes)}  ${path.basename(file)}\n`)
+            + (options.missing === 'meta' ? '' : `${options.badMeta ? '0'.repeat(64) : nodeRuntime.sha256Sync(metaBytes)}  ${path.basename(metaPath)}\n`);
+        fs.writeFileSync(file.replace(/\.jsonl$/, '.sha256'), sha);
+    }
+    if (options.truncated) fs.truncateSync(file, bytes.length - 3);
+    try { return await body(file, station, bytes); }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+for (const [label, options, code, suffix] of [
+    ['bad JSONL SHA before malformed', { malformed: true, badJsonl: true }, 'checksum_mismatch', '.jsonl'],
+    ['META SHA before malformed', { malformed: true, badMeta: true }, 'checksum_mismatch', '.meta.json'],
+    ['saved malformed after both SHA', { malformed: true }, 'invalid_release', null],
+    ['JSONL SHA before invalid header', { invalidHeader: true, badJsonl: true }, 'checksum_mismatch', '.jsonl'],
+    ['META SHA before invalid header', { invalidHeader: true, badMeta: true }, 'checksum_mismatch', '.meta.json'],
+    ['saved invalid header after both SHA', { invalidHeader: true }, 'invalid_release', null],
+    ['missing JSONL row', { missing: 'jsonl' }, 'checksum_mismatch', '.jsonl'],
+    ['missing META row before bad JSONL SHA', { missing: 'meta', badJsonl: true }, 'checksum_mismatch', '.meta.json'],
+    ['real truncated file', { truncated: true }, 'checksum_mismatch', '.jsonl'],
+    ['EIO', { ioCode: 'EIO' }, 'io', null],
+    ['EBADF', { ioCode: 'EBADF' }, 'io', null],
+]) {
+    test(`native Node direct stream public ${label} closes its sole FD`, async () => {
+        await withNativePublicStream(options, async file => {
+            const open = fs.openSync, close = fs.closeSync, read = fs.readSync;
+            let descriptor, opens = 0, closes = 0;
+            fs.openSync = (name, ...args) => {
+                const fd = open(name, ...args);
+                if (String(name) === file) { descriptor = fd; opens++; }
+                return fd;
+            };
+            fs.closeSync = fd => { if (fd === descriptor) closes++; return close(fd); };
+            fs.readSync = (fd, ...args) => {
+                if (fd === descriptor && options.ioCode) throw Object.assign(new Error(options.ioCode), { code: options.ioCode });
+                return read(fd, ...args);
+            };
+            syncBuiltinESMExports();
+            try {
+                await assert.rejects(sdk.OpenTideConstants.open({ file, mode: 'stream' }), e => e.code === code
+                    && (!suffix || e.file.endsWith(suffix)) && (!options.ioCode || e.cause?.code === options.ioCode));
+                assert.equal(opens, 1);
+                assert.equal(closes, 1);
+                assert.throws(() => fs.fstatSync(descriptor), e => e.code === 'EBADF');
+                console.log(JSON.stringify({ control: 'public authentication/cleanup', label, opens, closes, code }));
+            } finally { fs.openSync = open; fs.closeSync = close; fs.readSync = read; syncBuiltinESMExports(); }
+        });
+    });
+}
+
+for (const unverified of [false, true]) {
+    test(`native Node direct stream public same FD short reads and lazy station ${unverified ? 'unverified' : 'verified'}`, async () => {
+        await withNativePublicStream({ unverified }, async (file, station) => {
+            const open = fs.openSync, close = fs.closeSync, read = fs.readSync, readFile = fs.readFileSync;
+            let descriptor, opens = 0, closes = 0, wholeReads = 0;
+            const positions = [];
+            fs.openSync = (name, ...args) => {
+                const fd = open(name, ...args);
+                if (String(name) === file) { descriptor = fd; opens++; }
+                return fd;
+            };
+            fs.closeSync = fd => { if (fd === descriptor) closes++; return close(fd); };
+            fs.readSync = (fd, buffer, offset, length, position) => {
+                if (fd === descriptor) { positions.push(position); return read(fd, buffer, offset, Math.min(length, 17), position); }
+                return read(fd, buffer, offset, length, position);
+            };
+            fs.readFileSync = (name, ...args) => { if (String(name) === file) wholeReads++; return readFile(name, ...args); };
+            syncBuiltinESMExports();
+            let client;
+            try {
+                client = await sdk.OpenTideConstants.open({ file, mode: 'stream' });
+                assert.equal(client.loadedFrom, unverified ? 'file_unverified' : 'file');
+                assert.equal(opens, 1);
+                assert.equal(closes, 0);
+                assert.equal(wholeReads, 0);
+                const initialReads = positions.length;
+                assert.deepEqual(client.requireStation(station.station_id).raw, station);
+                assert.ok(positions.length > initialReads, 'the selected station must be read lazily');
+                assert.equal(positions[initialReads], 0, 'lazy station reads reuse original native byte offsets');
+                client.close(); client.close();
+                assert.equal(closes, 1);
+                assert.throws(() => client.requireStation(station.station_id), e => e.code === 'io');
+                console.log(JSON.stringify({ control: 'public reader lifecycle', unverified, opens, closes, wholeReads, initialReads, lazyReads: positions.length - initialReads }));
+            } finally {
+                client?.close(); fs.openSync = open; fs.closeSync = close; fs.readSync = read; fs.readFileSync = readFile; syncBuiltinESMExports();
+            }
+        });
+    });
+}
+
+test('native Node direct stream public fresh index keeps fresh error names', async () => {
+    await withNativePublicStream({}, async (file, station, bytes) => {
+        const client = await sdk.OpenTideConstants.open({ file, mode: 'stream' });
+        try {
+            fs.writeFileSync(file, Buffer.from(' '.repeat(bytes.length)));
+            assert.throws(() => client.requireStation(station.station_id), e => e.code === 'invalid_release'
+                && e.message.startsWith('the .jsonl index does not match') && !e.message.includes('index-v1.json'));
+        } finally { client.close(); }
+    });
 });

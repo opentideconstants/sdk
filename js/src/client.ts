@@ -16,7 +16,7 @@ import {
     CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
     OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
 } from "./errors.js";
-import { parseSha256, releaseFromJson, releaseFromJsonl, splitReleaseName } from "./loader.js";
+import { headerFromMeta, parseSha256, releaseFromJson, releaseFromJsonl, scanJsonlReader, splitReleaseName } from "./loader.js";
 import type { BlockingResult, NodeMod } from "./node-api.js";
 import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
@@ -424,6 +424,44 @@ export class OpenTideConstants {
         const stem = `OTC_${parts.datestamp}`;
         const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
         const shaPath = path.join(dir, `${stem}.sha256`);
+        if (kind === "jsonl" && mode === "stream") {
+            const lr = node.openLineReader(full);
+            try {
+                const metaName = `${stem}.meta.json`;
+                const meta = node.readFileOrIo(path.join(dir, metaName));
+                let header: ReturnType<typeof headerFromMeta> | null = null;
+                let headerError: unknown | null = null;
+                try { header = headerFromMeta(meta); } catch (e) { headerError = e; }
+                // Hash exactly the bytes used to build the index, through this one owned descriptor. Saved
+                // validation errors must wait for JSONL and META authentication, as with the eager byte path.
+                const hash = node.createSha256State();
+                const scanned = scanJsonlReader(header, lr.read, (chunk) => hash.update(chunk));
+                const actualSha = hash.digest();
+                const shaBytes = node.readIfExists(shaPath);
+                let files: FileInfo[];
+                let from: LoadedFrom;
+                if (shaBytes) {
+                    const rows = parseSha256(shaBytes, shaPath);
+                    needRows(full, dataNames, rows, `${stem}.sha256`, path);
+                    checkBytes(name, actualSha, scanned.bytesRead, rows.get(name) ?? null, null);
+                    checkBytes(metaName, node.sha256Sync(meta), meta.length, rows.get(metaName) ?? null, null);
+                    files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
+                    from = "file";
+                } else {
+                    files = dataNames.map((n) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: null }));
+                    from = "file_unverified";
+                }
+                files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+                if (headerError !== null) throw headerError;
+                if (scanned.error !== null) throw scanned.error;
+                const rel = releaseFromJsonl(meta, null, { eager: false, files, preparedIndex: { entries: scanned.entries },
+                    reader: lr.read, close: lr.close, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+                return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
+            } catch (e) {
+                lr.close();
+                throw e;
+            }
+        }
         const bytes = new Map<string, Uint8Array>();
         for (const n of dataNames) bytes.set(n, node.readFileOrIo(path.join(dir, n)));
         const shaBytes = node.readIfExists(shaPath);
@@ -448,17 +486,7 @@ export class OpenTideConstants {
         let rel: Release;
         if (kind === "jsonl") {
             const meta = bytes.get(`${stem}.meta.json`) as Uint8Array;
-            if (mode === "stream") {
-                const lr = node.openLineReader(full);
-                try {
-                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
-                } catch (e) {
-                    lr.close();
-                    throw e;
-                }
-            } else {
-                rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
-            }
+            rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
         } else {
             let json = data;
             if (kind === "json.gz") {
