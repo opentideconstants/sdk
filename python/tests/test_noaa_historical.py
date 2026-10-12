@@ -3,14 +3,20 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 import hashlib
 import inspect
 import json
+import os
+from copy import deepcopy
 from pathlib import Path
 import sys
 import unittest
+from typing import Any
 
 import opentideconstants as otc
+from opentideconstants._historical_offsets import historical_offset_eligibility, require_historical_offset
+from opentideconstants._models import freeze
 
 
 START = datetime(2026, 10, 11, tzinfo=timezone.utc)
@@ -121,6 +127,156 @@ class NativeHistoricalBaseline(unittest.TestCase):
     def test_actual_native_historical_policy_is_not_implemented(self):
         self.assertIn("historical_offsets_policy", inspect.signature(otc.OpenTideConstants).parameters,
                       "baseline RED: actual accepted SDK lacks strict own historical policy")
+
+
+
+class NativeHistoricalEligibility(unittest.TestCase):
+    """Policy cells derived from the pinned real two-row producer artifact."""
+
+    @classmethod
+    def setUpClass(cls):
+        candidate = os.environ.get("OTC_NOAA_CANDIDATE")
+        release = os.environ.get("OTC_NOAA_NATIVE_RELEASE")
+        proof = os.environ.get("OTC_NOAA_PROOF")
+        if not candidate or not release or not proof:
+            raise unittest.SkipTest("native source candidate/release/proof paths required")
+        path = Path(candidate)
+        cls.candidate_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        if cls.candidate_sha != "be435a8b5c7ad6ed601ad510559d1f771be74595a2a0f67367210fb75b7dbb63":
+            raise AssertionError("actual SF1 source artifact changed")
+        cls.document = load_native_inputs(path)
+        if load_native_inputs(Path(release)) != cls.document:
+            raise AssertionError("native release is not the exact source-derived candidate")
+        cls.client = otc.OpenTideConstants(file=Path(release), cache_dir=Path(proof) / "cache-predicate")
+        cls.addClassCleanup(cls.client.close)
+        cls.profiles = [s["subordinate_offsets"] for s in cls.document["stations"]
+                        if s.get("subordinate_offsets", {}).get("offset_id")]
+        if len(cls.profiles) != 2:
+            raise AssertionError("expected the exact two actual profiles")
+        cls.licences = {licence.licence_id: licence for licence in cls.client.release.licences}
+        cls.cells = []
+        cls.proof = Path(proof)
+
+    @classmethod
+    def tearDownClass(cls):
+        (cls.proof / f"native-predicate-cells-{sys.version_info.major}{sys.version_info.minor}.json").write_text(json.dumps({
+            "candidate_sha256": cls.candidate_sha, "sdk_file": otc.__file__, "sdk_version": otc.__version__,
+            "python": sys.version, "cells": cls.cells, "scope": "own-policy primitive; no public prediction GREEN claim"
+        }, sort_keys=True, indent=2) + "\n")
+
+    def evaluate(self, offsets, *, expected=True, **options):
+        reference = self.client.require_station(offsets["reference_station_id"])
+        selected = next(cs for cs in reference.constant_sets(include_no_constants=True)
+                        if cs.source == "noaa" and cs.quantity == "water_level")
+        arguments: dict[str, Any] = dict(policy="fallback", licences=self.licences, selected_reference=selected,
+                         better_path=False)
+        arguments.update(options)
+        before = deepcopy(offsets)
+        actual = historical_offset_eligibility(offsets, **arguments)
+        self.assertEqual(actual, expected)
+        self.assertEqual(offsets, before)
+        self.cells.append({"offset_id": offsets["offset_id"], "options": {
+            key: value for key, value in options.items() if key not in ("licences", "selected_reference")},
+            "own_qc": offsets["qc_status"], "equivalence": offsets["vintage"]["reference_2020_equivalence"],
+            "outcome": actual, "expected": expected})
+        if actual:
+            chosen = require_historical_offset(offsets, **arguments)
+            self.assertEqual(chosen.offset_id, offsets["offset_id"])
+            self.assertEqual(chosen.offsets["source_version"], offsets["source_version"])
+            self.assertEqual(chosen.offsets, freeze(offsets))
+            with self.assertRaises(TypeError):
+                chosen.offsets["vintage"]["current_validity"] = "verified"
+            self.assertEqual(chosen.offsets["provenance"]["raw_row_text"], offsets["provenance"]["raw_row_text"])
+            self.assertIs(chosen.reference, arguments["selected_reference"])
+        else:
+            with self.assertRaises(otc.NoConstantsError):
+                require_historical_offset(offsets, **arguments)
+
+    def test_default_strict_and_explicit_precedence(self):
+        for offsets in self.profiles:
+            self.evaluate(offsets)
+            self.evaluate(offsets, policy="exclude", expected=False)
+            self.evaluate(offsets, policy="exclude", selection="explicit", expected=False)
+            self.evaluate(offsets, better_path=True, expected=False)
+            self.evaluate(offsets, better_path=True, selection="explicit")
+
+    def test_same_native_own_qc_and_vintage_cells(self):
+        for offsets in self.profiles:
+            self.evaluate(offsets)
+            reference = self.client.require_station(offsets["reference_station_id"])
+            selected = next(cs for cs in reference.constant_sets(include_no_constants=True)
+                            if cs.source == "noaa" and cs.quantity == "water_level")
+            for case in ("own_qc_removed", "own_retirement_omitted"):
+                changed = deepcopy(offsets)
+                if case == "own_qc_removed":
+                    changed["qc_status"] = "removed"
+                else:
+                    changed.pop("vintage")
+                with self.assertRaises(otc.InvalidReleaseError):
+                    historical_offset_eligibility(changed, policy="fallback", licences=self.licences,
+                                                 selected_reference=selected, better_path=False)
+                self.cells.append({"offset_id": offsets["offset_id"], "case": case,
+                                   "outcome": "InvalidReleaseError", "expected": "refuse malformed own metadata"})
+
+    def test_own_and_reference_licences(self):
+        for offsets in self.profiles:
+            self.evaluate(offsets, commercial_only=True)
+            missing = dict(self.licences)
+            missing.pop(offsets["licence_id"])
+            with self.assertRaises(otc.InvalidReleaseError):
+                historical_offset_eligibility(offsets, policy="fallback", licences=missing,
+                                             selected_reference=None, better_path=False)
+            restricted = next(licence for licence in self.licences.values() if licence.commercial_use is False)
+            changed = deepcopy(offsets)
+            changed["licence_id"] = restricted.licence_id
+            self.evaluate(changed)
+            self.evaluate(changed, commercial_only=True, expected=False)
+
+    def test_reference_qc_datum_and_convention(self):
+        for offsets in self.profiles:
+            reference = self.client.require_station(offsets["reference_station_id"])
+            selected = next(cs for cs in reference.constant_sets(include_no_constants=True)
+                            if cs.source == "noaa" and cs.quantity == "water_level")
+            self.evaluate(offsets, selected_reference=replace(selected, qc_status="flagged"), expected=False)
+            own = self.client.require_station(next(s["station_id"] for s in self.document["stations"]
+                if s.get("subordinate_offsets", {}).get("offset_id"))).subordinate_offsets
+            assert own is not None
+            self.evaluate(offsets, selected_reference=replace(selected, fallback=own.fallback), expected=False)
+            self.evaluate(offsets, selected_reference=replace(selected, source_record_id="other-reference"), expected=False)
+            self.evaluate(offsets, selected_reference=None, expected=False)
+            raw = deepcopy(next(s for s in self.document["stations"]
+                                if s["station_id"] == offsets["reference_station_id"])["constant_sets"][0])
+            raw["datum"]["basis"]["mllw"]["kind"] = "derived"
+            self.evaluate(offsets, selected_reference=replace(selected, raw=freeze(raw)), expected=False)
+            self.evaluate(offsets, selected_reference=replace(selected, convention=replace(
+                selected.convention, v0_model="unknown")), expected=False)
+            restricted = next(licence for licence in self.licences.values() if licence.commercial_use is False)
+            self.evaluate(offsets, selected_reference=replace(selected, licence=restricted),
+                          commercial_only=True, expected=False)
+
+    def test_equivalence_is_informational(self):
+        # Counterfactual contract states exercise policy only; they are not performed book findings.
+        for offsets in self.profiles:
+            for outcome in ("not_checked", "matched_at_publisher_precision", "disagrees"):
+                changed = deepcopy(offsets)
+                changed["vintage"]["reference_2020_equivalence"] = outcome
+                if outcome != "not_checked":
+                    changed["vintage"]["reference_2020_equivalence_sha256"] = self.candidate_sha
+                self.evaluate(changed)
+
+    def test_wrong_profile_and_invalid_options(self):
+        for offsets in self.profiles:
+            changed = deepcopy(offsets)
+            changed["offset_id"] = "another-profile"
+            with self.assertRaises(otc.InvalidReleaseError):
+                historical_offset_eligibility(changed, policy="fallback", licences=self.licences,
+                                             selected_reference=None, better_path=False)
+            for options in ({"policy": "unknown"}, {"selection": "unknown"}, {"better_path": 1},
+                            {"commercial_only": 1}):
+                arguments: dict[str, Any] = dict(policy="fallback", licences=self.licences, selected_reference=None, better_path=False)
+                arguments.update(options)
+                with self.assertRaises(otc.InvalidArgumentError):
+                    historical_offset_eligibility(offsets, **arguments)
 
 
 if __name__ == "__main__":
