@@ -807,14 +807,95 @@ def test_no_case_names_both_knc_roots(calls):
 
 
 def test_bands(calls):
-    """Spec 6.3: every event step avoids the four bands (build_fixtures.band_problems), except the one recorded exception."""
+    """Spec 6.3: every event step avoids the four bands (build_fixtures.band_problems), except band 3 in the two exact recorded cases."""
     assert bf.band_problems(calls) == []
-    assert set(bf.BAND_EXCEPTIONS) == {"predict-extremes/single-constituent"}
+    assert set(bf.BAND_EXCEPTIONS) == {"predict-extremes/single-constituent", "predict-extremes/negative-amplitude"}
+
+
+@pytest.mark.parametrize("cid,root,amplitude", [
+    ("predict-extremes/single-constituent", "predict", 1.0),
+    ("predict-extremes/negative-amplitude", "predict-bad/extremes-negative-amplitude", -1.0),
+])
+def test_named_band_declarations_and_native_roots(calls, cid, root, amplitude):
+    case = next(c for c in calls["cases"] if c["id"] == cid)
+    declaration = case.get("band_exception")
+    assert isinstance(declaration, dict)
+    assert declaration == bf.BAND_EXCEPTIONS[cid]
+    assert declaration["case_id"] == cid and declaration["band"] == 3
+    assert declaration["event_time_tolerance_s"] == 1 and declaration["reason"]
+    assert declaration["root"] == root and declaration["set_id"] == "OTC-P-0005/noaa"
+    assert declaration["astro_table_id"] == bf.ASTRO_A
+    assert [declaration["start"], declaration["stop"]] == list(bf.PW["single"])
+    source = json.loads((FIX / root / f"OTC_{case["release"]}.json").read_bytes())
+    sm = set_sum(source, declaration["set_id"])
+    assert sm.terms == [("M2", amplitude, 20.903277)]
+    start, stop = map(ts, bf.PW["single"])
+    roots = scan(lambda t, y: sm.dh(t), start, stop, 5.0)
+    assert len(roots) == 116
+    problems = []
+    bf._tide_events(sm.t, sm.terms, start, stop, cid, problems)
+    assert len(problems) == 4 and all("band 3:" in p for p in problems)
+    assert bf.band_problems({"cases": [case]}) == []
+    unlisted = copy.deepcopy(case)
+    unlisted["id"] += "/unlisted"
+    unlisted.pop("band_exception")
+    rejected = bf.band_problems({"cases": [unlisted]})
+    assert len(rejected) == 4 and all("band 3:" in p for p in rejected)
+
+
+@pytest.mark.parametrize("fault", ["missing", "band", "tolerance", "root", "window"])
+def test_named_band_gate_refuses_inconsistent_declarations(calls, fault):
+    case = copy.deepcopy(next(c for c in calls["cases"] if c["id"] == "predict-extremes/single-constituent"))
+    if fault == "missing":
+        case.pop("band_exception", None)
+    elif fault == "window":
+        case["steps"][0]["strict"]["args"]["start"] = "2010-03-06T18:08:00Z"
+    elif fault == "root":
+        case["root"] = "predict-bad/extremes-negative-amplitude"
+    else:
+        case.setdefault("band_exception", {})["band" if fault == "band" else "event_time_tolerance_s"] = 4 if fault == "band" else 2
+    assert any("exception" in p for p in bf.band_problems({"cases": [case]}))
+
+
+@pytest.mark.parametrize("band", [1, 2, 4])
+def test_band3_allowance_keeps_other_native_bands(doc, band):
+    # Actual harmonic/table math, without substituting the validator or search functions.
+    ta = copy.deepcopy(table(doc, bf.ASTRO_A))
+    row = ta["constituents"]["M2"]
+    row["f"] = [1.0] * len(row["f"])
+    row["v0u_deg"] = [0.0] * len(row["v0u_deg"])
+    T = ts("2010-01-01T00:00:00Z")
+    if band == 1:
+        row["speed_deg_per_hour"] = 360.0 * 3600 / 2
+        start, stop = T + 7200, T + 7220
+    else:
+        start, stop = T - 4000, T + 4000
+        if band == 2:
+            speed = row["speed_deg_per_hour"]
+            old = 2009 - ta["first_year"]
+            row["v0u_deg"][old] = (-speed * (T - 1800 - year_start(2009)) / 3600) % 360
+            row["v0u_deg"][old + 1] = (-speed * 1800 / 3600) % 360
+    problems = []
+    bf._tide_events(ta, [("M2", 1.0, 0.0)], start, stop, "native-band-preservation", problems, report=False)
+    assert any(f"band {band}:" in p for p in problems), problems
+    assert not any("band 3:" in p for p in problems)
+
+
+def test_ripple_coverage_blocks_complete_scientific_gate(calls):
+    coverage = bf.band_coverage(calls["cases"])
+    assert calls["band_coverage"] == coverage
+    assert coverage["scientific_gate_ready"] is False and coverage["deferred"]
+    for entry in coverage["deferred"]:
+        assert entry["requires"] == ["KP1-H"] and entry["blocks"] == "K2b-pin scientific gate"
+        assert entry["case_id"] not in bf.BAND_EXCEPTIONS
+    named = [c for c in calls["cases"] if c["id"] in bf.BAND_EXCEPTIONS]
+    assert bf.band_coverage(named) == {"scientific_gate_ready": True, "deferred": []}
 
 
 def nonexempt_half_second_case(calls):
     case = copy.deepcopy(next(c for c in calls["cases"] if c["id"] == "predict-extremes/single-constituent"))
     case["id"] = "predict-extremes/nonexempt-half-second"
+    case.pop("band_exception", None)
     args = case["steps"][0]["strict"]["args"]
     args["start"], args["stop"] = "2010-03-06T18:08:00Z", "2010-03-06T18:10:00Z"
     return case
