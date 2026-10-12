@@ -4,7 +4,7 @@ import {
 } from "./errors.js";
 import { arr, deepFreeze, en, isObject, num, obj, str, time, val, type Json, type JsonObject } from "./json.js";
 import type {
-    ConstantSetsOptions, Constituent, Convention, Datum, DroppedConstituent, FileInfo, HeightAdjustedType, Kind,
+    SourceRecord, Fallback, HistoricalOffsetVintage, HistoricalOffsetProvenance, ConstantSetsOptions, Constituent, Convention, Datum, DroppedConstituent, FileInfo, HeightAdjustedType, Kind,
     Licence, NearOptions, NearestOptions, Nearby, Other, Provenance, ProvenanceBuild, QcFlag, QcStatus, Quantity,
     RecordSpan, SearchOptions, SourceType, StationFilters, StationStatus, StationType, Stats, SubordinateOffsets,
     TimeBase, TimeBaseEvidence, Tombstone, Validation,
@@ -28,6 +28,8 @@ export interface StoredSet {
     convention_id: string | null;
     licence_id: string | null;
     constituents: string[];
+    fallback: JsonObject | null;
+    current_bins: number[];
 }
 
 /** @internal One entry of index-v1.json, exactly as spec 6.2 gives it (the same in every SDK). */
@@ -48,6 +50,8 @@ export interface StoredEntry {
     offsets_licence_id: string | null;
     recommended_set_id: string | null;
     sets: StoredSet[];
+    subordinate_offsets: JsonObject | null;
+    current_offsets: JsonObject[];
 }
 
 const SET_KEYS = ["set_id", "source", "source_type", "quantity", "qc_status", "convention_id", "licence_id"] as const;
@@ -81,6 +85,7 @@ export interface IndexEntry {
 
 /** @internal The release document without its stations (the `.meta.json` sidecar). */
 export interface ReleaseHeader {
+    raw: JsonObject;
     format_version: string;
     release: JsonObject;
     conventions: JsonObject[];
@@ -150,7 +155,7 @@ export function parseHeader(doc: unknown): ReleaseHeader {
             seen.add(id);
         }
     }
-    return deepFreeze({ format_version: fv, release, conventions: cs, licences: ls });
+    return deepFreeze({ raw: doc, format_version: fv, release, conventions: cs, licences: ls });
 }
 
 /**
@@ -159,13 +164,15 @@ export function parseHeader(doc: unknown): ReleaseHeader {
  * I a finite number with an integral value, O an object, L a list of objects, S a list of strings, A a list.
  * The same table is in the Python, Ruby and C SDKs.
  */
-type FieldType = "T" | "N" | "I" | "O" | "L" | "S" | "A";
+type FieldType = "B" | "T" | "N" | "I" | "O" | "L" | "S" | "A";
 type FieldTypes = Readonly<Record<string, FieldType>>;
 const STATION_TYPES: FieldTypes = {
     name: "T", country: "T", timezone: "T", type: "T", recommended_set_id: "T", status: "T",
-    aliases: "O", constant_sets: "L", validation: "L", subordinate_offsets: "O", current_offsets: "A",
+    recommended_is_fallback: "B", source_records: "L", aliases: "O", constant_sets: "L", validation: "L", subordinate_offsets: "O", current_offsets: "A",
 };
 const OFFSET_TYPES: FieldTypes = {
+    offset_id: "T", source: "T", source_type: "T", source_version: "T", source_record_id: "T",
+    qc_status: "T", qc_flags: "L", fallback: "O", vintage: "O", provenance: "O",
     reference_station_id: "T", licence_id: "T", height_adjusted_type: "T",
     time_offset_high_min: "N", time_offset_low_min: "N", height_offset_high: "N", height_offset_low: "N",
 };
@@ -177,7 +184,7 @@ const VALIDATION_TYPES: FieldTypes = {
 const SET_TYPES: FieldTypes = {
     set_id: "T", source: "T", source_type: "T", quantity: "T", source_record_id: "T", source_version: "T",
     convention_id: "T", licence_id: "T", qc_status: "T", constituents: "L", dropped_constituents: "L", qc_flags: "L",
-    record_span: "O", datum: "O", time_base: "O", provenance: "O", current_bins: "A",
+    fallback: "O", record_span: "O", datum: "O", time_base: "O", provenance: "O", current_bins: "A",
 };
 const SPAN_TYPES: FieldTypes = { good_samples: "I" };
 const DATUM_TYPES: FieldTypes = { msl_offset_m: "N", named: "O" };
@@ -204,6 +211,7 @@ function finite(v: Json | undefined): v is number {
 function typeOk(v: Json | undefined, t: FieldType): boolean {
     if (v === undefined || v === null) return true;
     switch (t) {
+        case "B": return typeof v === "boolean";
         case "T": return typeof v === "string";
         case "N": return finite(v);
         case "I": return finite(v) && Number.isInteger(v);
@@ -251,11 +259,16 @@ function checkShape(doc: JsonObject, id: string): void {
         }
     }
     const off = obj(doc, "subordinate_offsets");
+    if (off) checkHistoricalOffsets(off);
+    checkSourceRecords(doc);
     if (off) check(off, OFFSET_TYPES, "subordinate_offsets.");
     for (const v of objects(doc, "validation")) check(v, VALIDATION_TYPES, "validation ");
     for (const cs of objects(doc, "constant_sets")) {
         const where = `set ${typeof cs["set_id"] === "string" ? cs["set_id"] : "?"}: `;
         check(cs, SET_TYPES, where);
+        const fallback = obj(cs, "fallback");
+        if (fallback) check(fallback, { reason: "T", basis: "T", otc_finding: "T", preferred_set_id: "T" }, `${where}fallback.`);
+        if (fallback?.["reason"] === "historical_offsets" || objects(cs, "qc_flags").some(f => f["flag"] === "fallback:historical_offsets")) throw new InvalidReleaseError(`${where}historical_offsets belongs only to subordinate_offsets`);
         for (const [k, table] of [["record_span", SPAN_TYPES], ["datum", DATUM_TYPES], ["time_base", TIME_BASE_TYPES],
             ["provenance", PROVENANCE_TYPES]] as const) {
             const o = obj(cs, k);
@@ -310,7 +323,7 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     // a line with no status (or null) is an active station, as in the stream index (CR2 DR28)
     const status = doc["status"] ?? "active";
     if (typeof id !== "string" || typeof status !== "string") throw new InvalidReleaseError("a station has no station_id, or a status that is not a string");
-    void header;
+
     checkShape(doc, id);
     const sets = arr(doc, "constant_sets").filter(isObject);
     const recId = str(doc, "recommended_set_id");
@@ -333,6 +346,12 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
     const off = obj(doc, "subordinate_offsets");
     const offLic = off ? str(off, "licence_id") : null;
     if (offLic !== null && !licences.has(offLic)) throw new InvalidReleaseError(`station ${id}: subordinate_offsets.licence_id ${offLic} does not resolve`);
+    for (const source of objects(doc, "source_records")) {
+        for (const key of ["licence_id", "upstream_licence_id"]) {
+            const lid = str(source, key);
+            if (lid !== null && !licences.has(lid)) throw new InvalidReleaseError(`source record of ${id}: ${key} does not resolve`);
+        }
+    }
     const kind = rec ? kindOfQuantity(str(rec, "quantity")) : null;
     const name = str(doc, "name");
     return entryFromStored({
@@ -342,10 +361,12 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
         aliases: aliasMap(doc),
         reference_station_id: off ? str(off, "reference_station_id") : null,
         offsets_licence_id: offLic,
+        subordinate_offsets: off, current_offsets: objects(doc, "current_offsets"),
         recommended_set_id: recId,
         sets: sets.map((cs) => ({
             set_id: str(cs, "set_id"), source: str(cs, "source"), source_type: str(cs, "source_type"), quantity: str(cs, "quantity"),
             qc_status: str(cs, "qc_status"), convention_id: str(cs, "convention_id"), licence_id: str(cs, "licence_id"),
+            fallback: obj(cs, "fallback"), current_bins: objects(cs, "current_bins").map((b) => num(b, "bin")).filter((v): v is number => v !== null),
             constituents: arr(cs, "constituents").filter(isObject).map((c) => str(c, "name")).filter((x): x is string => x !== null),
         })),
     });
@@ -358,7 +379,7 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
 export function lineView(s: StoredEntry): string {
     const sets = Array.isArray(s.sets) ? s.sets : [];
     return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
-        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents])]);
+        sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents, cs.fallback, cs.current_bins]), s.subordinate_offsets, s.current_offsets]);
 }
 
 /** @internal The in-memory entry of a stored index entry (spec 6.2). */
@@ -387,7 +408,7 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
 /** @internal The index-v1.json document (spec 6.2) for these entries (kinds resolved). */
 export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha256: string, jsonlSize: number, by: string): JsonObject {
     return {
-        index_version: 1, datestamp, jsonl: `OTC_${datestamp}.jsonl`, jsonl_sha256: jsonlSha256, jsonl_size: jsonlSize, by,
+        discovery_index_version: 1, index_version: 1, datestamp, jsonl: `OTC_${datestamp}.jsonl`, jsonl_sha256: jsonlSha256, jsonl_size: jsonlSize, by,
         stations: entries.map((e) => ({ ...e.stored, kind: e.kind })) as unknown as Json[],
     };
 }
@@ -401,7 +422,7 @@ export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha25
  */
 export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string | null, jsonlSize: number | null,
     conventions: Set<string>, licences: Set<string>): IndexEntry[] | null {
-    if (!isObject(v) || v["index_version"] !== 1 || v["datestamp"] !== datestamp || v["jsonl"] !== `OTC_${datestamp}.jsonl`) return null;
+    if (!isObject(v) || v["discovery_index_version"] !== 1 || v["index_version"] !== 1 || v["datestamp"] !== datestamp || v["jsonl"] !== `OTC_${datestamp}.jsonl`) return null;
     if (jsonlSha256 === null || v["jsonl_sha256"] !== jsonlSha256 || jsonlSize === null || v["jsonl_size"] !== jsonlSize) return null;
     const stations = v["stations"];
     if (!Array.isArray(stations)) return null;
@@ -421,10 +442,15 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
         if (e["name_folded"] !== (typeof name === "string" ? foldName(name) : null)) return null;
         const aliases = e["aliases"];
         if (!isObject(aliases) || !Object.values(aliases).every((ids) => Array.isArray(ids) && ids.every((x) => typeof x === "string"))) return null;
+        if (!Object.hasOwn(e, "subordinate_offsets") || !(e["subordinate_offsets"] === null || isObject(e["subordinate_offsets"]))) return null;
+        if (!Array.isArray(e["current_offsets"]) || !e["current_offsets"].every(isObject)) return null;
+        try { if (isObject(e["subordinate_offsets"])) checkHistoricalOffsets(e["subordinate_offsets"]); } catch { return null; }
         const sets = e["sets"];
         if (!Array.isArray(sets)) return null;
         for (const cs of sets) {
             if (!isObject(cs) || !SET_KEYS.every((k) => k in cs && strOrNull(cs[k]))) return null;
+            if (!Object.hasOwn(cs, "fallback") || !(cs["fallback"] === null || isObject(cs["fallback"]))) return null;
+            if (!Array.isArray(cs["current_bins"]) || !cs["current_bins"].every((v) => typeof v === "number" && Number.isSafeInteger(v) && v > 0)) return null;
             const cons = cs["constituents"];
             if (!Array.isArray(cons) || !cons.every((x) => typeof x === "string")) return null;
             // the same checks as indexDoc, for every status
@@ -435,6 +461,8 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
             if (e["recommended_set_id"] !== null && !sets.some((cs) => isObject(cs) && cs["set_id"] === e["recommended_set_id"])) return null;
             if (e["lat"] === null || e["lon"] === null) return null;
         }
+        const own = isObject(e["subordinate_offsets"]) ? e["subordinate_offsets"] : null;
+        if (e["reference_station_id"] !== str(own,"reference_station_id") || e["offsets_licence_id"] !== str(own,"licence_id")) return null;
         const stored = e as unknown as StoredEntry;
         const rec = stored.recommended_set_id === null ? undefined : stored.sets.find((cs) => cs.set_id === stored.recommended_set_id);
         // kind is derived, not trusted: from the recommended set here, and from the reference station below
@@ -569,6 +597,7 @@ export class ConstantSet {
     readonly source_version: string | null;
     readonly record_span: RecordSpan | null;
     readonly datum: Datum | null;
+    readonly fallback: Fallback | null;
     readonly qc_status: QcStatus | Other | null;
     readonly qc_flags: readonly QcFlag[];
     readonly dropped_constituents: readonly DroppedConstituent[];
@@ -601,10 +630,11 @@ export class ConstantSet {
             msl_offset_m: num(datum, "msl_offset_m"),
             named: Object.freeze(Object.fromEntries(Object.entries(obj(datum, "named") ?? {}).filter((e): e is [string, number] => typeof e[1] === "number"))),
         });
+        this.fallback = fallbackOf(obj(raw, "fallback"));
         this.qc_status = en(raw["qc_status"], QC_STATUSES);
         this.qc_flags = Object.freeze(arr(raw, "qc_flags").filter(isObject).map((f): QcFlag => Object.freeze({
             flag: en(f["flag"], ["time_base", "broken_record", "microtidal", "non_tidal_signal", "short_record",
-                "sibling_disagreement", "carried_over"] as const) ?? "other",
+                "sibling_disagreement", "carried_over", "fallback:time_base_disputed", "fallback:time_base_unresolved", "fallback:refused_fit", "fallback:short_record_uncalibrated", "fallback:short_record_long_period", "fallback:published_full_list", "fallback:reliability_withheld", "fallback:licence_reading", "fallback:datum_gate_failed", "fallback:not_in_otc_input", "fallback:historical_offsets"] as const) ?? "other",
             reason: str(f, "reason"), values: qcValues(f["values"]),
         })));
         this.dropped_constituents = Object.freeze(arr(raw, "dropped_constituents").filter(isObject).map((d) => Object.freeze({
@@ -668,6 +698,8 @@ export class ConstantSet {
 
 /** An active station. */
 export class Station {
+    readonly source_records: readonly SourceRecord[];
+    readonly recommended_is_fallback: boolean | null;
     readonly station_id: string;
     readonly name: string;
     readonly country: string | null;
@@ -690,6 +722,8 @@ export class Station {
     constructor(raw: JsonObject, entry: IndexEntry, release: Release) {
         this.raw = raw;
         this.#release = release;
+        this.recommended_is_fallback = typeof raw["recommended_is_fallback"] === "boolean" ? raw["recommended_is_fallback"] : null;
+        this.source_records = Object.freeze(objects(raw, "source_records").map((r) => sourceRecordOf(r, release)));
         this.station_id = entry.station_id;
         this.name = str(raw, "name") ?? "";
         this.country = str(raw, "country");
@@ -717,6 +751,11 @@ export class Station {
         this.#recommended = this.#sets.find((s) => s.isRecommended) ?? null;
         const off = obj(raw, "subordinate_offsets");
         this.#offsets = off === null ? null : Object.freeze({
+            offset_id: str(off, "offset_id"), source: str(off, "source"), source_type: en(off["source_type"], SOURCE_TYPES),
+            source_version: str(off, "source_version"), source_record_id: str(off, "source_record_id"), qc_status: en(off["qc_status"], QC_STATUSES),
+            qc_flags: Object.freeze(objects(off, "qc_flags").map(qcFlagOf)), fallback: fallbackOf(obj(off, "fallback")),
+            vintage: obj(off, "vintage") as unknown as HistoricalOffsetVintage | null,
+            provenance: obj(off, "provenance") as unknown as HistoricalOffsetProvenance | null,
             reference_station_id: str(off, "reference_station_id"),
             time_offset_high_min: num(off, "time_offset_high_min"), time_offset_low_min: num(off, "time_offset_low_min"),
             height_offset_high: num(off, "height_offset_high"), height_offset_low: num(off, "height_offset_low"),
@@ -827,16 +866,23 @@ interface CheckedFilters {
     kind: string | null;
     source: string | null;
     sourceType: string | null;
+    includeFlagged: boolean;
+    includeFallback: boolean;
 }
 
 function checkFilters(f: StationFilters | undefined | null): CheckedFilters {
     if (f !== undefined && f !== null && typeof f !== "object") throw new InvalidArgumentError("filters must be an object");
-    const out: CheckedFilters = { country: null, type: null, kind: null, source: null, sourceType: null };
+    const out: CheckedFilters = { country: null, type: null, kind: null, source: null, sourceType: null, includeFlagged: false, includeFallback: false };
     for (const k of ["country", "type", "kind", "source", "sourceType"] as const) {
         const v: unknown = f ? f[k] : undefined;
         if (v === undefined || v === null) continue;
         if (typeof v !== "string") throw new InvalidArgumentError(`filter ${k} must be a string; got ${JSON.stringify(v)}`);
         out[k] = v;
+    }
+    for (const k of ["includeFlagged", "includeFallback"] as const) {
+        const v = f?.[k];
+        if (v !== undefined && typeof v !== "boolean") throw new InvalidArgumentError(`${k} must be a boolean`);
+        out[k] = v ?? false;
     }
     return out;
 }
@@ -845,18 +891,6 @@ const STATION_TYPE_VALUES = ["reference", "subordinate"] as const;
 const KINDS = ["tide", "current"] as const;
 const SOURCE_TYPES = ["official", "gauge", "model"] as const;
 const QUANTITIES = ["water_level", "current"] as const;
-
-/** An enum filter compares the typed value: an unknown value in the data is "other", so "other" matches it and its
- * raw string matches nothing (spec 4.4, CR2 DR7). */
-function matches(e: IndexEntry, f: CheckedFilters, recSourceType: (e: IndexEntry) => string | null): boolean {
-    if (f.country !== null && e.country !== f.country) return false;
-    if (f.type !== null && en(e.type, STATION_TYPE_VALUES) !== f.type) return false;
-    if (f.kind !== null && en(e.kind, KINDS) !== f.kind) return false;
-    if (f.source !== null && !e.usable_sources.includes(f.source)) return false;
-    // with commercial_only, the effective recommended set's (spec 4.4, K-NC DR106)
-    if (f.sourceType !== null && en(recSourceType(e), SOURCE_TYPES) !== f.sourceType) return false;
-    return true;
-}
 
 function occurrences(text: string, sub: string): number[] {
     const out: number[] = [];
@@ -899,6 +933,10 @@ export class Release {
     readonly changelog_url: string | null;
     /** The release's files (spec 4.3.1). */
     readonly files: readonly FileInfo[];
+    readonly #header: JsonObject;
+    readonly #commercialOnly: boolean;
+    readonly #commercialBasis: "strict" | "as_published_upstream";
+    readonly #historicalPolicy: "fallback" | "exclude";
     readonly #source: StationSource;
     readonly #active: IndexEntry[];
     readonly #pos: Map<IndexEntry, number>;
@@ -916,7 +954,9 @@ export class Release {
 
     /** @internal */
     constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
-        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined, commercialOnly = false) {
+        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback") {
+        this.#header = header.raw;
+        this.#commercialOnly = commercialOnly; this.#commercialBasis = commercialBasis; this.#historicalPolicy = historicalPolicy;
         this.#source = source;
         this.#lru = eager ? Infinity : LRU_SIZE;
         const r = header.release;
@@ -974,6 +1014,62 @@ export class Release {
         Object.freeze(this);
     }
 
+    /** @internal The untouched release metadata and astronomical resources for the native predictor. */
+    get _header(): JsonObject { this.#open(); return this.#header; }
+
+    get historicalOffsetsPolicy(): "fallback" | "exclude" { this.#open(); return this.#historicalPolicy; }
+
+    #setEligible(cs: StoredSet, f: CheckedFilters, offsetsLicence: string | null = null): boolean {
+        if (cs.qc_status === null || !WITH_CONSTANTS.has(cs.qc_status)) return false;
+        if (cs.fallback !== null ? !f.includeFallback : cs.qc_status !== 'ok' && !f.includeFlagged) return false;
+        if (this.#commercialOnly) {
+            if (this.#commercialBasis === 'strict' && cs.fallback?.['reason'] === 'licence_reading') return false;
+            if (!this.#commercial(cs.licence_id) || offsetsLicence !== null && !this.#commercial(offsetsLicence)) return false;
+        }
+        return true;
+    }
+    #historicalEligible(e: IndexEntry, paths: readonly StoredSet[]): boolean {
+        const own = e.stored.subordinate_offsets;
+        if (!own?.['offset_id'] || this.#historicalPolicy === 'exclude') return false;
+        const rid = this._recommendedId(e);
+        if (e.stored.sets.some(cs => cs.set_id === rid && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status)) || paths.length > 0) return false;
+        const reference = this.#byId.get(str(own,'reference_station_id') ?? '');
+        const cs = reference?.stored.sets.find(cs => cs.source === 'noaa' && cs.quantity === 'water_level' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
+        if (!cs || cs.qc_status !== 'ok' || cs.fallback !== null || !cs.set_id?.startsWith(`${reference?.station_id}/`)) return false;
+        const raw = objects(this.#doc(reference as IndexEntry),'constant_sets').find(r => r['set_id'] === cs.set_id);
+        const binding = obj(obj(own,'provenance'),'reference_binding');
+        if (!raw || raw['source_record_id'] !== binding?.['noaa_id']) return false;
+        if (this.#commercialOnly && (!this.#commercial(str(own,'licence_id')) || !this.#commercial(cs.licence_id))) return false;
+        const convention = this.convention(cs.convention_id ?? '');
+        if (!convention || convention.v0_model !== 'schureman_tcd' || convention.nodal_handling !== 'f_u_at_prediction') return false;
+        const datum = obj(raw,'datum');
+        if (datum?.['chart_datum'] !== 'mllw' || num(datum,'msl_offset_m') === null || obj(datum,'named')?.['mllw'] !== 0 || obj(obj(datum,'basis'),'mllw')?.['kind'] !== 'published') return false;
+        return true;
+    }
+    #ordinaryPaths(e: IndexEntry, f: CheckedFilters): StoredSet[] {
+        const paths = e.stored.sets.filter(cs => this.#setEligible(cs,f));
+        if (!e.stored.subordinate_offsets?.['offset_id']) {
+            const reference = this.#byId.get(e.reference_station_id ?? '');
+            const cs = reference?.stored.sets.find(cs => cs.source === 'noaa' && cs.quantity === 'water_level' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
+            if (cs && this.#setEligible(cs,f,e.offsets_licence_id)) paths.push(cs);
+        }
+        for (const off of e.stored.current_offsets) {
+            const reference = this.#byId.get(str(off,'reference_station_id') ?? '');
+            const bin = num(off,'bin'), refBin = num(off,'reference_bin');
+            if (bin === null || refBin === null || !Number.isSafeInteger(bin) || !Number.isSafeInteger(refBin) || bin < 1 || refBin < 1) continue;
+            const cs = reference?.stored.sets.find(cs => cs.quantity === 'current' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status) && cs.current_bins.includes(refBin));
+            if (cs && this.#setEligible(cs,f,str(off,'licence_id'))) paths.push(cs);
+        }
+        return paths;
+    }
+    #matches(e: IndexEntry, f: CheckedFilters): boolean {
+        if (f.country !== null && e.country !== f.country || f.type !== null && en(e.type,STATION_TYPE_VALUES) !== f.type || f.kind !== null && en(e.kind,KINDS) !== f.kind) return false;
+        const paths: (StoredSet | JsonObject)[] = this.#ordinaryPaths(e,f);
+        const defaultPaths = this.#ordinaryPaths(e,{...f,includeFlagged:false,includeFallback:false});
+        if (this.#historicalEligible(e,defaultPaths) && e.stored.subordinate_offsets) paths.push(e.stored.subordinate_offsets);
+        return paths.some(cs => (f.source === null || cs.source === f.source) && (f.sourceType === null || en(cs.source_type,SOURCE_TYPES) === f.sourceType));
+    }
+
     #commercial(licenceId: string | null): boolean {
         return licenceId !== null && this.#licences.find((l) => l.licence_id === licenceId)?.commercial_use === true;
     }
@@ -988,11 +1084,11 @@ export class Release {
         const sets = e.stored.sets;
         const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
         if (!rec) return null;
-        if (this.#commercial(rec.licence_id)) return rec;
+        if (this.#commercial(rec.licence_id) && !(this.#commercialBasis === "strict" && rec.fallback?.["reason"] === "licence_reading")) return rec;
         const q = en(rec.quantity, QUANTITIES);
         if (q === null) return null;
         for (const status of ["ok", "flagged"]) {
-            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id));
+            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id) && !(this.#commercialBasis === "strict" && cs.fallback?.["reason"] === "licence_reading"));
             if (hit) return hit;
         }
         return null;
@@ -1004,8 +1100,7 @@ export class Release {
         return this.#effective.get(e.station_id)?.set_id ?? null;
     }
 
-    #recSourceType = (e: IndexEntry): string | null =>
-        this.#effective === null ? e.recommended_source_type : this.#effective.get(e.station_id)?.source_type ?? null;
+
 
     /**
      * The licences of a station's tide source under commercial_only (spec 4.2, K-NC DR106): its effective recommended
@@ -1200,11 +1295,11 @@ export class Release {
         const active = this.#active;
         const open = () => this.#open();
         const station = (e: IndexEntry) => this.#station(e);
-        const recSourceType = this.#recSourceType;
+        const thisMatches = (e: IndexEntry, f: CheckedFilters) => this.#matches(e, f);
         return (function* () {
             for (const e of active) {
                 open();
-                if (matches(e, f, recSourceType)) yield station(e);
+                if (thisMatches(e, f)) yield station(e);
             }
             open();
         })();
@@ -1223,7 +1318,7 @@ export class Release {
         if (q === "") throw new InvalidArgumentError("the query is empty");
         const ranked: [number, string, IndexEntry][] = [];
         for (const e of this.#active) {
-            if (!matches(e, f, this.#recSourceType)) continue;
+            if (!this.#matches(e, f)) continue;
             const n = e.name_folded;
             let r: number;
             if (n === q) r = 0;
@@ -1243,7 +1338,7 @@ export class Release {
         const band = maxKm === null ? Infinity : maxKm / (EARTH_R_KM * DEG) + 1e-9;
         const hits: [number, IndexEntry][] = [];
         for (const e of this.#active) {
-            if (e.lat === null || e.lon === null || Math.abs(e.lat - lat) > band || !matches(e, f, this.#recSourceType)) continue;
+            if (e.lat === null || e.lon === null || Math.abs(e.lat - lat) > band || !this.#matches(e, f)) continue;
             const d = haversine(lat, lon, e.lat, e.lon);
             if (maxKm === null || d <= maxKm) hits.push([d, e]);
         }
@@ -1402,4 +1497,240 @@ export function indexStations(header: ReleaseHeader, docs: readonly Json[]): Ind
 /** @internal Sort datestamps newest first. */
 export function newestFirst(ds: Iterable<string>): string[] {
     return [...ds].sort((a, b) => compareDatestamps(b, a));
+}
+
+const FALLBACK_REASONS = ["time_base_disputed","time_base_unresolved","refused_fit","short_record_uncalibrated","short_record_long_period","published_full_list","reliability_withheld","licence_reading","datum_gate_failed","not_in_otc_input","historical_offsets"] as const;
+
+const QC_FLAGS = ["time_base","broken_record","microtidal","non_tidal_signal","short_record","sibling_disagreement","carried_over","fallback:time_base_disputed","fallback:time_base_unresolved","fallback:refused_fit","fallback:short_record_uncalibrated","fallback:short_record_long_period","fallback:published_full_list","fallback:reliability_withheld","fallback:licence_reading","fallback:datum_gate_failed","fallback:not_in_otc_input","fallback:historical_offsets"] as const;
+
+const SOURCE_ROLES = ["gauge_station","published_harmonic_record","model","reference"] as const;
+
+const SOURCE_DISPOSITIONS = ["metadata_only","not_fitted","licence_restricted","unavailable","retained"] as const;
+
+const HISTORICAL_PROFILES: Readonly<Record<string, JsonObject>> = {
+  "noaa-2020-atlantic-table2-2513": {
+    "datum": {
+      "basis": {
+        "mllw": {
+          "kind": "published",
+          "method": "source",
+          "source_name": "MLLW"
+        }
+      },
+      "chart_datum": "mllw",
+      "named": {
+        "mllw": 0.0
+      },
+      "zero": "chart_datum"
+    },
+    "height_adjusted_type": "R",
+    "height_offset_high": 0.84,
+    "height_offset_low": 1.0,
+    "offset_id": "noaa-2020-atlantic-table2-2513",
+    "provenance": {
+      "annual_table_row": 2513,
+      "book": "atlantic",
+      "id_crosswalk": {
+        "legacy_id": "TEC2869",
+        "modern_alias_verified": false,
+        "status": "inferred"
+      },
+      "pdf_page": 351,
+      "printed_page": 345,
+      "raw_row_text": "  2513     Lockwoods Folly Inlet . . . . . . . . . . . . . . . . . . . . . . .         33° 55'     78° 14'     +0 04      +0 15     *0.84     *1.00    4.2    4.8     2.3",
+      "reference_binding": {
+        "mapping_status": "primary_name_position",
+        "noaa_id": "8661070",
+        "station_id": "OTC-a6c00a3f"
+      },
+      "source_manifest_sha256": "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7"
+    },
+    "qc_status": "flagged",
+    "reference_station_id": "OTC-a6c00a3f",
+    "source": "noaa",
+    "source_record_id": "annual-tide-tables-2020/atlantic/Table2/2513",
+    "source_type": "official",
+    "source_version": "annual-tide-tables-2020",
+    "time_offset_high_min": 4,
+    "time_offset_low_min": 15,
+    "vintage": {
+      "current_accuracy": "unverified",
+      "current_validity": "unestablished",
+      "publication_year": 2020,
+      "removal_events": [
+        {
+          "evidence_sha256": "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61",
+          "name": "Lockwoods Folly Inlet (r)",
+          "operation": "Removed",
+          "source_clock_timestamp": "2026-02-18T14:09:46",
+          "source_timezone": null
+        }
+      ],
+      "source_lifecycle": "retired"
+    }
+  },
+  "noaa-2020-pacific-table2-517": {
+    "datum": {
+      "basis": {
+        "mllw": {
+          "kind": "published",
+          "method": "source",
+          "source_name": "MLLW"
+        }
+      },
+      "chart_datum": "mllw",
+      "named": {
+        "mllw": 0.0
+      },
+      "zero": "chart_datum"
+    },
+    "height_adjusted_type": "A",
+    "height_offset_high": -0.06096,
+    "height_offset_low": 0.0,
+    "offset_id": "noaa-2020-pacific-table2-517",
+    "provenance": {
+      "annual_table_row": 517,
+      "book": "pacific",
+      "id_crosswalk": {
+        "legacy_id": "TWC0509",
+        "modern_alias_verified": false,
+        "status": "inferred"
+      },
+      "pdf_page": 302,
+      "printed_page": 284,
+      "raw_row_text": "   517     San Francisco Bar . . . . . . . . . . . . . . . . . . . . . . . . .         37° 46'     122° 38'     -0 35       -0 31      -0.2        0.0    3.9    5.6     3.0",
+      "reference_binding": {
+        "mapping_status": "primary_name_position",
+        "noaa_id": "9414290",
+        "station_id": "OTC-ee4593cd"
+      },
+      "source_manifest_sha256": "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7"
+    },
+    "qc_status": "flagged",
+    "reference_station_id": "OTC-ee4593cd",
+    "source": "noaa",
+    "source_record_id": "annual-tide-tables-2020/pacific/Table2/517",
+    "source_type": "official",
+    "source_version": "annual-tide-tables-2020",
+    "time_offset_high_min": -35,
+    "time_offset_low_min": -31,
+    "vintage": {
+      "current_accuracy": "unverified",
+      "current_validity": "unestablished",
+      "publication_year": 2020,
+      "removal_events": [
+        {
+          "evidence_sha256": "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61",
+          "name": "San Francisco Bar (r)",
+          "operation": "Removed",
+          "source_clock_timestamp": "2026-02-18T14:09:50",
+          "source_timezone": null
+        },
+        {
+          "evidence_sha256": "c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61",
+          "name": "San Francisco Bar",
+          "operation": "Removed",
+          "source_clock_timestamp": "2026-07-06T11:17:37",
+          "source_timezone": null
+        }
+      ],
+      "source_lifecycle": "retired"
+    }
+  }
+};
+function fallbackOf(d: JsonObject | null): Fallback | null {
+    if (!d) return null;
+    return Object.freeze({ reason: en(d['reason'], FALLBACK_REASONS) ?? 'other', basis: str(d, 'basis') ?? '',
+        otc_finding: str(d, 'otc_finding') ?? '', preferred_set_id: str(d, 'preferred_set_id'), raw: d });
+}
+function qcFlagOf(d: JsonObject): QcFlag {
+    return Object.freeze({flag: en(d['flag'], QC_FLAGS) ?? 'other', reason: str(d, 'reason'), values: qcValues(d['values'])});
+}
+function sourceRecordOf(d: JsonObject, release: Release): SourceRecord {
+    return Object.freeze({source: str(d,'source') ?? '', source_version: str(d,'source_version') ?? '',
+        source_record_id: str(d,'source_record_id') ?? '', role: en(d['role'],SOURCE_ROLES) ?? 'other',
+        disposition: en(d['disposition'],SOURCE_DISPOSITIONS) ?? 'other', detail: str(d,'detail') ?? '',
+        licence_id: str(d,'licence_id'), upstream_licence_id: str(d,'upstream_licence_id'),
+        published_set_ids: Object.freeze(arr(d,'published_set_ids').filter((v): v is string => typeof v === 'string')),
+        provenance: obj(d,'provenance') ?? Object.freeze({}), original_metadata: obj(d,'original_metadata') ?? Object.freeze({}),
+        original_harmonics: obj(d,'original_harmonics'), licence: release.licence(str(d,'licence_id') ?? ''),
+        upstreamLicence: release.licence(str(d,'upstream_licence_id') ?? ''), raw: d });
+}
+function checkSourceRecords(doc: JsonObject): void {
+    const records = doc['source_records'];
+    const fail = (field: string): never => { throw new InvalidReleaseError(`station ${String(doc['station_id'])}: invalid source record ${field}`); };
+    if (records !== undefined && (!Array.isArray(records) || records.length === 0)) fail('source_records');
+    for (const d of objects(doc,'source_records')) {
+        for (const k of ['source','source_version','source_record_id','role','disposition','detail']) {
+            if (typeof d[k] !== 'string' || !d[k]) fail(k);
+        }
+        for (const k of ['licence_id','upstream_licence_id']) if (d[k] !== undefined && d[k] !== null && typeof d[k] !== 'string') fail(k);
+        if (!Object.hasOwn(d,'licence_id') || !Array.isArray(d['published_set_ids']) || !d['published_set_ids'].every(v => typeof v === 'string')) fail('required fields');
+        const p = obj(d,'provenance');
+        if (!p || !Array.isArray(p['input_sha256']) || !p['input_sha256'].every(v => typeof v === 'string') || typeof p['inventory_sha256'] !== 'string') fail('provenance');
+        if (Object.hasOwn(d,'original_metadata') && !isObject(d['original_metadata'])) fail('original_metadata');
+        const h = d['original_harmonics'];
+        if (h !== undefined && h !== null) {
+            if (!isObject(h)) fail('original_harmonics');
+            if (isObject(h)) {
+                for (const k of ['format','amplitude_unit','amplitude_unit_basis','phase_unit','phase_convention','amplitude_uncertainty_unit','amplitude_uncertainty_unit_basis']) {
+                    if (h[k] !== undefined && h[k] !== null && typeof h[k] !== 'string') fail(k);
+                }
+                if (h['columns'] !== undefined && h['columns'] !== null && (!Array.isArray(h['columns']) || !h['columns'].every(v => typeof v === 'string'))) fail('columns');
+                if (h['rows'] !== undefined && (!Array.isArray(h['rows']) || !h['rows'].every(r => Array.isArray(r) && r.every(c => typeof c === 'string')))) fail('rows');
+                for (const annotation of objects(h,'annotations')) {
+                    if (annotation['row'] !== undefined && annotation['row'] !== null && !(typeof annotation['row'] === 'number' && Number.isFinite(annotation['row']) && Number.isInteger(annotation['row']))) fail('annotation.row');
+                    for (const k of ['reason','detail']) if (annotation[k] !== undefined && annotation[k] !== null && typeof annotation[k] !== 'string') fail(`annotation.${k}`);
+                }
+                if (h['annotations'] !== undefined && h['annotations'] !== null && (!Array.isArray(h['annotations']) || !h['annotations'].every(isObject))) fail('annotations');
+            }
+        }
+    }
+}
+/** Source-bound profiles, not a general licence to admit arbitrary historical offsets. */
+function checkHistoricalOffsets(d: JsonObject): void {
+    const flag = objects(d,'qc_flags').some(f => f['flag'] === 'fallback:historical_offsets');
+    if (!Object.hasOwn(d,'offset_id') && obj(d,'fallback')?.['reason'] !== 'historical_offsets' && !flag) return;
+    const fail = (key: string): never => { throw new InvalidReleaseError(`invalid historical subordinate_offsets.${key}`); };
+    const id = str(d,'offset_id');
+    const expected = id === null ? undefined : HISTORICAL_PROFILES[id];
+    if (!expected) fail('offset_id');
+    const text = (v: Json | undefined) => typeof v === 'string' && v.trim().length > 0;
+    const digest = (v: Json | undefined) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
+    const hashes = (v: Json | undefined) => Array.isArray(v) && v.length > 0 && v.every(digest) && new Set(v).size === v.length;
+    for (const [key,value] of Object.entries(expected ?? {})) {
+        if (key === 'vintage' || key === 'provenance' || key === 'qc_flags' || key === 'fallback') continue;
+        if (canonicalJson(d[key]) !== canonicalJson(value)) fail(key);
+    }
+    if (!text(d['licence_id'])) fail('licence_id');
+    const flags = objects(d,'qc_flags');
+    if (flags.length !== 1 || flags[0]?.['flag'] !== 'fallback:historical_offsets' || !text(flags[0]?.['reason'])) fail('qc_flags');
+    const f = obj(d,'fallback');
+    if (!f || f['reason'] !== 'historical_offsets' || !text(f['basis']) || !text(f['otc_finding']) || Object.hasOwn(f,'preferred_set_id')) fail('fallback');
+    const v = obj(d,'vintage'), ev = obj(expected,'vintage');
+    if (!v || !ev) fail('vintage');
+    for (const key of ['publication_year','source_lifecycle','removal_events','current_validity','current_accuracy']) {
+        if (canonicalJson(v?.[key]) !== canonicalJson(ev?.[key])) fail(`vintage.${key}`);
+    }
+    const equivalence = v?.['reference_2020_equivalence'];
+    if (!['not_checked','matched_at_publisher_precision','disagrees'].includes(String(equivalence))) fail('reference_2020_equivalence');
+    if (equivalence === 'not_checked' ? Object.hasOwn(v ?? {},'reference_2020_equivalence_sha256') : !digest(v?.['reference_2020_equivalence_sha256'])) fail('reference_2020_equivalence_sha256');
+    const p = obj(d,'provenance'), ep = obj(expected,'provenance');
+    if (!p || !ep) fail('provenance');
+    for (const key of ['source_manifest_sha256','book','annual_table_row','printed_page','pdf_page','raw_row_text']) {
+        if (p?.[key] !== ep?.[key]) fail(`provenance.${key}`);
+    }
+    if (!hashes(p?.['input_sha256']) || !digest(p?.['acceptance_report_sha256'])) fail('provenance evidence');
+    for (const [key,fields] of [['id_crosswalk',['legacy_id','status','modern_alias_verified']],['reference_binding',['noaa_id','station_id','mapping_status']]] as const) {
+        const actual = obj(p,key), baseline = obj(ep,key);
+        if (!actual || !baseline || !hashes(actual['evidence_sha256']) || fields.some(k => actual[k] !== baseline[k])) fail(`provenance.${key}`);
+    }
+    try { if (!text(p?.['raw_values_json']) || !isObject(JSON.parse(String(p?.['raw_values_json'])))) fail('raw_values_json'); }
+    catch { fail('raw_values_json'); }
+}
+
+function canonicalJson(v: Json | undefined): string | undefined {
+    if (isObject(v)) return JSON.stringify(Object.fromEntries(Object.keys(v).sort().map(k => [k, JSON.parse(canonicalJson(v[k]) ?? "null")])));
+    if (Array.isArray(v)) return JSON.stringify(v.map(x => JSON.parse(canonicalJson(x) ?? "null")));
+    return JSON.stringify(v);
 }

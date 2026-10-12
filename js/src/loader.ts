@@ -89,7 +89,7 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
 
 /** @internal A release from the full `.json` document (eager). */
 export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
-    warn: (message: string) => void = () => undefined, commercialOnly = false): Release {
+    warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback"): Release {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -98,7 +98,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly);
+    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -167,6 +167,8 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     warn?: (message: string) => void;
     /** The open option of spec 4.2 (K-NC DR106). */
     commercialOnly?: boolean;
+    commercialBasis?: "strict" | "as_published_upstream";
+    historicalOffsetsPolicy?: "fallback" | "exclude";
 }): Release {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
@@ -219,7 +221,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false);
+    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false, opts.commercialBasis ?? "strict", opts.historicalOffsetsPolicy ?? "fallback");
 }
 
 /**

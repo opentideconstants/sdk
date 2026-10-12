@@ -206,6 +206,10 @@ export class OpenTideConstants {
         const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
         const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
         // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
+        const commercialBasis = options.commercialBasis ?? "strict";
+        if (!["strict", "as_published_upstream"].includes(commercialBasis) || options.commercialBasis === null) throw new InvalidArgumentError("commercialBasis must be strict or as_published_upstream");
+        const historicalOffsetsPolicy = options.historicalOffsetsPolicy ?? "fallback";
+        if (!["fallback", "exclude"].includes(historicalOffsetsPolicy) || options.historicalOffsetsPolicy === null) throw new InvalidArgumentError("historicalOffsetsPolicy must be fallback or exclude");
         const commercialOnly: unknown = options.commercialOnly;
         if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
             throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
@@ -259,12 +263,12 @@ export class OpenTideConstants {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
             proxy, caFile,
             userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
-            onNetworkError, logger: options.logger ?? null, mode, commercialOnly: commercialOnly === true,
+            onNetworkError, logger: options.logger ?? null, mode, commercialBasis, historicalOffsetsPolicy, commercialOnly: commercialOnly === true,
         };
         const extra = { lastError: null as OpenTideConstantsError | null, pinned: release !== "latest", file: null as FileSource | null, cacheRoot, autoUpdate, interval };
 
         if (file !== null && node) {
-            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly);
+            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly, ctx.commercialBasis ?? "strict", ctx.historicalOffsetsPolicy ?? "fallback");
             return new OpenTideConstants(ctx, node, rel, from, { ...extra, pinned: true, file: src });
         }
         const store = ctx.store;
@@ -398,12 +402,12 @@ export class OpenTideConstants {
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
         const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, warn);
-        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles);
+        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
     static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void,
-        commercialOnly: boolean): { rel: Release; from: LoadedFrom; src: FileSource } {
+        commercialOnly: boolean, commercialBasis: "strict" | "as_published_upstream", historicalOffsetsPolicy: "fallback" | "exclude"): { rel: Release; from: LoadedFrom; src: FileSource } {
         const path = node.nodePath;
         const full = path.resolve(file);
         if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
@@ -445,13 +449,13 @@ export class OpenTideConstants {
             if (mode === "stream") {
                 const lr = node.openLineReader(full);
                 try {
-                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn, commercialOnly });
+                    rel = releaseFromJsonl(meta, data, { eager: false, files, reader: lr.read, close: lr.close, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
                 } catch (e) {
                     lr.close();
                     throw e;
                 }
             } else {
-                rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly });
+                rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
             }
         } else {
             let json = data;
@@ -463,7 +467,7 @@ export class OpenTideConstants {
                 }
                 if (jsonSha !== null) checkJsonBytes(full, node.sha256Sync(json), jsonSha);
             }
-            rel = releaseFromJson(json, files, null, warn, commercialOnly);
+            rel = releaseFromJson(json, files, null, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
         }
         return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
     }
@@ -512,7 +516,7 @@ export class OpenTideConstants {
             const v = vb ? parseVerified(vb, res.datestamp) : null;
             if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
             const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
-                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null);
+                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
         } catch (e) {

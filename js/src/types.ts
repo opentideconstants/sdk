@@ -17,7 +17,7 @@ export type CanaryStatus = "pass" | "fail" | "not_applicable";
 export type HeightAdjustedType = "R" | "A";
 export type DroppedReason = "rayleigh" | "noise" | "long_period_rule" | "non_tidal_rule" | "convention" | "other";
 export type QcFlagName = "time_base" | "broken_record" | "microtidal" | "non_tidal_signal" | "short_record" | "sibling_disagreement"
-    | "carried_over";
+    | "carried_over" | "fallback:time_base_disputed" | "fallback:time_base_unresolved" | "fallback:refused_fit" | "fallback:short_record_uncalibrated" | "fallback:short_record_long_period" | "fallback:published_full_list" | "fallback:reliability_withheld" | "fallback:licence_reading" | "fallback:datum_gate_failed" | "fallback:not_in_otc_input" | "fallback:historical_offsets";
 export type DecisionTier = "rule" | "review" | "fallback";
 export type DecisionOutcome = "accept" | "fallback";
 export type AliasSystem = "noaa" | "gesla" | "ticon" | "xtide" | "kartverket" | "slackwater" | "webcaltides" | "linz"
@@ -224,6 +224,16 @@ export interface Validation {
 
 /** The offsets of a subordinate station from its reference station. */
 export interface SubordinateOffsets {
+    readonly offset_id: string | null;
+    readonly source: string | null;
+    readonly source_type: SourceType | Other | null;
+    readonly source_version: string | null;
+    readonly source_record_id: string | null;
+    readonly qc_status: QcStatus | Other | null;
+    readonly qc_flags: readonly QcFlag[];
+    readonly fallback: Fallback | null;
+    readonly vintage: HistoricalOffsetVintage | null;
+    readonly provenance: HistoricalOffsetProvenance | null;
     readonly reference_station_id: string | null;
     readonly time_offset_high_min: number | null;
     readonly time_offset_low_min: number | null;
@@ -255,6 +265,8 @@ export interface Nearby<S = unknown> {
 
 /** Station filters (spec 4.4). All are optional and combine with AND. */
 export interface StationFilters {
+    includeFlagged?: boolean;
+    includeFallback?: boolean;
     country?: string | null;
     type?: StationType | null;
     kind?: Kind | null;
@@ -299,6 +311,8 @@ export interface Logger {
 
 /** Options of `OpenTideConstants.open` (spec 4.2). */
 export interface OpenOptions {
+    commercialBasis?: "strict" | "as_published_upstream";
+    historicalOffsetsPolicy?: "fallback" | "exclude";
     /** "latest" (the default) or a datestamp. */
     release?: string | null;
     /** A local .json, .json.gz or .jsonl file (Node only). */
@@ -339,4 +353,60 @@ export interface DownloadOptions {
 /** Options of `prune`. */
 export interface PruneOptions {
     keep?: number | null;
+}
+
+export type SourceRole = "gauge_station" | "published_harmonic_record" | "model" | "reference";
+
+export type SourceDisposition = "metadata_only" | "not_fitted" | "licence_restricted" | "unavailable" | "retained";
+
+export type FallbackReason = "time_base_disputed" | "time_base_unresolved" | "refused_fit" | "short_record_uncalibrated" | "short_record_long_period" | "published_full_list" | "reliability_withheld" | "licence_reading" | "datum_gate_failed" | "not_in_otc_input" | "historical_offsets";
+
+export interface SourceRecord {
+    readonly source: string;
+    readonly source_version: string;
+    readonly source_record_id: string;
+    readonly role: SourceRole | Other;
+    readonly disposition: SourceDisposition | Other;
+    readonly detail: string;
+    readonly licence_id: string | null;
+    readonly upstream_licence_id: string | null;
+    readonly published_set_ids: readonly string[];
+    readonly provenance: JsonObject;
+    readonly original_metadata: JsonObject;
+    readonly original_harmonics: JsonObject | null;
+    readonly licence: Licence | null;
+    readonly upstreamLicence: Licence | null;
+    readonly raw: JsonObject;
+}
+
+export interface Fallback {
+    readonly reason: FallbackReason | Other;
+    readonly basis: string;
+    readonly otc_finding: string;
+    readonly preferred_set_id: string | null;
+    readonly raw: JsonObject;
+}
+
+export interface HistoricalOffsetVintage {
+    readonly publication_year: number;
+    readonly source_lifecycle: string;
+    readonly removal_events: readonly JsonObject[];
+    readonly current_validity: string;
+    readonly current_accuracy: string;
+    readonly reference_2020_equivalence: string;
+    readonly reference_2020_equivalence_sha256: string | null;
+}
+
+export interface HistoricalOffsetProvenance {
+    readonly source_manifest_sha256: string;
+    readonly input_sha256: readonly string[];
+    readonly book: string;
+    readonly annual_table_row: number;
+    readonly printed_page: number;
+    readonly pdf_page: number;
+    readonly raw_row_text: string;
+    readonly raw_values_json: string;
+    readonly id_crosswalk: JsonObject;
+    readonly reference_binding: JsonObject;
+    readonly acceptance_report_sha256: string;
 }

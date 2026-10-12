@@ -27,6 +27,8 @@ export interface Ctx {
     mode: Mode;
     /** The open option of spec 4.2 (K-NC DR106), applied to every release the client loads. */
     commercialOnly: boolean;
+    commercialBasis?: "strict" | "as_published_upstream";
+    historicalOffsetsPolicy?: "fallback" | "exclude";
 }
 
 /** A latest-pointer or index entry, with absolute file URLs. */
@@ -671,7 +673,7 @@ export interface SyncDir {
 
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined,
-    commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null): Release {
+    commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalOffsetsPolicy: "fallback" | "exclude" = "fallback"): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
     const byName = (a: FileInfo, b: FileInfo) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -689,8 +691,8 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
         return b;
     };
     if (mode === "eager") {
-        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly);
-        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly });
+        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
+        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
     }
     const meta = sized(n.meta);
     const want = verified.files[n.jsonl]?.size;
@@ -737,14 +739,14 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     const lr = dir.lineReader(n.jsonl);
     if (lr) {
         try {
-            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly });
+            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
         } catch (e) {
             lr.close();
             throw e;
         }
     }
     const bytes = jsonl ?? sized(n.jsonl);
-    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly });
+    return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
 }
 
 /** Read a cache directory into a SyncDir (the browser, where storage is async). */
