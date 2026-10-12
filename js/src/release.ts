@@ -61,12 +61,27 @@ export interface StoredEntry {
 
 const SET_KEYS = ["set_id", "source", "source_type", "quantity", "qc_status", "convention_id", "licence_id"] as const;
 const ENTRY_STR = ["name", "name_folded", "country", "type", "kind", "reference_station_id", "offsets_licence_id", "recommended_set_id"] as const;
+const PRIVATE_SET_KEYS = ["source_record_id", "source_version", "datum"] as const;
+const CURRENT_BASE_KEYS = ["bin", "reference_bin", "reference_station_id", "licence_id"] as const;
+const CURRENT_ADJUSTMENTS = ["time_adj_max_flood_min", "time_adj_max_ebb_min", "time_adj_slack_before_flood_min", "time_adj_slack_before_ebb_min", "flood_amp_ratio", "ebb_amp_ratio"] as const;
+
+/** @internal Admitted field presence, independent of the informational writer name. Never serialized. */
+export interface IndexPresence {
+    own: "full" | "sparse" | "base";
+    offsets: "full" | "projected" | "sparse";
+    privateSets: boolean;
+    bins: boolean;
+    baseFallback: boolean;
+    fallback: readonly boolean[];
+}
 
 /** @internal One line (station or tombstone) of a release, as the SDK keeps it in memory: the stored entry plus derived facts. */
 export interface IndexEntry {
     stored: StoredEntry;
     /** Legacy discovery entries omit the own-offset payload; never serialized into index-v1.json. */
     legacyOffsets?: boolean;
+    indexPresence?: IndexPresence;
+    policyHydrated?: boolean;
     offset: number;
     length: number;
     station_id: string;
@@ -383,8 +398,23 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
  * @internal The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
  * status, the references and the sets. The other keys are used as the index gives them (spec 6.2).
  */
-export function lineView(s: StoredEntry, legacyOffsets = false): string {
+export function lineView(s: StoredEntry, legacyOffsets = false, presence?: IndexPresence, doc?: JsonObject): string {
     const sets = Array.isArray(s.sets) ? s.sets : [];
+    if (presence) {
+        const rawSets = doc ? objects(doc, "constant_sets") : [];
+        const projectedSets = sets.map((cs, i) => {
+            const raw = doc ? rawSets.find(raw => raw["set_id"] === cs.set_id) : cs as unknown as JsonObject;
+            return [...SET_KEYS.map(k => cs[k]), cs.constituents,
+                ...(presence.baseFallback ? [] : [presence.fallback[i] ? cs.fallback : cs.fallback === null ? null : "missing-fallback-mismatch"]),
+                ...(presence.bins ? [cs.current_bins] : []),
+                ...(presence.privateSets ? PRIVATE_SET_KEYS.map(k => canonicalJson(raw?.[k] ?? null)) : [])];
+        });
+        const offsetKeys = presence.offsets === "projected" ? CURRENT_BASE_KEYS : [...CURRENT_BASE_KEYS, ...CURRENT_ADJUSTMENTS];
+        const offsets = s.current_offsets.map(row => offsetKeys.map(k => row[k]));
+        return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
+            projectedSets, ...(presence.own === "base" ? [] : [presence.own === "sparse" && s.subordinate_offsets !== null
+                ? "missing-own-offset-mismatch" : s.subordinate_offsets]), offsets]);
+    }
     return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
         sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents, cs.fallback, cs.current_bins]),
         ...(legacyOffsets ? [] : [s.subordinate_offsets]), s.current_offsets]);
@@ -430,25 +460,33 @@ export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha25
  */
 export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string | null, jsonlSize: number | null,
     conventions: Set<string>, licences: Set<string>): IndexEntry[] | null {
-    if (!isObject(v) || v["discovery_index_version"] !== 1 || v["index_version"] !== 1 || v["datestamp"] !== datestamp || v["jsonl"] !== `OTC_${datestamp}.jsonl`) return null;
+    if (!isObject(v) || Object.hasOwn(v, "discovery_index_version") && v["discovery_index_version"] !== 1 || v["index_version"] !== 1 || v["datestamp"] !== datestamp || v["jsonl"] !== `OTC_${datestamp}.jsonl`) return null;
     if (jsonlSha256 === null || v["jsonl_sha256"] !== jsonlSha256 || jsonlSize === null || v["jsonl_size"] !== jsonlSize) return null;
     const stations = v["stations"];
     if (!Array.isArray(stations)) return null;
     // A complete older discovery index lacks this payload everywhere. A partial deletion from an expanded
     // index remains stale, so its full validation cannot be downgraded entry by entry.
     const legacyOffsets = stations.every((e) => isObject(e) && !Object.hasOwn(e, "subordinate_offsets"));
+    const allSets = stations.flatMap(e => isObject(e) && Array.isArray(e["sets"]) ? e["sets"] : []);
+    if (!allSets.every(isObject)) return null;
+    const privateSets = allSets.some(cs => PRIVATE_SET_KEYS.some(k => Object.hasOwn(cs, k)));
+    if (privateSets && !allSets.every(cs => PRIVATE_SET_KEYS.every(k => Object.hasOwn(cs, k)))) return null;
+    const bins = allSets.some(cs => Object.hasOwn(cs, "current_bins"));
+    const baseFallback = !allSets.some(cs => Object.hasOwn(cs, "fallback"));
+    if (bins && !allSets.every(cs => Object.hasOwn(cs, "current_bins"))) return null;
+    let currentProfile: "full" | "projected" | null = null;
     const strOrNull = (x: unknown) => x === null || typeof x === "string";
     const numOrNull = (x: unknown) => x === null || (typeof x === "number" && Number.isFinite(x));
     const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0;
     const out: IndexEntry[] = [];
     let start = 0; // the least offset the next entry may have: after the line before it and its line end (CR2 DR9)
     for (const entry of stations) {
-        const e = legacyOffsets && isObject(entry) ? {
+        if (!isObject(entry)) return null;
+        const e: JsonObject = {
             ...entry,
-            reference_station_id: entry["reference_station_id"] ?? null,
-            offsets_licence_id: entry["offsets_licence_id"] ?? null,
-            subordinate_offsets: null,
-        } : entry;
+            subordinate_offsets: Object.hasOwn(entry, "subordinate_offsets") ? entry["subordinate_offsets"] : null,
+            current_offsets: Object.hasOwn(entry, "current_offsets") ? entry["current_offsets"] : [],
+        };
         if (!isObject(e) || !isInt(e["offset"]) || !isInt(e["length"]) || typeof e["station_id"] !== "string" || typeof e["status"] !== "string") return null;
         const offset = e["offset"];
         const length = e["length"];
@@ -461,13 +499,30 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
         if (!isObject(aliases) || !Object.values(aliases).every((ids) => Array.isArray(ids) && ids.every((x) => typeof x === "string"))) return null;
         if (!Object.hasOwn(e, "subordinate_offsets") || !(e["subordinate_offsets"] === null || isObject(e["subordinate_offsets"]))) return null;
         if (!Array.isArray(e["current_offsets"]) || !e["current_offsets"].every(isObject)) return null;
-        try { if (isObject(e["subordinate_offsets"])) checkHistoricalOffsets(e["subordinate_offsets"]); } catch { return null; }
+        try { if (isObject(e["subordinate_offsets"])) checkShape({ subordinate_offsets: e["subordinate_offsets"] }, e["station_id"]); } catch { return null; }
+        for (const off of e["current_offsets"]) {
+            if (!CURRENT_BASE_KEYS.every(k => Object.hasOwn(off, k)) || ![off["bin"], off["reference_bin"]].every(n => typeof n === "number" && Number.isSafeInteger(n) && n > 0)
+                || typeof off["reference_station_id"] !== "string" || typeof off["licence_id"] !== "string" || !licences.has(off["licence_id"])) return null;
+            const adjustments = CURRENT_ADJUSTMENTS.filter(k => Object.hasOwn(off, k));
+            if (adjustments.length !== 0 && adjustments.length !== CURRENT_ADJUSTMENTS.length
+                || !adjustments.every(k => off[k] === null || typeof off[k] === "number" && Number.isFinite(off[k]))) return null;
+            const profile = adjustments.length === 0 ? "projected" : "full";
+            if (currentProfile !== null && currentProfile !== profile) return null;
+            currentProfile = profile;
+        }
         const sets = e["sets"];
-        if (!Array.isArray(sets)) return null;
+        if (!Array.isArray(sets) || !sets.every(isObject)) return null;
         for (const cs of sets) {
             if (!isObject(cs) || !SET_KEYS.every((k) => k in cs && strOrNull(cs[k]))) return null;
-            if (!Object.hasOwn(cs, "fallback") || !(cs["fallback"] === null || isObject(cs["fallback"]))) return null;
-            if (!Array.isArray(cs["current_bins"]) || !cs["current_bins"].every((v) => typeof v === "number" && Number.isSafeInteger(v) && v > 0)) return null;
+            if (Object.hasOwn(cs, "fallback") && !(cs["fallback"] === null || isObject(cs["fallback"]))) return null;
+            if (isObject(cs["fallback"])) {
+                try { checkShape({ constant_sets: [{ fallback: cs["fallback"] }] }, e["station_id"]); } catch { return null; }
+            }
+            if (bins && (!Array.isArray(cs["current_bins"]) || !cs["current_bins"].every((v) => typeof v === "number" && Number.isSafeInteger(v) && v > 0))) return null;
+            if (privateSets) {
+                if (!strOrNull(cs["source_record_id"]) || !strOrNull(cs["source_version"]) || !(cs["datum"] === null || isObject(cs["datum"]))) return null;
+                try { checkShape({ constant_sets: [Object.fromEntries(PRIVATE_SET_KEYS.map(k => [k, cs[k]]))] }, e["station_id"]); } catch { return null; }
+            }
             const cons = cs["constituents"];
             if (!Array.isArray(cons) || !cons.every((x) => typeof x === "string")) return null;
             // the same checks as indexDoc, for every status
@@ -479,16 +534,26 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
             if (e["lat"] === null || e["lon"] === null) return null;
         }
         const own = isObject(e["subordinate_offsets"]) ? e["subordinate_offsets"] : null;
+        if (!legacyOffsets && isObject(entry) && !Object.hasOwn(entry, "subordinate_offsets")
+            && (e["reference_station_id"] !== null || e["offsets_licence_id"] !== null)) return null;
         if (!legacyOffsets && (e["reference_station_id"] !== str(own,"reference_station_id") || e["offsets_licence_id"] !== str(own,"licence_id"))) return null;
-        const stored = e as unknown as StoredEntry;
+        const stored = { ...e, sets: sets.map(cs => ({ ...cs as JsonObject,
+            fallback: Object.hasOwn(cs, "fallback") ? (cs as JsonObject)["fallback"] : null,
+            current_bins: bins ? (cs as JsonObject)["current_bins"] : [],
+        })) } as unknown as StoredEntry;
         const rec = stored.recommended_set_id === null ? undefined : stored.sets.find((cs) => cs.set_id === stored.recommended_set_id);
         // kind is derived, not trusted: from the recommended set here, and from the reference station below
         const indexed = entryFromStored({ ...stored, kind: rec ? kindOfQuantity(rec.quantity) : null });
         if (legacyOffsets) indexed.legacyOffsets = true;
+        indexed.indexPresence = Object.freeze({ own: legacyOffsets ? "base" : isObject(entry) && Object.hasOwn(entry, "subordinate_offsets") ? "full" : "sparse",
+            offsets: isObject(entry) && Object.hasOwn(entry, "current_offsets") ? currentProfile ?? "full" : "sparse",
+            privateSets, bins, baseFallback, fallback: Object.freeze(sets.map(cs => Object.hasOwn(cs, "fallback"))) });
         out.push(indexed);
     }
     checkLinks(out);
     resolveKinds(out);
+    const activeIds = new Set(out.filter(e => e.status === "active").map(e => e.station_id));
+    if (out.some(e => e.stored.current_offsets.some(off => !activeIds.has(String(off["reference_station_id"]))))) return null;
     const given = stations as unknown as StoredEntry[];
     if (out.some((x, i) => x.status === "active" && x.kind !== (given[i]?.kind ?? null))) return null;
     return out;
@@ -1067,11 +1132,13 @@ get historicalOffsetsPolicy()
         return true;
     }
     #historicalEligible(e: IndexEntry, paths: readonly StoredSet[]): boolean {
+        this.#policyEntry(e);
         const own = e.stored.subordinate_offsets;
         if (!own?.['offset_id'] || this.#historicalPolicy === 'exclude') return false;
         const rid = this._recommendedId(e);
         if (e.stored.sets.some(cs => cs.set_id === rid && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status)) || paths.length > 0) return false;
         const reference = this.#byId.get(str(own,'reference_station_id') ?? '');
+        if (reference) this.#policyEntry(reference);
         const cs = reference?.stored.sets.find(cs => cs.source === 'noaa' && cs.quantity === 'water_level' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
         if (!cs || cs.qc_status !== 'ok' || cs.fallback !== null || !cs.set_id?.startsWith(`${reference?.station_id}/`)) return false;
         const raw = objects(this.#doc(reference as IndexEntry),'constant_sets').find(r => r['set_id'] === cs.set_id);
@@ -1090,14 +1157,17 @@ get historicalOffsetsPolicy()
         } catch(error) {if(error instanceof X.OpenTideConstantsError)return false;throw error;}
     }
     #ordinaryPaths(e: IndexEntry, f: CheckedFilters): StoredSet[] {
+        this.#policyEntry(e);
         const paths = e.stored.sets.filter(cs => this.#setEligible(cs,f));
         if (!e.stored.subordinate_offsets?.['offset_id']) {
             const reference = this.#byId.get(e.reference_station_id ?? '');
+            if (reference) this.#policyEntry(reference);
             const cs = reference?.stored.sets.find(cs => cs.source === 'noaa' && cs.quantity === 'water_level' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status));
             if (cs && this.#setEligible(cs,f,e.offsets_licence_id)) paths.push(cs);
         }
         for (const off of e.stored.current_offsets) {
             const reference = this.#byId.get(str(off,'reference_station_id') ?? '');
+            if (reference) this.#policyEntry(reference);
             const bin = num(off,'bin'), refBin = num(off,'reference_bin');
             if (bin === null || refBin === null || !Number.isSafeInteger(bin) || !Number.isSafeInteger(refBin) || bin < 1 || refBin < 1) continue;
             const cs = reference?.stored.sets.find(cs => cs.quantity === 'current' && cs.qc_status !== null && WITH_CONSTANTS.has(cs.qc_status) && cs.current_bins.includes(refBin));
@@ -1124,6 +1194,7 @@ get historicalOffsetsPolicy()
      * quantity never matches.
      */
     #effectiveSet(e: IndexEntry): StoredSet | null {
+        this.#policyEntry(e);
         const sets = e.stored.sets;
         const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
         if (!rec) return null;
@@ -1207,6 +1278,23 @@ get historicalOffsetsPolicy()
         const i = this.#pos.get(e);
         if (i === undefined) throw new InvalidReleaseError(`station ${e.station_id} is not an entry of release ${this.datestamp}`);
         return this.#source.doc(e, i);
+    }
+
+    /** Fill only uncached policy summaries through the existing checked lazy read; no full station is retained. */
+    #policyEntry(e: IndexEntry): void {
+        const presence = e.indexPresence;
+        if (!presence || e.policyHydrated || presence.own !== "base" && presence.bins && presence.fallback.every(Boolean)) return;
+        const header = parseHeader(this.#header);
+        const doc = this.#doc(e);
+        const actual = indexDoc(doc, header, e.offset, e.length,
+            new Set(header.conventions.map(c => String(c["convention_id"]))),
+            new Set(header.licences.map(l => String(l["licence_id"]))));
+        e.stored = { ...e.stored, subordinate_offsets: presence.own === "base" ? actual.stored.subordinate_offsets : e.stored.subordinate_offsets,
+            sets: e.stored.sets.map((cs, i) => ({ ...cs,
+                fallback: presence.fallback[i] ? cs.fallback : actual.stored.sets[i]?.fallback ?? null,
+                current_bins: presence.bins ? cs.current_bins : actual.stored.sets[i]?.current_bins ?? [],
+            })) };
+        e.policyHydrated = true;
     }
 
     #station(e: IndexEntry): Station {
