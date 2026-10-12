@@ -1,6 +1,60 @@
 import XCTest
 @testable import OpenTideConstants
 final class ReaderTests: XCTestCase {
+    func testDuplicateConventionActualFormats() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("conformance/fixtures/bad/duplicate-convention-id")
+        for (name, mode) in [("OTC_20991231.json", Mode.eager), ("OTC_20991231.json.gz", .eager), ("OTC_20991231.jsonl", .eager), ("OTC_20991231.jsonl", .stream)] {
+            XCTAssertThrowsError(try Reader.load(root.appendingPathComponent(name), mode: mode, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback"), "\(name) \(mode)") { error in
+                guard let native = error as? OpenTideConstantsError else { return XCTFail("unexpected error \(error)") }
+                XCTAssertEqual(native.code, "invalid_release")
+                XCTAssertEqual(native.message, "duplicate convention")
+                print("DUPLICATE_CONVENTION name=\(name) mode=\(mode) code=\(native.code)")
+            }
+        }
+    }
+    func testDuplicateConventionUnchangedSourceControls() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("conformance/fixtures")
+        let good = root.appendingPathComponent("good")
+        let document = try JSONValue.parse(Data(contentsOf: good.appendingPathComponent("OTC_20991231.json")))
+        let sourceConventions = document["conventions"].array
+        let sourceStations = document["stations"].array
+        for (name, mode) in [("OTC_20991231.json", Mode.eager), ("OTC_20991231.json.gz", .eager), ("OTC_20991231.jsonl", .eager), ("OTC_20991231.jsonl", .stream)] {
+            let release = try Reader.load(good.appendingPathComponent(name), mode: mode, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")
+            defer { release.close() }
+            XCTAssertEqual(release.meta["conventions"], document["conventions"])
+            if mode == .stream {
+                XCTAssertEqual(release.documents.count, 0)
+                XCTAssertEqual(release.lruOrder.count, 0)
+            }
+            for source in sourceStations {
+                let id = try XCTUnwrap(source["station_id"].string)
+                guard source["status"].string != "removed" else { continue }
+                let station = try XCTUnwrap(release.station(stationId: id))
+                XCTAssertEqual(station.raw, source)
+                XCTAssertEqual(station.raw["source_records"], source["source_records"])
+                for set in station.constantSets(includeNoConstants: true) {
+                    let convention = try XCTUnwrap(set.convention)
+                    XCTAssertEqual(convention.raw, sourceConventions.first { $0["convention_id"].string == set.raw["convention_id"].string })
+                }
+            }
+            print("CONVENTION_SOURCE_CONTROL name=\(name) mode=\(mode) raw_and_provenance_equal=true")
+        }
+        for fixture in ["convention-without-id", "unresolved-convention"] {
+            for (name, mode) in [("OTC_20991231.json", Mode.eager), ("OTC_20991231.json.gz", .eager), ("OTC_20991231.jsonl", .eager), ("OTC_20991231.jsonl", .stream)] {
+                XCTAssertThrowsError(try Reader.load(root.appendingPathComponent("bad/\(fixture)/\(name)"), mode: mode, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")) { error in
+                    guard let native = error as? OpenTideConstantsError else { return XCTFail("unexpected error \(error)") }
+                    XCTAssertEqual(native.code, "invalid_release")
+                    print("CONVENTION_REFUSAL_CONTROL fixture=\(fixture) name=\(name) mode=\(mode) code=\(native.code)")
+                }
+            }
+        }
+    }
     func testActualReaderFileInfoHandoff() throws {
         let fixtureRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()

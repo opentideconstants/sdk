@@ -188,7 +188,14 @@ internal extension Reader {
             let parts=mr.split(separator:".").compactMap { Int64($0) }
             guard parts.count==2,parts[0]<1 || parts[0]==1 && parts[1]==0 else { throw OpenTideConstantsError.readerTooOld("needs reader \(mr); SDK reads 1.0") }
         }
-        let conventions=Dictionary(uniqueKeysWithValues:meta["conventions"].array.compactMap { r in r["convention_id"].string.map { ($0,Convention(r)) } })
+        var conventions: [String: Convention] = [:]
+        for row in meta["conventions"].array {
+            guard let id = row["convention_id"].string else { continue }
+            guard conventions[id] == nil else {
+                throw OpenTideConstantsError.invalidRelease("duplicate convention")
+            }
+            conventions[id] = Convention(row)
+        }
         var licences:[String:Licence]=[:];for row in meta["licences"].array { let l=try licence(row);if licences[l.licenceId] != nil { throw OpenTideConstantsError.invalidRelease("duplicate licence") };licences[l.licenceId]=l }
         func consume(_ d:JSONValue,_ offset:UInt64?,_ length:Int?)throws {
             guard let id=d["station_id"].string else { throw OpenTideConstantsError.invalidRelease("station_id missing") }
