@@ -155,25 +155,44 @@ def pending_runners(bundle):
     return names
 
 
+def materialize_release(bundle, document, release, directory, features):
+    """Keep pinned eager bytes; losslessly project them for stream-only readers."""
+    original = directory / f"OTC_{release['release']['datestamp']}.json"
+    original.write_bytes((bundle / "vectors-release.json").read_bytes())
+    if sha256(original) != document["release_sha256"]:
+        raise VectorError("vector input changed before the canonical release copy was opened")
+    checksums = [(original, document["release_sha256"])]
+    opened, mode = original, "eager"
+    if "stream" in features and "eager" not in features:
+        opened, mode = original.with_suffix(".jsonl"), "stream"
+        metadata = original.with_suffix(".meta.json")
+        opened.write_text("".join(json.dumps(station, ensure_ascii=False, allow_nan=False) + "\n"
+                                  for station in release["stations"]), encoding="utf-8")
+        metadata.write_text(json.dumps({key: value for key, value in release.items() if key != "stations"},
+                                       ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
+        reconstructed = json.loads(metadata.read_text(encoding="utf-8"))
+        reconstructed["stations"] = [json.loads(line) for line in opened.read_text(encoding="utf-8").splitlines()]
+        if json.dumps(reconstructed, sort_keys=True) != json.dumps(json.loads(original.read_bytes()), sort_keys=True):
+            raise VectorError("stream vector input differs from the authenticated original release")
+        checksums.extend((path, sha256(path)) for path in (opened, metadata))
+    original.with_suffix(".sha256").write_text("".join(f"{digest}  {path.name}\n" for path, digest in checksums),
+                                               encoding="utf-8")
+    return opened, mode
+
+
 def run_vectors(bundle, document, release, command, no_expected_failures, timeout):
     expected_failures = set() if no_expected_failures else pending_runners(bundle)
     results = []
     with tempfile.TemporaryDirectory(prefix="otc-vectors-") as directory:
         tmp = Path(directory)
-        # SDK file readers require OTC_<datestamp>.json. Preserve the producer's
-        # pinned artifact name and open an authenticated byte-for-byte copy.
-        opened_release = tmp / f"OTC_{release['release']['datestamp']}.json"
-        opened_release.write_bytes((bundle / "vectors-release.json").read_bytes())
-        if sha256(opened_release) != document["release_sha256"]:
-            raise VectorError("vector input changed before the canonical release copy was opened")
-        opened_release.with_suffix(".sha256").write_text(f"{document['release_sha256']}  {opened_release.name}\n")
         runner = driver.Runner(shlex.split(command), driver.runner_env(driver.isolated_env(tmp)),
                                tmp / "runner.stderr", cwd=str(CONF.parent))
         try:
             hello = driver.parse_hello(runner.read(timeout))
+            opened_release, mode = materialize_release(bundle, document, release, tmp, hello["features"])
             name = hello.get("runner", "unknown")
             pending = name in expected_failures
-            runner.send({"op": "open", "args": {"file": str(opened_release), "mode": "eager"}})
+            runner.send({"op": "open", "args": {"file": str(opened_release), "mode": mode}})
             opened = runner.read(timeout)
             errors = driver.reply_problems(opened)
             if errors:
