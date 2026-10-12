@@ -101,6 +101,7 @@ private enum HeldPrediction {
     static func station(_ station: Station?) -> JSONValue {
         guard let station else { return .null }
         var raw = station.raw.object
+        raw["aliases"] = station.raw["aliases"].isNull ? .object([:]) : station.raw["aliases"]
         raw["kind"] = station.kind.map { .string($0.rawValue) } ?? .null
         raw["recommended_set_id"] = station.recommendedSet.map { .string($0.setId) } ?? .null
         raw["is_reference"] = .bool(station.isReference)
@@ -112,8 +113,11 @@ private enum HeldPrediction {
         if let fallback = station.recommendedIsFallback { result["recommended_is_fallback"] = .bool(fallback) }
         return .object(result)
     }
+    static func releaseInfo(_ info: ReleaseInfo) -> JSONValue {
+        .object(["datestamp": .string(info.datestamp), "format_version": .string(info.formatVersion), "concept_doi": plain(info.conceptDoi), "zenodo_version_doi": plain(info.zenodoVersionDoi), "content_sha256": .string(info.contentSha256), "files": .array(info.files.sorted { $0.name < $1.name }.map { file in .object(["name": .string(file.name), "url": plain(file.url), "size": plain(file.size), "sha256": plain(file.sha256)]) })])
+    }
     static func main() async {
-        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "json", "eager", "stream", "predict", "localtime_module", "localtime"].map(JSONValue.string))])]))
+        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "localtime_module", "localtime"].map(JSONValue.string))])]))
         var client: OpenTideConstants?
         var held: [String: Release] = [:]
         var prediction: HeldPrediction?
@@ -137,10 +141,28 @@ private enum HeldPrediction {
                     case "loaded_from": result = .object(["loaded_from": .string(client.loadedFrom.rawValue)])
                     case "last_error": result = .object(["code": client.lastError.map { .string($0.code) } ?? .null])
                     case "newer_format_major": result = .object(["newer_format_major": client.newerFormatMajor.map(JSONValue.integer) ?? .null])
+                    case "releases": result = .object(["releases": .array(try await client.releases().map(releaseInfo))])
+                    case "latest": result = .object(["release": releaseInfo(try await client.latest())])
+                    case "check_for_update": result = .object(["release": try await client.checkForUpdate().map(releaseInfo) ?? .null])
+                    case "update": result = plain(try await client.update())
+                    case "download":
+                        let formats: [Format]
+                        if args.object.keys.contains("formats") {
+                            guard case .array(let values) = args["formats"] else { throw OpenTideConstantsError.invalidArgument("formats must be an array") }
+                            formats = try values.map { value in
+                                guard let name = value.string else { throw OpenTideConstantsError.invalidArgument("formats must contain strings") }
+                                return Format(rawValue: name) ?? .other
+                            }
+                        } else { formats = [.jsonl] }
+                        let paths = try await client.download(release: string(args, "release") ?? "latest", to: string(args, "to") ?? "", formats: formats, overwrite: boolean(args, "overwrite"))
+                        result = .object(["paths": .array(paths.map { URL(fileURLWithPath: $0).lastPathComponent }.sorted().map(JSONValue.string))])
                     case "verify": result = .object(["verified": .bool(try client.verify())])
                     case "cached_releases": result = .object(["datestamps": .array(try client.cachedReleases().map(JSONValue.string))])
+                    case "prune": result = .object(["removed": .array(try await client.prune(keep: integer(args, "keep") ?? 3).map(JSONValue.string))])
                     case "station", "require_station":
-                        let value = op == "require_station" ? try r.requireStation(stationId: id) : try r.station(stationId: id)
+                        let value: Station?
+                        if q["on"].string == nil { value = op == "require_station" ? try client.requireStation(stationId: id) : try client.station(stationId: id) }
+                        else { value = op == "require_station" ? try r.requireStation(stationId: id) : try r.station(stationId: id) }
                         result = .object(["station": station(value)])
                     case "tombstone": result = .object(["tombstone": try r.tombstone(stationId: id)?.raw ?? .null])
                     case "station_by_alias": result = .object(["station_id": try r.stationByAlias(system: args["system"].string ?? "", aliasId: args["alias_id"].string ?? "").map { .string($0.stationId) } ?? .null])
