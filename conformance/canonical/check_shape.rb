@@ -182,6 +182,63 @@ module NativeShape
         value.each_with_index { |child, index| schema(child, rule.fetch("items"), definitions, "#{path}[#{index}]") } if value.is_a?(Array) && rule.key?("items")
     end
 
+    def self.public_return_selector?(shape, definitions, seen = [])
+        if shape.key?("type_ref")
+            name = shape.fetch("type_ref")
+            return false if seen.include?(name)
+            return public_return_selector?(definitions.fetch(name), definitions, seen + [name])
+        end
+        return true if shape["kind"] == "member_result_selector"
+        return true if shape["kind"] == "selected_member_contract" && shape.fetch("selector", "").include?("returns")
+        return true if shape["collection"] == "members" && shape.fetch("path", []).include?("returns")
+        shape.values.any? do |value|
+            if value.is_a?(Hash)
+                public_return_selector?(value, definitions, seen)
+            elsif value.is_a?(Array)
+                value.any? { |item| item.is_a?(Hash) && public_return_selector?(item, definitions, seen) }
+            else
+                false
+            end
+        end
+    end
+
+    # Check the existing logical producer value form, not native source syntax.
+    def self.internal_value_form?(value, shape, definitions)
+        return true if value.nil? && shape["nullable"] == true
+        return internal_value_form?(value, definitions.fetch(shape.fetch("type_ref")), definitions) if shape.key?("type_ref")
+        case shape["kind"]
+        when "record"
+            return false unless value.is_a?(Hash)
+            fields = shape.fetch("fields")
+            return false if shape["additional_fields"] == false && (value.keys - fields.keys).any?
+            fields.all? { |name, field| (!value.key?(name) && field["required"] == false) || (value.key?(name) && internal_value_form?(value.fetch(name), field, definitions)) }
+        when "sequence"
+            value.is_a?(Array) && value.all? { |item| internal_value_form?(item, shape.fetch("items"), definitions) }
+        when "union"
+            shape.fetch("variants").any? { |variant| internal_value_form?(value, variant, definitions) }
+        when "enum"
+            shape.fetch("values").include?(value)
+        when "primitive"
+            case shape.fetch("type")
+            when "string", "native_path" then value.is_a?(String)
+            when "boolean" then value == true || value == false
+            when "integer" then value.is_a?(Integer)
+            when "finite_binary64" then value.is_a?(Numeric) && value.to_f.finite?
+            when "byte_sequence"
+                value.is_a?(String) || (value.is_a?(Array) && value.all? { |byte| byte.is_a?(Integer) && byte.between?(0, 255) }) || (value.is_a?(Hash) && value.keys == (0...value.length).map(&:to_s) && value.values.all? { |byte| byte.is_a?(Integer) && byte.between?(0, 255) })
+            else false
+            end
+        when "json_value"
+            value.nil? || value == true || value == false || value.is_a?(String) || (value.is_a?(Numeric) && value.to_f.finite?) || (value.is_a?(Array) && value.all? { |item| internal_value_form?(item, shape, definitions) }) || (value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) } && value.values.all? { |item| internal_value_form?(item, shape, definitions) })
+        when "opaque_native_error"
+            value.is_a?(Hash) || value.is_a?(String)
+        when "map", "catalog_schema_selector", "catalog_selector", "contract_selector", "selected_argument_record", "selected_member_contract", "selected_model_contract", "selected_model_field_contracts", "json_projection"
+            value.is_a?(Hash)
+        else
+            false
+        end
+    end
+
     def self.presence(observation, root, profile, callee = nil)
         corpus = read(File.join(DIRECTORY, "shape-values.json"))
         result = observation.fetch("canonical_result")
@@ -192,10 +249,25 @@ module NativeShape
             text(channel.fetch(selectors.first), "channel selector")
         end
         if result.key?("concept_ref") || error.key?("concept_ref")
-            require_true(result["concept_ref"] == "cache_bytes" && error["concept_ref"] == "canonical_error", "Unknown or wrong internal result/error concept")
-            require_true(callee && callee.fetch("id") == "B28" && callee.fetch("output").fetch("concept_ref") == "cache_bytes" && callee.fetch("declaration").fetch("result").fetch("concept_ref") == "cache_bytes", "Internal concept does not match actual B28 callee result")
-            require_true(observation.fetch("classification") == "reused_callable" && result.fetch("presence") == "present_value" && result.key?("value") && !result.fetch("value").nil?, "B28 Bytes value erased or inactive")
-            require_true(error.fetch("presence") == "absent" && !error.key?("value"), "B28 internal Bytes observation changed error channel")
+            concept = corpus.fetch("concepts").find { |entry| entry.fetch("name") == result["concept_ref"] }
+            require_true(concept && error["concept_ref"] == "canonical_error", "Unknown or wrong internal result/error concept")
+            require_true(callee && callee.fetch("output").fetch("concept_ref") == concept.fetch("name") && callee.fetch("declaration").fetch("result").fetch("concept_ref") == concept.fetch("name"), "Internal concept does not match actual callee result")
+            require_true(observation.fetch("expected_result_type") == callee.fetch("declaration").fetch("result").fetch("native_type"), "Internal result native type differs")
+            definitions = corpus.fetch("type_definitions").merge(corpus.fetch("concepts").to_h { |entry| [entry.fetch("name"), entry.fetch("shape")] })
+            require_true(!public_return_selector?(concept.fetch("shape"), definitions), "Public selected-member output requires member_id")
+            rp = result.fetch("presence")
+            ep = error.fetch("presence")
+            require_true(result.key?("value") == (rp == "present_value") && error.key?("value") == (ep == "present_error"), "Internal channel presence/value mismatch")
+            if observation.fetch("classification") == "private_unimplemented_refusal"
+                require_true(rp == "absent" && ep == "absent", "Fabricated successful stub output/canonical error")
+                text(observation.fetch("native_refusal"), "observed private native refusal")
+            elsif rp == "present_value" && ep == "absent"
+                require_true(internal_value_form?(result.fetch("value"), concept.fetch("shape"), definitions), "Internal returned value incompatible with declared producer form")
+            elsif rp == "absent" && ep == "present_error"
+                require_true(internal_value_form?(error.fetch("value"), definitions.fetch("canonical_error"), definitions), "Internal failure value incompatible with canonical_error")
+            else
+                raise Invalid, "Unsupported internal result/error presence combination"
+            end
             return
         end
         require_true(result.fetch("member_id") == error.fetch("member_id"), "Presence channels select different members")
