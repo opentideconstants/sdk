@@ -80,11 +80,14 @@
         "qualified_branch": {
           "type": "string",
           "minLength": 1
+        },
+        "concept_ref": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "presence",
-        "member_id"
+        "presence"
       ],
       "additionalProperties": false
     },
@@ -276,11 +279,14 @@
             "qualified_branch": {
               "type": "string",
               "minLength": 1
+            },
+            "concept_ref": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
-            "presence",
-            "member_id"
+            "presence"
           ],
           "additionalProperties": false
         },
@@ -303,11 +309,14 @@
             "qualified_branch": {
               "type": "string",
               "minLength": 1
+            },
+            "concept_ref": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
-            "presence",
-            "member_id"
+            "presence"
           ],
           "additionalProperties": false
         },
@@ -756,11 +765,14 @@
                   "qualified_branch": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "concept_ref": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "presence",
-                  "member_id"
+                  "presence"
                 ],
                 "additionalProperties": false
               },
@@ -783,11 +795,14 @@
                   "qualified_branch": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "concept_ref": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "presence",
-                  "member_id"
+                  "presence"
                 ],
                 "additionalProperties": false
               },
@@ -1080,11 +1095,14 @@
                   "qualified_branch": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "concept_ref": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "presence",
-                  "member_id"
+                  "presence"
                 ],
                 "additionalProperties": false
               },
@@ -1107,11 +1125,14 @@
                   "qualified_branch": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "concept_ref": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "presence",
-                  "member_id"
+                  "presence"
                 ],
                 "additionalProperties": false
               },

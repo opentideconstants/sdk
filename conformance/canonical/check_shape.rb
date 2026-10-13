@@ -182,10 +182,22 @@ module NativeShape
         value.each_with_index { |child, index| schema(child, rule.fetch("items"), definitions, "#{path}[#{index}]") } if value.is_a?(Array) && rule.key?("items")
     end
 
-    def self.presence(observation, root, profile)
+    def self.presence(observation, root, profile, callee = nil)
         corpus = read(File.join(DIRECTORY, "shape-values.json"))
         result = observation.fetch("canonical_result")
         error = observation.fetch("canonical_error")
+        [result, error].each do |channel|
+            selectors = %w[member_id concept_ref].select { |key| channel.key?(key) }
+            require_true(selectors.length == 1, "Channel requires exactly one member_id or concept_ref")
+            text(channel.fetch(selectors.first), "channel selector")
+        end
+        if result.key?("concept_ref") || error.key?("concept_ref")
+            require_true(result["concept_ref"] == "cache_bytes" && error["concept_ref"] == "canonical_error", "Unknown or wrong internal result/error concept")
+            require_true(callee && callee.fetch("id") == "B28" && callee.fetch("output").fetch("concept_ref") == "cache_bytes" && callee.fetch("declaration").fetch("result").fetch("concept_ref") == "cache_bytes", "Internal concept does not match actual B28 callee result")
+            require_true(observation.fetch("classification") == "reused_callable" && result.fetch("presence") == "present_value" && result.key?("value") && !result.fetch("value").nil?, "B28 Bytes value erased or inactive")
+            require_true(error.fetch("presence") == "absent" && !error.key?("value"), "B28 internal Bytes observation changed error channel")
+            return
+        end
         require_true(result.fetch("member_id") == error.fetch("member_id"), "Presence channels select different members")
         member = corpus.fetch("members").find { |m| m.fetch("id") == result.fetch("member_id") }
         require_true(member, "Unknown selected member")
@@ -277,7 +289,7 @@ module NativeShape
                 imported = File.realpath(observation.fetch("imported_module"))
                 require_true(imported.start_with?(File.realpath(File.join(root, "python/src")) + File::SEPARATOR), "Python imported legacy/non-candidate module")
             end
-            presence(observation, root, profile)
+            presence(observation, root, profile, callee)
         end
         true
     rescue KeyError => error
