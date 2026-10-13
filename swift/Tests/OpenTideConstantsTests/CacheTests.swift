@@ -1,6 +1,35 @@
 import XCTest
 @testable import OpenTideConstants
 final class CacheTests:XCTestCase {
+    func testCanonicalGeneratedCacheBytes()throws {
+        let root=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let golden=try JSONValue.parse(Data(contentsOf:root.appendingPathComponent("conformance/canonical/cache-golden.json")))
+        let output=ProcessInfo.processInfo.environment["OTC_ENC_PROOF_DIR"].map { URL(fileURLWithPath:$0) }
+        if let output { try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true) }
+        func input(_ vector:JSONValue)throws->JSONValue {
+            if let hex=vector["binary64_hex"].string {
+                return .number(Double(bitPattern:try XCTUnwrap(UInt64(hex,radix:16))))
+            }
+            return vector["input"]
+        }
+        for vector in golden["cases"].array {
+            let id=try XCTUnwrap(vector["id"].string)
+            let actual=try input(vector).data(),expected=Data(try XCTUnwrap(vector["expected"].string).utf8)
+            if let output { try Cache.atomic(actual,output.appendingPathComponent(id+".json")) }
+            print("ENC-SW \(id) actual_hex=\(actual.map { String(format:"%02x",$0) }.joined()) expected_hex=\(expected.map { String(format:"%02x",$0) }.joined()) match=\(actual==expected)")
+            XCTAssertEqual(actual,expected,id)
+        }
+        for vector in golden["refusals"].array {
+            let id=try XCTUnwrap(vector["id"].string)
+            if let hex=vector["raw_json_hex"].string {
+                let bytes=stride(from:0,to:hex.count,by:2).map { position in
+                    UInt8(hex.dropFirst(position).prefix(2),radix:16)!
+                }
+                XCTAssertThrowsError(try JSONValue.parse(Data(bytes)),id)
+            } else { XCTAssertThrowsError(try input(vector).data(),id) }
+            print("ENC-SW refusal \(id)")
+        }
+    }
     private final class NativeFixture {
         let directory:URL
         let process=Process()

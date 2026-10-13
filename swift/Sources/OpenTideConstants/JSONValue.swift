@@ -43,7 +43,7 @@ public indirect enum JSONValue: Codable, Sendable, Equatable {
         var parser = JSONParser(bytes: Array(data))
         return try parser.parse()
     }
-    internal func data() throws -> Data { try JSONEncoder().encode(self) }
+    internal func data() throws -> Data { try encode_cache_json(self) }
 }
 
 internal func parseTime(_ s: String?) throws -> Date? {
