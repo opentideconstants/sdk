@@ -215,7 +215,8 @@ module NativeShape
         when "sequence"
             value.is_a?(Array) && value.all? { |item| internal_value_form?(item, shape.fetch("items"), definitions) }
         when "union"
-            shape.fetch("variants").any? { |variant| internal_value_form?(value, variant, definitions) }
+            variants = shape.fetch("variants")
+            (variants.is_a?(Hash) ? variants.values : variants).any? { |variant| internal_value_form?(value, variant, definitions) }
         when "enum"
             shape.fetch("values").include?(value)
         when "primitive"

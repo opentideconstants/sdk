@@ -1,12 +1,12 @@
 {
   "protocol_version": 1,
   "scope": "Construction descriptors and actual native invocation observations only; never behavior acceptance. Concrete declarations remain S-slot obligations.",
-  "foundation_sha256": "b07a5ee9fa0fd08492a9def2f2ddec62509e6ec2aa382492923a5227746aac4c",
-  "accepted_receipt_sha256": "7b6dc39a4fe94ff6a72d3cf634c2a0f1888948ff4da3e98226f757c623793cf1",
+  "foundation_sha256": "69453bbefbe85b2530be9ac5f6aaf447a9e2bd879c94f87c91996b7fbe952149",
+  "accepted_receipt_sha256": "aaef5fa7eff99848e59def490f1b894d35e5cfd55003202128f5f76a96938a2b",
   "authority_sha256": {
-    "behavior-catalog.json": "9d6bc6f6dd397b4ff50785f9d8f06d5f170fdb89aa5b68921f8c04ffbe7843f4",
-    "design.md": "2d71350ff94d11130bcdc5064d74f05c0e59fcbd94ba1500fd85ba5f29006808",
-    "source-references.json": "cddcebc3652c10eeac05acec17da0333b99993e02353a59e98af6f2434fc9b37"
+    "behavior-catalog.json": "b30a574b1d9f3c972b90ca020b87d6b6ceb56e4309592717777347f885b3dc7f",
+    "design.md": "9e71137e1448fc1a1a5f6863f91803c9a42e0b4560c6281345e47fb6214b70f7",
+    "source-references.json": "27f7bfde001a982ad4752f661f17b6f2b78edb2993c6d11cd63a18423689e045"
   },
   "profiles": [
     "python",
@@ -5085,14 +5085,14 @@
       "name": "height_values",
       "meaning": "height values",
       "shape": {
-        "kind": "contract_selector",
-        "collection": "members",
-        "id": "Release.heights",
-        "path": [
-          "canonical_contract",
-          "returns"
-        ],
-        "nullability": "exact selected contract"
+        "kind": "sequence",
+        "items": {
+          "type_ref": "Number",
+          "nullable": false,
+          "units": "metres in requested_datum"
+        },
+        "preserve_order": true,
+        "nullable": false
       },
       "nullability": "as explicitly declared by shape or its exact selected contract",
       "representation": "Same logical value in all languages; retain copied native model/argument mapping. Internal records introduce no serialized format."
@@ -7855,26 +7855,44 @@
       "additional_fields": false
     },
     "PredictionWindow": {
-      "kind": "record",
-      "fields": {
-        "start": {
-          "type_ref": "UtcSecond",
-          "nullable": false
-        },
-        "stop": {
-          "type_ref": "UtcSecond",
-          "nullable": false
-        },
-        "step": {
-          "type_ref": "Number",
-          "nullable": true
+      "kind": "union",
+      "discriminator": "exact selected time_inputs/window_inputs member contract; no new public tag",
+      "variants": {
+        "span": {
+          "kind": "record",
+          "fields": {
+            "start": {
+              "type_ref": "UtcSecond",
+              "nullable": false
+            },
+            "stop": {
+              "type_ref": "UtcSecond",
+              "nullable": false
+            },
+            "step": {
+              "type_ref": "Number",
+              "nullable": true
+            }
+          },
+          "additional_fields": false
         },
         "instants": {
-          "type_ref": "JsonValue",
-          "nullable": true
+          "kind": "record",
+          "fields": {
+            "instants": {
+              "kind": "sequence",
+              "items": {
+                "type_ref": "UtcSecond",
+                "nullable": false
+              },
+              "preserve_order": true,
+              "nullable": false
+            }
+          },
+          "additional_fields": false
         }
       },
-      "additional_fields": false
+      "nullable": false
     },
     "TransportOptions": {
       "kind": "selected_argument_record",

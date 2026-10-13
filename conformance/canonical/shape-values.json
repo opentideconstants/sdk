@@ -1,6 +1,6 @@
 {
   "protocol_version": 1,
-  "foundation_sha256": "b07a5ee9fa0fd08492a9def2f2ddec62509e6ec2aa382492923a5227746aac4c",
+  "foundation_sha256": "69453bbefbe85b2530be9ac5f6aaf447a9e2bd879c94f87c91996b7fbe952149",
   "scope": "Finite structural selectors/variants; native fixtures provide actual values. This corpus is not invocation evidence or a business-result golden.",
   "concepts": [
     {
@@ -839,14 +839,14 @@
       "name": "height_values",
       "meaning": "height values",
       "shape": {
-        "kind": "contract_selector",
-        "collection": "members",
-        "id": "Release.heights",
-        "path": [
-          "canonical_contract",
-          "returns"
-        ],
-        "nullability": "exact selected contract"
+        "kind": "sequence",
+        "items": {
+          "type_ref": "Number",
+          "nullable": false,
+          "units": "metres in requested_datum"
+        },
+        "preserve_order": true,
+        "nullable": false
       },
       "nullability": "as explicitly declared by shape or its exact selected contract",
       "representation": "Same logical value in all languages; retain copied native model/argument mapping. Internal records introduce no serialized format."
@@ -3609,26 +3609,44 @@
       "additional_fields": false
     },
     "PredictionWindow": {
-      "kind": "record",
-      "fields": {
-        "start": {
-          "type_ref": "UtcSecond",
-          "nullable": false
-        },
-        "stop": {
-          "type_ref": "UtcSecond",
-          "nullable": false
-        },
-        "step": {
-          "type_ref": "Number",
-          "nullable": true
+      "kind": "union",
+      "discriminator": "exact selected time_inputs/window_inputs member contract; no new public tag",
+      "variants": {
+        "span": {
+          "kind": "record",
+          "fields": {
+            "start": {
+              "type_ref": "UtcSecond",
+              "nullable": false
+            },
+            "stop": {
+              "type_ref": "UtcSecond",
+              "nullable": false
+            },
+            "step": {
+              "type_ref": "Number",
+              "nullable": true
+            }
+          },
+          "additional_fields": false
         },
         "instants": {
-          "type_ref": "JsonValue",
-          "nullable": true
+          "kind": "record",
+          "fields": {
+            "instants": {
+              "kind": "sequence",
+              "items": {
+                "type_ref": "UtcSecond",
+                "nullable": false
+              },
+              "preserve_order": true,
+              "nullable": false
+            }
+          },
+          "additional_fields": false
         }
       },
-      "additional_fields": false
+      "nullable": false
     },
     "TransportOptions": {
       "kind": "selected_argument_record",
