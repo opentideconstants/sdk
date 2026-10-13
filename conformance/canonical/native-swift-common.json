@@ -3196,7 +3196,11 @@
         "second validated tag",
         "conditional HTTP",
         "304/404/200",
-        "body/tag publish; publication lock still absent"
+        "acquire pointer lock",
+        "remove old tag",
+        "atomic raw body",
+        "valid raw tag",
+        "release owned lock; publication errors warn and preserve in-memory metadata"
       ],
       "canonical_effects": {
         "state": [],
@@ -4222,7 +4226,7 @@
       "file": "swift/Sources/OpenTideConstants/Client.swift",
       "declarations": [
         {
-          "line": 393,
+          "line": 397,
           "signature": "func agreement(_ rows:[String:String],entry:JSONValue?,stamp:String)throws {"
         }
       ],
@@ -4337,7 +4341,7 @@
       "file": "swift/Sources/OpenTideConstants/Client.swift",
       "declarations": [
         {
-          "line": 407,
+          "line": 411,
           "signature": "func fetch(_ stamp:String,entry:JSONValue?)async throws->Loaded {"
         }
       ],
@@ -4994,7 +4998,7 @@
       "file": "swift/Sources/OpenTideConstants/Client.swift",
       "declarations": [
         {
-          "line": 407,
+          "line": 411,
           "signature": "func fetch(_ stamp:String,entry:JSONValue?)async throws->Loaded {"
         }
       ],
@@ -5601,7 +5605,7 @@
           "signature": "public func download(release:String=\"latest\",to:String,formats:[Format]=[.jsonl],overwrite:Bool=false)async throws->[String] {"
         },
         {
-          "line": 444,
+          "line": 448,
           "signature": "func download(_ selected:String,to destination:URL,formats:[Format],overwrite:Bool)async throws->[String] {"
         }
       ],
@@ -10806,7 +10810,7 @@
       "file": "swift/Sources/OpenTideConstants/Client.swift",
       "declarations": [
         {
-          "line": 384,
+          "line": 388,
           "signature": "func sha(_ stamp:String,entry:JSONValue?)async throws->([String:String],Data) {"
         }
       ],
@@ -11408,8 +11412,7 @@
     }
   ],
   "limitations": [
-    "B11 writer locking/tag sanitization pending",
-    "source min_reader_version missing-field refusal not proven",
+    "B11 read/writer and B06 source min_reader_version named controls have local native RED/GREEN; independent VALUE pending",
     "SC09 heartbeat/steal/lost-token full native branches pending",
     "SC07 rollback/SC08 partial prune require targeted acceptance",
     "Broad driver run excluded from bounded acceptance; concrete failures retained for root routing"

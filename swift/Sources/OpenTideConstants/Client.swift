@@ -331,6 +331,10 @@ private struct ClientIO:@unchecked Sendable {
         catch { throw OpenTideConstantsError.network("HTTP200 pointer is not JSON",["url":.string(url.absoluteString),"status":.integer(200)]) }
         guard pointerShape(name,doc) else { throw OpenTideConstantsError.network("HTTP200 pointer has wrong shape",["url":.string(url.absoluteString),"status":.integer(200)]) }
         do {
+            let directory=path.deletingLastPathComponent(),token=try await cache.takeLock(directory)
+            defer { cache.releaseLock(directory,token) }
+            let tagPath=path.appendingPathExtension("etag")
+            if FileManager.default.fileExists(atPath:tagPath.path) { try FileManager.default.removeItem(at:tagPath) }
             try Cache.atomic(response.bytes,path)
             if let etag=response.etag,(1...256).contains(etag.utf8.count),etag.utf8.allSatisfy({ (32...126).contains($0) }) { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
             else { try? FileManager.default.removeItem(at:path.appendingPathExtension("etag")) }
@@ -412,7 +416,6 @@ private struct ClientIO:@unchecked Sendable {
         let json="OTC_\(stamp).json",gz=json+".gz",jsonl="OTC_\(stamp).jsonl",meta="OTC_\(stamp).meta.json"
         let names=mode == .stream ? [jsonl,meta]:[json]
         for name in names { guard rows[name] != nil else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) } }
-        try Cache.atomic(shaBytes,directory.appendingPathComponent("OTC_\(stamp).sha256"))
         let previous=try cache.verified(stamp)
         var verified:[String:JSONValue]=(previous?["files"].object ?? [:]).filter { name,_ in
             name != "OTC_\(stamp).sha256" && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
@@ -434,12 +437,20 @@ private struct ClientIO:@unchecked Sendable {
             try Cache.install(temporary,directory.appendingPathComponent(name))
             verified[name] = .object(["sha256":.string(rows[name]!),"size":.integer(size),"url":.string(url(name,entry:entry).absoluteString)])
         }
-        let doc=try JSONValue.parse(Reader.read(directory.appendingPathComponent(mode == .stream ? meta:json)))
+        let metadata=entry.map { $0["files"].array.map(FileInfo.init) } ?? verified.keys.sorted().map { name -> FileInfo in
+            var row=verified[name]!.object;row["name"] = .string(name);return FileInfo(.object(row))
+        }
+        let loaded=try read(directory.appendingPathComponent(mode == .stream ? jsonl:json),files:metadata,from:.download)
+        let doc=loaded.release.meta
         let doi=entry?["zenodo_version_doi"].string ?? previous?["zenodo_version_doi"].string
-        let marker:[String:JSONValue]=["files":.object(verified),"datestamp":.string(stamp),"by":.string("opentideconstants-swift/0.1.0"),"verified_at":.string(ISO8601DateFormatter().string(from:Date())),"format_version":doc["format_version"],"min_reader_version":doc["release"]["min_reader_version"].string.map(JSONValue.string) ?? .string("1.0"),"zenodo_version_doi":doi.map(JSONValue.string) ?? .null]
-        try Cache.atomic(JSONValue.object(marker).data(),directory.appendingPathComponent(".verified"))
-        guard let loaded=try cached(stamp,files:entry.map { $0["files"].array.map(FileInfo.init) }) else { throw OpenTideConstantsError.cache("download left cache") }
-        return Loaded(release:loaded.release,from:.download,paths:loaded.paths)
+        let marker:[String:JSONValue]=["files":.object(verified),"datestamp":.string(stamp),"by":.string("opentideconstants-swift/0.1.0"),"verified_at":.string(ISO8601DateFormatter().string(from:Date())),"format_version":doc["format_version"],"min_reader_version":doc["release"]["min_reader_version"],"zenodo_version_doi":doi.map(JSONValue.string) ?? .null]
+        do {
+            try Cache.atomic(shaBytes,directory.appendingPathComponent("OTC_\(stamp).sha256"))
+            try Cache.atomic(JSONValue.object(marker).data(),directory.appendingPathComponent(".verified"))
+        }
+        catch { loaded.release.close();throw error }
+        loaded.release.zenodoVersionDoi=doi
+        return loaded
     }
     func download(_ selected:String,to destination:URL,formats:[Format],overwrite:Bool)async throws->[String] {
         var selectedEntry:JSONValue?

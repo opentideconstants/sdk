@@ -186,8 +186,8 @@ internal extension Reader {
         let fv=meta["format_version"].string ?? ""
         guard fv.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.invalidRelease("invalid format version") }
         guard fv.split(separator:".").first=="1" else { throw OpenTideConstantsError.unsupportedFormat("unsupported format \(fv)") }
-        if !meta["release"]["min_reader_version"].isNull {
-            let mr=meta["release"]["min_reader_version"].string ?? ""
+        do {
+            guard let mr=meta["release"]["min_reader_version"].string else { throw OpenTideConstantsError.invalidRelease("min_reader_version missing or wrong type") }
             guard mr.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.invalidRelease("invalid min_reader_version") }
             let parts=mr.split(separator:".").compactMap { Int64($0) }
             guard parts.count==2,parts[0]<1 || parts[0]==1 && parts[1]==0 else { throw OpenTideConstantsError.readerTooOld("needs reader \(mr); SDK reads 1.0") }
