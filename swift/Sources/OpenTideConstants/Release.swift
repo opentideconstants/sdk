@@ -135,9 +135,11 @@ internal func historicalEligible(_ e:IndexEntry)->Bool {
         let own=e.summary["subordinate_offsets"]
         guard let cs=ref.sets.first(where: { $0["source"].string=="noaa" && $0["quantity"].string=="water_level" && ["ok","flagged"].contains($0["qc_status"].string ?? "") }),cs["qc_status"].string=="ok",cs["fallback"].isNull else { return false }
         if commercialOnly && (licById[own["licence_id"].string ?? ""]?.commercialUse != true || licById[cs["licence_id"].string ?? ""]?.commercialUse != true) { return false }
-        guard let conv=convById[cs["convention_id"].string ?? ""],conv.raw["v0_model"].string=="schureman_tcd",conv.raw["nodal_handling"].string=="f_u_at_prediction",let table=meta["astro_tables"].array.first(where: { $0["astro_table_id"]==conv.raw["astro_table_id"] }),let doc=try? rawStation(ref),let full=doc["constant_sets"].array.first(where: { $0["set_id"]==cs["set_id"] }) else { return false }
+        guard let doc=try? rawStation(ref),let selectedId=cs["set_id"].string,let full=doc["constant_sets"].array.first(where: { $0["set_id"].string==selectedId }),let conv=convById[full["convention_id"].string ?? ""],let lic=licById[full["licence_id"].string ?? ""] else { return false }
+        let constants=ConstantSet(raw:full,convention:conv,licence:lic,isRecommended:effective(ref)==selectedId,validation:doc["validation"].array.map(Validation.init).filter { $0.setId==selectedId }.sorted { $0.window < $1.window })
+        guard (try? Predict.historicalReferenceTable(self,constants:constants)) != nil else { return false }
         let datum=full["datum"]
-        return full["set_id"].string?.hasPrefix(ref.id+"/")==true && full["source_record_id"]==own["provenance"]["reference_binding"]["noaa_id"] && datum["chart_datum"].string=="mllw" && datum["msl_offset_m"].number != nil && datum["named"]["mllw"].number==0 && datum["basis"]["mllw"]["kind"].string=="published" && !table.isNull
+        return full["set_id"].string?.hasPrefix(ref.id+"/")==true && full["source_record_id"]==own["provenance"]["reference_binding"]["noaa_id"] && datum["chart_datum"].string=="mllw" && datum["msl_offset_m"].number != nil && datum["named"]["mllw"].number==0 && datum["basis"]["mllw"]["kind"].string=="published"
     }
 internal func filteredEntries(country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[IndexEntry] {
     try checkOpen()
