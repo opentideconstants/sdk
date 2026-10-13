@@ -311,12 +311,15 @@ private struct ClientIO:@unchecked Sendable {
     }
     func pointer(_ name:String)async throws->JSONValue? {
         let path=cache.pointer(name),url=baseUrl.appendingPathComponent(name)
+        func readTag()->Data? {
+            guard let bytes=try? Data(contentsOf:path.appendingPathExtension("etag")),(1...256).contains(bytes.count),bytes.allSatisfy({ (32...126).contains($0) }) else { return nil }
+            return bytes
+        }
+        let firstTag=readTag()
         let candidate=(try? JSONValue.parse(Data(contentsOf:path)))
         let stored=candidate.flatMap { pointerShape(name,$0) ? $0:nil }
-        let cachedTag=stored==nil ? nil:try? Data(contentsOf:path.appendingPathExtension("etag"))
-        let etag=cachedTag.flatMap { bytes in
-            (1...256).contains(bytes.count) && bytes.allSatisfy { (32...126).contains($0) } ? String(data:bytes,encoding:.ascii):nil
-        }
+        let secondTag=readTag()
+        let etag=stored != nil && firstTag != nil && firstTag==secondTag ? String(data:firstTag!,encoding:.ascii):nil
         if offline { guard let stored else { throw OpenTideConstantsError.offlineUnavailable("\(name) not cached") };return stored }
         var response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile,etag:etag)
         if response.status==304,stored==nil { response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile) }
@@ -329,7 +332,7 @@ private struct ClientIO:@unchecked Sendable {
         guard pointerShape(name,doc) else { throw OpenTideConstantsError.network("HTTP200 pointer has wrong shape",["url":.string(url.absoluteString),"status":.integer(200)]) }
         do {
             try Cache.atomic(response.bytes,path)
-            if let etag=response.etag { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
+            if let etag=response.etag,(1...256).contains(etag.utf8.count),etag.utf8.allSatisfy({ (32...126).contains($0) }) { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
             else { try? FileManager.default.removeItem(at:path.appendingPathExtension("etag")) }
         } catch { logger?("opentideconstants: cannot cache \(name)") }
         return doc
