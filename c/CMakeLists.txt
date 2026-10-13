@@ -204,6 +204,36 @@ endif()
 # A test whose name starts with test_fetch_ runs under the conformance fixture
 # server (c/tests/run_with_server.sh needs python3). Run them with ctest.
 option(OTC_BUILD_TESTS "Build the C library's own tests (c/tests)" OFF)
+option(OTC_CANONICAL_SHAPE_ONLY "Build private canonical construction fixtures" OFF)
+if(OTC_CANONICAL_SHAPE_ONLY)
+    enable_testing()
+    add_library(otc_canonical_shape OBJECT src/otc_canonical.c)
+    target_include_directories(otc_canonical_shape PRIVATE src include)
+    target_compile_options(otc_canonical_shape PRIVATE ${OTC_WARNINGS})
+    add_executable(test_canonical_shape tests/test_canonical_shape.c
+        $<TARGET_OBJECTS:otc_canonical_shape>)
+    target_include_directories(test_canonical_shape PRIVATE src include)
+    target_compile_options(test_canonical_shape PRIVATE ${OTC_WARNINGS})
+    target_link_libraries(test_canonical_shape PRIVATE opentideconstants)
+    otc_sanitize(otc_canonical_shape)
+    otc_sanitize(test_canonical_shape)
+    add_test(NAME canonical_shape COMMAND test_canonical_shape)
+    add_executable(canonical_public_consumer tests/consumer/canonical_shape.c)
+    target_link_libraries(canonical_public_consumer PRIVATE opentideconstants)
+    target_compile_definitions(canonical_public_consumer PRIVATE
+        OTC_SHAPE_FETCH=$<BOOL:${OTC_WITH_FETCH}>
+        OTC_SHAPE_PREDICT=$<BOOL:${OTC_WITH_PREDICT}>)
+    otc_sanitize(canonical_public_consumer)
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/canonical-fixture)
+    foreach(_otc_shape_extension jsonl meta.json)
+        configure_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/../conformance/fixtures/v1/OTC_20991231.3.${_otc_shape_extension}
+            ${CMAKE_CURRENT_BINARY_DIR}/canonical-fixture/OTC_20991231.3.${_otc_shape_extension}
+            COPYONLY)
+    endforeach()
+    add_test(NAME canonical_shape_public_consumer COMMAND canonical_public_consumer
+        ${CMAKE_CURRENT_BINARY_DIR}/canonical-fixture/OTC_20991231.3.jsonl)
+endif()
 if(OTC_BUILD_TESTS)
     enable_testing()
     file(GLOB OTC_TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.c)
@@ -253,6 +283,9 @@ if(OTC_BUILD_TESTS)
     endif()
     foreach(src ${OTC_TEST_SOURCES})
         get_filename_component(name ${src} NAME_WE)
+        if(name STREQUAL "test_canonical_shape")
+            continue()
+        endif()
         if(name MATCHES "^test_fetch_" AND NOT OTC_WITH_FETCH)
             continue()
         endif()
