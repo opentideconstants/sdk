@@ -15,6 +15,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from ._cache_json import encode_cache_json
 from ._errors import CacheError, InvalidReleaseError
 from ._release import integral
 
@@ -282,7 +283,7 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock", wait=True):
         try:
             owner = {"pid": os.getpid(), "host": socket.gethostname(), "sdk": sdk, "token": token,
                      "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-            atomic_write(lock / "owner.json", json.dumps(owner).encode("utf-8"))
+            atomic_write(lock / "owner.json", encode_cache_json(owner))
         except OSError as e:
             try:
                 os.rmdir(lock)
