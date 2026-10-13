@@ -11,6 +11,7 @@ import secrets
 import shutil
 import socket
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -240,6 +241,8 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock", wait=True):
     to remove it 3 times is CacheError. After a removal the wait starts again. On release the lock is removed only
     if its owner.json still carries this lock's token (another process may have taken it as stale)."""
     lock = directory / name
+    stopped = threading.Event()
+    heartbeat = None
     waited = 0.0
     held = False
     stale_failures = 0
@@ -293,10 +296,49 @@ def lock_dir(directory: Path, sdk: str, done=None, name=".lock", wait=True):
                 pass
             raise CacheError(f"cannot write {lock / 'owner.json'}: {e}") from e
     try:
+        if held:
+            def refresh():
+                while not stopped.wait(30):
+                    try:
+                        if not _refresh_lock(lock, token):
+                            return
+                    except (OSError, ValueError) as e:
+                        _log.warning("cannot refresh %s: %s", lock, e)
+
+            heartbeat = threading.Thread(target=refresh, name="opentideconstants-lock-heartbeat", daemon=True)
+            heartbeat.start()
         yield held
     finally:
+        stopped.set()
+        if heartbeat is not None and heartbeat.ident is not None:
+            heartbeat.join()
         if held:
             _release_lock(lock, token)
+
+
+def _refresh_lock(lock: Path, token: str) -> bool:
+    owner = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
+    if not isinstance(owner, dict) or owner.get("token") != token:
+        return False
+    owner["started_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    tmp = tmp_name(lock)
+    try:
+        with open(tmp, "wb") as f:
+            f.write(encode_cache_json(owner))
+            _fsync(f)
+        current = json.loads((lock / "owner.json").read_text(encoding="utf-8"))
+        if not isinstance(current, dict) or current.get("token") != token:
+            return False
+        os.replace(tmp, lock / "owner.json")
+        os.utime(lock, None)
+        return True
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            _log.warning("cannot remove %s: %s", tmp, e)
 
 
 def lock_age(lock: Path):
