@@ -178,13 +178,15 @@ class Cache:
         """The cached body and ETag of a pointer or index file, or (None, None) when either is not there. A file
         that is there but cannot be read is CacheError, never "absent" (spec §5.2 step 6)."""
         d = self.pointer_dir()
-        body = self.read_pointer_body(name)
-        if body is None:
-            return None, None
         p = d / (name + ".etag")
         try:
-            # an ETag that is not UTF-8 is read with U+FFFD in it, so the client does not send it (pk11)
-            return body, p.read_bytes().decode("utf-8", "replace").strip()
+            first = p.read_bytes()
+            body = self.read_pointer_body(name)
+            second = p.read_bytes()
+            if (body is None or first != second or not 1 <= len(first) <= 256
+                    or any(b < 0x20 or b >= 0x7F for b in first)):
+                return None, None
+            return body, first.decode("ascii")
         except (FileNotFoundError, NotADirectoryError):
             return None, None
         except OSError as e:

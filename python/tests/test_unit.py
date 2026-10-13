@@ -83,6 +83,129 @@ class CacheJSONTest(unittest.TestCase):
                 encode_cache_json(value)
 
 
+class CommonBehaviorTraceTest(unittest.TestCase):
+    def test_effective_recommendation_uses_typed_quantity_not_raw_unknown_spelling(self):
+        original = json.loads((GOOD / "OTC_20991231.2.json").read_bytes())
+        for mode in ("eager", "stream"):
+            for old_quantity, next_quantity, replaces in [(None, None, False),
+                    ("unknown-A", "unknown-B", True), ("water_level", "water_level", True),
+                    ("water_level", "current", False)]:
+                document = copy.deepcopy(original)
+                station = next(st for st in document["stations"] if st["station_id"] == "OTC-T-0001")
+                first = station["constant_sets"][0]
+                first["licence_id"] = "restricted-test"
+                first["quantity"] = old_quantity
+                replacement = copy.deepcopy(first)
+                replacement.update(set_id="OTC-T-0001/replacement", licence_id="noaa", quantity=next_quantity)
+                station["constant_sets"] = [first, replacement]
+                station["recommended_set_id"] = first["set_id"]
+                restricted = copy.deepcopy(next(lic for lic in document["licences"] if lic["licence_id"] == "noaa"))
+                restricted.update(licence_id="restricted-test", commercial_use=False,
+                                  restriction="private refusal control", terms_url="https://example.invalid/terms")
+                document["licences"].append(restricted)
+                with self.subTest(mode=mode, quantities=(old_quantity, next_quantity)), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    if mode == "eager":
+                        path = root / "OTC_20991231.2.json"
+                        path.write_text(json.dumps(document))
+                    else:
+                        path = root / "OTC_20991231.2.jsonl"
+                        path.write_text("".join(json.dumps(row) + "\n" for row in document.pop("stations")))
+                        path.with_name("OTC_20991231.2.meta.json").write_text(json.dumps(document))
+                    with otc.OpenTideConstants(file=path, mode=mode, commercial_only=True) as client:
+                        actual = client.require_station(station["station_id"])
+                        actual_id = None if actual.recommended_set is None else actual.recommended_set.set_id
+                        self.assertEqual(actual_id, replacement["set_id"] if replaces else None)
+                        self.assertEqual(actual.raw["constant_sets"][0]["quantity"], old_quantity)
+                        self.assertEqual(actual.raw["constant_sets"][1]["quantity"], next_quantity)
+
+    @unittest.skipUnless(os.environ.get("OTC_COMMON_HISTORICAL"), "bounded real historical slice required")
+    def test_historical_source_labels_and_strict_identity_remain_exact(self):
+        path = Path(os.environ["OTC_COMMON_HISTORICAL"])
+        document = json.loads(path.read_bytes())
+        targets = [row for row in document["stations"] if (row.get("subordinate_offsets") or {}).get("offset_id")]
+        self.assertEqual(len(targets), 2)
+        for mode, suffix in (("eager", ".json"), ("stream", ".jsonl")):
+            for policy in ("fallback", "exclude"):
+                with self.subTest(mode=mode, policy=policy), otc.OpenTideConstants(
+                        file=path.with_suffix(suffix), mode=mode, historical_offsets_policy=policy) as client:
+                    found = {station.station_id for station in client.stations()}
+                    for row in targets:
+                        station = client.require_station(row["station_id"])
+                        self.assertEqual(station.raw["subordinate_offsets"], freeze(row["subordinate_offsets"]))
+                        self.assertEqual(row["station_id"] in found, policy == "fallback")
+                        self.assertEqual(station.subordinate_offsets.vintage.reference_2020_equivalence,
+                                         row["subordinate_offsets"]["vintage"]["reference_2020_equivalence"])
+
+    def test_real_public_common_routes_preserve_ordered_native_boundaries(self):
+        events = []
+        active = ["none"]
+        sdk_root = (ROOT / "python" / "src" / "opentideconstants").resolve()
+
+        def profile(frame, event, value):
+            filename = Path(frame.f_code.co_filename)
+            if event not in ("call", "return") or not filename.is_relative_to(sdk_root):
+                return
+            events.append({"route": active[0], "event": event,
+                           "file": str(filename.relative_to(ROOT)),
+                           "symbol": frame.f_code.co_qualname,
+                           "line": frame.f_code.co_firstlineno,
+                           "inputs": {name: type(item).__name__ for name, item in frame.f_locals.items()},
+                           "output_type": type(value).__name__ if event == "return" else None})
+
+        old_profile = sys.getprofile()
+        srv = _Server()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                cache = Path(directory) / "cache"
+                sys.setprofile(profile)
+                for mode in ("eager", "stream"):
+                    active[0] = "local-" + mode
+                    with otc.OpenTideConstants(file=GOOD / "OTC_20991231.2.jsonl", mode=mode) as client:
+                        release = client.release
+                        station = release.require_station("OTC-T-0001")
+                        self.assertEqual(station.raw["station_id"], station.station_id)
+                        release.station_by_alias("noaa", "9414290")
+                        release.search(name="San", include_flagged=True, include_fallback=True)
+                        release.near(lat=37, lon=-122, radius_km=500)
+                        release.attribution([station])
+                        release.reference_station(station)
+                        release.subordinates_of(station)
+                        station.constant_sets(include_no_constants=True)
+                        self.assertIsInstance(release.citation, str)
+                        self.assertIsInstance(release.stats, otc.Stats)
+                active[0] = "network-latest"
+                with otc.OpenTideConstants(base_url=srv.url, cache_dir=cache, mode="stream") as client:
+                    client.station("OTC-T-0001")
+                    client.check_for_update()
+                    client.verify()
+                    client.cached_releases()
+                    client.download("20991231.2", to=Path(directory) / "download", formats=("jsonl",))
+                    client.prune(keep=1)
+                active[0] = "offline-pinned"
+                with otc.OpenTideConstants(release="20991231.2", offline=True, cache_dir=cache,
+                                          mode="stream") as client:
+                    client.station("OTC-T-0001")
+                active[0] = "invalid-options"
+                with self.assertRaises(otc.InvalidArgumentError):
+                    otc.OpenTideConstants(file=GOOD / "OTC_20991231.2.jsonl", offline=True)
+        finally:
+            sys.setprofile(old_profile)
+            srv.close()
+        calls = lambda route: [e["symbol"] for e in events if e["route"] == route and e["event"] == "call"]
+        stream = calls("local-stream")
+        self.assertLess(stream.index("OpenTideConstants.__init__"), stream.index("load_document"))
+        self.assertIn("build_station", stream)
+        network = calls("network-latest")
+        self.assertLess(network.index("Release._read_line"), network.index("Release._check_line"))
+        self.assertLess(network.index("OpenTideConstants._get_sha256_rows"), network.index("OpenTideConstants._fetch_file"))
+        self.assertIn("encode_cache_json", network)
+        self.assertNotIn("Http.get", calls("offline-pinned"))
+        self.assertNotIn("Http.get", calls("invalid-options"))
+        if os.environ.get("OTC_COMMON_TRACE"):
+            Path(os.environ["OTC_COMMON_TRACE"]).write_text(json.dumps(events, indent=2) + "\n")
+
+
 class HistoricalOffsetModelTest(unittest.TestCase):
     def test_ordinary_offsets_have_empty_optional_historical_fields(self):
         offsets = otc.SubordinateOffsets._parse({"reference_station_id": "OTC-reference",
@@ -1703,6 +1826,33 @@ class ErrorClassificationTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_pointer_tag_changes_during_body_read_force_unconditional_get(self):
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            pointer = self.cache / "v1" / "pointer" / "OTC_latest-f1.json"
+            etag = pointer.with_name(pointer.name + ".etag")
+            etag.write_bytes(b'"before"')
+            read_bytes = Path.read_bytes
+            reads = []
+
+            def changing_read(path):
+                data = read_bytes(path)
+                if path in (pointer, etag):
+                    reads.append(path.name)
+                if path == pointer:
+                    etag.write_bytes(b'"after"')
+                return data
+
+            srv.requests.clear()
+            with mock.patch.object(Path, "read_bytes", changing_read):
+                with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)) as client:
+                    self.assertEqual(client.release.datestamp, "20991231.2")
+            self.assertNotIn("If-None-Match", srv.requests[0][1])
+            self.assertEqual(reads[:3], [etag.name, pointer.name, etag.name])
+        finally:
+            srv.close()
+
     def test_bad_user_agent_is_invalid_argument_at_construction(self):
         # DR20: a string with no control characters, latin-1 only; checked before any request
         srv = _Server()
@@ -1731,6 +1881,26 @@ class ErrorClassificationTest(unittest.TestCase):
         finally:
             srv.close()
 
+
+    def test_cached_etag_preserves_printable_bytes_and_refuses_invalid_bytes(self):
+        srv = _Server()
+        try:
+            otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache)).close()
+            etag = self.cache / "v1" / "pointer" / "OTC_latest-f1.json.etag"
+            for value, send in [(b"not-an-entity-tag", True), (b"W/not-quoted", True),
+                                (b'"strong"', True), (b'W/"weak"', True),
+                                (b'""', True), (b'"a b"', True),
+                                (b'"trim"' + b"\r\n", False), (b"x" * 257, False),
+                                (b'"del\x7f"', False), ('"caf\u00e9"'.encode(), False)]:
+                etag.write_bytes(value)
+                srv.requests.clear()
+                with self.subTest(etag=value), otc.OpenTideConstants(
+                        base_url=srv.url, cache_dir=str(self.cache)) as client:
+                    self.assertEqual(client.release.datestamp, "20991231.2")
+                    actual = srv.requests[0][1].get("If-None-Match")
+                    self.assertEqual(actual, value.decode() if send else None)
+        finally:
+            srv.close()
 
     def test_304_on_a_broken_cached_pointer_that_cannot_be_removed_does_not_recurse(self):
         # R2-094: a 304 for a stored pointer that is not JSON, in a directory where it cannot be deleted, used to
@@ -2239,6 +2409,28 @@ class ReadmeTest(unittest.TestCase):
 
 class Format10Test(unittest.TestCase):
     """Format 1.0 reading (spec §4.5, §4.6, §7.3, §7.4)."""
+
+    def test_source_minimum_reader_is_required_even_without_legacy_receipt(self):
+        original = json.loads((GOOD / "OTC_20991231.2.json").read_bytes())
+        for mode in ("eager", "stream"):
+            for absent in ("missing", "null"):
+                document = copy.deepcopy(original)
+                if absent == "missing":
+                    document["release"].pop("min_reader_version")
+                else:
+                    document["release"]["min_reader_version"] = None
+                with self.subTest(mode=mode, minimum=absent), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    if mode == "eager":
+                        path = root / "OTC_20991231.2.json"
+                        path.write_text(json.dumps(document))
+                    else:
+                        path = root / "OTC_20991231.2.jsonl"
+                        path.write_bytes((GOOD / path.name).read_bytes())
+                        document.pop("stations")
+                        path.with_name("OTC_20991231.2.meta.json").write_text(json.dumps(document))
+                    with self.assertRaises(otc.InvalidReleaseError):
+                        otc.OpenTideConstants(file=path, mode=mode).close()
 
     def setUp(self):
         self.c = otc.OpenTideConstants(file=str(FIXTURES / "v1" / "OTC_20991231.3.jsonl"))

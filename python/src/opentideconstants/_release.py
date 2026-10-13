@@ -1215,6 +1215,8 @@ def _check_meta(meta, what):
         raise InvalidReleaseError(f"{what}: not a JSON object")
     rel = meta.get("release") if isinstance(meta.get("release"), dict) else {}
     check_format(meta.get("format_version"), rel.get("min_reader_version"), rel.get("datestamp"))
+    if not isinstance(rel.get("min_reader_version"), str):
+        raise InvalidReleaseError(f"{what}: release.min_reader_version is required")
 
 
 def _refs(meta, what):
