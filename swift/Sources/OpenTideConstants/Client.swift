@@ -332,7 +332,7 @@ private struct ClientIO:@unchecked Sendable {
         guard pointerShape(name,doc) else { throw OpenTideConstantsError.network("HTTP200 pointer has wrong shape",["url":.string(url.absoluteString),"status":.integer(200)]) }
         do {
             try Cache.atomic(response.bytes,path)
-            if let etag=response.etag { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
+            if let etag=response.etag,(1...256).contains(etag.utf8.count),etag.utf8.allSatisfy({ (32...126).contains($0) }) { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
             else { try? FileManager.default.removeItem(at:path.appendingPathExtension("etag")) }
         } catch { logger?("opentideconstants: cannot cache \(name)") }
         return doc
