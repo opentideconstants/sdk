@@ -10,6 +10,55 @@
 
 #define JSONL_SHA "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"   /* good/OTC_20991231.2.jsonl */
 
+static void index_contract(otc_fetch_options *fo, const char *dir, const char *jsonl)
+{
+    otc_release *rel = NULL;
+    char *ix = test_join(dir, "index-v1.json"), *text = NULL, *canonical = NULL;
+    size_t len = 0;
+    cJSON *doc, *entry, *set;
+    const char *id;
+    otc_station_t *station = NULL;
+    CHECK_STATUS(otc_fetch_open(fo, "20991231.2", NULL, &rel), OTC_OK);
+    if (!rel) { free(ix); return; }
+    otc_close(rel);
+    CHECK_STATUS(otc__read_all(ix, &text, &len), OTC_OK);
+    doc = text ? otc__json_parse(text, len) : NULL;
+    CHECK(doc != NULL);
+    if (!doc) { free(text); free(ix); return; }
+    CHECK_STATUS(otc__encode_cache_json(doc, &canonical), OTC_OK);
+    CHECK(canonical && !strcmp(text, canonical));
+    free(canonical);
+    free(text);
+    cJSON_ArrayForEach(entry, otc__jget(doc, "stations")) {
+        CHECK(cJSON_GetObjectItemCaseSensitive(entry, "subordinate_offsets") != NULL);
+        CHECK(cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(entry, "current_offsets")));
+        cJSON_ArrayForEach(set, otc__jget(entry, "sets")) {
+            CHECK(cJSON_GetObjectItemCaseSensitive(set, "fallback") != NULL);
+            CHECK(cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(set, "current_bins")));
+        }
+    }
+    entry = cJSON_GetArrayItem(otc__jget(doc, "stations"), 0);
+    id = otc__jstr(entry, "station_id");
+    CHECK(id != NULL);
+    if (id) {
+        CHECK(cJSON_ReplaceItemInObject(entry, "name", cJSON_CreateString("tampered name")));
+        CHECK_STATUS(otc__encode_cache_json(doc, &canonical), OTC_OK);
+        if (canonical) test_write(dir, "index-v1.json", canonical);
+        free(canonical);
+        CHECK_STATUS(otc_open_file(jsonl, NULL, &rel), OTC_OK);
+        if (rel) {
+            CHECK(rel->index_used);
+            CHECK_STATUS(otc_station(rel, id, &station), OTC_E_INVALID_RELEASE);
+            CHECK(station == NULL);
+            CHECK(access(ix, F_OK) != 0);
+            otc_station_free(station);
+            otc_close(rel);
+        }
+    }
+    cJSON_Delete(doc);
+    free(ix);
+}
+
 int main(void)
 {
     char *cache = test_tmpdir(), base[512], path[4096], *dir, *vpath, *jsonl, *text = NULL, *out, hex[65] = "";
@@ -28,6 +77,7 @@ int main(void)
     dir = test_join(cache, "v1/releases/20991231.2");
     vpath = test_join(dir, ".verified");
     jsonl = test_join(dir, "OTC_20991231.2.jsonl");
+    index_contract(&fo, dir, jsonl);
     /* .verified records an older .jsonl, which is the one on disk (so the download replaces it) ... */
     if (otc__read_all(vpath, &text, &len) != OTC_OK) { perror(vpath); return 2; }
     v = cJSON_Parse(text);
