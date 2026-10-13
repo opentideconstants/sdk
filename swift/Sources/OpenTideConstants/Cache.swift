@@ -51,9 +51,10 @@ internal struct Cache {
     static func checksums(_ data:Data)throws->[String:String] {
         guard let text=String(data:data,encoding:.utf8) else { throw OpenTideConstantsError.invalidRelease("checksum file not UTF8") }
         var result:[String:String]=[:]
-        for line in text.split(separator:"\n") {
-            let bits=line.split(maxSplits:1,whereSeparator:{ $0==" " || $0=="\t" });if bits.count != 2 { continue }
-            let digest=String(bits[0]),name=String(bits[1]).trimmingCharacters(in:.whitespaces).trimmingCharacters(in:CharacterSet(charactersIn:"*"))
+        for line in text.components(separatedBy:"\n") {
+            if line.utf8.allSatisfy(asciiWhitespace) { continue }
+            let bits=line.split(maxSplits:1,whereSeparator:{ $0==" " || $0=="\t" });guard bits.count==2 else { throw OpenTideConstantsError.invalidRelease("invalid checksum row") }
+            let digest=String(bits[0]),name=String(bits[1]).trimmingCharacters(in:.whitespacesAndNewlines).trimmingCharacters(in:CharacterSet(charactersIn:"*"))
             guard digest.range(of:"^[a-fA-F0-9]{64}$",options:.regularExpression) != nil,!name.contains("/"),result[name]==nil else { throw OpenTideConstantsError.invalidRelease("invalid/duplicate checksum row") };result[name]=digest.lowercased()
         }
         guard !result.isEmpty else { throw OpenTideConstantsError.invalidRelease("no valid checksum rows") };return result
