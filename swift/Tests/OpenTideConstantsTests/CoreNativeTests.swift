@@ -1,6 +1,43 @@
 import XCTest
 @testable import OpenTideConstants
 final class CoreNativeTests:XCTestCase {
+    func testEffectiveTypedQuantityControls() async throws {
+        // Private injected controls derived from retained source rows; not upstream defects.
+        let fixtures=try path("OTC_QUANTITY_CONTROLS")
+        let cache=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:cache) }
+        let original=try JSONValue.parse(Data(contentsOf:URL(fileURLWithPath:fixtures+"/authentic/OTC_20261011.json")))
+        for mode in [Mode.eager,Mode.stream] {
+            for label in ["authentic","null_both","absent_both","unknown_pair","unknown_candidate_null","known_distinct","known_same","ok_before_flagged"] {
+                let url=URL(fileURLWithPath:fixtures+"/"+label+"/OTC_20261011.json")
+                let document=try JSONValue.parse(Data(contentsOf:url))
+                let client=try await OpenTideConstants.open(file:url.path,cacheDir:cache.path,mode:mode,commercialOnly:true)
+                defer { client.close() }
+                for raw in document["stations"].array {
+                    let id=try XCTUnwrap(raw["station_id"].string)
+                    let source=try XCTUnwrap(original["stations"].array.first { $0["station_id"].string==id })
+                    let station=try client.requireStation(stationId:id)
+                    let expected:String?
+                    if ["null_both","absent_both","unknown_candidate_null","known_distinct"].contains(label) { expected=nil }
+                    else if label=="authentic" { expected=raw["recommended_set_id"].string }
+                    else { expected=source["constant_sets"].array.first?["set_id"].string }
+                    XCTAssertEqual(station.recommendedSet?.setId,expected,"\(label) \(mode.rawValue) \(id)")
+                    XCTAssertEqual(station.raw,raw)
+                    XCTAssertEqual(station.sourceRecords.map(\.raw),source["source_records"].array)
+                    let originalSet=try XCTUnwrap(station.constantSet(setId:raw["recommended_set_id"].string!))
+                    if label.hasPrefix("unknown") || ["null_both","absent_both"].contains(label) { XCTAssertEqual(originalSet.quantity,.other) }
+                    print("QUANTITY_CONTROL label=\(label) mode=\(mode.rawValue) station=\(id) recommended=\(station.recommendedSet?.setId ?? "null") expected=\(expected ?? "null") raw=preserved source=preserved")
+                }
+            }
+            do {
+                _=try await OpenTideConstants.open(file:fixtures+"/wrong_primitive/OTC_20261011.json",cacheDir:cache.path,mode:mode,commercialOnly:true)
+                XCTFail("wrong quantity primitive must fail during load")
+            } catch {
+                XCTAssertEqual((error as? OpenTideConstantsError)?.code,"invalid_release")
+                XCTAssertEqual((error as? OpenTideConstantsError)?.message,"constant set: quantity wrong type")
+            }
+        }
+    }
     func testForeignStationOwnershipWithEqualRaw() async throws {
         let fixtures=try path("OTC_MD6_FIXTURES")
         let cache=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
