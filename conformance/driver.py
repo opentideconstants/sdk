@@ -1262,32 +1262,21 @@ def act_assert_index(a):
             return [] if actual is _MISSING else [f"{where}: should be absent"]
         return match(value, actual, 0, where)
 
-    writers = tuple(f'opentideconstants-{language}/' for language in ('python', 'ruby', 'js', 'c', 'swift'))
-    if isinstance(doc, dict) and isinstance(doc.get('by'), str) and doc['by'].startswith(writers):
-        # Accepted native discovery summaries retain the original index-v1 fields. Check each
-        # extension against actual JSONL before comparing those fields, including offsets and digests.
-        # Ruby's accepted writer retains index_version alone; other writers also seal discovery version 1.
-        if not doc['by'].startswith('opentideconstants-ruby/') or 'discovery_index_version' in doc:
-            extension_problems += match(1, doc.get('discovery_index_version', _MISSING), 0, 'discovery_index_version')
+    if isinstance(doc, dict):
+        # Canonical discovery summaries use the same source projection for every writer.
+        # Validate extensions before comparing the original index fields, spans and digest.
+        extension_problems += match(1, doc.get('discovery_index_version', _MISSING), 0, 'discovery_index_version')
         doc = copy.deepcopy(doc)
         doc.pop('discovery_index_version', None)
-        sparse_c = doc['by'].startswith('opentideconstants-c/')
-        full_offsets = doc['by'].startswith(('opentideconstants-c/', 'opentideconstants-ruby/', 'opentideconstants-js/'))
         records = [json.loads(line) for line in jsonl.read_bytes().splitlines() if line.strip()]
         for entry, raw in zip(doc.get('stations') or [], records):
             if not isinstance(entry, dict):
                 continue
             own_offsets = raw.get("subordinate_offsets")
-            if sparse_c and own_offsets is None:
-                own_offsets = _MISSING
             extension_problems += check_extension(entry, 'subordinate_offsets', own_offsets,
                                                   f"{entry.get('station_id')}.subordinate_offsets")
             offsets = [{key: row.get(key) for key in ('bin', 'reference_bin', 'reference_station_id', 'licence_id')}
                        for row in raw.get('current_offsets') or []]
-            if full_offsets:
-                offsets = raw.get('current_offsets', _MISSING if sparse_c else [])
-                if sparse_c and offsets is None:
-                    offsets = _MISSING
             extension_problems += check_extension(entry, 'current_offsets', offsets,
                                                   f"{entry.get('station_id')}.current_offsets")
             summaries = entry.get('sets')
@@ -1297,17 +1286,11 @@ def act_assert_index(a):
                 if not isinstance(summary, dict):
                     continue
                 fallback = constants.get('fallback')
-                if sparse_c and fallback is None:
-                    fallback = _MISSING
                 extension_problems += check_extension(summary, 'fallback', fallback,
                                                       f"{summary.get('set_id')}.fallback")
                 bins = [row.get('bin') for row in constants.get('current_bins') or []]
                 extension_problems += match(bins, summary.pop('current_bins', _MISSING), 0,
                                             f"{summary.get('set_id')}.current_bins")
-                if doc['by'].startswith('opentideconstants-ruby/'):
-                    for key in ('source_record_id', 'source_version', 'datum'):
-                        extension_problems += match(constants.get(key), summary.pop(key, _MISSING), 0,
-                                                    f"{summary.get('set_id')}.{key}")
     return [f"{p.name}: {x}" for x in extension_problems + stream_index.compare(doc, ref)][:20]
 
 
