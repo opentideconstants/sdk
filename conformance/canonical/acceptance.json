@@ -20,5 +20,377 @@
   "whole_sdk_complete": false,
   "private_body_status": "All 60 canonical behaviors remain INCOMPLETE per profile; Ruby B28 alone reuses the unchanged genuine encoder and is not newly migrated or globally behavior-accepted.",
   "corpus_unlocked": true,
-  "body_migration_unlocked": false
+  "body_migration_unlocked": false,
+  "corpus": {
+    "version": 1,
+    "status": "FINITE_EXPECTATIONS_BOUND_SELECTED_NATIVE_PUBLIC_CONTROLS_VALIDATED",
+    "source_subject": "b1c4e330595b3a1006b19c6455c42b47cdeb4c52",
+    "required_profiles": [
+      "python",
+      "ruby",
+      "typescript_node",
+      "typescript_browser",
+      "c",
+      "swift"
+    ],
+    "scenario_ids": [
+      "SC01",
+      "SC02",
+      "SC03",
+      "SC04",
+      "SC05",
+      "SC06",
+      "SC07",
+      "SC08",
+      "SC09",
+      "SC10",
+      "SC11",
+      "SC12",
+      "SC13",
+      "SC14",
+      "SC15",
+      "SC16",
+      "SC17",
+      "SC18",
+      "SC19",
+      "SC20",
+      "SC21",
+      "SC22",
+      "SC23",
+      "SC24",
+      "SC25"
+    ],
+    "selected_case_object_count": 59,
+    "unique_selected_case_ids": [
+      "rules/pk07/file-offline",
+      "rules/pk07/file-release",
+      "net/offline-env-wins-over-option",
+      "net/latest-download",
+      "format/latest-skips-too-new",
+      "format/latest-offline-cached-index",
+      "net/304-no-cache",
+      "cross/verified-doi-null-pointer",
+      "update/swap",
+      "update/last-error-cleared-update",
+      "lifecycle/after-close",
+      "load/file-json-gz-json-row-mismatch",
+      "load/verify-file-json-gz",
+      "cache/verify",
+      "cache/dr100-pinned-other-mode-adds",
+      "cache/newest-corrupt-offline",
+      "cache/dr100-null-size-offline",
+      "download/rename-failure-restores",
+      "cache/prune-keeps-loaded",
+      "cache/prune-partial-failure",
+      "cache/prune-counter-order",
+      "cache/prune-stale-lock",
+      "cache/prune-fresh-lock",
+      "cross/lock-contention",
+      "net/retry-500-then-200",
+      "net/proxy-credentials-redacted",
+      "rules/pk12/redirect-https-to-http-refused",
+      "cross/cache-offline-stream",
+      "cross/cache-offline-eager",
+      "cross/index-shared",
+      "cross/index-stale",
+      "cross/index-station-id-swapped",
+      "cross/index-offset-past-eof",
+      "rules/r2-pk09/blank-lines-jsonl-stream",
+      "rules/r2-pk09/blank-line-nbsp-jsonl-stream",
+      "rules/r2-pk09/blank-lines-index",
+      "rules/pk06/bad-duplicate-station-id-jsonl-stream",
+      "tolerant/format-minor",
+      "tolerant/raw-good",
+      "rules/r2-pk09/links-bad-station",
+      "geo/near-antimeridian",
+      "geo/near-pole",
+      "search/qfilt-labelled-fallback",
+      "knc/qfilt-labelled-fallback-strict",
+      "knc/qfilt-labelled-fallback-as_published_upstream",
+      "commercial-only/keep-commercial-recommended",
+      "commercial-only/ok-before-flagged",
+      "geo/qfilt-labelled-fallback",
+      "commercial-only/flagged-fallback",
+      "release/stats-20991231.2",
+      "release/stats-20991231",
+      "v1/stats",
+      "attribution/non-commercial-null-provider",
+      "attribution/empty-scope",
+      "release/citation-exact-version-doi",
+      "predict-datums/ranges",
+      "predict-astro-values",
+      "predict-empty-window-out-of-range"
+    ],
+    "all_private_bodies": "INCOMPLETE except unchanged genuine Ruby B28 encoder within accepted exact scope",
+    "full_family_or_profile_acceptance": false,
+    "missing_obligations": {
+      "all_families": "Actual new private callee entry/exit body values/order require real native direct consumers; public runner protocol alone does not prove them.",
+      "SC03": "Selected driver inputs cover 304/DOI; ETag race/invalid-header cases remain exact existing COMMON receipt scope until mapped, not new acceptance.",
+      "SC15": "Foreign-station public control exists; identical-raw own rematerialization requires exact MD6 source-qualified receipt input, not this different foreign-station case.",
+      "SC18": "OTC-T-0181 existing counterpart is a control; exact null quantity and two distinct unknown replacement inputs are absent from selected current cases and remain INCOMPLETE.",
+      "SC21_SC22": "No H4 native prediction cases in the pinned 932-case search aid. Existing PRED-PY historical guard receipts are bounded locators; authenticate their exact fixture and approved refusal expectations before reuse.",
+      "SC24": "Reuse immutable vector input/oracle, preserved source-body provenance and existing receipts within exact scope; Swift 17 kills never imply Python 17 qualification.",
+      "SC25": "Public auxiliaries exist; fold/gap and private empty-window evaluation effects retain direct native proof limits.",
+      "four_compositions": "open→discovery→model→prediction; stream reopen→lazy comparison; failed update→held release; historical admission→offset result remain obligations, not metadata GREEN."
+    },
+    "proof_reference_pins": [
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-C/independent-value/report.md",
+        "sha256": "3baa6dbf17c3898eabb2c0e213e2a9a02345c2d7e8ea177bcf87c5997a80f48b"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-C/independent-value/receipt.json",
+        "sha256": "9c9a60b111fd87c0e11d811b74184b41c08b52d4d6fa61acb763d0235a59bdce"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-C/report.md",
+        "sha256": "447ce67e4f52c8dc1da6af8b6023d84aa1f3441f355265066a4f716df96d2407"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-C/independent-value/report.md",
+        "sha256": "0e97ec1be8db7ead0f6cced4f91a1c68168babd221872b471b65c0a297549136"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-C/independent-value/receipt.json",
+        "sha256": "9cbecb39e5ee490d7f2d6e4b2a99f1a01f8f5df8de5fd10e19430437486eb220"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-C/report.md",
+        "sha256": "ea1dce90c295a23806873f325e578f060dd46f833f7f56383f09b55f60b7887f"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-C/independent-value/report.md",
+        "sha256": "b1af82141c06faad63e2201920e1358fa64e80bd252ad5fb744ec8a79a83787f"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-C/independent-value/receipt.json",
+        "sha256": "d7fc5077bb89346c3e3e1d06b48003a5d516d7a62947bb448f3b40842d33bda4"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ASSERT-CACHE/independent-value/report.md",
+        "sha256": "88e6be776eb71efa405c54660807299c231f08d13182d4ffac588ada97eb5bf3"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ASSERT-CACHE/independent-value/receipt.json",
+        "sha256": "a4430e28bf076caa0bae808c2c3f63333a98fa2e7ddb7fa89636b541fcc812be"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/native-trace.json",
+        "sha256": "92dfc3676228133a0e5d729cf6491298a64ddb33da649019e6a0eda3407bf0e2"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-PY/independent-value/receipt.json",
+        "sha256": "2ea493e903a7fa34b706cd67eba3a8df2a4bce07e6893ec25adc55326958dd0e"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-PY/independent-value/receipt.json",
+        "sha256": "0e6c15dced00a4e63f7753c2b01da9e02e3ba4404aeb0651793424b7df7b35cf"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-PY/independent-value/receipt.json",
+        "sha256": "a8d089b439c232f6c0d7580478192258d4fa5f0da86d0e2b14b0638d8e70cb64"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/native-cases.json",
+        "sha256": "52f5a7af57b6c8ead3676005a34640362190f5e607245746245296c0042d2dc9"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/package-writer-final.log",
+        "sha256": "4047b317d63e810ad115c084d70c8d001ac19955514a8498ae8d3bd53f85b65d"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/qualified-red-final.log",
+        "sha256": "d0289c6fddc45d673a806d5c68bb833e34e2bea4a364670df47655ef89f8a55c"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/qualified-green.log",
+        "sha256": "35cee0cd29012165c677c393d43142ee4659ea0563e95d982f6171f6e32659cb"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/writer-red.log",
+        "sha256": "15b364de5333701462b2122fed2ca58c981fae22c6a6bf0fffb0a97c479ae105"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/writer-green.log",
+        "sha256": "3bfead9a018260ed772e776a7cb4837bda61ee89f92afe026f0ed1bb0b070ce3"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/conditional-final.json",
+        "sha256": "f614510de3b8b24e48125330d2d2b7087511e0197d21c09e8b10649277602b7c"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/common-controls-qualified.log",
+        "sha256": "ac93414443610142679465e9be22f7d8ce44756e03284f9e1d7df867763601a1"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/historical-eligibility-qualified.log",
+        "sha256": "d7e1fada504668f36d2425ec1493d38ed3a356c32e7f64d9ebcb9b484ff8f95b"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-RB/ordered-runtime-phases.json",
+        "sha256": "8cf069d5df46b0a87483f82903d41a88f85046b3f94f0afc3203c865b34c1b36"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-RB/independent-value/receipt.json",
+        "sha256": "8523eeb1527485948b49c18789ebed8ee93359671615fcb50d7b894f27c4da19"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-RB/independent-value/receipt.json",
+        "sha256": "f3844f11a732389d7d049bf3f30c6d4b2b98ced661963567c12c0c19f5aed289"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-RB/independent-value/receipt.json",
+        "sha256": "aedac5b71a880233e839f02f11044404e5d760b8a0af76330323a39baa4db683"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/FMT/independent-value/receipt.json",
+        "sha256": "02ccbd3ebb2f5ddf6dca9007de2c0aad16f29eea4d14a0dc66c2fe74d4008522"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/HISTORY-MODEL-RB/independent-value/receipt.json",
+        "sha256": "26d6d26bdf6fdf5e085024457e20f632dfbf8d527ccde4b103bbc072f80951bd"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/HISTORY-RB/final-receipt.json",
+        "sha256": "e9e6b66afac73cc7f128979f056ec64a254736b8c5ce11717430fc99801bc36b"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/baseline-strict-selection/receipt.json",
+        "sha256": "9af0f851201cf72d02a19d6e8d21bb94c32d36f54c2256c8a064d86e6a01f3e9"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-RB/scenario-evidence.json",
+        "sha256": "d9ce91b7964dc29dfbffff38d52e6057886a8673772c43fa06f1134d3a59718a"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-TS/receipt.json",
+        "sha256": "a61f3bc8693ddd4765519a30ee686fb54fab868d3d4ad435a1ca09031b3869a2"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/RECEIPT-TS/independent-value/receipt.json",
+        "sha256": "46d884e97f0439d99d6de2ec9f9d49287ba4e11b639e4209f565f0fa7b8fafb1"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-TS/receipt.json",
+        "sha256": "b7e1472615807b058dca3fae6b7d81253fdb51cc5ceb146ce0736c4effaf991e"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/INDEX-TS/independent-value/receipt.json",
+        "sha256": "8c30a34f1178fa51334a6a112ecc8a21e3a4e684c2f6e54703e2e6faad87f0d8"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/STRICT-TS/receipt.json",
+        "sha256": "29868f50482448f8d3571113c0e9d4b9c27f8869c434955fbae82ccfe3df99ef"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/STRICT-TS/independent-value/receipt.json",
+        "sha256": "d9111c353705133bde026d06593d92f9b9920d5a0a04d3b1de657b4101311a61"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-TS/green-receipt.json",
+        "sha256": "6fcd4d383ebb3c542e62932ba25425b1cd3e9879f484b6dc59ec8cdef29fc786"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/ENC-TS/independent-value/receipt.json",
+        "sha256": "1db9c875eb5325042d49e1770563296309be00e3642b9fc3fe082cd693a674e2"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/native-sealed-phase.json",
+        "sha256": "4228bbe7834c9bb8271dc0d61a50e0aee37200ef296ab665655c4716a16bf36c"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/historical-red-final.log",
+        "sha256": "f6d8c6fe07327b0369e0d10b6ac8d62b6cc1db0e39e89df0c157182c16544f74"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/historical-green-final.log",
+        "sha256": "e1d3bf82fa5750768c0de3826c32878c8291ef90bb9cdd5a510f06a1039e9e6b"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/historical-complete-guards.log",
+        "sha256": "91b71a949b852eda0f2fdfc47cb26da2c896124ba8db5c1525711012b7fdbb54"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/historical-complete-guards.json",
+        "sha256": "fbab321088937708f35fb55b987338ae01b20f10b3313f4d21de50258f61eaf8"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/package-sealed.log",
+        "sha256": "01d8c072c9497d571f0d5a0e32f0c4c0e0e35ae9a3c3036b5672f4998590e87a"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/native-baseline.json",
+        "sha256": "3afa64740f6b6248f78e04424649a275c9befc533165013e348e8f69892e3314"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/native-final.json",
+        "sha256": "3afa64740f6b6248f78e04424649a275c9befc533165013e348e8f69892e3314"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/numerical-reuse.json",
+        "sha256": "25dd3baaf24a1872f16967631ca675241a99e7dc0b45000101eddcd5c1e73758"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/typecheck-comparison.json",
+        "sha256": "7e8b567284371abfa8d6fd5fbe82e82df3ee080c63b391e9b5e1219109217f69"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/lsp.json",
+        "sha256": "432a3ccbec00fb923ee4730d5bf6991e0327321bd8b8ec969cdb14e76595591a"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-PY/authority-addendum/report.md",
+        "sha256": "fcc8c2617d656c0512a307470277b0da9f928303d31de64b81273d74f53168b9"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-PY/final-independent-value/receipt.json",
+        "sha256": "b29fe4b0ddea58bc7ccd0fadc192a33c88d2f8b7c26502b09b20aca420fa9069"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/trace-pins.json",
+        "sha256": "5c8da360035dcec05f5189f51776bf141a902954da00436ec47706d70954ba6a"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/actual-imports.json",
+        "sha256": "d578530e2911e8b6dc8026b5ea529b827893475000644e3d817bab1498a9c363"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/ordered-runtime-phases.json",
+        "sha256": "c2ebbb1ed44f31b163ac0c62ed94f552a2156750f089109bb31641d28a676954"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/empty-window-native-phases.json",
+        "sha256": "48960980132c7b228eeb13a530639e670f07fae36cbed298f1dc13d16f93eb1b"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/ownership-native-phases.json",
+        "sha256": "7719577d924bcfef40310e8ad5c8d31b39bc2e436aa93a652836ee8c0bf17748"
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/PRED-RB/primary-native-observed.json",
+        "sha256": "195463bea385266eaa4bccdc446b05cf6d5d08ef183aecd8866199d2d152de5d"
+      }
+    ],
+    "shape_gate_source_sha": "b1c4e330595b3a1006b19c6455c42b47cdeb4c52",
+    "body_migration_unlocked": false,
+    "targeted_native_validation": {
+      "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/CORPUS/bound-public.json",
+      "sha256": "f2a245bddef9ac6cd0648c76341190081f665966ec1e1ca7e88ea30bb48e1723",
+      "bytes": 8730
+    },
+    "private_red_and_unchanged_post": [
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/CORPUS/native-red.stdout.json",
+        "sha256": "8ac8ac2453f4ebd250f920cf7e309fafa5ff660c88618533744cd6c153d8cf45",
+        "bytes": 1001
+      },
+      {
+        "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/CORPUS/native-post.stdout.json",
+        "sha256": "8ac8ac2453f4ebd250f920cf7e309fafa5ff660c88618533744cd6c153d8cf45",
+        "bytes": 1001
+      }
+    ],
+    "m1_leaf_fixture_expectation_binding_count": 13,
+    "root_acceptance_pending": true
+  }
 }
