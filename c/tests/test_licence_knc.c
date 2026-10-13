@@ -10,7 +10,7 @@
 
 #include <stddef.h>
 
-#define KNC_META "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"concept_doi\":\"10.1/x\"}," \
+#define KNC_META "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"concept_doi\":\"10.1/x\",\"min_reader_version\":\"1.0\"}," \
     "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":["                                                  \
     "{\"licence_id\":\"c\",\"spdx\":\"CC-BY-4.0\",\"provider\":\"C Co\",\"attribution\":\"C text\",\"commercial_use\":true}," \
     "{\"licence_id\":\"t\",\"spdx\":\"CC-BY-4.0\",\"provider\":\"T Co\",\"attribution\":\"T text\",\"commercial_use\":true," \
