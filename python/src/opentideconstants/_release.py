@@ -489,7 +489,7 @@ class Release:
     __slots__ = ("_meta", "_release", "_files", "_conventions", "_conv_by_id", "_licences", "_lic_by_id",
                  "_entries", "_by_id", "_tombs", "_alias", "_subs", "_stations", "_tomb_objs", "_mode", "_fh",
                  "_lock", "_lru", "_jsonl", "_constituent_names", "_stats", "_closed", "_zenodo_version_doi",
-                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_historical_offsets_policy", "_effective", "_astro_cache", "__weakref__")
+                 "_index_path", "_opened", "_commercial_only", "_commercial_basis", "_historical_offsets_policy", "_effective", "_astro_cache", "_station_origin", "__weakref__")
 
     def __init__(self, *, meta, entries, files, mode, stations=None, tombstones=None, jsonl=None, index_path=None,
                  commercial_only=False, commercial_basis="strict", historical_offsets_policy="fallback"):
@@ -546,7 +546,11 @@ class Release:
             if e.get("type") == "subordinate" and e.get("reference_station_id"):
                 self._subs.setdefault(e["reference_station_id"], []).append(e["station_id"])
         self._mode = mode
+        self._station_origin = object()
         self._stations = stations  # eager: id -> Station
+        if stations is not None:
+            for station in stations.values():
+                object.__setattr__(station, "_origin", self._station_origin)
         self._tomb_objs = tombstones  # eager: id -> Tombstone
         self._fh = None
         self._lock = threading.Lock()
@@ -686,6 +690,7 @@ class Release:
             st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"), self._effective[sid])
         else:
             st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"))
+        object.__setattr__(st, "_origin", self._station_origin)
         with self._lock:
             self._lru[sid] = st
             if len(self._lru) > LRU_SIZE:
@@ -1003,7 +1008,7 @@ class Release:
         if not isinstance(station, Station):
             raise InvalidArgumentError(f"{what}: station must be a Station")
         own = self.station(station.station_id)
-        if own is None or (own is not station and own.raw != station.raw):
+        if station._origin is not self._station_origin or own is None or (own is not station and own.raw != station.raw):
             raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
                                        f"{self.datestamp}")
 
@@ -1083,7 +1088,7 @@ class Release:
                 if not isinstance(st, Station):
                     raise InvalidArgumentError("stations must be a list of Station objects")
                 own = self.station(st.station_id)
-                if own is None or (own is not st and own.raw != st.raw):
+                if st._origin is not self._station_origin or own is None or (own is not st and own.raw != st.raw):
                     # unknown, removed or from another release: never skipped silently (CR D2 a)
                     raise InvalidArgumentError(f"station {st.station_id} is not an active station of release "
                                                f"{self.datestamp}")

@@ -2,6 +2,7 @@
 With OTC_TEST_INSTALLED=1 they test the installed package instead of python/src."""
 import copy
 import dataclasses
+import gc
 import json
 import os
 import operator
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import weakref
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1864,6 +1866,98 @@ class AttributionTest(RepeatedIdsTest):
         with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
             with self.assertRaises(otc.InvalidArgumentError):
                 c.attribution([foreign])
+
+    def test_equal_raw_foreign_station_is_rejected_by_three_public_consumers(self):
+        path = str(GOOD / "OTC_20991231.2.jsonl")
+        for mode in ("eager", "stream"):
+            with otc.OpenTideConstants(file=path, mode=mode) as left, \
+                    otc.OpenTideConstants(file=path, mode=mode) as right:
+                foreign = left.require_station("OTC-T-0001")
+                own = right.require_station(foreign.station_id)
+                self.assertEqual(foreign.raw, own.raw)
+                self.assertNotEqual(foreign, own)  # referenced licence objects retain their existing identity equality
+                self.assertEqual(hash(foreign), hash(own))
+                for operation in ("attribution", "reference_station", "subordinates_of"):
+                    with self.subTest(mode=mode, operation=operation):
+                        argument = [foreign] if operation == "attribution" else foreign
+                        with self.assertRaises(otc.InvalidArgumentError):
+                            getattr(right.release, operation)(argument)
+
+    def test_owned_station_copies_factories_and_lru_rematerialization(self):
+        from unittest import mock
+        path = str(GOOD / "OTC_20991231.2.jsonl")
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), mock.patch("opentideconstants._release.LRU_SIZE", 1), \
+                    otc.OpenTideConstants(file=path, mode=mode) as client:
+                release = client.release
+                station = release.require_station("OTC-T-0001")
+                expected = release.attribution([station])
+                self.assertEqual(release.attribution([copy.copy(station)]), expected)
+                self.assertEqual(copy.copy(station), station)
+                other_origin = copy.copy(station)
+                object.__setattr__(other_origin, "_origin", object())
+                self.assertEqual(other_origin, station)
+                self.assertEqual(hash(other_origin), hash(station))
+                self.assertEqual(repr(other_origin), repr(station))
+                with self.assertRaises(otc.InvalidArgumentError):
+                    release.attribution([other_origin])
+                self.assertNotIn("_origin", repr(station))
+                self.assertNotIn("_origin", station.raw)
+                self.assertNotIn("_origin", {f.name for f in dataclasses.fields(station) if f.init})
+                self.assertIsNone(release.reference_station(station))
+                self.assertTrue(all(s.station_id != station.station_id for s in release.subordinates_of(station)))
+                variants = [release.station(station.station_id), *release.stations(),
+                            *release.iter_stations(), *release.search(name=station.name)]
+                variants.extend(n.station for n in release.near(lat=station.lat, lon=station.lon, radius_km=1))
+                nearest = release.nearest(lat=station.lat, lon=station.lon)
+                self.assertIsNotNone(nearest)
+                variants.append(nearest.station)
+                for system, ids in station.aliases.items():
+                    variants.append(release.station_by_alias(system, ids[0]))
+                for materialized in variants:
+                    self.assertIsNotNone(materialized)
+                    self.assertTrue(release.attribution([materialized]))
+                changed = copy.copy(station)
+                object.__setattr__(changed, "raw", freeze({**station.raw, "name": "changed"}))
+                unknown = copy.copy(station)
+                object.__setattr__(unknown, "station_id", "OTC-T-9999")
+                for invalid in (changed, unknown):
+                    with self.assertRaises(otc.InvalidArgumentError):
+                        release.attribution([invalid])
+                self.assertIsNone(release.station("OTC-T-9999"))
+                with self.assertRaises(otc.StationNotFoundError):
+                    release.require_station("OTC-T-9999")
+                if mode == "stream":
+                    with mock.patch("opentideconstants._release.LRU_SIZE", 1):
+                        original = release.require_station(station.station_id)
+                        for other in release.iter_stations():
+                            if other.station_id != original.station_id:
+                                break
+                        rematerialized = release.require_station(original.station_id)
+                    self.assertIsNot(original, rematerialized)
+                    self.assertNotEqual(original, rematerialized)  # nested metadata keeps existing identity equality
+                    self.assertEqual(original.raw, rematerialized.raw)
+                    self.assertEqual(hash(original), hash(rematerialized))
+                    self.assertEqual(release.attribution([original]), expected)
+                    self.assertEqual(release.attribution([rematerialized]), expected)
+
+    def test_station_origin_does_not_retain_release_and_closed_error_stays_io(self):
+        path = str(GOOD / "OTC_20991231.2.jsonl")
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode):
+                client = otc.OpenTideConstants(file=path, mode=mode)
+                release = client.release
+                station = release.require_station("OTC-T-0001")
+                retained = weakref.ref(release)
+                client.close()
+                for operation in ("attribution", "reference_station", "subordinates_of"):
+                    argument = [station] if operation == "attribution" else station
+                    with self.assertRaises(otc.FileError):
+                        getattr(release, operation)(argument)
+                del release, client
+                gc.collect()
+                self.assertIsNone(retained())
+                self.assertEqual(station.station_id, "OTC-T-0001")
 
 
 class ReadmeTest(unittest.TestCase):

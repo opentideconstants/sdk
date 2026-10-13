@@ -644,6 +644,7 @@ class Station:
     _sets: Tuple[ConstantSet, ...] = field(default=(), repr=False, compare=False)
     recommended_is_fallback: Optional[bool] = None
     source_records: Tuple[SourceRecord, ...] = ()
+    _origin: Optional[object] = field(default=None, init=False, repr=False, compare=False)
 
     def __hash__(self):  # CR D16: hashable by id; == still compares the fields
         return hash(self.station_id)
