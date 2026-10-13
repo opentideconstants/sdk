@@ -61,6 +61,12 @@ public final class OpenTideConstants {
             }
             let rows=try Cache.checksums(bytes)
             for path in opened { try io.check(path,sha:rows[path.lastPathComponent]) }
+            for path in opened where path.lastPathComponent.hasSuffix(".json.gz") {
+                let json=URL(fileURLWithPath:String(path.path.dropLast(3)))
+                guard let expected=rows[json.lastPathComponent] else { throw OpenTideConstantsError.checksumMismatch("not listed",["file":.string(json.path)]) }
+                let actual=SHA256.digest(try Reader.gunzip(Reader.read(path)))
+                guard actual==expected.lowercased() else { throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(json.path),"expected":.string(expected.lowercased()),"actual":.string(actual)]) }
+            }
             return true
         }
     }
@@ -233,6 +239,12 @@ private struct ClientIO:@unchecked Sendable {
         let rows=FileManager.default.fileExists(atPath:sha.path) ? try Cache.checksums(sha):nil
         if let rows {
             for name in names { try check(directory.appendingPathComponent(name),sha:rows[name]) }
+            if name.hasSuffix(".json.gz") {
+                let json=URL(fileURLWithPath:String(path.path.dropLast(3)))
+                guard let expected=rows[json.lastPathComponent] else { throw OpenTideConstantsError.checksumMismatch("not listed",["file":.string(json.path)]) }
+                let actual=SHA256.digest(try Reader.gunzip(Reader.read(path)))
+                guard actual==expected.lowercased() else { throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(json.path),"expected":.string(expected.lowercased()),"actual":.string(actual)]) }
+            }
         } else if verifyOnOpen { throw OpenTideConstantsError.checksumMismatch("no OTC_\(stamp).sha256 next to file") }
         let metadataNames=rows.map { Array($0.keys) } ?? names
         let metadata=metadataNames.sorted().map { name -> FileInfo in
@@ -243,6 +255,8 @@ private struct ClientIO:@unchecked Sendable {
         return try read(path,files:metadata,from:rows==nil ? .fileUnverified:.file)
     }
     func check(_ path:URL,sha:String?,size:Int64?=nil,hash:Bool=true)throws {
+        do { let handle=try FileHandle(forReadingFrom:path);try? handle.close() }
+        catch { throw OpenTideConstantsError.io("cannot read \(path.path): \(error)",["path":.string(path.path)]) }
         guard let sha else { throw OpenTideConstantsError.checksumMismatch("not listed",["file":.string(path.path)]) }
         if let size,(try FileManager.default.attributesOfItem(atPath:path.path)[.size] as? NSNumber)?.int64Value != size { throw OpenTideConstantsError.checksumMismatch("size mismatch",["file":.string(path.path),"expected":.string(sha),"actual":.null]) }
         if hash { let actual=try SHA256.file(path);guard actual==sha.lowercased() else { throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(path.path),"expected":.string(sha),"actual":.string(actual)]) } }
@@ -388,7 +402,8 @@ private struct ClientIO:@unchecked Sendable {
     func sha(_ stamp:String,entry:JSONValue?)async throws->([String:String],Data) {
         let name="OTC_\(stamp).sha256",url=url(name,entry:entry)
         let bytes=try await HTTP.get(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile)
-        guard String(data:bytes,encoding:.utf8)?.range(of:#"(?m)^\s*[a-fA-F0-9]{64}[ \t]+\*?\S"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.network("HTTP200 checksum body has no checksum row",["url":.string(url.absoluteString),"status":.integer(200)]) }
+        guard let text=String(data:bytes,encoding:.utf8) else { throw OpenTideConstantsError.invalidRelease("checksum file not UTF8") }
+        guard text.range(of:#"(?m)^\s*[a-fA-F0-9]{64}[ \t]+\*?\S"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.network("HTTP200 checksum body has no checksum row",["url":.string(url.absoluteString),"status":.integer(200)]) }
         if let file=entry?["files"].array.first(where:{ $0["name"].string==name }),let expected=file["sha256"].string,SHA256.digest(bytes) != expected { throw OpenTideConstantsError.checksumMismatch("checksum file differs from pointer",["file":.string(name),"expected":.string(expected),"actual":.string(SHA256.digest(bytes))]) }
         let rows=try Cache.checksums(bytes)
         try agreement(rows,entry:entry,stamp:stamp)

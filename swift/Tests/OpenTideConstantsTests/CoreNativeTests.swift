@@ -1,6 +1,68 @@
 import XCTest
 @testable import OpenTideConstants
 final class CoreNativeTests:XCTestCase {
+    private func integrityFixture(_ label:String,_ suffixes:[String])throws->URL {
+        let proof=URL(fileURLWithPath:try path("OTC_INTEGRITY_PROOF_ROOT")),directory=proof.appendingPathComponent(label)
+        if FileManager.default.fileExists(atPath:directory.path) { try FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let source=URL(fileURLWithPath:try path("OTC_MD6_FIXTURES"))
+        for suffix in suffixes {
+            let name="OTC_20991231.2."+suffix
+            try FileManager.default.copyItem(at:source.appendingPathComponent(name),to:directory.appendingPathComponent(name))
+        }
+        return directory
+    }
+    func testIntegrityActualDecodedGzipDigests()async throws {
+        let directory=try integrityFixture("decoded-gzip",["json.gz","sha256"])
+        let source=URL(fileURLWithPath:try path("OTC_MD6_FIXTURES")),file=directory.appendingPathComponent("OTC_20991231.2.json.gz"),manifest=directory.appendingPathComponent("OTC_20991231.2.sha256")
+        let original=try Data(contentsOf:manifest),compressed=try Data(contentsOf:file),decoded=try Data(contentsOf:source.appendingPathComponent("OTC_20991231.2.json"))
+        let good=try await OpenTideConstants.open(file:file.path)
+        defer { good.close() }
+        XCTAssertTrue(try good.verify())
+        let rows=try Cache.checksums(original),expected=try XCTUnwrap(rows["OTC_20991231.2.json"])
+        let lines=try XCTUnwrap(String(data:original,encoding:.utf8)).components(separatedBy:"\n")
+        for label in ["missing-json-row","mismatch-json-row"] {
+            let changed=lines.compactMap { line -> String? in
+                guard line.hasSuffix("  OTC_20991231.2.json") else { return line }
+                return label=="missing-json-row" ? nil:"\(rows["OTC_20991231.2.jsonl"]!)  OTC_20991231.2.json"
+            }.joined(separator:"\n")
+            try Data(changed.utf8).write(to:manifest)
+            do { let bad=try await OpenTideConstants.open(file:file.path);bad.close();XCTFail("\(label): decoded digest open must refuse") }
+            catch let error as OpenTideConstantsError { XCTAssertEqual(error.code,"checksum_mismatch");XCTAssertEqual(error.fields["file"]?.string,directory.appendingPathComponent("OTC_20991231.2.json").path);if label=="mismatch-json-row" { XCTAssertEqual(error.fields["actual"]?.string,SHA256.digest(decoded)) } }
+            XCTAssertThrowsError(try good.verify(),label) { error in
+                let error=error as? OpenTideConstantsError;XCTAssertEqual(error?.code,"checksum_mismatch");XCTAssertEqual(error?.fields["file"]?.string,directory.appendingPathComponent("OTC_20991231.2.json").path)
+            }
+            XCTAssertEqual(try Data(contentsOf:file),compressed)
+            print("INTEGRITY_GZIP label=\(label) compressed=\(SHA256.digest(compressed)) decoded=\(SHA256.digest(decoded)) source=unchanged open_verify=checksum_mismatch")
+        }
+        try original.write(to:manifest)
+        XCTAssertTrue(try good.verify());XCTAssertEqual(SHA256.digest(decoded),expected)
+    }
+    func testIntegrityActualChecksumRowsAndFraming()async throws {
+        let fixtures=URL(fileURLWithPath:try path("OTC_MD6_FIXTURES")),cases=try JSONValue.parse(Data(contentsOf:fixtures.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("cases/load.json")))["cases"].array
+        for (id,label,valid) in [("load/sha256-malformed-no-name","no-name",false),("load/sha256-malformed-no-separator","no-separator",false),("load/sha256-blank-lines-crlf","crlf",true)] {
+            let directory=try integrityFixture("manifest-"+label,["jsonl","meta.json"]),file=directory.appendingPathComponent("OTC_20991231.2.jsonl")
+            let nativeCase=try XCTUnwrap(cases.first { $0["id"].string==id }),body=try XCTUnwrap(nativeCase["steps"].array.first { $0["driver"].string=="write" }?["text"].string)
+            try Data(body.utf8).write(to:directory.appendingPathComponent("OTC_20991231.2.sha256"))
+            if valid { let client=try await OpenTideConstants.open(file:file.path);defer { client.close() };XCTAssertTrue(try client.verify()) }
+            else { do { let client=try await OpenTideConstants.open(file:file.path);client.close();XCTFail("\(label): malformed nonblank row accepted") } catch let error as OpenTideConstantsError { XCTAssertEqual(error.code,"invalid_release") } }
+            XCTAssertEqual(try Data(contentsOf:file),try Data(contentsOf:fixtures.appendingPathComponent(file.lastPathComponent)))
+            print("INTEGRITY_MANIFEST label=\(label) expected=\(valid ? "verified":"invalid_release") actual_case_body=true source=unchanged")
+        }
+    }
+    func testIntegrityActualMissingFilePrecedence()async throws {
+        for suffix in ["jsonl","json.gz"] {
+            let directory=try integrityFixture("missing-"+suffix,suffix=="jsonl" ? ["jsonl","meta.json","sha256"]:["json.gz","sha256"]),file=directory.appendingPathComponent("OTC_20991231.2."+suffix),manifest=directory.appendingPathComponent("OTC_20991231.2.sha256")
+            let client=try await OpenTideConstants.open(file:file.path)
+            defer { client.close() }
+            let original=try String(contentsOf:manifest,encoding:.utf8)
+            try FileManager.default.removeItem(at:file)
+            let changed=original.components(separatedBy:"\n").filter { !$0.hasSuffix("  "+file.lastPathComponent) }.joined(separator:"\n")
+            try Data(changed.utf8).write(to:manifest)
+            XCTAssertThrowsError(try client.verify()) { error in XCTAssertEqual((error as? OpenTideConstantsError)?.code,"io") }
+            print("INTEGRITY_MISSING suffix=\(suffix) no_source_row=true requested_file_missing=true verify=io")
+        }
+    }
     func testHistoricalDiscoveryUsesSelectedReferenceTable() async throws {
         // Private invalid table controls retain the genuine historical station rows.
         let fixtures=try path("OTC_HISTORY_SW_PROOF_ROOT")
