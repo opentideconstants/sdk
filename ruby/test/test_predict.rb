@@ -34,6 +34,32 @@ class PredictNativeTest < Minitest::Test
         assert_raises(OpenTideConstants::FileError) { held.currents("OTC-P-0001", start: nil, stop: nil) }
         assert_raises(OpenTideConstants::FileError) { held.current_events("OTC-P-0001", start: nil, stop: nil) }
     end
+    def test_prediction_refuses_foreign_origin_with_identical_raw
+        c = native_client
+        other = native_client
+        start = Time.utc(2010, 3, 1)
+        window = { start: start, stop: start + 3600 }
+        {
+            heights: ["OTC-P-0001", window],
+            extremes: ["OTC-P-0001", window],
+            currents: ["OTC-P-0016", window],
+            current_events: ["OTC-P-0016", window],
+            datums: ["OTC-P-0001", {}]
+        }.each do |route, (id, options)|
+            owned = c.require_station(id)
+            foreign = other.require_station(id)
+            assert_equal owned.raw, foreign.raw, route
+            error = assert_raises(OpenTideConstants::InvalidArgumentError, route.to_s) do
+                c.public_send(route, foreign, **options)
+            end
+            assert_equal "invalid_argument", error.code, route
+            assert_equal Marshal.dump(c.public_send(route, id, **options)),
+                         Marshal.dump(c.public_send(route, owned, **options)), route
+        end
+    ensure
+        c&.close
+        other&.close
+    end
     def test_astro_boundaries_and_missing_terms
         c = native_client
         table = c.release.astro_table
