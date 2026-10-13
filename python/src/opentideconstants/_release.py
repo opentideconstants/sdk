@@ -440,15 +440,6 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                     tuple(frozenset(k for k in ("fallback", "current_bins") if k in cs) for cs in e["sets"]))
         e["_index_presence"] = presence
         out.append(e)
-    projected = []
-    for e in out:
-        rec = next((cs for cs in e["sets"] if e["recommended_set_id"] is not None
-                    and cs["set_id"] == e["recommended_set_id"]), None)
-        kind = None if rec is None else {"water_level": "tide", "current": "current"}.get(rec["quantity"], "other")
-        projected.append({**e, "kind": kind})
-    _resolve_kinds(projected)
-    if any(e["kind"] != projected[i]["kind"] for i, e in enumerate(out)):
-        return None
     return out
 
 
@@ -752,9 +743,20 @@ class Release:
             _validate_refs(d, self._conv_by_id, self._lic_by_id)
             got = _entry(d, e["offset"], e["length"])
             if got["kind"] is None and got["type"] == "subordinate":
-                ref = self._by_id.get(got["reference_station_id"])
-                if ref is not None:
-                    got["kind"] = ref["kind"]
+                current, seen = got, {got["station_id"]}
+                for _ in range(_MAX_LINKS):
+                    ref = self._by_id.get(current["reference_station_id"])
+                    if ref is None or ref["station_id"] in seen:
+                        break
+                    seen.add(ref["station_id"])
+                    rec = next((cs for cs in ref["sets"] if ref["recommended_set_id"] is not None
+                                and cs["set_id"] == ref["recommended_set_id"]), None)
+                    if rec is not None:
+                        got["kind"] = {"water_level": "tide", "current": "current"}.get(rec["quantity"], "other")
+                        break
+                    if ref["type"] != "subordinate":
+                        break
+                    current = ref
         except (KeyError, TypeError, AttributeError) as ex:
             raise InvalidReleaseError(f"the line of {e['station_id']}: {ex!r}") from ex
         presence = e.get("_index_presence")
