@@ -307,14 +307,17 @@ class NodeCache implements CacheStore {
                     await fsp.rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
                     throw new CacheError(`cannot write ${ownerFile}`, { path: ownerFile, cause: e });
                 }
-                return async () => {
+                const owns = async (): Promise<boolean> => {
                     let current: unknown = null;
                     try {
                         current = JSON.parse(await fsp.readFile(ownerFile, "utf8"));
                     } catch {
-                        return; // gone or unreadable: another process took the lock as stale; leave it alone
+                        return false; // gone or unreadable: another process took the lock as stale; leave it alone
                     }
-                    if (typeof current !== "object" || current === null || (current as { token?: unknown }).token !== token) return;
+                    return typeof current === "object" && current !== null && (current as { token?: unknown }).token === token;
+                };
+                const unlock: Unlock = async () => {
+                    if (!await owns()) return;
                     try {
                         await fsp.rm(ownerFile, { force: true });
                         await fsp.rmdir(lockDir);
@@ -322,6 +325,8 @@ class NodeCache implements CacheStore {
                         throw new CacheError(`cannot release the lock ${lockDir}`, { path: lockDir, cause: e });
                     }
                 };
+                unlock.owns = owns;
+                return unlock;
             }
             // a non-blocking take (the DOI note) applies only the age test, and tries once more after a removal
             if (options.wait === false && (stolen || !lockIsStale(lockDir))) return null;

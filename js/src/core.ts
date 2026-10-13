@@ -1,7 +1,7 @@
 /** @internal The network and cache flows (spec 5.2 to 5.4), shared by the client and the auto-update worker. */
 import { checkVersion, compareDatestamps, formatMajor, isDatestamp, readerReads, SDK_ID, supportedFormat, SUPPORTED_FORMAT_MAJORS } from "./constants.js";
 import {
-    ChecksumError, FileError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, redactCredentials, ReleaseNotFoundError,
+    CacheError, ChecksumError, FileError, InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, redactCredentials, ReleaseNotFoundError,
     UnsupportedFormatError,
 } from "./errors.js";
 import { daysInMonth, isObject } from "./json.js";
@@ -536,75 +536,83 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     }
     if (ctx.offline) throw new OfflineError(`release ${d} is not cached and the client is offline`);
     await store.mkdirs(dir);
-    // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
-    const unlock = await store.lock(dir, {
-        done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
-    });
-    try {
-        const now = new Set(await store.list(dir));
-        verified = await readVerified(store, d);
-        if (verified && usable(ctx.mode, d, now)) {
-            await syncZenodo(ctx, verified, entry, true);
-            return "cache";
-        }
-        const n = names(d);
-        const { bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry);
-        const needed = ctx.mode === "stream" ? [n.jsonl, n.meta]
-            : rows.has(n.gz) ? [n.gz, n.json] : rows.has(n.json) ? [n.json] : [n.jsonl, n.meta];
-        for (const name of needed) {
-            if (!rows.has(name)) throw new ChecksumError(`${name} is not listed in ${n.sha}`, { file: name, expected: null, actual: null });
-        }
-        const writes: [string, Uint8Array][] = [];
-        if (ctx.mode === "stream") {
-            for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
-        } else if (rows.has(n.gz) && !rows.has(n.json)) {
-            // the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
-            throw new ChecksumError(`${n.json} is not listed in ${n.sha}`, { file: n.json, expected: null, actual: null });
-        } else if (rows.has(n.gz)) {
-            log(ctx, "info", `downloading ${n.gz}`);
-            const gz = await fetchChecked(ctx, n.gz, rows, entry);
-            let json: Uint8Array;
-            try {
-                json = await ctx.platform.gunzip(gz);
-            } catch (e) {
-                if (e instanceof OpenTideConstantsError) throw e; // for example, no DecompressionStream (PK10 T31)
-                throw new ChecksumError(`${n.gz} does not decompress`, { file: n.gz, expected: rows.get(n.gz) ?? null, actual: null, cause: e });
+    let lostAttempts = 0;
+    for (;;) {
+        // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
+        const unlock = await store.lock(dir, {
+            done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
+        });
+        try {
+            const now = new Set(await store.list(dir));
+            verified = await readVerified(store, d);
+            if (verified && usable(ctx.mode, d, now)) {
+                await syncZenodo(ctx, verified, entry, true);
+                return "cache";
             }
-            const size = entry?.files.find((x) => x.name === n.json)?.size ?? null;
-            checkBytes(n.json, await ctx.platform.sha256(json), json.length, rows.get(n.json) ?? null, size);
-            writes.push([n.json, json]);
-        } else if (rows.has(n.json)) {
-            writes.push([n.json, await fetchChecked(ctx, n.json, rows, entry)]);
-        } else {
-            for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
+            const n = names(d);
+            const { bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry);
+            const needed = ctx.mode === "stream" ? [n.jsonl, n.meta]
+                : rows.has(n.gz) ? [n.gz, n.json] : rows.has(n.json) ? [n.json] : [n.jsonl, n.meta];
+            for (const name of needed) {
+                if (!rows.has(name)) throw new ChecksumError(`${name} is not listed in ${n.sha}`, { file: name, expected: null, actual: null });
+            }
+            const writes: [string, Uint8Array][] = [];
+            if (ctx.mode === "stream") {
+                for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
+            } else if (rows.has(n.gz) && !rows.has(n.json)) {
+                // the decoded .json must have its own row, or it is cached with no digest (CR2 DR15)
+                throw new ChecksumError(`${n.json} is not listed in ${n.sha}`, { file: n.json, expected: null, actual: null });
+            } else if (rows.has(n.gz)) {
+                log(ctx, "info", `downloading ${n.gz}`);
+                const gz = await fetchChecked(ctx, n.gz, rows, entry);
+                let json: Uint8Array;
+                try {
+                    json = await ctx.platform.gunzip(gz);
+                } catch (e) {
+                    if (e instanceof OpenTideConstantsError) throw e; // for example, no DecompressionStream (PK10 T31)
+                    throw new ChecksumError(`${n.gz} does not decompress`, { file: n.gz, expected: rows.get(n.gz) ?? null, actual: null, cause: e });
+                }
+                const size = entry?.files.find((x) => x.name === n.json)?.size ?? null;
+                checkBytes(n.json, await ctx.platform.sha256(json), json.length, rows.get(n.json) ?? null, size);
+                writes.push([n.json, json]);
+            } else if (rows.has(n.json)) {
+                writes.push([n.json, await fetchChecked(ctx, n.json, rows, entry)]);
+            } else {
+                for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
+            }
+            const format = formatOf(writes, n);
+            log(ctx, "info", `verified release ${d}`);
+            for (const [name, bytes] of writes) await store.write(`${dir}/${name}`, bytes);
+            await store.write(`${dir}/${n.sha}`, shaBytes);
+            // .verified has a row only for each file that is present and verified in the release directory, with its
+            // real size and lowercase SHA-256, and never one for the .sha256 file (spec 5.4, CR3 DR100): the rows of an
+            // earlier open in the other mode while their files are there, and the files written now
+            const there = new Set(await store.list(dir));
+            const files: Verified["files"] = {};
+            for (const [name, f] of Object.entries(verified?.files ?? {})) {
+                if (name !== n.sha && f.sha256 !== null && there.has(name)) files[name] = f;
+            }
+            for (const [name, b] of writes) {
+                const url = entry?.files.find((x) => x.name === name)?.url ?? new URL(name, ctx.baseUrl).href;
+                files[name] = { sha256: (rows.get(name) as string).toLowerCase(), size: b.length, url };
+            }
+            const v: Verified = {
+                files, verified_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: SDK_ID, datestamp: d,
+                format_version: format?.format_version ?? entry?.format_version ?? verified?.format_version ?? null,
+                min_reader_version: format ? format.min_reader_version : entry?.min_reader_version ?? verified?.min_reader_version ?? null,
+                // a null DOI never erases a known one (CR2 DR11)
+                zenodo_version_doi: entry?.zenodo_version_doi ?? verified?.zenodo_version_doi ?? null,
+            };
+            if (unlock?.owns && !await unlock.owns()) {
+                log(ctx, "warn", `lost the release lock of ${d} before publishing .verified; waiting for its owner`);
+                if (++lostAttempts >= 3) throw new CacheError(`lost the release lock of ${d} three times`, { path: store.describe(dir) });
+                continue;
+            }
+            await store.write(`${dir}/.verified`, encodeCacheJson(v));
+            return "download";
+        } finally {
+            await releaseLock(ctx, unlock);
         }
-        const format = formatOf(writes, n);
-        log(ctx, "info", `verified release ${d}`);
-        for (const [name, bytes] of writes) await store.write(`${dir}/${name}`, bytes);
-        await store.write(`${dir}/${n.sha}`, shaBytes);
-        // .verified has a row only for each file that is present and verified in the release directory, with its
-        // real size and lowercase SHA-256, and never one for the .sha256 file (spec 5.4, CR3 DR100): the rows of an
-        // earlier open in the other mode while their files are there, and the files written now
-        const there = new Set(await store.list(dir));
-        const files: Verified["files"] = {};
-        for (const [name, f] of Object.entries(verified?.files ?? {})) {
-            if (name !== n.sha && f.sha256 !== null && there.has(name)) files[name] = f;
-        }
-        for (const [name, b] of writes) {
-            const url = entry?.files.find((x) => x.name === name)?.url ?? new URL(name, ctx.baseUrl).href;
-            files[name] = { sha256: (rows.get(name) as string).toLowerCase(), size: b.length, url };
-        }
-        const v: Verified = {
-            files, verified_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: SDK_ID, datestamp: d,
-            format_version: format?.format_version ?? entry?.format_version ?? verified?.format_version ?? null,
-            min_reader_version: format ? format.min_reader_version : entry?.min_reader_version ?? verified?.min_reader_version ?? null,
-            // a null DOI never erases a known one (CR2 DR11)
-            zenodo_version_doi: entry?.zenodo_version_doi ?? verified?.zenodo_version_doi ?? null,
-        };
-        await store.write(`${dir}/.verified`, encodeCacheJson(v));
-        return "download";
-    } finally {
-        await releaseLock(ctx, unlock);
     }
 }
 
