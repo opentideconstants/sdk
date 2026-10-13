@@ -20,6 +20,7 @@ from . import _enums as E
 from ._errors import (ChecksumError, FileError, InvalidArgumentError, InvalidReleaseError, ReaderTooOldError,
                       StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
+from ._cache_json import encode_cache_json
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, _is_finite, build_station,
                       freeze, parse_time, _check_historical_offsets, check_station_types)
 
@@ -318,8 +319,7 @@ def _index_presence(entries):
 
 
 def _line_view(e, presence=None, raw=None):
-    """The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
-    status, the references and the sets. The other keys are used as the index gives them (spec §6.2)."""
+    """The represented fields that the actual row must give, using the admitted presence profile."""
     if presence is not None:
         profile, entry_keys, set_keys = presence
         values = []
@@ -342,9 +342,11 @@ def _line_view(e, presence=None, raw=None):
             if profile["full_current"]:
                 fields += _INDEX_CURRENT_ADJUSTMENTS
             current = (tuple(tuple(freeze(row.get(k)) for k in fields) for row in rows),)
-        return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"),
+        return (tuple(freeze(e.get(k)) for k in ("name", "name_folded", "country", "type", "lat", "lon", "kind", "aliases")),
+                e.get("station_id"), e.get("status"), e.get("recommended_set_id"),
                 e.get("reference_station_id"), e.get("offsets_licence_id"), values, own, current)
-    return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
+    return (tuple(freeze(e.get(k)) for k in ("name", "name_folded", "country", "type", "lat", "lon", "kind", "aliases")),
+            e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
             e.get("offsets_licence_id"),
             [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()), freeze(cs.get("fallback")),
                                                        tuple(cs.get("current_bins") or ())) for cs in e.get("sets") or ()],
@@ -466,14 +468,19 @@ def _check_ids(entries, conventions, licences):
 
 def _resolve_kinds(entries):
     by_id = {e["station_id"]: e for e in entries if e.get("status") == "active"}
+    own_kinds = {}
+    for sid, e in by_id.items():
+        rec = next((cs for cs in e["sets"] if e["recommended_set_id"] is not None
+                    and cs["set_id"] == e["recommended_set_id"]), None)
+        own_kinds[sid] = None if rec is None else {"water_level": "tide", "current": "current"}.get(rec["quantity"], "other")
 
-    def kind(e, seen):
-        if e.get("kind") is not None:
-            return e["kind"]
-        if e.get("type") == "subordinate" and e.get("reference_station_id"):
+    def kind(e, seen, links=0):
+        if own_kinds[e["station_id"]] is not None:
+            return own_kinds[e["station_id"]]
+        if links < _MAX_LINKS and e.get("type") == "subordinate" and e.get("reference_station_id"):
             ref = by_id.get(e["reference_station_id"])
             if ref is not None and ref["station_id"] not in seen:
-                return kind(ref, seen | {e["station_id"]})
+                return kind(ref, seen | {e["station_id"]}, links + 1)
         return None
 
     resolved = {sid: kind(e, frozenset()) for sid, e in by_id.items()}
@@ -522,7 +529,8 @@ class Release:
         self._lic_by_id = {x.licence_id: x for x in self._licences}
         parse_time(rel.get("created"), "release.created")
         _check_ids(entries, self._conventions, self._licences)
-        _resolve_kinds(entries)
+        if not all("_index_presence" in e for e in entries):
+            _resolve_kinds(entries)
         # commercial_only (spec §4.2, K-NC DR106): station_id -> the effective recommended set_id (or None)
         self._commercial_only = commercial_only
         self._commercial_basis = commercial_basis
@@ -736,17 +744,31 @@ class Release:
 
     def _check_line(self, d, e):
         """A line read through the stream index gets the checks of the full pass, and it must give its entry's
-        status, references and sets (spec §6.2, CR D4, PK-R2-07)."""
+        represented source fields (spec §6.2, CR D4, PK-R2-07)."""
         try:
             _validate_refs(d, self._conv_by_id, self._lic_by_id)
             got = _entry(d, e["offset"], e["length"])
+            if got["kind"] is None and got["type"] == "subordinate":
+                current, seen = got, {got["station_id"]}
+                for _ in range(_MAX_LINKS):
+                    ref = self._by_id.get(current["reference_station_id"])
+                    if ref is None or ref["station_id"] in seen:
+                        break
+                    seen.add(ref["station_id"])
+                    rec = next((cs for cs in ref["sets"] if ref["recommended_set_id"] is not None
+                                and cs["set_id"] == ref["recommended_set_id"]), None)
+                    if rec is not None:
+                        got["kind"] = {"water_level": "tide", "current": "current"}.get(rec["quantity"], "other")
+                        break
+                    if ref["type"] != "subordinate":
+                        break
+                    current = ref
         except (KeyError, TypeError, AttributeError) as ex:
             raise InvalidReleaseError(f"the line of {e['station_id']}: {ex!r}") from ex
         presence = e.get("_index_presence")
         if len(got.get("sets") or ()) != len(e.get("sets") or ()) \
                 or _line_view(got, presence, d) != _line_view(e, presence):
-            raise InvalidReleaseError(f"the line of {e['station_id']} does not give the status, references and "
-                                      f"sets of its entry")
+            raise InvalidReleaseError(f"the line of {e['station_id']} does not give the represented fields of its entry")
 
     def _index_policy_entry(self, e):
         """Uncached policy fields come from the validated actual record, never absence defaults."""
@@ -1225,10 +1247,20 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         _check_meta(meta, str(meta_path_for(path)))
         conv, lic = _refs(meta, str(meta_path_for(path)))
         if mode == "stream":
-            entries = _stream_index(path, conv, lic, index_path, index_sha256)
-            return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
-                           commercial_only=commercial_only, commercial_basis=commercial_basis,
-                           historical_offsets_policy=historical_offsets_policy)
+            for attempt in range(2):
+                had_index = index_path is not None and index_path.exists()
+                entries = _stream_index(path, conv, lic, index_path, index_sha256)
+                try:
+                    return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
+                                   commercial_only=commercial_only, commercial_basis=commercial_basis,
+                                   historical_offsets_policy=historical_offsets_policy)
+                except InvalidReleaseError:
+                    if attempt or not had_index or index_path is None:
+                        raise
+                    try:
+                        index_path.unlink()
+                    except FileNotFoundError:
+                        pass
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
@@ -1312,22 +1344,36 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
             idx = json.loads(index_path.read_text(encoding="utf-8"))
             entries = _usable_index(idx, path.name, index_sha256 or file_sha256(path), size, conv, lic)
             if entries is not None:
-                # Own-offset labels are eligibility inputs. Compare the actual subordinate line before
-                # accepting a derived cache; a matching file hash alone cannot validate its summaries.
                 with path.open('rb') as handle:
+                    end = 0
                     for entry in entries:
-                        if "subordinate_offsets" not in entry:
-                            continue  # a base/sparse omission is checked before its metadata is used
-                        if entry.get('type') != 'subordinate' and entry.get('subordinate_offsets') is None:
-                            continue
-                        handle.seek(entry['offset'])
-                        raw = _json(handle.read(entry['length']), f"{path}: cached subordinate line")
-                        if not isinstance(raw, dict) or freeze(raw.get('subordinate_offsets')) != freeze(entry['subordinate_offsets']):
+                        handle.seek(end)
+                        remaining = entry['offset'] - end
+                        while remaining:
+                            gap = handle.read(min(remaining, 1 << 16))
+                            if not gap or gap.strip(b" \t\r\n\f\v"):
+                                break
+                            remaining -= len(gap)
+                        if remaining:
                             break
+                        end = entry['offset'] + entry['length']
+                        if entry['status'] != 'active':
+                            handle.seek(entry['offset'])
+                            raw = _json(handle.read(entry['length']), f"{path}: cached nonactive line")
+                            if not isinstance(raw, dict) or raw.get('station_id') != entry['station_id'] \
+                                    or _status(raw) != entry['status']:
+                                break
                     else:
-                        return entries
+                        handle.seek(end)
+                        if all(not chunk.strip(b" \t\r\n\f\v")
+                               for chunk in iter(lambda: handle.read(1 << 16), b"")):
+                            return entries
         except (OSError, ValueError, RecursionError):
             pass  # a stale or broken index is rebuilt
+        try:
+            index_path.unlink()
+        except FileNotFoundError:
+            pass
     entries = []
     h = hashlib.sha256()
     offset = 0
@@ -1335,8 +1381,10 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
         with open(path, "rb") as f:
             for i, line in enumerate(f):
                 h.update(line)
-                body = line.rstrip(b"\r\n")
-                if body.strip():
+                body = line[:-1] if line.endswith(b"\n") else line
+                if line.endswith(b"\r\n"):
+                    body = body[:-1]
+                if body.strip(b" \t\r\n\f\v"):
                     d = _json(body, f"{path} line {i + 1}")
                     if not isinstance(d, dict) or "station_id" not in d:
                         raise InvalidReleaseError(f"{path} line {i + 1}: not a station")
@@ -1355,7 +1403,7 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
         doc = {"index_version": INDEX_VERSION, "discovery_index_version": 1, "datestamp": path.name[len("OTC_"):-len(".jsonl")], "jsonl": path.name,
                "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
         try:
-            atomic_write(index_path, json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+            atomic_write(index_path, encode_cache_json(doc))
         except OSError as e:  # the index only saves work: the release loads without it (spec §6.2)
             _log.warning("cannot write %s: %s", index_path, e)
     return entries

@@ -615,28 +615,51 @@ client.close
 
     def marked_index(self, index):
         entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
-        entry["country"] = "ZZ"  # the same discovery-only witness as cross/index-shared
+        entry["country"] = "ZZ"  # admitted at open, but must match the source when queried
         self.index.write_text(json.dumps(index), encoding="utf-8")
         return self.index.read_bytes(), entry
 
+    def assert_country_tampering_is_rejected(self, index):
+        saved, entry = self.marked_index(index)
+        queries = {
+            "stations": lambda client: client.stations(country="ZZ"),
+            "search": lambda client: client.search(name=entry["name"], country="ZZ"),
+            "near": lambda client: client.near(lat=entry["lat"], lon=entry["lon"],
+                                               radius_km=1, country="ZZ"),
+            "station": lambda client: client.station(entry["station_id"]),
+        }
+        for name, query in queries.items():
+            with self.subTest(query=name):
+                self.index.write_bytes(saved)
+                with self.reopen() as client:
+                    self.assertEqual(self.index.read_bytes(), saved)
+                    with self.assertRaises(otc.InvalidReleaseError):
+                        query(client)
+                self.assertFalse(self.index.exists())
+
     def test_real_ruby_index_keeps_three_public_queries_and_raw(self):
-        saved, entry = self.marked_index(self.ruby_index())
+        index = self.ruby_index()
+        saved = self.index.read_bytes()
+        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
         path = self.index.parent / "OTC_20991231.2.jsonl"
         with path.open("rb") as handle:
             handle.seek(entry["offset"])
             original = json.loads(handle.read(entry["length"]))
         with self.reopen() as client:
+            self.assertEqual(self.index.read_bytes(), saved)
             queries = {
-                "stations": client.stations(country="ZZ"),
-                "search": client.search(name=entry["name"], country="ZZ"),
+                "stations": client.stations(country=entry["country"]),
+                "search": client.search(name=entry["name"], country=entry["country"]),
                 "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
-                                                             radius_km=1, country="ZZ")),
+                                                             radius_km=1, country=entry["country"])),
             }
             for name, stations in queries.items():
                 with self.subTest(query=name):
-                    self.assertEqual(tuple(s.station_id for s in stations), ("OTC-T-0011",))
+                    expected = ("OTC-T-0006", "OTC-T-0011") if name == "stations" else ("OTC-T-0011",)
+                    self.assertEqual(tuple(s.station_id for s in stations), expected)
             self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
         self.assertEqual(self.index.read_bytes(), saved)
+        self.assert_country_tampering_is_rejected(index)
 
     def test_sparse_null_extensions_preserve_native_index_bytes(self):
         index = json.loads(self.index.read_bytes())
@@ -648,10 +671,15 @@ client.close
             for cs in entry["sets"]:
                 if cs["fallback"] is None:
                     del cs["fallback"]
-        saved, _ = self.marked_index(index)
+        self.index.write_text(json.dumps(index), encoding="utf-8")
+        saved = self.index.read_bytes()
+        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
         with self.reopen() as client:
-            self.assertEqual(tuple(s.station_id for s in client.stations(country="ZZ")), ("OTC-T-0011",))
+            self.assertEqual(self.index.read_bytes(), saved)
+            self.assertEqual(tuple(s.station_id for s in client.stations(country=entry["country"])),
+                             ("OTC-T-0006", "OTC-T-0011"))
         self.assertEqual(self.index.read_bytes(), saved)
+        self.assert_country_tampering_is_rejected(index)
 
     def test_private_fields_must_be_complete_across_every_set(self):
         original = self.ruby_index()
@@ -676,10 +704,15 @@ client.close
             for cs in entry["sets"]:
                 for field in ("source_record_id", "source_version", "datum"):
                     del cs[field]
-        saved, _ = self.marked_index(index)
+        self.index.write_text(json.dumps(index), encoding="utf-8")
+        saved = self.index.read_bytes()
+        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
         with self.reopen() as client:
-            self.assertEqual(tuple(s.station_id for s in client.stations(country="ZZ")), ("OTC-T-0011",))
+            self.assertEqual(self.index.read_bytes(), saved)
+            self.assertEqual(tuple(s.station_id for s in client.stations(country=entry["country"])),
+                             ("OTC-T-0006", "OTC-T-0011"))
         self.assertEqual(self.index.read_bytes(), saved)
+        self.assert_country_tampering_is_rejected(index)
 
     def test_present_invalid_marker_is_not_an_absent_marker(self):
         original = json.loads(self.index.read_bytes())
