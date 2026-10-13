@@ -1,6 +1,64 @@
 import XCTest
 @testable import OpenTideConstants
 final class CoreNativeTests:XCTestCase {
+    func testHistoricalDiscoveryUsesSelectedReferenceTable() async throws {
+        // Private invalid table controls retain the genuine historical station rows.
+        let fixtures=try path("OTC_HISTORY_SW_PROOF_ROOT")
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let instant=try XCTUnwrap(parseTime("2026-10-11T00:00:00Z"))
+        let targets=["OTC-28c56e20","OTC-541f1a73"]
+        for label in ["valid","missing_m2","missing_s2","missing_n2","model_mismatch"] {
+            let local=directory.appendingPathComponent(label)
+            try FileManager.default.createDirectory(at:local,withIntermediateDirectories:true)
+            for suffix in ["json","jsonl","meta.json","sha256"] {
+                let name="OTC_20261011."+suffix
+                try FileManager.default.copyItem(at:URL(fileURLWithPath:fixtures+"/inputs/"+label+"/"+name),to:local.appendingPathComponent(name))
+            }
+            for mode in [Mode.eager,Mode.stream] {
+                let file=local.appendingPathComponent("OTC_20261011."+(mode == .eager ? "json":"jsonl"))
+                for pass in 0...1 {
+                    let client=try await OpenTideConstants.open(file:file.path,cacheDir:directory.appendingPathComponent("cache").path,mode:mode)
+                    let release=client.release
+                    defer { client.close() }
+                    XCTAssertTrue(release.lruOrder.isEmpty)
+                    let clientCursor=try client.iterStations(includeFlagged:true,includeFallback:true)
+                    let releaseCursor=try release.iterStations(includeFlagged:true,includeFallback:true)
+                    XCTAssertTrue(release.lruOrder.isEmpty,"historical admission must not materialize reference Stations")
+                    var clientIds=[String](),releaseIds=[String]()
+                    while let station=try clientCursor() { clientIds.append(station.stationId) }
+                    while let station=try releaseCursor() { releaseIds.append(station.stationId) }
+                    let discovered=try client.stations(includeFlagged:true,includeFallback:true).map(\.stationId)
+                    XCTAssertEqual(clientIds,releaseIds)
+                    XCTAssertEqual(discovered,clientIds)
+                    XCTAssertEqual(try release.stations(includeFlagged:true,includeFallback:true).map(\.stationId),discovered)
+                    for id in targets {
+                        XCTAssertEqual(discovered.contains(id),label=="valid","\(label) \(mode.rawValue) pass=\(pass) \(id)")
+                        let station=try client.requireStation(stationId:id)
+                        let original=station.raw
+                        XCTAssertEqual(try release.requireStation(stationId:id).raw,original)
+                        if label=="valid" {
+                            XCTAssertTrue(try client.extremes(stationId:id,start:instant,stop:instant,datum:"chart").historicalOffsets)
+                        } else {
+                            for call in [
+                                { try client.extremes(stationId:id,start:instant,stop:instant,datum:"chart") },
+                                { try release.extremes(stationId:id,start:instant,stop:instant,datum:"chart") }
+                            ] {
+                                XCTAssertThrowsError(try call()) { error in
+                                    let value=error as? OpenTideConstantsError
+                                    XCTAssertEqual(value?.code,label=="model_mismatch" ? "unsupported_convention":"unsupported_constituent")
+                                    if label.hasPrefix("missing_") { XCTAssertEqual(value?.fields["constituent"]?.string,String(label.dropFirst(8)).uppercased()) }
+                                }
+                            }
+                        }
+                        XCTAssertEqual(station.raw,original)
+                        print("HISTORY_DISCOVERY label=\(label) mode=\(mode.rawValue) pass=\(pass) station=\(id) advertised=\(discovered.contains(id)) identity=preserved prediction_guard=preserved")
+                    }
+                    if mode == .stream { XCTAssertTrue(FileManager.default.fileExists(atPath:local.appendingPathComponent("index-v1.json").path)) }
+                }
+            }
+        }
+    }
     func testEffectiveTypedQuantityControls() async throws {
         // Private injected controls derived from retained source rows; not upstream defects.
         let fixtures=try path("OTC_QUANTITY_CONTROLS")
