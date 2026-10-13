@@ -3,6 +3,8 @@
 #include "otc_internal.h"
 #include "otc_sha256_rename.h"
 #include "sha-256.h"
+#include <fenv.h>
+#include <locale.h> /* IWYU pragma: keep (portable locale_t/newlocale declarations) */
 
 #ifndef _WIN32
 #include <errno.h>
@@ -1298,6 +1300,213 @@ char *otc__json_escape_n(const char *s, size_t n)
     out[o++] = '"';
     out[o] = '\0';
     return out;
+}
+
+/* --------------------------------------------------------- generated cache */
+
+typedef struct cache_output {
+    char *bytes;
+    size_t length, capacity;
+} cache_output;
+
+static otc_status cache_append(cache_output *out, const char *bytes, size_t length)
+{
+    size_t needed, capacity;
+    char *grown;
+    if (length >= SIZE_MAX - out->length) return OTC_E_NOMEM;
+    needed = out->length + length + 1;
+    if (needed > out->capacity) {
+        capacity = out->capacity ? out->capacity : 128;
+        while (capacity < needed) {
+            if (capacity > SIZE_MAX / 2) { capacity = needed; break; }
+            capacity *= 2;
+        }
+        grown = (char *)realloc(out->bytes, capacity);
+        if (!grown) return OTC_E_NOMEM;
+        out->bytes = grown;
+        out->capacity = capacity;
+    }
+    memcpy(out->bytes + out->length, bytes, length);
+    out->length += length;
+    out->bytes[out->length] = '\0';
+    return OTC_OK;
+}
+
+static otc_status cache_string(cache_output *out, const char *bytes, size_t length)
+{
+    char *literal;
+    otc_status st;
+    if (!bytes || !utf8_valid((const unsigned char *)bytes, length)) return OTC_E_INVALID_ARGUMENT;
+    if (length > (SIZE_MAX - 3) / 6) return OTC_E_NOMEM;
+    literal = otc__json_escape_n(bytes, length);
+    if (!literal) return OTC_E_NOMEM;
+    st = cache_append(out, literal, strlen(literal));
+    free(literal);
+    return st;
+}
+
+/* libc rounds a requested decimal precision to the closest value (ties even).
+ * Search increasing significant precision for a binary64 round trip. At an
+ * asymmetric power-of-two boundary the adjacent decimal can round-trip when
+ * the closest does not, so test its two neighbours as well. The thread-local
+ * C numeric locale and rounding mode are restored before returning. */
+static otc_status cache_number(cache_output *out, double value)
+{
+    char scientific[64], digits[32], result[64], *exponent_at, *p;
+    int precision, exponent = 0, count = 0, i, position, n = 0;
+    int rounding;
+    double magnitude = fabs(value);
+#ifdef _WIN32
+    _locale_t locale;
+#else
+    locale_t locale, previous;
+#endif
+    if (!isfinite(value)) return OTC_E_INVALID_ARGUMENT;
+    if (value == 0) return cache_append(out, "0", 1);
+#ifdef _WIN32
+    locale = _create_locale(LC_NUMERIC, "C");
+#else
+    locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+#endif
+    if (!locale) return OTC_E_NOMEM;
+#ifndef _WIN32
+    previous = uselocale(locale);
+#endif
+    rounding = fegetround();
+    if (rounding != FE_TONEAREST) (void)fesetround(FE_TONEAREST);
+    for (precision = 1; precision <= 17; precision++) {
+        double parsed;
+#ifdef _WIN32
+        (void)_snprintf_l(scientific, sizeof scientific, "%.*e", locale, precision - 1, magnitude);
+        parsed = _strtod_l(scientific, NULL, locale);
+#else
+        (void)snprintf(scientific, sizeof scientific, "%.*e", precision - 1, magnitude);
+        parsed = strtod(scientific, NULL);
+#endif
+        exponent_at = strchr(scientific, 'e');
+        exponent = (int)strtol(exponent_at + 1, NULL, 10);
+        count = 0;
+        for (p = scientific; p < exponent_at; p++) if (*p != '.') digits[count++] = *p;
+        digits[count] = '\0';
+        if (parsed == magnitude) break;
+        {
+            uint64_t coefficient = (uint64_t)strtoull(digits, NULL, 10);
+            int step;
+            for (step = -1; step <= 1; step += 2) {
+                uint64_t neighbour = step < 0 ? coefficient - 1 : coefficient + 1;
+                (void)snprintf(scientific, sizeof scientific, "%llue%d",
+                               (unsigned long long)neighbour, exponent - count + 1);
+#ifdef _WIN32
+                parsed = _strtod_l(scientific, NULL, locale);
+#else
+                parsed = strtod(scientific, NULL);
+#endif
+                if (parsed == magnitude) {
+                    int old_count = count;
+                    count = snprintf(digits, sizeof digits, "%llu", (unsigned long long)neighbour);
+                    exponent += count - old_count;
+                    break;
+                }
+            }
+            if (parsed == magnitude) break;
+        }
+    }
+    if (rounding != FE_TONEAREST && rounding != -1) (void)fesetround(rounding);
+#ifdef _WIN32
+    _free_locale(locale);
+#else
+    (void)uselocale(previous);
+    freelocale(locale);
+#endif
+    while (count > 1 && digits[count - 1] == '0') count--;
+    if (value < 0) result[n++] = '-';
+    if (magnitude >= 1e-6 && magnitude < 1e21) {
+        position = exponent + 1;
+        if (position <= 0) {
+            result[n++] = '0'; result[n++] = '.';
+            for (i = 0; i < -position; i++) result[n++] = '0';
+        }
+        for (i = 0; i < count || i < position; i++) {
+            if (i == position && position > 0) result[n++] = '.';
+            result[n++] = i < count ? digits[i] : '0';
+        }
+    } else {
+        result[n++] = digits[0];
+        if (count > 1) result[n++] = '.';
+        for (i = 1; i < count; i++) result[n++] = digits[i];
+        n += snprintf(result + n, sizeof result - (size_t)n, "e%d", exponent);
+    }
+    return cache_append(out, result, (size_t)n);
+}
+
+/* Valid UTF-8 has the same bytewise and Unicode-scalar lexicographic order. */
+static int cache_key_compare(const void *left, const void *right)
+{
+    const cJSON *a = *(const cJSON *const *)left, *b = *(const cJSON *const *)right;
+    return strcmp(a->string, b->string);
+}
+
+static otc_status cache_value(cache_output *out, const cJSON *value, unsigned depth)
+{
+    const cJSON *child;
+    otc_status st;
+    if (!value || depth > 1000) return OTC_E_INVALID_ARGUMENT;
+    if (cJSON_IsNull(value)) return cache_append(out, "null", 4);
+    if (cJSON_IsBool(value)) return cJSON_IsTrue(value) ? cache_append(out, "true", 4) : cache_append(out, "false", 5);
+    if (cJSON_IsNumber(value)) return cache_number(out, value->valuedouble);
+    if (cJSON_IsString(value)) return cache_string(out, value->valuestring, otc__jstr_len(value));
+    if (cJSON_IsRaw(value)) {
+        cJSON *parsed = NULL;
+        if (!value->valuestring) return OTC_E_INVALID_ARGUMENT;
+        st = otc__json_parse_st(value->valuestring, strlen(value->valuestring), &parsed);
+        if (st == OTC_OK) st = cache_value(out, parsed, depth + 1);
+        cJSON_Delete(parsed);
+        return st == OTC_E_INVALID_RELEASE ? OTC_E_INVALID_ARGUMENT : st;
+    }
+    if (cJSON_IsArray(value)) {
+        st = cache_append(out, "[", 1);
+        for (child = value->child; st == OTC_OK && child; child = child->next) {
+            if (child != value->child) st = cache_append(out, ",", 1);
+            if (st == OTC_OK) st = cache_value(out, child, depth + 1);
+        }
+        return st == OTC_OK ? cache_append(out, "]", 1) : st;
+    }
+    if (cJSON_IsObject(value)) {
+        const cJSON **members;
+        size_t count = 0, i = 0;
+        for (child = value->child; child; child = child->next) {
+            if (!child->string || !utf8_valid((const unsigned char *)child->string, strlen(child->string)))
+                return OTC_E_INVALID_ARGUMENT;
+            if (count == SIZE_MAX / sizeof *members) return OTC_E_NOMEM;
+            count++;
+        }
+        members = count ? (const cJSON **)malloc(count * sizeof *members) : NULL;
+        if (count && !members) return OTC_E_NOMEM;
+        for (child = value->child; child; child = child->next) members[i++] = child;
+        if (count > 1) qsort(members, count, sizeof *members, cache_key_compare);
+        st = cache_append(out, "{", 1);
+        for (i = 0; st == OTC_OK && i < count; i++) {
+            if (i) st = cache_append(out, ",", 1);
+            if (st == OTC_OK) st = cache_string(out, members[i]->string, strlen(members[i]->string));
+            if (st == OTC_OK) st = cache_append(out, ":", 1);
+            if (st == OTC_OK) st = cache_value(out, members[i], depth + 1);
+        }
+        free(members);
+        return st == OTC_OK ? cache_append(out, "}", 1) : st;
+    }
+    return OTC_E_INVALID_ARGUMENT;
+}
+
+otc_status otc__encode_cache_json(const cJSON *cache_document, char **cache_bytes)
+{
+    cache_output out = {NULL, 0, 0};
+    otc_status st;
+    if (!cache_bytes) return OTC_E_INVALID_ARGUMENT;
+    *cache_bytes = NULL;
+    st = cache_value(&out, cache_document, 0);
+    if (st == OTC_OK) *cache_bytes = out.bytes;
+    else free(out.bytes);
+    return st;
 }
 
 /* -------------------------------------------------------------------- fold */

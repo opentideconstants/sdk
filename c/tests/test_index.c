@@ -12,6 +12,103 @@
 
 static char *g_dir, *g_jsonl;
 
+/* The finite B28 oracle is approved independently of the SDK. Exercise the
+ * same native emitter used by this generated-index writer, not a fake. */
+static char *encode_cache_document(const cJSON *document)
+{
+    char *bytes = NULL;
+    (void)otc__encode_cache_json(document, &bytes);
+    return bytes;
+}
+
+static void cache_regression(void)
+{
+    static const char input[] = "{\"z\\n\":\"x\\u0000y\",\"a\":[0.000001,1e21,-0.0]}";
+    cJSON *document = otc__json_parse(input, sizeof input - 1);
+    cJSON *invalid = cJSON_CreateString("\xed\xa0\x80");
+    cJSON *raw = cJSON_CreateRaw("\"x\\u0000y\"");
+    char before[128], after[128], *bytes = NULL;
+    size_t needed;
+    CHECK(document != NULL && invalid != NULL && raw != NULL);
+    CHECK_STATUS(otc__copy_json(document, before, sizeof before, &needed), OTC_OK);
+    CHECK_STATUS(otc__encode_cache_json(document, &bytes), OTC_OK);
+    CHECK(bytes && !strcmp(bytes, "{\"a\":[0.000001,1e21,0],\"z\\u000a\":\"x\\u0000y\"}"));
+    free(bytes);
+    CHECK_STATUS(otc__copy_json(document, after, sizeof after, &needed), OTC_OK);
+    CHECK(!strcmp(before, after));   /* encoding never mutates the source tree/raw accessor */
+    CHECK_STATUS(otc__encode_cache_json(invalid, &bytes), OTC_E_INVALID_ARGUMENT);
+    CHECK(bytes == NULL);
+    CHECK_STATUS(otc__encode_cache_json(raw, &bytes), OTC_OK);
+    CHECK(bytes && !strcmp(bytes, "\"x\\u0000y\""));
+    free(bytes);
+    CHECK_STATUS(otc__encode_cache_json(NULL, &bytes), OTC_E_INVALID_ARGUMENT);
+    CHECK(bytes == NULL);
+    CHECK_STATUS(otc__encode_cache_json(document, NULL), OTC_E_INVALID_ARGUMENT);
+    cJSON_Delete(document);
+    cJSON_Delete(invalid);
+    cJSON_Delete(raw);
+}
+
+static int cache_goldens(const char *path)
+{
+    char *text;
+    size_t length;
+    cJSON *golden, *row;
+    CHECK_STATUS(otc__read_all(path, &text, &length), OTC_OK);
+    golden = otc__json_parse(text, length);
+    free(text);
+    CHECK(golden != NULL);
+    if (!golden) return test_done("test_index cache goldens");
+    cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(golden, "cases")) {
+        cJSON *input = cJSON_GetObjectItemCaseSensitive(row, "input");
+        cJSON *owned = NULL;
+        const char *bits = otc__jstr(row, "binary64_hex");
+        const char *expected = otc__jstr(row, "expected");
+        char *bytes;
+        if (bits) {
+            uint64_t word = (uint64_t)strtoull(bits, NULL, 16);
+            double number;
+            memcpy(&number, &word, sizeof number);
+            owned = input = cJSON_CreateNumber(number);
+        }
+        bytes = encode_cache_document(input);
+        printf("CASE %s expected=%s actual=%s\n", otc__jstr(row, "id"), expected,
+               bytes ? bytes : "<refused>");
+        CHECK(bytes && !strcmp(bytes, expected));
+        free(bytes);
+        cJSON_Delete(owned);
+    }
+    cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(golden, "refusals")) {
+        const char *bits = otc__jstr(row, "binary64_hex");
+        const char *hex = otc__jstr(row, "raw_json_hex");
+        cJSON *input = NULL;
+        char *bytes = NULL;
+        if (bits) {
+            uint64_t word = (uint64_t)strtoull(bits, NULL, 16);
+            double number;
+            memcpy(&number, &word, sizeof number);
+            input = cJSON_CreateNumber(number);
+        } else if (hex) {
+            size_t i, n = strlen(hex) / 2;
+            char raw[64];
+            CHECK(n < sizeof raw);
+            for (i = 0; i < n; i++) {
+                char pair[3] = {hex[i * 2], hex[i * 2 + 1], 0};
+                raw[i] = (char)strtoul(pair, NULL, 16);
+            }
+            raw[n] = 0;
+            input = otc__json_parse(raw, n);
+        }
+        if (input) bytes = encode_cache_document(input);
+        printf("REFUSAL %s actual=%s\n", otc__jstr(row, "id"), bytes ? bytes : "<refused>");
+        CHECK(bytes == NULL);
+        free(bytes);
+        cJSON_Delete(input);
+    }
+    cJSON_Delete(golden);
+    return test_done("test_index cache goldens");
+}
+
 static void die(const char *what)
 {
     fprintf(stderr, "test_index: %s\n", what);
@@ -36,15 +133,15 @@ static void write_index(cJSON *(*tamper)(cJSON *doc))
     otc_close(rel);
     if (!doc) die("otc__index_doc gave NULL");
     if (tamper) doc = tamper(doc);
-    txt = cJSON_PrintUnformatted(doc);
-    if (!txt) die("cJSON_PrintUnformatted gave NULL");
+    txt = encode_cache_document(doc);
+    if (!txt) die("encode_cache_document gave NULL");
     ixp = test_join(g_dir, "index-v1.json");
     f = fopen(ixp, "wb");
     if (!f) die("cannot create index-v1.json");
     if (fputs(txt, f) < 0) die("cannot write index-v1.json");
     if (fclose(f) != 0) die("cannot close index-v1.json");
     free(ixp);
-    cJSON_free(txt);
+    free(txt);
     cJSON_Delete(doc);
 }
 
@@ -140,6 +237,9 @@ int main(void)
     otc_release *rel = NULL;
     otc_station_t *st = NULL;
     const char *native = getenv("OTC_INDEX_NATIVE_JSONL");
+    const char *golden = getenv("OTC_CACHE_GOLDEN");
+    if (golden) return cache_goldens(golden);
+    cache_regression();
     if (native) {
         cJSON *document;
         char hex[65], *text;
@@ -148,10 +248,10 @@ int main(void)
         sha256_or_die(native, hex);
         document = otc__index_doc(rel, hex, "native C regression");
         if (!document) die("actual native index writer failed");
-        text = cJSON_PrintUnformatted(document);
+        text = encode_cache_document(document);
         if (!text) die("actual native index serialization failed");
         puts(text);
-        cJSON_free(text);
+        free(text);
         cJSON_Delete(document);
         otc_close(rel);
         return test_done("test_index native writer");

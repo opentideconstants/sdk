@@ -71,6 +71,10 @@ cJSON *otc__json_dup(const cJSON *v);
 /* A new node for the string node s, for a document that is only printed: a raw
  * JSON literal when s holds a NUL, else a plain string. NULL: no memory. */
 cJSON *otc__json_str_out(const cJSON *s);
+/* B28: generated cache_document -> UTF-8 cache_bytes, without BOM or LF.
+ * Caller frees *cache_bytes with free; failure leaves it NULL. Source/raw
+ * accessors retain their separate encoding and original source bytes. */
+otc_status otc__encode_cache_json(const cJSON *cache_document, char **cache_bytes);
 
 /* ---------------------------------------------------------------- platform */
 
