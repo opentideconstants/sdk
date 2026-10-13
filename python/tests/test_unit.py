@@ -1853,6 +1853,28 @@ class ErrorClassificationTest(unittest.TestCase):
         finally:
             srv.close()
 
+    def test_invalid_response_etag_is_not_written_but_pointer_body_is_preserved(self):
+        body = (GOOD / "OTC_latest-f1.json").read_bytes()
+        for value, valid in [("x" * 257, False), ('"caf\u00e9"', False),
+                             ('"del\x7f"', False), ('"control\x01"', False),
+                             ('"strong"', True), ('W/"weak"', True),
+                             ("x" * 256, True), ('"a\\b"', True)]:
+            with self.subTest(etag=value), tempfile.TemporaryDirectory() as directory:
+                cache = Path(directory) / "cache"
+                srv = _Server(script={"/OTC_latest-f1.json": (200, {"ETag": value}, body)})
+                try:
+                    with otc.OpenTideConstants(base_url=srv.url, cache_dir=cache) as client:
+                        self.assertEqual(client.release.datestamp, "20991231.2")
+                        self.assertTrue(client.verify())
+                    pointer = cache / "v1" / "pointer" / "OTC_latest-f1.json"
+                    self.assertEqual(pointer.read_bytes(), body)
+                    etag = pointer.with_name(pointer.name + ".etag")
+                    self.assertEqual(etag.exists(), valid)
+                    if valid:
+                        self.assertEqual(etag.read_bytes(), value.encode("ascii"))
+                finally:
+                    srv.close()
+
     def test_bad_user_agent_is_invalid_argument_at_construction(self):
         # DR20: a string with no control characters, latin-1 only; checked before any request
         srv = _Server()

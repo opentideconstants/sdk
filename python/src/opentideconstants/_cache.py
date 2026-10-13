@@ -215,8 +215,8 @@ class Cache:
                 except FileNotFoundError:
                     pass
                 atomic_write(d / name, body)
-                if etag:
-                    atomic_write(d / (name + ".etag"), etag.encode("utf-8"))
+                if etag and len(etag) <= 256 and all(0x20 <= ord(c) < 0x7F for c in etag):
+                    atomic_write(d / (name + ".etag"), etag.encode("ascii"))
         except OSError as e:
             raise CacheError(f"cannot write {d / name}: {e}") from e
 
