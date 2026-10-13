@@ -13,6 +13,7 @@ import socket
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -44,16 +45,17 @@ def _opt(v, t) -> bool:
     return v is None or isinstance(v, t)
 
 
-def default_root() -> Path:
-    env = os.environ.get("OPENTIDECONSTANTS_CACHE_DIR")
+def default_root(environment: Mapping[str, str] | None = None) -> Path:
+    environment = os.environ if environment is None else environment
+    env = environment.get("OPENTIDECONSTANTS_CACHE_DIR")
     if env:
         return Path(env)
     if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        base = environment.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
         return Path(base) / "opentideconstants" / "Cache"
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Caches" / "opentideconstants"
-    xdg = os.environ.get("XDG_CACHE_HOME")
+    xdg = environment.get("XDG_CACHE_HOME")
     return Path(xdg) / "opentideconstants" if xdg else Path.home() / ".cache" / "opentideconstants"
 
 

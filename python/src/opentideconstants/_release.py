@@ -490,6 +490,122 @@ def _resolve_kinds(entries):
 
 # --------------------------------------------------------------------------- Release
 
+def _validate_station_filters(country, type, kind, source, source_type, include_flagged, include_fallback):
+    for name, v in (("country", country), ("type", type), ("kind", kind), ("source", source),
+                    ("source_type", source_type)):
+        _check_type(name, v, (str,))
+    for name, value in (("include_flagged", include_flagged), ("include_fallback", include_fallback)):
+        _check_type(name, value, (bool,), allow_none=False)
+
+
+def _validate_search_arguments(name, limit, match):
+    _check_type("name", name, (str,), allow_none=False)
+    limit = _limit(limit)
+    if match is not None and match != "exact":
+        raise InvalidArgumentError(f"match must be 'exact', not {match!r}")
+    q = fold(name)
+    if not q:
+        raise InvalidArgumentError("the query is empty")
+    return q, limit
+
+
+def _bind_release_fields_1(_receiver: "Release", *, historical_offsets_policy, astro_cache, meta, index_path):
+    _receiver._historical_offsets_policy = historical_offsets_policy
+    _receiver._astro_cache = astro_cache
+    _receiver._meta = meta
+    _receiver._index_path = index_path
+
+
+def _bind_release_fields_2(_receiver: "Release", *, opened):
+    _receiver._opened = opened
+
+
+def _bind_release_fields_3(_receiver: "Release", *, release):
+    _receiver._release = release
+
+
+def _bind_release_fields_4(_receiver: "Release", *, files):
+    _receiver._files = files
+
+
+def _bind_release_fields_5(_receiver: "Release", *, conventions):
+    _receiver._conventions = conventions
+
+
+def _bind_release_fields_6(_receiver: "Release", *, licences):
+    _receiver._licences = licences
+
+
+def _bind_release_fields_7(_receiver: "Release", *, conv_by_id):
+    _receiver._conv_by_id = conv_by_id
+
+
+def _bind_release_fields_8(_receiver: "Release", *, lic_by_id):
+    _receiver._lic_by_id = lic_by_id
+
+
+def _bind_release_fields_9(_receiver: "Release", *, commercial_only, commercial_basis):
+    _receiver._commercial_only = commercial_only
+    _receiver._commercial_basis = commercial_basis
+
+
+def _bind_release_fields_10(_receiver: "Release", *, effective):
+    _receiver._effective = effective
+
+
+def _bind_release_fields_11(_receiver: "Release", *, entries):
+    _receiver._entries = entries
+
+
+def _bind_release_fields_12(_receiver: "Release", *, by_id):
+    _receiver._by_id = by_id
+
+
+def _bind_release_fields_13(_receiver: "Release", *, tombs):
+    _receiver._tombs = tombs
+
+
+def _bind_release_fields_14(_receiver: "Release", *, alias, subs):
+    _receiver._alias = alias
+    _receiver._subs = subs
+
+
+def _bind_release_fields_15(_receiver: "Release", *, mode):
+    _receiver._mode = mode
+
+
+def _bind_release_fields_16(_receiver: "Release", *, station_origin):
+    _receiver._station_origin = station_origin
+
+
+def _bind_release_fields_17(_receiver: "Release", *, stations):
+    _receiver._stations = stations
+    if stations is not None:
+        for station in stations.values():
+            object.__setattr__(station, "_origin", _receiver._station_origin)
+
+
+def _bind_release_fields_18(_receiver: "Release", *, tomb_objs, fh):
+    _receiver._tomb_objs = tomb_objs
+    _receiver._fh = fh
+
+
+def _bind_release_fields_19(_receiver: "Release", *, lock):
+    _receiver._lock = lock
+
+
+def _bind_release_fields_20(_receiver: "Release", *, lru):
+    _receiver._lru = lru
+
+
+def _bind_release_fields_21(_receiver: "Release", *, jsonl, constituent_names, stats, closed, zenodo_version_doi):
+    _receiver._jsonl = jsonl
+    _receiver._constituent_names = constituent_names
+    _receiver._stats = stats
+    _receiver._closed = closed
+    _receiver._zenodo_version_doi = zenodo_version_doi
+
+
 class Release:
     """One loaded OTC_{DATESTAMP} release. Immutable; every query method is here."""
 
@@ -502,22 +618,19 @@ class Release:
                  commercial_only=False, commercial_basis="strict", historical_offsets_policy="fallback"):
         if not isinstance(historical_offsets_policy, str) or historical_offsets_policy not in ('fallback', 'exclude'):
             raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
-        self._historical_offsets_policy = historical_offsets_policy
-        self._astro_cache = {}
-        self._meta = meta
-        self._index_path = index_path
-        self._opened = ()  # the files this release was loaded from (the client sets it; verify hashes them)
+        _bind_release_fields_1(self, historical_offsets_policy=historical_offsets_policy, astro_cache={}, meta=meta, index_path=index_path)
+        _bind_release_fields_2(self, opened=())
         rel = meta.get("release")
         if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
             raise InvalidReleaseError("release.datestamp is missing")
         sv = rel.get("source_versions")
         if sv is not None and (not isinstance(sv, dict) or not all(isinstance(v, str) for v in sv.values())):
             raise InvalidReleaseError("release.source_versions is not an object of strings")
-        self._release = rel
-        self._files = tuple(files)
+        _bind_release_fields_3(self, release=rel)
+        _bind_release_fields_4(self, files=tuple(files))
         try:
-            self._conventions = tuple(Convention._parse(c) for c in meta.get("conventions") or ())
-            self._licences = tuple(Licence._parse(x) for x in meta.get("licences") or ())
+            _bind_release_fields_5(self, conventions=tuple(Convention._parse(c) for c in meta.get("conventions") or ()))
+            _bind_release_fields_6(self, licences=tuple(Licence._parse(x) for x in meta.get("licences") or ()))
         except (KeyError, TypeError, AttributeError) as e:
             raise InvalidReleaseError(f"conventions or licences: {e!r}") from e
         for x in self._licences:
@@ -525,49 +638,39 @@ class Release:
             if not isinstance(x.attribution, str) or not (x.provider is None or isinstance(x.provider, str)):
                 raise InvalidReleaseError(f"licence {x.licence_id!r}: attribution must be a string and provider a "
                                           f"string or null")
-        self._conv_by_id = {c.convention_id: c for c in self._conventions}
-        self._lic_by_id = {x.licence_id: x for x in self._licences}
+        _bind_release_fields_7(self, conv_by_id={c.convention_id: c for c in self._conventions})
+        _bind_release_fields_8(self, lic_by_id={x.licence_id: x for x in self._licences})
         parse_time(rel.get("created"), "release.created")
         _check_ids(entries, self._conventions, self._licences)
         if not all("_index_presence" in e for e in entries):
             _resolve_kinds(entries)
         # commercial_only (spec §4.2, K-NC DR106): station_id -> the effective recommended set_id (or None)
-        self._commercial_only = commercial_only
-        self._commercial_basis = commercial_basis
-        self._effective = _effective_ids(entries, self._lic_by_id) if commercial_only else None
+        _bind_release_fields_9(self, commercial_only=commercial_only, commercial_basis=commercial_basis)
+        _bind_release_fields_10(self, effective=_effective_ids(entries, self._lic_by_id) if commercial_only else None)
         active = sorted((e for e in entries if e.get("status") == "active"), key=lambda e: e["station_id"])
-        self._entries = active
-        self._by_id = {e["station_id"]: e for e in active}
-        self._tombs = {e["station_id"]: e for e in entries if e.get("status") == "removed"}
+        _bind_release_fields_11(self, entries=active)
+        _bind_release_fields_12(self, by_id={e["station_id"]: e for e in active})
+        _bind_release_fields_13(self, tombs={e["station_id"]: e for e in entries if e.get("status") == "removed"})
         for e in entries:
             if e.get("status") not in ("active", "removed"):
                 # a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no
                 # query and no count; said once, at load (CR2 DR8)
                 _log.warning("station %s has the status %r, which this SDK does not know: it is left out of every "
                              "query", e["station_id"], e.get("status"))
-        self._alias = {}
-        self._subs = {}
+        _bind_release_fields_14(self, alias={}, subs={})
         for e in active:
             for system, ids in (e.get("aliases") or {}).items():
                 for i in ids:
                     self._alias.setdefault(system, {})[i] = e["station_id"]
             if e.get("type") == "subordinate" and e.get("reference_station_id"):
                 self._subs.setdefault(e["reference_station_id"], []).append(e["station_id"])
-        self._mode = mode
-        self._station_origin = object()
-        self._stations = stations  # eager: id -> Station
-        if stations is not None:
-            for station in stations.values():
-                object.__setattr__(station, "_origin", self._station_origin)
-        self._tomb_objs = tombstones  # eager: id -> Tombstone
-        self._fh = None
-        self._lock = threading.Lock()
-        self._lru = OrderedDict()
-        self._jsonl = jsonl
-        self._constituent_names = None
-        self._stats = None
-        self._closed = False
-        self._zenodo_version_doi = None
+        _bind_release_fields_15(self, mode=mode)
+        _bind_release_fields_16(self, station_origin=object())
+        _bind_release_fields_17(self, stations=stations)
+        _bind_release_fields_18(self, tomb_objs=tombstones, fh=None)
+        _bind_release_fields_19(self, lock=threading.Lock())
+        _bind_release_fields_20(self, lru=OrderedDict())
+        _bind_release_fields_21(self, jsonl=jsonl, constituent_names=None, stats=None, closed=False, zenodo_version_doi=None)
         if mode == "stream":
             try:
                 self._fh = open(jsonl, "rb")
@@ -911,11 +1014,7 @@ class Release:
     def _filtered(self, country=None, type=None, kind=None, source=None, source_type=None,
                   include_flagged=False, include_fallback=False):  # noqa: A002
         self._check_open()
-        for name, v in (("country", country), ("type", type), ("kind", kind), ("source", source),
-                        ("source_type", source_type)):
-            _check_type(name, v, (str,))
-        for name, value in (("include_flagged", include_flagged), ("include_fallback", include_fallback)):
-            _check_type(name, value, (bool,), allow_none=False)
+        _validate_station_filters(country, type, kind, source, source_type, include_flagged, include_fallback)
         out = []
         for e in self._entries:
             if country is not None and e.get("country") != country:
@@ -951,13 +1050,7 @@ class Release:
 
     def search(self, *, name, limit=None, match=None, country=None, type=None, kind=None, source=None,  # noqa: A002
                source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Station, ...]:
-        _check_type("name", name, (str,), allow_none=False)
-        limit = _limit(limit)
-        if match is not None and match != "exact":
-            raise InvalidArgumentError(f"match must be 'exact', not {match!r}")
-        q = fold(name)
-        if not q:
-            raise InvalidArgumentError("the query is empty")
+        q, limit = _validate_search_arguments(name, limit, match)
         ranked = []
         for e in self._filtered(country, type, kind, source, source_type, include_flagged, include_fallback):
             n = e["name_folded"] or ""

@@ -57,7 +57,7 @@ def _survivor(cluster, slack):
     return max(candidates, key=lambda c: (c[2], -c[0])) if wanted == 'high' else min(candidates, key=lambda c: (c[2], c[0]))
 
 
-def events(total, start, stop, *, slack=False):
+def _unrounded_events(total, start, stop, *, slack=False):
     """Unrounded roots, alternating signs and values over the half-open reporting window."""
     if start == stop:
         return []
@@ -135,4 +135,10 @@ def events(total, start, stop, *, slack=False):
         survivor = _survivor(cluster, slack)
         if survivor is not None:
             kept.append(survivor)
-    return [c for c in kept if start <= math.floor(c[0] + 0.5) < stop]
+    return kept
+
+
+def events(total, start, stop, *, slack=False):
+    """The original rounded half-open reporting window over unchanged survivors."""
+    return [c for c in _unrounded_events(total, start, stop, slack=slack)
+            if start <= math.floor(c[0] + 0.5) < stop]

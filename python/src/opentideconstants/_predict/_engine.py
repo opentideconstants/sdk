@@ -9,7 +9,7 @@ from .. import _errors as X
 from .._enums import ExtremeType, CurrentEventType, PredictionMethod
 from .._models import Station, freeze
 from ._astro import AstroTable, instant, utc, angle
-from ._harmonic import Sum, events, RAD
+from ._harmonic import Sum, events, RAD, _unrounded_events
 from ._results import HeightPoint, Extreme, CurrentPoint, CurrentEvent, HeightSeries, ExtremeList, CurrentSeries, CurrentEventList, DatumInfo, DatumLevel, Ranges
 
 
@@ -336,17 +336,22 @@ def extremes(release, station, *, start, stop, datum=None, set_id=None, offset_i
     return _result(release, context, ExtremeList, items, datum)
 
 
-def _current_events(context, start, stop):
+def _unrounded_current_events(context, start, stop, *, event_source=_unrounded_events):
     # W is flood-positive, while U/V retain the geographic axis orientation.
     total = Sum(context.table, context.current_bin.get('constituents') or (), amplitude='major_amplitude_ms', phase='major_phase_deg', multiplier=context.sigma, mean=context.sigma * context.current_bin.get('mean_major_ms', 0.0))
     candidates = []
-    for t, kind, value in events(total, start, stop):
+    for t, kind, value in event_source(total, start, stop):
         if kind == 'high' and value > 0:
             candidates.append((t, 'max_flood', value, context.current_bin.get('mean_flood_dir_deg')))
         elif kind == 'low' and value < 0:
             candidates.append((t, 'max_ebb', value, context.current_bin.get('mean_ebb_dir_deg')))
-    candidates.extend((t, kind, 0.0, None) for t, kind, value in events(total, start, stop, slack=True))
+    candidates.extend((t, kind, 0.0, None) for t, kind, value in event_source(total, start, stop, slack=True))
     return sorted(candidates, key=lambda c: c[0])
+
+
+def _current_events(context, start, stop):
+    return [c for c in _unrounded_current_events(context, start, stop)
+            if start <= math.floor(c[0] + 0.5) < stop]
 
 
 def currents(release, station, *, start, stop, step_s=600, bin_number=None, set_id=None) -> CurrentSeries:

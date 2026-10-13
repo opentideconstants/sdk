@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gzip
+import _thread
 import hashlib
 import json
 import logging
@@ -186,11 +187,202 @@ def _auto_update_error(e: Exception) -> OpenTideConstantsError:
     return err
 
 
+def _validate_constructor_options(*, release="latest", file=None, offline=False, mode="eager",
+                                  on_network_error="use_cache", auto_update=False, verify_on_open=False,
+                                  commercial_only=False, commercial_basis="strict", historical_offsets_policy="fallback",
+                                  timeout=None, update_interval: float | None=86_400):
+    _validate_constructor_policy(release=release, offline=offline, mode=mode,
+        on_network_error=on_network_error, auto_update=auto_update, verify_on_open=verify_on_open,
+        commercial_only=commercial_only, commercial_basis=commercial_basis,
+        historical_offsets_policy=historical_offsets_policy)
+    _validate_constructor_file_and_timeout(release=release, file=file, offline=offline,
+        on_network_error=on_network_error, timeout=timeout, update_interval=update_interval)
+
+
+def _validate_constructor_policy(*, release, offline, mode, on_network_error, auto_update,
+                                 verify_on_open, commercial_only, commercial_basis, historical_offsets_policy):
+    if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
+        raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
+    if mode not in _MODES:
+        raise InvalidArgumentError(f"mode must be one of {_MODES}, not {mode!r}")
+    if on_network_error not in _ON_ERR:
+        raise InvalidArgumentError(f"on_network_error must be one of {_ON_ERR}, not {on_network_error!r}")
+    for name, v in (("offline", offline), ("auto_update", auto_update), ("verify_on_open", verify_on_open),
+                    ("commercial_only", commercial_only)):
+        if not isinstance(v, bool):
+            raise InvalidArgumentError(f"{name} must be a boolean")
+    if not isinstance(commercial_basis, str) or commercial_basis not in ("strict", "as_published_upstream"):
+        raise InvalidArgumentError(f"commercial_basis must be strict or as_published_upstream, not {commercial_basis!r}")
+    if not isinstance(historical_offsets_policy, str) or historical_offsets_policy not in ('fallback', 'exclude'):
+        raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
+
+
+def _validate_constructor_file_and_timeout(*, release, file, offline, on_network_error, timeout,
+                                           update_interval: float | None):
+    # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
+    # spec §4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+    if file is not None and (release != "latest" or offline or on_network_error != "use_cache"):
+        raise InvalidArgumentError("file cannot be combined with release, offline or on_network_error")
+    for name, v in (("timeout", timeout), ("update_interval", update_interval)):
+        if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                              or v <= 0):
+            raise InvalidArgumentError(f"{name} must be a positive finite number, not {v!r}")
+    # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19): below 1 ms a timeout rounds to "none" in some HTTP clients
+    if timeout is not None and not TIMEOUT_MIN_S <= timeout <= TIMEOUT_MAX_S:
+        raise InvalidArgumentError(f"timeout must be from {TIMEOUT_MIN_S} to {TIMEOUT_MAX_S:g} seconds, not {timeout!r}")
+
+
+def _resolve_constructor_defaults(*, offline, base_url, cache_dir, update_interval, environment,
+                                 platform_cache_dir):
+    """Existing pure defaults, using explicit caller-owned environment/platform values."""
+    effective_offline = _constructor_offline(offline, environment)
+    base = _constructor_base_url(base_url, environment)
+    if cache_dir is None and any(environment.get(name) for name in
+            ("OPENTIDECONSTANTS_CACHE_DIR", "LOCALAPPDATA", "XDG_CACHE_HOME")):
+        platform_cache_dir = str(default_root(environment))
+    root = _constructor_cache_root(cache_dir, platform_cache_dir)
+    interval = _constructor_update_interval(update_interval)
+    return effective_offline, base, root, interval
+
+
+def _constructor_offline(offline, environment):
+    return offline or _flag(environment.get("OPENTIDECONSTANTS_OFFLINE", ""))
+
+
+def _constructor_base_url(base_url, environment):
+    return base_url or environment.get("OPENTIDECONSTANTS_BASE_URL") or DEFAULT_BASE_URL
+
+
+def _constructor_cache_root(cache_dir, platform_cache_dir):
+    return cache_dir if cache_dir is not None else platform_cache_dir
+
+
+def _constructor_update_interval(update_interval):
+    return float(update_interval if update_interval is not None else 86_400)
+
+
+def _validate_download_arguments(*, release, formats, overwrite, to):
+    if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
+        raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
+    if isinstance(formats, str) or not isinstance(formats, (list, tuple)) or not formats:
+        raise InvalidArgumentError("formats must be a non-empty list")
+    for f in formats:
+        if f not in FORMAT_EXT:
+            raise InvalidArgumentError(f"unknown format {f!r} (use json, json.gz or jsonl)")
+    if not isinstance(overwrite, bool):
+        raise InvalidArgumentError("overwrite must be a boolean")
+    if not isinstance(to, (str, os.PathLike)):
+        raise InvalidArgumentError("to must be a path")
+
+
+def _validate_prune_arguments(keep):
+    if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
+        raise InvalidArgumentError("keep must be a non-negative integer")
+
+
+def _bind_client_fields_1(_receiver: "OpenTideConstants", *, log):
+    _receiver._log = log
+
+
+def _bind_client_fields_2(_receiver: "OpenTideConstants", *, lock):
+    _receiver._lock = lock
+
+
+def _bind_client_fields_3(_receiver: "OpenTideConstants", *, release, loaded_from, last_error, newer_format_major, closed):
+    _receiver._release = release
+    _receiver._loaded_from = loaded_from
+    _receiver._last_error = last_error
+    _receiver._newer_format_major = newer_format_major
+    _receiver._closed = closed
+
+
+def _bind_client_fields_4(_receiver: "OpenTideConstants", *, handed_out):
+    _receiver._handed_out = handed_out
+
+
+def _bind_client_fields_5(_receiver: "OpenTideConstants", *, historical_offsets_policy):
+    _receiver._historical_offsets_policy = historical_offsets_policy
+
+
+def _bind_client_fields_6(_receiver: "OpenTideConstants", *, pinned):
+    _receiver._pinned = pinned
+
+
+def _bind_client_fields_7(_receiver: "OpenTideConstants", *, file):
+    _receiver._file = file
+
+
+def _bind_client_fields_8(_receiver: "OpenTideConstants", *, mode):
+    _receiver._mode = mode
+
+
+def _bind_client_fields_9(_receiver: "OpenTideConstants", *, offline):
+    _receiver._offline = offline
+
+
+def _bind_client_fields_10(_receiver: "OpenTideConstants", *, base_url):
+    _receiver._base_url = base_url
+
+
+def _bind_client_fields_11(_receiver: "OpenTideConstants", *, cache):
+    _receiver._cache = cache
+
+
+def _bind_client_fields_12(_receiver: "OpenTideConstants", *, on_network_error, auto_update):
+    _receiver._on_network_error = on_network_error
+    _receiver._auto_update = auto_update
+
+
+def _bind_client_fields_13(_receiver: "OpenTideConstants", *, update_interval):
+    _receiver._update_interval = update_interval
+
+
+def _bind_client_fields_14(_receiver: "OpenTideConstants", *, verify_on_open):
+    _receiver._verify_on_open = verify_on_open
+
+
+def _bind_client_fields_15(_receiver: "OpenTideConstants", *, commercial_only, commercial_basis):
+    _receiver._commercial_only = commercial_only
+    _receiver._commercial_basis = commercial_basis
+
+
+def _bind_client_fields_16(_receiver: "OpenTideConstants", *, http):
+    _receiver._http = http
+
+
+def _bind_client_fields_17(_receiver: "OpenTideConstants", *, last_check):
+    _receiver._last_check = last_check
+
+
 class OpenTideConstants:
     """An OpenTideConstants client: ``OpenTideConstants()`` opens the latest release.
 
     Use ``with OpenTideConstants(...) as otc:`` or call ``close()``. Query methods are forwarded to the
     current Release (``otc.release``)."""
+
+    _log: logging.Logger
+    _lock: _thread.RLock
+    _release: Release | None
+    _loaded_from: LoadedFrom | None
+    _last_error: OpenTideConstantsError | None
+    _newer_format_major: int | None
+    _closed: bool
+    _handed_out: weakref.WeakSet[Release]
+    _historical_offsets_policy: str
+    _pinned: str | None
+    _file: Path | None
+    _mode: str
+    _offline: bool
+    _base_url: str
+    _cache: Cache
+    _on_network_error: str
+    _auto_update: bool
+    _update_interval: float
+    _verify_on_open: bool
+    _commercial_only: bool
+    _commercial_basis: str
+    _http: Http
+    _last_check: float
 
     def __init__(self, *, release: str = "latest", file=None, cache_dir=None, offline: bool = False,
                  mode: str = "eager", base_url: Optional[str] = None, timeout=None, proxy=None, ca_file=None,
@@ -198,69 +390,44 @@ class OpenTideConstants:
                  update_interval=86_400, logger: Optional[logging.Logger] = None, verify_on_open: bool = False,
                  commercial_only: bool = False, commercial_basis: str = "strict",
                  historical_offsets_policy: str = "fallback"):
-        self._log = logger or logging.getLogger("opentideconstants")
-        self._lock = threading.RLock()
-        self._release: Optional[Release] = None
-        self._loaded_from: Optional[LoadedFrom] = None
-        self._last_error: Optional[OpenTideConstantsError] = None
-        self._newer_format_major: Optional[int] = None
-        self._closed = False
-        self._handed_out = weakref.WeakSet()  # Releases this client made that may still be held
-        if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
-            raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
-        if mode not in _MODES:
-            raise InvalidArgumentError(f"mode must be one of {_MODES}, not {mode!r}")
-        if on_network_error not in _ON_ERR:
-            raise InvalidArgumentError(f"on_network_error must be one of {_ON_ERR}, not {on_network_error!r}")
-        for name, v in (("offline", offline), ("auto_update", auto_update), ("verify_on_open", verify_on_open),
-                        ("commercial_only", commercial_only)):
-            if not isinstance(v, bool):
-                raise InvalidArgumentError(f"{name} must be a boolean")
-        if not isinstance(commercial_basis, str) or commercial_basis not in ("strict", "as_published_upstream"):
-            raise InvalidArgumentError(f"commercial_basis must be strict or as_published_upstream, not {commercial_basis!r}")
-        if not isinstance(historical_offsets_policy, str) or historical_offsets_policy not in ('fallback', 'exclude'):
-            raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
-        self._historical_offsets_policy = historical_offsets_policy
-        # A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
-        # spec §4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
-        if file is not None and (release != "latest" or offline or on_network_error != "use_cache"):
-            raise InvalidArgumentError("file cannot be combined with release, offline or on_network_error")
-        for name, v in (("timeout", timeout), ("update_interval", update_interval)):
-            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
-                                  or v <= 0):
-                raise InvalidArgumentError(f"{name} must be a positive finite number, not {v!r}")
-        # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19): below 1 ms a timeout rounds to "none" in some HTTP clients
-        if timeout is not None and not TIMEOUT_MIN_S <= timeout <= TIMEOUT_MAX_S:
-            raise InvalidArgumentError(f"timeout must be from {TIMEOUT_MIN_S} to {TIMEOUT_MAX_S:g} seconds, not {timeout!r}")
-        self._pinned = release if release != "latest" else None
-        self._file = None if file is None else Path(file)
-        self._mode = mode
-        self._offline = offline or _flag(os.environ.get("OPENTIDECONSTANTS_OFFLINE", ""))
-        base = base_url or os.environ.get("OPENTIDECONSTANTS_BASE_URL") or DEFAULT_BASE_URL
+        _bind_client_fields_1(self, log=logger or logging.getLogger("opentideconstants"))
+        _bind_client_fields_2(self, lock=threading.RLock())
+        _bind_client_fields_3(self, release=None, loaded_from=None, last_error=None, newer_format_major=None, closed=False)
+        _bind_client_fields_4(self, handed_out=weakref.WeakSet())
+        _validate_constructor_policy(release=release, offline=offline, mode=mode,
+                                      on_network_error=on_network_error, auto_update=auto_update,
+                                      verify_on_open=verify_on_open, commercial_only=commercial_only,
+                                      commercial_basis=commercial_basis, historical_offsets_policy=historical_offsets_policy)
+        _bind_client_fields_5(self, historical_offsets_policy=historical_offsets_policy)
+        _validate_constructor_file_and_timeout(release=release, file=file, offline=offline,
+            on_network_error=on_network_error, timeout=timeout, update_interval=update_interval)
+        _bind_client_fields_6(self, pinned=release if release != "latest" else None)
+        _bind_client_fields_7(self, file=None if file is None else Path(file))
+        _bind_client_fields_8(self, mode=mode)
+        _bind_client_fields_9(self, offline=_constructor_offline(offline, os.environ))
+        base = _constructor_base_url(base_url, os.environ)
         check_http_url("base_url", base)  # at construction, never retried (CR D19)
-        self._base_url = base if base.endswith("/") else base + "/"
-        root = cache_dir if cache_dir is not None else default_root()
-        self._cache = Cache(Path(root), log=self._log)
-        self._on_network_error = on_network_error
-        self._auto_update = auto_update
-        self._update_interval = float(update_interval if update_interval is not None else 86_400)
-        self._verify_on_open = verify_on_open
+        _bind_client_fields_10(self, base_url=base if base.endswith("/") else base + "/")
+        root = _constructor_cache_root(cache_dir, default_root() if cache_dir is None else cache_dir)
+        _bind_client_fields_11(self, cache=Cache(Path(root), log=self._log))
+        _bind_client_fields_12(self, on_network_error=on_network_error, auto_update=auto_update)
+        _bind_client_fields_13(self, update_interval=_constructor_update_interval(update_interval))
+        _bind_client_fields_14(self, verify_on_open=verify_on_open)
         # select only sets whose licence allows commercial use, in every release this client loads (spec §4.2,
         # K-NC DR106)
-        self._commercial_only = commercial_only
-        self._commercial_basis = commercial_basis
+        _bind_client_fields_15(self, commercial_only=commercial_only, commercial_basis=commercial_basis)
         ua = f"opentideconstants-python/{__version__} (+https://opentideconstants.org)"
         _check_user_agent(user_agent)
         if user_agent:
             ua += " " + user_agent
-        self._http = Http(user_agent=ua, timeout=timeout, proxy=proxy, ca_file=ca_file, logger=self._log)
+        _bind_client_fields_16(self, http=Http(user_agent=ua, timeout=timeout, proxy=proxy, ca_file=ca_file, logger=self._log))
         if self._file is not None:
             self._open_file(self._file)
         elif self._pinned is not None:
             self._open_pinned(self._pinned)
         else:
             self._open_latest()
-        self._last_check = time.monotonic()
+        _bind_client_fields_17(self, last_check=time.monotonic())
 
     # ------------------------------------------------------------------ context
 
@@ -1047,8 +1214,7 @@ class OpenTideConstants:
         """Remove cached releases beyond the newest ``keep``. Never removes the loaded release. Stops at the first
         release it cannot remove with CacheError, whose ``removed`` lists the releases removed before it."""
         self._check_open()
-        if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
-            raise InvalidArgumentError("keep must be a non-negative integer")
+        _validate_prune_arguments(keep)
         # Protect only the current release loaded by this client (spec §4.3, R13-A1).
         keep_ds = set()
         if self._release is not None:
@@ -1094,17 +1260,7 @@ class OpenTideConstants:
         OTC_{D}.meta.json and OTC_{D}.sha256, which are always included. A file that is already there with the
         right SHA-256 is skipped. Returns the paths this call wrote (skipped files are not in it)."""
         self._check_open()
-        if not isinstance(release, str) or (release != "latest" and not DATESTAMP_RE.match(release)):
-            raise InvalidArgumentError(f"release must be 'latest' or a datestamp, not {release!r}")
-        if isinstance(formats, str) or not isinstance(formats, (list, tuple)) or not formats:
-            raise InvalidArgumentError("formats must be a non-empty list")
-        for f in formats:
-            if f not in FORMAT_EXT:
-                raise InvalidArgumentError(f"unknown format {f!r} (use json, json.gz or jsonl)")
-        if not isinstance(overwrite, bool):
-            raise InvalidArgumentError("overwrite must be a boolean")
-        if not isinstance(to, (str, os.PathLike)):
-            raise InvalidArgumentError("to must be a path")
+        _validate_download_arguments(release=release, formats=formats, overwrite=overwrite, to=to)
         to = Path(to)
         info = None
         if release == "latest":

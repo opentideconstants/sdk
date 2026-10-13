@@ -842,6 +842,32 @@ def check_station_types(d) -> None:
 _RELEASE_REC = object()  # build_station: the station's recommended set is the release's
 
 
+def _build_record_span(span):
+    return None if span is None else RecordSpan(parse_time(span.get("start"), "record_span.start"),
+        parse_time(span.get("end"), "record_span.end"),
+        span.get("good_samples"))
+
+
+def _build_datum(datum):
+    return None if datum is None else Datum(datum.get("msl_offset_m"), freeze(dict(datum.get("named") or {})))
+
+
+def _build_constant_set(cs, rows, rid, conv, lic):
+    span = cs.get("record_span")
+    datum = cs.get("datum")
+    set_id = cs["set_id"]
+    return ConstantSet(
+        set_id, cs.get("source"), E.enum_or_raw(E.SourceType, cs.get("source_type")),
+        E.enum_or_raw(E.Quantity, cs.get("quantity")), cs.get("source_record_id"), cs.get("source_version"),
+        _build_record_span(span), _build_datum(datum),
+        E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
+        tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
+        tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
+        TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
+        tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
+        freeze(cs), fallback=Fallback._parse(cs.get("fallback")))
+
+
 def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
     """Build a Station from the parsed JSON of a station line (the caller passes active lines only; the status
     is not checked here). conventions/licences: id -> object. recommended: the set_id (or None) that the Station
@@ -867,22 +893,7 @@ def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
             names = [c["name"] for c in cs.get("constituents") or ()]
             if len(set(names)) != len(names):   # spec 6.1 (CR2 DR22)
                 raise InvalidReleaseError(f"{cs.get('set_id')}: a constituent name appears twice")
-            span = cs.get("record_span")
-            datum = cs.get("datum")
-            set_id = cs["set_id"]
-            sets.append(ConstantSet(
-                set_id, cs.get("source"), E.enum_or_raw(E.SourceType, cs.get("source_type")),
-                E.enum_or_raw(E.Quantity, cs.get("quantity")), cs.get("source_record_id"), cs.get("source_version"),
-                None if span is None else RecordSpan(parse_time(span.get("start"), "record_span.start"),
-                                                     parse_time(span.get("end"), "record_span.end"),
-                                                     span.get("good_samples")),
-                None if datum is None else Datum(datum.get("msl_offset_m"), freeze(dict(datum.get("named") or {}))),
-                E.enum_or_raw(E.QcStatus, cs.get("qc_status")),
-                tuple(QcFlag._parse(f) for f in cs.get("qc_flags") or ()),
-                tuple(DroppedConstituent._parse(x) for x in cs.get("dropped_constituents") or ()),
-                TimeBase._parse(cs.get("time_base")), rid is not None and set_id == rid, conv, lic, Provenance._parse(cs.get("provenance")),
-                tuple(sorted((v for v in rows if v.set_id == set_id), key=lambda v: v.window or "")),
-                freeze(cs), fallback=Fallback._parse(cs.get("fallback"))))
+            sets.append(_build_constant_set(cs, rows, rid, conv, lic))
         if release_rid is not None and not any(s.set_id == release_rid for s in sets):
             raise InvalidReleaseError(f"{sid}: recommended_set_id {release_rid!r} does not resolve")
         rec = [s for s in sets if rid is not None and s.set_id == rid]

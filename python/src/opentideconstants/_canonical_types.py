@@ -1,12 +1,18 @@
-"""Closed private construction types. No public routes or algorithms use these stubs."""
+"""Closed private construction and prepared receiver types."""
 
 from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import _thread
+import weakref
+from collections import OrderedDict
+from typing import BinaryIO
+from ._cache import Cache
+from ._http import Http
 from pathlib import Path
-from typing import Literal, TypeAlias, TypedDict
+from typing import Literal, TypeAlias, TypedDict, Protocol, runtime_checkable
 from . import _enums as E
 from ._errors import OpenTideConstantsError
 from ._client import OpenTideConstants
@@ -38,6 +44,8 @@ from ._models import (
     HistoricalOffsetProvenance,
 )
 from ._predict._astro import AstroTable
+from ._predict._harmonic import Sum
+from ._predict._engine import _Context
 from ._predict._results import (
     HeightPoint,
     Extreme,
@@ -2588,6 +2596,28 @@ class _EffectiveOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class _ConstructorOptions:
+    release: str
+    file: str | None
+    cache_dir: str | None
+    offline: bool
+    mode: E.Mode
+    base_url: str | None
+    timeout: float | None
+    proxy: str | None
+    ca_file: str | None
+    user_agent: str | None
+    on_network_error: E.OnNetworkError
+    auto_update: bool
+    update_interval: float | None
+    logger: logging.Logger | None
+    verify_on_open: bool
+    commercial_only: bool
+    commercial_basis: str
+    historical_offsets_policy: str
+
+
+@dataclass(frozen=True, slots=True)
 class _ClientState:
     current_release: Release
     effective_options: _EffectiveOptions
@@ -2790,6 +2820,11 @@ class _PredictionWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class _InstantPredictionWindow:
+    instants: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class _ProjectionContract:
     scalar_types: str
     models: str
@@ -2917,9 +2952,9 @@ class _StationIndexEntrySetsItemRequired(TypedDict):
     qc_status: str | None
     convention_id: str | None
     licence_id: str | None
-    constituents: tuple[str, ...]
+    constituents: Sequence[str]
     fallback: _Schemafallback | None
-    current_bins: tuple[int, ...]
+    current_bins: Sequence[int]
 
 
 class _StationIndexEntrySetsItem(_StationIndexEntrySetsItemRequired, total=False):
@@ -2954,10 +2989,10 @@ class _StationIndexEntryRequired(TypedDict):
     lon: float | None
     offset: int
     length: int
-    aliases: Mapping[str, tuple[str, ...]]
-    sets: tuple[_StationIndexEntrySetsItem, ...]
+    aliases: Mapping[str, Sequence[str]]
+    sets: Sequence[_StationIndexEntrySetsItem]
     subordinate_offsets: _SchemasubordinateOffsets | None
-    current_offsets: tuple[_StationIndexEntryCurrentOffsetsItem, ...]
+    current_offsets: Sequence[_StationIndexEntryCurrentOffsetsItem]
 
 
 class _StationIndexEntry(_StationIndexEntryRequired, total=False):
@@ -3096,6 +3131,43 @@ class _PresentError:
     error: _CanonicalError
 
 
+@runtime_checkable
+class _OriginIdentity(Protocol):
+    """The genuine native identity token; it retains no producing data."""
+
+    def __hash__(self) -> int: ...
+
+
+@runtime_checkable
+class _StationFieldsOwner(Protocol):
+    @property
+    def conventions(self) -> Mapping[str, Convention]: ...
+    @property
+    def licences(self) -> Mapping[str, Licence]: ...
+    @property
+    def kind(self) -> E.Kind | None: ...
+    @property
+    def recommendation(self) -> str | None: ...
+
+
+@runtime_checkable
+class _PreparedModel(Protocol):
+    """Borrowed native reference selection; no acquisition or selection is replayed."""
+
+    @property
+    def native_sum(self) -> Sum: ...
+    @property
+    def native_table(self) -> AstroTable: ...
+    @property
+    def native_context(self) -> _Context: ...
+
+
+@runtime_checkable
+class _NativeFailureOwner(Protocol):
+    @property
+    def native_error(self) -> OpenTideConstantsError: ...
+
+
 _ErrorChannel: TypeAlias = _Absent | _PresentError
 
 
@@ -3184,7 +3256,7 @@ _CCandidatePath: TypeAlias = (
 )
 
 
-_CCanonicalError: TypeAlias = _ErrorChannel
+_CCanonicalError: TypeAlias = _CanonicalError | _ErrorChannel
 
 
 _CCanonicalResult: TypeAlias = _ResultChannel
@@ -3264,7 +3336,433 @@ _CExpectedResult: TypeAlias = _JsonValue
 _CExplicitOptions: TypeAlias = _EffectiveOptions
 
 
-_CFieldContract: TypeAlias = tuple[_FieldContract, ...]
+@runtime_checkable
+class _ConstantSetFieldsOwner(Protocol):
+    @property
+    def rows(self) -> tuple[Validation, ...]: ...
+    @property
+    def recommendation(self) -> str | None: ...
+    @property
+    def convention(self) -> Convention: ...
+    @property
+    def licence(self) -> Licence: ...
+
+
+@runtime_checkable
+class _SourceFieldsOwner(Protocol):
+    @property
+    def licences(self) -> Mapping[str, Licence]: ...
+
+
+class _FileInfoRawFields(TypedDict):
+    name: str
+    url: str | None
+    size: int | None
+    sha256: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _FileInfoModelFields:
+    raw_fields: _FileInfoRawFields
+
+
+class _ReleaseInfoRawFields(TypedDict):
+    datestamp: str
+    format_version: str
+    concept_doi: str | None
+    zenodo_version_doi: str | None
+    content_sha256: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ReleaseInfoModelFields:
+    raw_fields: _ReleaseInfoRawFields
+    native_files: tuple[FileInfo, ...]
+    native_min_reader_version: str | None
+
+
+class _UpdateResultRawFields(TypedDict):
+    updated: bool
+    from_: str
+    to: str
+
+
+@dataclass(frozen=True, slots=True)
+class _UpdateResultModelFields:
+    raw_fields: _UpdateResultRawFields
+
+
+class _NearbyRawFields(TypedDict):
+    distance_km: float
+
+
+@dataclass(frozen=True, slots=True)
+class _NearbyModelFields:
+    raw_fields: _NearbyRawFields
+    native_station: Station
+
+
+class _StatsRawFields(TypedDict):
+    type: Mapping[str, int]
+    kind: Mapping[str, int]
+    country: Mapping[str, int]
+    source: Mapping[str, int]
+    qc_status: Mapping[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class _StatsModelFields:
+    raw_fields: _StatsRawFields
+
+
+class _HeightPointRawFields(TypedDict):
+    height_m: float
+    local_time: str | None
+    utc_offset_s: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _HeightPointModelFields:
+    raw_fields: _HeightPointRawFields
+    native_time: datetime
+    native_local: datetime | None
+
+
+class _ExtremeRawFields(TypedDict):
+    type: E.ExtremeType
+    height_m: float
+    local_time: str | None
+    utc_offset_s: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ExtremeModelFields:
+    raw_fields: _ExtremeRawFields
+    native_time: datetime
+    native_local: datetime | None
+
+
+class _CurrentPointRawFields(TypedDict):
+    velocity_major_ms: float
+    velocity_minor_ms: float
+    speed_ms: float
+    direction_deg: float | None
+    local_time: str | None
+    utc_offset_s: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CurrentPointModelFields:
+    raw_fields: _CurrentPointRawFields
+    native_time: datetime
+    native_local: datetime | None
+
+
+class _CurrentEventRawFields(TypedDict):
+    type: E.CurrentEventType
+    velocity_ms: float
+    direction_deg: float | None
+    local_time: str | None
+    utc_offset_s: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CurrentEventModelFields:
+    raw_fields: _CurrentEventRawFields
+    native_time: datetime
+    native_local: datetime | None
+
+
+class _HeightSeriesRawFields(TypedDict):
+    station_id: str | None
+    timezone: str | None
+    method: E.PredictionMethod | None
+    set_id: str | None
+    convention_id: str | None
+    astro_table_id: str | None
+    reference_station_id: str | None
+    reference_bin: int | None
+    datum: str | None
+    datum_name: str | None
+    datum_kind: str | None
+    datum_uncertainty_m: float | None
+    tz: str | None
+    tz_version: str | None
+    release: str | None
+    algorithm: str | None
+    offset_id: str | None
+    offset_source: str | None
+    offset_source_version: str | None
+    historical_offsets: bool
+    current_validity: str | None
+    current_accuracy: str | None
+    reference_set_id: str | None
+    reference_source_version: str | None
+    reference_2020_equivalence: str | None
+    source_note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _HeightSeriesModelFields:
+    raw_fields: _HeightSeriesRawFields
+    native_items: tuple[HeightPoint, ...]
+
+
+class _ExtremeListRawFields(TypedDict):
+    station_id: str | None
+    timezone: str | None
+    method: E.PredictionMethod | None
+    set_id: str | None
+    convention_id: str | None
+    astro_table_id: str | None
+    reference_station_id: str | None
+    reference_bin: int | None
+    datum: str | None
+    datum_name: str | None
+    datum_kind: str | None
+    datum_uncertainty_m: float | None
+    tz: str | None
+    tz_version: str | None
+    release: str | None
+    algorithm: str | None
+    offset_id: str | None
+    offset_source: str | None
+    offset_source_version: str | None
+    historical_offsets: bool
+    current_validity: str | None
+    current_accuracy: str | None
+    reference_set_id: str | None
+    reference_source_version: str | None
+    reference_2020_equivalence: str | None
+    source_note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ExtremeListModelFields:
+    raw_fields: _ExtremeListRawFields
+    native_items: tuple[Extreme, ...]
+
+
+class _CurrentSeriesRawFields(TypedDict):
+    station_id: str | None
+    timezone: str | None
+    method: E.PredictionMethod | None
+    set_id: str | None
+    convention_id: str | None
+    astro_table_id: str | None
+    reference_station_id: str | None
+    reference_bin: int | None
+    datum: str | None
+    datum_name: str | None
+    datum_kind: str | None
+    datum_uncertainty_m: float | None
+    bin_number: int | None
+    tz: str | None
+    tz_version: str | None
+    release: str | None
+    algorithm: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CurrentSeriesModelFields:
+    raw_fields: _CurrentSeriesRawFields
+    native_items: tuple[CurrentPoint, ...]
+
+
+class _CurrentEventListRawFields(TypedDict):
+    station_id: str | None
+    timezone: str | None
+    method: E.PredictionMethod | None
+    set_id: str | None
+    convention_id: str | None
+    astro_table_id: str | None
+    reference_station_id: str | None
+    reference_bin: int | None
+    datum: str | None
+    datum_name: str | None
+    datum_kind: str | None
+    datum_uncertainty_m: float | None
+    bin_number: int | None
+    omitted_event_types: tuple[E.CurrentEventType, ...] | None
+    tz: str | None
+    tz_version: str | None
+    release: str | None
+    algorithm: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CurrentEventListModelFields:
+    raw_fields: _CurrentEventListRawFields
+    native_items: tuple[CurrentEvent, ...]
+
+
+class _DatumInfoRawFields(TypedDict):
+    set_id: str | None
+    zero: str | None
+    zero_name: str | None
+    chart_datum: str | None
+    msl_offset_m: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class _DatumInfoModelFields:
+    raw_fields: _DatumInfoRawFields
+    native_levels: tuple[DatumLevel, ...]
+
+
+class _DatumLevelRawFields(TypedDict):
+    key: str | None
+    value_m: float
+    above_chart_m: float | None
+    kind: str | None
+    method: str | None
+    source_name: str | None
+    epoch: _JsonValue
+    data_span: _JsonValue
+    control_station_id: str | None
+    control_set_id: str | None
+    control_source_id: str | None
+    uncertainty_m: float | None
+    uncertainty_basis: str | None
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _DatumLevelModelFields:
+    raw_fields: _DatumLevelRawFields
+
+
+class _RangesRawFields(TypedDict):
+    mn: float | None
+    gt: float | None
+    dhq: float | None
+    dlq: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RangesModelFields:
+    raw_fields: _RangesRawFields
+
+
+class _NativeIndexEntryRequired(TypedDict):
+    station_id: str
+    status: str
+    name: str | None
+    name_folded: str | None
+    country: str | None
+    type: str | None
+    kind: str | None
+    reference_station_id: str | None
+    offsets_licence_id: str | None
+    recommended_set_id: str | None
+    lat: float | None
+    lon: float | None
+    offset: int | None
+    length: int | None
+    aliases: Mapping[str, Sequence[str]]
+    sets: Sequence[_StationIndexEntrySetsItem]
+    subordinate_offsets: _SchemasubordinateOffsets | None
+    current_offsets: Sequence[_StationIndexEntryCurrentOffsetsItem]
+
+
+class _NativeIndexEntry(_NativeIndexEntryRequired, total=False):
+    _index_presence: set[str] | frozenset[str]
+
+
+class _ClientRawFields(TypedDict):
+    _newer_format_major: int | None
+    _closed: bool
+    _historical_offsets_policy: str
+    _pinned: str | None
+    _mode: str
+    _offline: bool
+    _base_url: str
+    _on_network_error: str
+    _auto_update: bool
+    _update_interval: float
+    _verify_on_open: bool
+    _commercial_only: bool
+    _commercial_basis: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ClientModelFields:
+    raw_fields: _ClientRawFields
+    native_log: logging.Logger
+    native_lock: _thread.RLock
+    native_release: Release | None
+    native_loaded_from: E.LoadedFrom | None
+    native_last_error: OpenTideConstantsError | None
+    native_handed_out: weakref.WeakSet[Release]
+    native_file: Path | None
+    native_cache: Cache
+    native_http: Http
+    native_last_check: float
+
+
+class _ReleaseRawFields(TypedDict):
+    _historical_offsets_policy: str
+    _commercial_only: bool
+    _commercial_basis: str
+    _mode: str
+    _closed: bool
+    _zenodo_version_doi: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ReleaseModelFields:
+    raw_fields: _ReleaseRawFields
+    native_astro_cache: dict[str, AstroTable]
+    native_meta: Mapping[str, _JsonValue]
+    native_index_path: Path | None
+    native_opened: tuple[Path, ...]
+    native_release: Mapping[str, _JsonValue]
+    native_files: tuple[FileInfo, ...]
+    native_conventions: tuple[Convention, ...]
+    native_licences: tuple[Licence, ...]
+    native_conv_by_id: dict[str, Convention]
+    native_lic_by_id: dict[str, Licence]
+    native_effective: dict[str, str | None] | None
+    native_entries: list[_NativeIndexEntry]
+    native_by_id: dict[str, _NativeIndexEntry]
+    native_tombs: dict[str, _NativeIndexEntry]
+    native_alias: dict[str, dict[str, str]]
+    native_subs: dict[str, list[str]]
+    native_station_origin: _OriginIdentity
+    native_stations: dict[str, Station] | None
+    native_tomb_objs: dict[str, Tombstone] | None
+    native_fh: BinaryIO | None
+    native_lock: _thread.LockType
+    native_lru: OrderedDict[str, Station]
+    native_jsonl: Path | None
+    native_constituent_names: tuple[str, ...] | None
+    native_stats: Stats | None
+
+
+_CFieldContract: TypeAlias = (
+    tuple[_FieldContract, ...]
+    | _StationFieldsOwner
+    | _ConstantSetFieldsOwner
+    | _SourceFieldsOwner
+    | _FileInfoModelFields
+    | _ReleaseInfoModelFields
+    | _UpdateResultModelFields
+    | _NearbyModelFields
+    | _StatsModelFields
+    | _HeightPointModelFields
+    | _ExtremeModelFields
+    | _CurrentPointModelFields
+    | _CurrentEventModelFields
+    | _HeightSeriesModelFields
+    | _ExtremeListModelFields
+    | _CurrentSeriesModelFields
+    | _CurrentEventListModelFields
+    | _DatumInfoModelFields
+    | _DatumLevelModelFields
+    | _RangesModelFields
+    | _ClientModelFields
+    | _ReleaseModelFields
+)
 
 
 _CFoldedHeightValues: TypeAlias = HeightSeries
@@ -3273,7 +3771,7 @@ _CFoldedHeightValues: TypeAlias = HeightSeries
 _CFormatSelection: TypeAlias = _FormatSelection
 
 
-_CHeightValues: TypeAlias = HeightSeries
+_CHeightValues: TypeAlias = tuple[float, ...]
 
 
 _CHeldRelease: TypeAlias = Release
@@ -3357,7 +3855,19 @@ _CLockState: TypeAlias = _LockState
 _CLockedCacheState: TypeAlias = _CacheState
 
 
-_CMemberContract: TypeAlias = _MemberArguments
+@dataclass(frozen=True, slots=True)
+class _AstroMemberContract:
+    arguments: _Arguments26
+    native_table: AstroTable
+
+    @property
+    def member_id(
+        self,
+    ) -> Literal["AstroTable.equilibrium_for_year", "AstroTable.node_factor_for_year"]:
+        return self.arguments.member_id
+
+
+_CMemberContract: TypeAlias = _MemberArguments | _AstroMemberContract
 
 
 _CMergedReceipt: TypeAlias = _MergedReceipt
@@ -3371,7 +3881,140 @@ _CNativeProfile: TypeAlias = Literal[
 ]
 
 
-_CNativeResult: TypeAlias = _MemberValue
+_CNativeResult: TypeAlias = (
+    OpenTideConstants
+    | Release
+    | E.LoadedFrom
+    | OpenTideConstantsError
+    | None
+    | tuple[ReleaseInfo, ...]
+    | ReleaseInfo
+    | ReleaseInfo
+    | None
+    | int
+    | None
+    | UpdateResult
+    | tuple[str, ...]
+    | bool
+    | str
+    | datetime
+    | str
+    | None
+    | Mapping[str, str]
+    | tuple[FileInfo, ...]
+    | tuple[Convention, ...]
+    | Convention
+    | None
+    | tuple[Licence, ...]
+    | Licence
+    | None
+    | Stats
+    | int
+    | Station
+    | None
+    | Station
+    | Tombstone
+    | None
+    | tuple[Station, ...]
+    | Iterator[Station]
+    | tuple[Nearby, ...]
+    | Nearby
+    | None
+    | HeightSeries
+    | ExtremeList
+    | CurrentSeries
+    | CurrentEventList
+    | DatumInfo
+    | tuple[DatumInfo, ...]
+    | Ranges
+    | AstroTable
+    | None
+    | float
+    | E.StationType
+    | E.Kind
+    | None
+    | Mapping[str, tuple[str, ...]]
+    | E.StationStatus
+    | ConstantSet
+    | None
+    | tuple[ConstantSet, ...]
+    | SubordinateOffsets
+    | None
+    | tuple[Validation, ...]
+    | Mapping[str, _JsonValue]
+    | bool
+    | None
+    | tuple[SourceRecord, ...]
+    | E.RemovedReason
+    | E.SourceType
+    | E.Quantity
+    | RecordSpan
+    | None
+    | Datum
+    | None
+    | E.QcStatus
+    | tuple[QcFlag, ...]
+    | tuple[DroppedConstituent, ...]
+    | TimeBase
+    | None
+    | Convention
+    | Licence
+    | Provenance
+    | tuple[Constituent, ...]
+    | Constituent
+    | None
+    | Fallback
+    | None
+    | float
+    | None
+    | E.PhaseReference
+    | E.NodalHandling
+    | Mapping[str, str | int]
+    | None
+    | Mapping[str, _JsonValue]
+    | None
+    | tuple[str, ...]
+    | None
+    | ProvenanceBuild
+    | None
+    | datetime
+    | None
+    | Mapping[str, str]
+    | None
+    | E.TimeBaseCode
+    | tuple[Mapping[str, _JsonValue], ...]
+    | E.QcFlagName
+    | Mapping[str, float | None]
+    | None
+    | E.DroppedReason
+    | E.HeightAdjustedType
+    | E.SourceType
+    | None
+    | E.QcStatus
+    | None
+    | HistoricalOffsetVintage
+    | None
+    | HistoricalOffsetProvenance
+    | None
+    | Mapping[str, float]
+    | None
+    | Mapping[str, int]
+    | tuple[int, int]
+    | E.ExtremeType
+    | E.CurrentEventType
+    | tuple[HeightPoint, ...]
+    | E.PredictionMethod
+    | tuple[Extreme, ...]
+    | tuple[CurrentPoint, ...]
+    | tuple[CurrentEvent, ...]
+    | tuple[E.CurrentEventType, ...]
+    | None
+    | tuple[DatumLevel, ...]
+    | E.FallbackReason
+    | E.SourceRole
+    | E.SourceDisposition
+    | None
+)
 
 
 _COffsetCurrentResult: TypeAlias = CurrentEventList
@@ -3454,7 +4097,7 @@ _COrderedFailures: TypeAlias = tuple[_CanonicalError, ...]
 _COrderedStationResults: TypeAlias = tuple[Station, ...]
 
 
-_COrigin: TypeAlias = _OpaqueOrigin
+_COrigin: TypeAlias = _OpaqueOrigin | _OriginIdentity
 
 
 _COriginalRecommendation: TypeAlias = ConstantSet | None
@@ -3489,7 +4132,7 @@ _CPredictionResult: TypeAlias = (
 )
 
 
-_CPredictionWindow: TypeAlias = _PredictionWindow
+_CPredictionWindow: TypeAlias = _PredictionWindow | _InstantPredictionWindow
 
 
 _CProjectionContract: TypeAlias = _ProjectionContract
@@ -3515,7 +4158,27 @@ _CQueryKind: TypeAlias = Literal[
 _CQueryOptions: TypeAlias = _QueryOptions
 
 
-_CRawFields: TypeAlias = Mapping[str, _JsonValue]
+_CRawFields: TypeAlias = (
+    Mapping[str, _JsonValue]
+    | _FileInfoRawFields
+    | _ReleaseInfoRawFields
+    | _UpdateResultRawFields
+    | _NearbyRawFields
+    | _StatsRawFields
+    | _HeightPointRawFields
+    | _ExtremeRawFields
+    | _CurrentPointRawFields
+    | _CurrentEventRawFields
+    | _HeightSeriesRawFields
+    | _ExtremeListRawFields
+    | _CurrentSeriesRawFields
+    | _CurrentEventListRawFields
+    | _DatumInfoRawFields
+    | _DatumLevelRawFields
+    | _RangesRawFields
+    | _ClientRawFields
+    | _ReleaseRawFields
+)
 
 
 _CRawRecord: TypeAlias = Mapping[str, _JsonValue]

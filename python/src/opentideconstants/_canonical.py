@@ -1,7 +1,116 @@
-"""Private construction seams; all bodies deliberately incomplete."""
+"""Private canonical leaves and incomplete orchestration seams."""
 
 from __future__ import annotations
 from . import _canonical_types as T
+from . import _client, _models, _release, _errors
+from ._cache_json import encode_cache_json
+from ._predict import _engine, _astro, _harmonic, _results
+from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from typing import TypeVar
+from . import _enums
+
+_OptionT = TypeVar("_OptionT")
+
+
+def _specified(value: _OptionT | T._Omitted, default: _OptionT) -> _OptionT:
+    return default if isinstance(value, T._Omitted) else value
+
+
+def _open_options(
+    options: T._Arguments0 | T._EffectiveOptions,
+) -> T._ConstructorOptions:
+    """Native presence projection into the unchanged constructor parameters."""
+    return T._ConstructorOptions(
+        release=_specified(options.release, "latest"),
+        file=_specified(options.file, None),
+        cache_dir=_specified(options.cache_dir, None),
+        offline=_specified(options.offline, False),
+        mode=_specified(options.mode, _enums.Mode.EAGER),
+        base_url=_specified(options.base_url, None),
+        timeout=_specified(options.timeout, None),
+        proxy=_specified(options.proxy, None),
+        ca_file=_specified(options.ca_file, None),
+        user_agent=_specified(options.user_agent, None),
+        on_network_error=_specified(
+            options.on_network_error, _enums.OnNetworkError.USE_CACHE
+        ),
+        auto_update=_specified(options.auto_update, False),
+        update_interval=_specified(options.update_interval, 86400.0),
+        logger=_specified(options.logger, None),
+        verify_on_open=_specified(options.verify_on_open, False),
+        commercial_only=_specified(options.commercial_only, False),
+        commercial_basis=_specified(options.commercial_basis, "strict"),
+        historical_offsets_policy=_specified(
+            options.historical_offsets_policy, "fallback"
+        ),
+    )
+
+
+def _mutable_source(
+    value: T._JsonValue | T._CCacheDocument | T._CRawFields,
+) -> T._JsonValue:
+    """Only the original raw/source/cache JSON domain; no contract/type erasure."""
+    if isinstance(value, Mapping):
+        result: dict[str, T._JsonValue] = {}
+        for key, item in value.items():
+            if item is None or isinstance(
+                item, (str, bool, int, float, tuple, list, Mapping)
+            ):
+                result[key] = _mutable_source(item)
+            else:
+                raise TypeError(f"unsupported source JSON value: {type(item).__name__}")
+        return result
+    if isinstance(value, (tuple, list)):
+        return [_mutable_source(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class _BoundModel(T._PredictionModel):
+    native_sum: _harmonic.Sum
+    native_table: _astro.AstroTable
+    native_context: _engine._Context
+    native_year: int | None = None
+
+
+class _AstronomyBoundSum:
+    """Native evaluation forwarding; numerical formulas stay in the genuine Sum."""
+
+    def __init__(self, source: _harmonic.Sum, model: T._PredictionModel):
+        if not isinstance(model, T._PreparedModel):
+            raise NotImplementedError("Native selected model owner incomplete")
+        self.source = source
+        self.table = source.table
+        self.model = _BoundModel(
+            station=model.station,
+            release_view=model.release_view,
+            constant_set=model.constant_set,
+            convention=model.convention,
+            astro_table=model.astro_table,
+            required_constituents=model.required_constituents,
+            reference_bin=model.reference_bin,
+            mean_term=source.mean,
+            datum_source=model.datum_source,
+            native_sum=source,
+            native_table=model.native_table,
+            native_context=model.native_context,
+        )
+
+    def value(
+        self, seconds: float, year: int | None = None, derivative: bool = False
+    ) -> float:
+        _evaluate_astronomy(
+            selected_prediction_model=replace(self.model, native_year=year),
+            utc_instant=seconds,
+        )
+        return self.source.value(seconds, year, derivative)
+
+    def bound(self, year: int, derivative: bool) -> float:
+        return self.source.bound(year, derivative)
+
+    def error(self, year: int, a: float, b: float, derivative: bool) -> float:
+        return self.source.error(year, a, b, derivative)
 
 
 def _validate_operation_arguments(
@@ -10,7 +119,116 @@ def _validate_operation_arguments(
     arguments: T._CArguments,
     member_contract: T._CMemberContract,
 ) -> T._CValidatedArguments:
-    raise NotImplementedError("B01 construction-only; body incomplete")
+    if isinstance(arguments, T._Arguments0):
+        if member_contract.member_id != arguments.member_id:
+            raise _errors.InvalidArgumentError(
+                "member contract does not match operation"
+            )
+        options = _open_options(arguments)
+        _client._validate_constructor_options(
+            release=options.release,
+            file=options.file,
+            offline=options.offline,
+            mode=options.mode,
+            on_network_error=options.on_network_error,
+            auto_update=options.auto_update,
+            verify_on_open=options.verify_on_open,
+            commercial_only=options.commercial_only,
+            commercial_basis=options.commercial_basis,
+            historical_offsets_policy=options.historical_offsets_policy,
+            timeout=options.timeout,
+            update_interval=options.update_interval,
+        )
+        if options.base_url is not None:
+            _client.check_http_url("base_url", options.base_url)
+        _client._check_user_agent(options.user_agent)
+        if options.proxy is not None:
+            _client.check_http_url("proxy", options.proxy)
+        return arguments
+    if isinstance(arguments, T._Arguments2):
+        _client._validate_download_arguments(
+            release=_specified(arguments.release, "latest"),
+            formats=_specified(arguments.formats, (_enums.Format.JSONL,)),
+            overwrite=_specified(arguments.overwrite, False),
+            to=arguments.to,
+        )
+    elif isinstance(arguments, T._Arguments3):
+        _client._validate_prune_arguments(_specified(arguments.keep, 3))
+    elif isinstance(
+        arguments, (T._Arguments8, T._Arguments9, T._Arguments10, T._Arguments11)
+    ):
+        if isinstance(arguments, T._Arguments9):
+            _release._validate_search_arguments(
+                arguments.name,
+                _specified(arguments.limit, None),
+                _specified(arguments.match, None),
+            )
+        elif isinstance(arguments, T._Arguments10):
+            arguments = replace(
+                arguments,
+                lat=_release._number("lat", arguments.lat, -90, 90),
+                lon=_release._number("lon", arguments.lon, -180, 180),
+                radius_km=_release._number("radius_km", arguments.radius_km, 0),
+            )
+            _release._limit(_specified(arguments.limit, None))
+        elif isinstance(arguments, T._Arguments11):
+            arguments = replace(
+                arguments,
+                lat=_release._number("lat", arguments.lat, -90, 90),
+                lon=_release._number("lon", arguments.lon, -180, 180),
+                max_km=_release._number(
+                    "max_km", _specified(arguments.max_km, None), 0, allow_none=True
+                ),
+            )
+        _release._validate_station_filters(
+            _specified(arguments.country, None),
+            _specified(arguments.type, None),
+            _specified(arguments.kind, None),
+            _specified(arguments.source, None),
+            _specified(arguments.source_type, None),
+            _specified(arguments.include_flagged, False),
+            _specified(arguments.include_fallback, False),
+        )
+    elif isinstance(
+        arguments, (T._Arguments14, T._Arguments16, T._Arguments17, T._Arguments18)
+    ):
+        if isinstance(arguments, (T._Arguments14, T._Arguments17)):
+            _engine._window(
+                arguments.start, arguments.stop, _specified(arguments.step_s, 600)
+            )
+        else:
+            _engine._window(arguments.start, arguments.stop)
+        datum = (
+            _specified(arguments.datum, None)
+            if isinstance(arguments, (T._Arguments14, T._Arguments16))
+            else None
+        )
+        bin_number = (
+            _specified(arguments.bin_number, None)
+            if isinstance(arguments, (T._Arguments17, T._Arguments18))
+            else None
+        )
+        _engine._options(_specified(arguments.set_id, None), datum, bin_number)
+    elif isinstance(arguments, T._Arguments15):
+        for instant in arguments.times:
+            _astro.instant(instant)
+        _engine._options(
+            _specified(arguments.set_id, None), _specified(arguments.datum, None)
+        )
+    elif isinstance(arguments, T._Arguments25):
+        _astro.instant(arguments.at)
+    elif isinstance(arguments, T._Arguments26):
+        if isinstance(member_contract, T._AstroMemberContract):
+            if member_contract.arguments is not arguments:
+                raise NotImplementedError(
+                    "B01 selected AstroTable argument binding incomplete"
+                )
+            member_contract.native_table._row(arguments.name)
+        _astro._validate_year(arguments.year)
+    # Remaining closed records have no additional primitive/value checks on their
+    # genuine reference routes. Model ownership, domain and localization stay with
+    # their separately named operations.
+    return arguments
 
 
 def _resolve_effective_options(
@@ -19,13 +237,45 @@ def _resolve_effective_options(
     environment: T._CEnvironment,
     platform_defaults: T._CPlatformDefaults,
 ) -> T._CEffectiveOptions:
-    raise NotImplementedError("B02 construction-only; body incomplete")
+    options = _open_options(explicit_options)
+    platform = _open_options(platform_defaults)
+    offline, base, cache_dir, interval = _client._resolve_constructor_defaults(
+        offline=options.offline,
+        base_url=options.base_url,
+        cache_dir=options.cache_dir,
+        update_interval=options.update_interval,
+        environment=environment,
+        platform_cache_dir=platform.cache_dir,
+    )
+    return T._EffectiveOptions(
+        release=options.release,
+        file=options.file,
+        cache_dir=cache_dir,
+        offline=offline,
+        mode=options.mode,
+        base_url=base,
+        timeout=options.timeout,
+        proxy=options.proxy,
+        ca_file=options.ca_file,
+        user_agent=options.user_agent,
+        on_network_error=options.on_network_error,
+        auto_update=options.auto_update,
+        update_interval=interval,
+        logger=options.logger,
+        verify_on_open=options.verify_on_open,
+        commercial_only=options.commercial_only,
+        commercial_basis=options.commercial_basis,
+        historical_offsets_policy=options.historical_offsets_policy,
+    )
 
 
 def _select_canonical_error(
     *, operation: T._COperation, ordered_failures: T._COrderedFailures, cause: T._CCause
 ) -> T._CCanonicalError:
-    raise NotImplementedError("B03 construction-only; body incomplete")
+    if not ordered_failures:
+        raise NotImplementedError("B03 has no selected native failure")
+    failure = ordered_failures[0]
+    return failure if failure.cause is cause else replace(failure, cause=cause)
 
 
 def _translate_native_binding(
@@ -34,7 +284,27 @@ def _translate_native_binding(
     canonical_error: T._CCanonicalError,
     native_profile: T._CNativeProfile,
 ) -> T._CNativeResult:
-    raise NotImplementedError("B04 construction-only; body incomplete")
+    if native_profile != "python":
+        raise NotImplementedError("B04 requires the actual Python native binding")
+    if not isinstance(canonical_result, T._Absent):
+        if (
+            isinstance(canonical_error, T._PresentError)
+            and canonical_error.member_id != canonical_result.member_id
+        ):
+            raise _errors.InvalidArgumentError(
+                "result and error select different members"
+            )
+        if isinstance(canonical_result, T._SuccessfulNoValue):
+            return None
+        return canonical_result.value
+    error = (
+        canonical_error.error
+        if isinstance(canonical_error, T._PresentError)
+        else canonical_error
+    )
+    if isinstance(error, T._NativeFailureOwner):
+        raise error.native_error
+    raise NotImplementedError("B04 selected native error owner incomplete")
 
 
 def _decode_release_document(
@@ -59,7 +329,552 @@ def _materialize_typed_model(
     origin: T._COrigin,
     model_type: T._CModelType,
 ) -> T._CTypedModel:
-    raise NotImplementedError("B07 construction-only; body incomplete")
+    if model_type == "FileInfo" and isinstance(field_contract, T._FileInfoModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared FileInfo source binding incomplete")
+        return _models.FileInfo(
+            name=field_contract.raw_fields["name"],
+            url=field_contract.raw_fields["url"],
+            size=field_contract.raw_fields["size"],
+            sha256=field_contract.raw_fields["sha256"],
+        )
+    if model_type == "ReleaseInfo" and isinstance(
+        field_contract, T._ReleaseInfoModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared ReleaseInfo source binding incomplete"
+            )
+        return _models.ReleaseInfo(
+            datestamp=field_contract.raw_fields["datestamp"],
+            format_version=field_contract.raw_fields["format_version"],
+            concept_doi=field_contract.raw_fields["concept_doi"],
+            zenodo_version_doi=field_contract.raw_fields["zenodo_version_doi"],
+            content_sha256=field_contract.raw_fields["content_sha256"],
+            files=field_contract.native_files,
+            _min_reader_version=field_contract.native_min_reader_version,
+        )
+    if model_type == "UpdateResult" and isinstance(
+        field_contract, T._UpdateResultModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared UpdateResult source binding incomplete"
+            )
+        return _models.UpdateResult(
+            updated=field_contract.raw_fields["updated"],
+            from_=field_contract.raw_fields["from_"],
+            to=field_contract.raw_fields["to"],
+        )
+    if model_type == "Nearby" and isinstance(field_contract, T._NearbyModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Nearby source binding incomplete")
+        return _models.Nearby(
+            station=field_contract.native_station,
+            distance_km=field_contract.raw_fields["distance_km"],
+        )
+    if model_type == "Stats" and isinstance(field_contract, T._StatsModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Stats source binding incomplete")
+        return _models.Stats(
+            type=field_contract.raw_fields["type"],
+            kind=field_contract.raw_fields["kind"],
+            country=field_contract.raw_fields["country"],
+            source=field_contract.raw_fields["source"],
+            qc_status=field_contract.raw_fields["qc_status"],
+        )
+    if model_type == "HeightPoint" and isinstance(
+        field_contract, T._HeightPointModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared HeightPoint source binding incomplete"
+            )
+        return _results.HeightPoint(
+            time=field_contract.native_time,
+            height_m=field_contract.raw_fields["height_m"],
+            local_time=field_contract.raw_fields["local_time"],
+            utc_offset_s=field_contract.raw_fields["utc_offset_s"],
+            _local=field_contract.native_local,
+        )
+    if model_type == "Extreme" and isinstance(field_contract, T._ExtremeModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Extreme source binding incomplete")
+        return _results.Extreme(
+            time=field_contract.native_time,
+            type=field_contract.raw_fields["type"],
+            height_m=field_contract.raw_fields["height_m"],
+            local_time=field_contract.raw_fields["local_time"],
+            utc_offset_s=field_contract.raw_fields["utc_offset_s"],
+            _local=field_contract.native_local,
+        )
+    if model_type == "CurrentPoint" and isinstance(
+        field_contract, T._CurrentPointModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared CurrentPoint source binding incomplete"
+            )
+        return _results.CurrentPoint(
+            time=field_contract.native_time,
+            velocity_major_ms=field_contract.raw_fields["velocity_major_ms"],
+            velocity_minor_ms=field_contract.raw_fields["velocity_minor_ms"],
+            speed_ms=field_contract.raw_fields["speed_ms"],
+            direction_deg=field_contract.raw_fields["direction_deg"],
+            local_time=field_contract.raw_fields["local_time"],
+            utc_offset_s=field_contract.raw_fields["utc_offset_s"],
+            _local=field_contract.native_local,
+        )
+    if model_type == "CurrentEvent" and isinstance(
+        field_contract, T._CurrentEventModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared CurrentEvent source binding incomplete"
+            )
+        return _results.CurrentEvent(
+            time=field_contract.native_time,
+            type=field_contract.raw_fields["type"],
+            velocity_ms=field_contract.raw_fields["velocity_ms"],
+            direction_deg=field_contract.raw_fields["direction_deg"],
+            local_time=field_contract.raw_fields["local_time"],
+            utc_offset_s=field_contract.raw_fields["utc_offset_s"],
+            _local=field_contract.native_local,
+        )
+    if model_type == "HeightSeries" and isinstance(
+        field_contract, T._HeightSeriesModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared HeightSeries source binding incomplete"
+            )
+        return _results.HeightSeries(
+            items=field_contract.native_items,
+            station_id=field_contract.raw_fields["station_id"],
+            timezone=field_contract.raw_fields["timezone"],
+            method=field_contract.raw_fields["method"],
+            set_id=field_contract.raw_fields["set_id"],
+            convention_id=field_contract.raw_fields["convention_id"],
+            astro_table_id=field_contract.raw_fields["astro_table_id"],
+            reference_station_id=field_contract.raw_fields["reference_station_id"],
+            reference_bin=field_contract.raw_fields["reference_bin"],
+            datum=field_contract.raw_fields["datum"],
+            datum_name=field_contract.raw_fields["datum_name"],
+            datum_kind=field_contract.raw_fields["datum_kind"],
+            datum_uncertainty_m=field_contract.raw_fields["datum_uncertainty_m"],
+            tz=field_contract.raw_fields["tz"],
+            tz_version=field_contract.raw_fields["tz_version"],
+            release=field_contract.raw_fields["release"],
+            algorithm=field_contract.raw_fields["algorithm"],
+            offset_id=field_contract.raw_fields["offset_id"],
+            offset_source=field_contract.raw_fields["offset_source"],
+            offset_source_version=field_contract.raw_fields["offset_source_version"],
+            historical_offsets=field_contract.raw_fields["historical_offsets"],
+            current_validity=field_contract.raw_fields["current_validity"],
+            current_accuracy=field_contract.raw_fields["current_accuracy"],
+            reference_set_id=field_contract.raw_fields["reference_set_id"],
+            reference_source_version=field_contract.raw_fields[
+                "reference_source_version"
+            ],
+            reference_2020_equivalence=field_contract.raw_fields[
+                "reference_2020_equivalence"
+            ],
+            source_note=field_contract.raw_fields["source_note"],
+        )
+    if model_type == "ExtremeList" and isinstance(
+        field_contract, T._ExtremeListModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared ExtremeList source binding incomplete"
+            )
+        return _results.ExtremeList(
+            items=field_contract.native_items,
+            station_id=field_contract.raw_fields["station_id"],
+            timezone=field_contract.raw_fields["timezone"],
+            method=field_contract.raw_fields["method"],
+            set_id=field_contract.raw_fields["set_id"],
+            convention_id=field_contract.raw_fields["convention_id"],
+            astro_table_id=field_contract.raw_fields["astro_table_id"],
+            reference_station_id=field_contract.raw_fields["reference_station_id"],
+            reference_bin=field_contract.raw_fields["reference_bin"],
+            datum=field_contract.raw_fields["datum"],
+            datum_name=field_contract.raw_fields["datum_name"],
+            datum_kind=field_contract.raw_fields["datum_kind"],
+            datum_uncertainty_m=field_contract.raw_fields["datum_uncertainty_m"],
+            tz=field_contract.raw_fields["tz"],
+            tz_version=field_contract.raw_fields["tz_version"],
+            release=field_contract.raw_fields["release"],
+            algorithm=field_contract.raw_fields["algorithm"],
+            offset_id=field_contract.raw_fields["offset_id"],
+            offset_source=field_contract.raw_fields["offset_source"],
+            offset_source_version=field_contract.raw_fields["offset_source_version"],
+            historical_offsets=field_contract.raw_fields["historical_offsets"],
+            current_validity=field_contract.raw_fields["current_validity"],
+            current_accuracy=field_contract.raw_fields["current_accuracy"],
+            reference_set_id=field_contract.raw_fields["reference_set_id"],
+            reference_source_version=field_contract.raw_fields[
+                "reference_source_version"
+            ],
+            reference_2020_equivalence=field_contract.raw_fields[
+                "reference_2020_equivalence"
+            ],
+            source_note=field_contract.raw_fields["source_note"],
+        )
+    if model_type == "CurrentSeries" and isinstance(
+        field_contract, T._CurrentSeriesModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared CurrentSeries source binding incomplete"
+            )
+        return _results.CurrentSeries(
+            items=field_contract.native_items,
+            station_id=field_contract.raw_fields["station_id"],
+            timezone=field_contract.raw_fields["timezone"],
+            method=field_contract.raw_fields["method"],
+            set_id=field_contract.raw_fields["set_id"],
+            convention_id=field_contract.raw_fields["convention_id"],
+            astro_table_id=field_contract.raw_fields["astro_table_id"],
+            reference_station_id=field_contract.raw_fields["reference_station_id"],
+            reference_bin=field_contract.raw_fields["reference_bin"],
+            datum=field_contract.raw_fields["datum"],
+            datum_name=field_contract.raw_fields["datum_name"],
+            datum_kind=field_contract.raw_fields["datum_kind"],
+            datum_uncertainty_m=field_contract.raw_fields["datum_uncertainty_m"],
+            bin_number=field_contract.raw_fields["bin_number"],
+            tz=field_contract.raw_fields["tz"],
+            tz_version=field_contract.raw_fields["tz_version"],
+            release=field_contract.raw_fields["release"],
+            algorithm=field_contract.raw_fields["algorithm"],
+        )
+    if model_type == "CurrentEventList" and isinstance(
+        field_contract, T._CurrentEventListModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared CurrentEventList source binding incomplete"
+            )
+        return _results.CurrentEventList(
+            items=field_contract.native_items,
+            station_id=field_contract.raw_fields["station_id"],
+            timezone=field_contract.raw_fields["timezone"],
+            method=field_contract.raw_fields["method"],
+            set_id=field_contract.raw_fields["set_id"],
+            convention_id=field_contract.raw_fields["convention_id"],
+            astro_table_id=field_contract.raw_fields["astro_table_id"],
+            reference_station_id=field_contract.raw_fields["reference_station_id"],
+            reference_bin=field_contract.raw_fields["reference_bin"],
+            datum=field_contract.raw_fields["datum"],
+            datum_name=field_contract.raw_fields["datum_name"],
+            datum_kind=field_contract.raw_fields["datum_kind"],
+            datum_uncertainty_m=field_contract.raw_fields["datum_uncertainty_m"],
+            bin_number=field_contract.raw_fields["bin_number"],
+            omitted_event_types=field_contract.raw_fields["omitted_event_types"],
+            tz=field_contract.raw_fields["tz"],
+            tz_version=field_contract.raw_fields["tz_version"],
+            release=field_contract.raw_fields["release"],
+            algorithm=field_contract.raw_fields["algorithm"],
+        )
+    if model_type == "DatumInfo" and isinstance(
+        field_contract, T._DatumInfoModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared DatumInfo source binding incomplete"
+            )
+        return _results.DatumInfo(
+            set_id=field_contract.raw_fields["set_id"],
+            zero=field_contract.raw_fields["zero"],
+            zero_name=field_contract.raw_fields["zero_name"],
+            chart_datum=field_contract.raw_fields["chart_datum"],
+            msl_offset_m=field_contract.raw_fields["msl_offset_m"],
+            levels=field_contract.native_levels,
+        )
+    if model_type == "DatumLevel" and isinstance(
+        field_contract, T._DatumLevelModelFields
+    ):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError(
+                "B07 prepared DatumLevel source binding incomplete"
+            )
+        return _results.DatumLevel(
+            key=field_contract.raw_fields["key"],
+            value_m=field_contract.raw_fields["value_m"],
+            above_chart_m=field_contract.raw_fields["above_chart_m"],
+            kind=field_contract.raw_fields["kind"],
+            method=field_contract.raw_fields["method"],
+            source_name=field_contract.raw_fields["source_name"],
+            epoch=field_contract.raw_fields["epoch"],
+            data_span=field_contract.raw_fields["data_span"],
+            control_station_id=field_contract.raw_fields["control_station_id"],
+            control_set_id=field_contract.raw_fields["control_set_id"],
+            control_source_id=field_contract.raw_fields["control_source_id"],
+            uncertainty_m=field_contract.raw_fields["uncertainty_m"],
+            uncertainty_basis=field_contract.raw_fields["uncertainty_basis"],
+            flags=field_contract.raw_fields["flags"],
+        )
+    if model_type == "Ranges" and isinstance(field_contract, T._RangesModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Ranges source binding incomplete")
+        return _results.Ranges(
+            mn=field_contract.raw_fields["mn"],
+            gt=field_contract.raw_fields["gt"],
+            dhq=field_contract.raw_fields["dhq"],
+            dlq=field_contract.raw_fields["dlq"],
+        )
+    if model_type == "Client" and isinstance(field_contract, T._ClientModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Client source binding incomplete")
+        receiver = _client.OpenTideConstants.__new__(_client.OpenTideConstants)
+        _client._bind_client_fields_1(
+            receiver,
+            log=field_contract.native_log,
+        )
+        _client._bind_client_fields_2(
+            receiver,
+            lock=field_contract.native_lock,
+        )
+        _client._bind_client_fields_3(
+            receiver,
+            release=field_contract.native_release,
+            loaded_from=field_contract.native_loaded_from,
+            last_error=field_contract.native_last_error,
+            newer_format_major=field_contract.raw_fields["_newer_format_major"],
+            closed=field_contract.raw_fields["_closed"],
+        )
+        _client._bind_client_fields_4(
+            receiver,
+            handed_out=field_contract.native_handed_out,
+        )
+        _client._bind_client_fields_5(
+            receiver,
+            historical_offsets_policy=field_contract.raw_fields[
+                "_historical_offsets_policy"
+            ],
+        )
+        _client._bind_client_fields_6(
+            receiver,
+            pinned=field_contract.raw_fields["_pinned"],
+        )
+        _client._bind_client_fields_7(
+            receiver,
+            file=field_contract.native_file,
+        )
+        _client._bind_client_fields_8(
+            receiver,
+            mode=field_contract.raw_fields["_mode"],
+        )
+        _client._bind_client_fields_9(
+            receiver,
+            offline=field_contract.raw_fields["_offline"],
+        )
+        _client._bind_client_fields_10(
+            receiver,
+            base_url=field_contract.raw_fields["_base_url"],
+        )
+        _client._bind_client_fields_11(
+            receiver,
+            cache=field_contract.native_cache,
+        )
+        _client._bind_client_fields_12(
+            receiver,
+            on_network_error=field_contract.raw_fields["_on_network_error"],
+            auto_update=field_contract.raw_fields["_auto_update"],
+        )
+        _client._bind_client_fields_13(
+            receiver,
+            update_interval=field_contract.raw_fields["_update_interval"],
+        )
+        _client._bind_client_fields_14(
+            receiver,
+            verify_on_open=field_contract.raw_fields["_verify_on_open"],
+        )
+        _client._bind_client_fields_15(
+            receiver,
+            commercial_only=field_contract.raw_fields["_commercial_only"],
+            commercial_basis=field_contract.raw_fields["_commercial_basis"],
+        )
+        _client._bind_client_fields_16(
+            receiver,
+            http=field_contract.native_http,
+        )
+        _client._bind_client_fields_17(
+            receiver,
+            last_check=field_contract.native_last_check,
+        )
+        return receiver
+    if model_type == "Release" and isinstance(field_contract, T._ReleaseModelFields):
+        if field_contract.raw_fields is not raw_fields:
+            raise NotImplementedError("B07 prepared Release source binding incomplete")
+        receiver = _release.Release.__new__(_release.Release)
+        _release._bind_release_fields_1(
+            receiver,
+            historical_offsets_policy=field_contract.raw_fields[
+                "_historical_offsets_policy"
+            ],
+            astro_cache=field_contract.native_astro_cache,
+            meta=field_contract.native_meta,
+            index_path=field_contract.native_index_path,
+        )
+        _release._bind_release_fields_2(
+            receiver,
+            opened=field_contract.native_opened,
+        )
+        _release._bind_release_fields_3(
+            receiver,
+            release=field_contract.native_release,
+        )
+        _release._bind_release_fields_4(
+            receiver,
+            files=field_contract.native_files,
+        )
+        _release._bind_release_fields_5(
+            receiver,
+            conventions=field_contract.native_conventions,
+        )
+        _release._bind_release_fields_6(
+            receiver,
+            licences=field_contract.native_licences,
+        )
+        _release._bind_release_fields_7(
+            receiver,
+            conv_by_id=field_contract.native_conv_by_id,
+        )
+        _release._bind_release_fields_8(
+            receiver,
+            lic_by_id=field_contract.native_lic_by_id,
+        )
+        _release._bind_release_fields_9(
+            receiver,
+            commercial_only=field_contract.raw_fields["_commercial_only"],
+            commercial_basis=field_contract.raw_fields["_commercial_basis"],
+        )
+        _release._bind_release_fields_10(
+            receiver,
+            effective=field_contract.native_effective,
+        )
+        _release._bind_release_fields_11(
+            receiver,
+            entries=field_contract.native_entries,
+        )
+        _release._bind_release_fields_12(
+            receiver,
+            by_id=field_contract.native_by_id,
+        )
+        _release._bind_release_fields_13(
+            receiver,
+            tombs=field_contract.native_tombs,
+        )
+        _release._bind_release_fields_14(
+            receiver,
+            alias=field_contract.native_alias,
+            subs=field_contract.native_subs,
+        )
+        _release._bind_release_fields_15(
+            receiver,
+            mode=field_contract.raw_fields["_mode"],
+        )
+        _release._bind_release_fields_16(
+            receiver,
+            station_origin=field_contract.native_station_origin,
+        )
+        _release._bind_release_fields_17(
+            receiver,
+            stations=field_contract.native_stations,
+        )
+        _release._bind_release_fields_18(
+            receiver,
+            tomb_objs=field_contract.native_tomb_objs,
+            fh=field_contract.native_fh,
+        )
+        _release._bind_release_fields_19(
+            receiver,
+            lock=field_contract.native_lock,
+        )
+        _release._bind_release_fields_20(
+            receiver,
+            lru=field_contract.native_lru,
+        )
+        _release._bind_release_fields_21(
+            receiver,
+            jsonl=field_contract.native_jsonl,
+            constituent_names=field_contract.native_constituent_names,
+            stats=field_contract.native_stats,
+            closed=field_contract.raw_fields["_closed"],
+            zenodo_version_doi=field_contract.raw_fields["_zenodo_version_doi"],
+        )
+        return receiver
+    source = _mutable_source(raw_fields)
+    if model_type == "Constituent":
+        return _models.Constituent._parse(source)
+    if model_type == "Convention":
+        return _models.Convention._parse(source)
+    if model_type == "Licence":
+        return _models.Licence._parse(source)
+    if model_type == "Provenance":
+        return _models.Provenance._parse(source)
+    if model_type == "ProvenanceBuild":
+        model = _models.ProvenanceBuild._parse(source)
+        if model is not None:
+            return model
+    if model_type == "TimeBase":
+        model = _models.TimeBase._parse(source)
+        if model is not None:
+            return model
+    if model_type == "QcFlag":
+        return _models.QcFlag._parse(source)
+    if model_type == "DroppedConstituent":
+        return _models.DroppedConstituent._parse(source)
+    if model_type == "Validation":
+        return _models.Validation._parse(source)
+    if model_type == "Tombstone":
+        return _models.Tombstone._parse(source)
+    if model_type == "SubordinateOffsets":
+        return _models.SubordinateOffsets._parse(source)
+    if model_type == "AstroTable":
+        return _astro.AstroTable(source)
+    if model_type == "SourceRecord" and isinstance(
+        field_contract, T._SourceFieldsOwner
+    ):
+        return _models.SourceRecord._parse(source, field_contract.licences)
+    if model_type == "Fallback":
+        model = _models.Fallback._parse(source)
+        if model is not None:
+            return model
+    if model_type == "HistoricalOffsetVintage":
+        return _models.HistoricalOffsetVintage._parse(source)
+    if model_type == "HistoricalOffsetProvenance":
+        return _models.HistoricalOffsetProvenance._parse(source)
+    if model_type == "ConstantSet" and isinstance(
+        field_contract, T._ConstantSetFieldsOwner
+    ):
+        return _models._build_constant_set(
+            source,
+            field_contract.rows,
+            field_contract.recommendation,
+            field_contract.convention,
+            field_contract.licence,
+        )
+    if model_type == "RecordSpan":
+        model = _models._build_record_span(source)
+        if model is not None:
+            return model
+    if model_type == "Datum":
+        model = _models._build_datum(source)
+        if model is not None:
+            return model
+    if model_type != "Station" or not isinstance(field_contract, T._StationFieldsOwner):
+        raise NotImplementedError("B07 selected native model context incomplete")
+    station = _models.build_station(
+        source,
+        field_contract.conventions,
+        field_contract.licences,
+        field_contract.kind,
+        field_contract.recommendation,
+    )
+    object.__setattr__(station, "_origin", origin)
+    return station
 
 
 def _access_raw_record(
@@ -226,7 +1041,12 @@ def _project_station_index(
     source_byte_span: T._CSourceByteSpan,
     projection_contract: T._CProjectionContract,
 ) -> T._CStationIndexEntry:
-    raise NotImplementedError("B24 construction-only; body incomplete")
+    entry = _release._entry(
+        _mutable_source(station_source_row),
+        source_byte_span.offset_bytes,
+        source_byte_span.length_bytes,
+    )
+    return T._StationIndexEntry(**entry)
 
 
 def _authenticate_station_index(
@@ -259,7 +1079,7 @@ def _read_station_lazily(
 
 
 def _encode_cache_json(*, cache_document: T._CCacheDocument) -> T._CCacheBytes:
-    raise NotImplementedError("B28 construction-only; body incomplete")
+    return encode_cache_json(_mutable_source(cache_document))
 
 
 def _lookup_station_identity(
@@ -360,7 +1180,20 @@ def _parse_prediction_window(
     step: T._CStep,
     local_time_profile: T._CLocalTimeProfile,
 ) -> T._CPredictionWindow:
-    raise NotImplementedError("B39 construction-only; body incomplete")
+    if isinstance(time_inputs, T._Arguments15):
+        instants = tuple(float(_astro.instant(t)) for t in time_inputs.times)
+        return T._InstantPredictionWindow(instants)
+    if isinstance(
+        window_inputs, (T._Arguments14, T._Arguments16, T._Arguments17, T._Arguments18)
+    ):
+        if isinstance(step, T._Omitted):
+            start, stop = _engine._window(window_inputs.start, window_inputs.stop)
+            native_step = None
+        else:
+            start, stop = _engine._window(window_inputs.start, window_inputs.stop, step)
+            native_step = step
+        return T._PredictionWindow(float(start), float(stop), native_step, None)
+    raise NotImplementedError("B39 selected native prediction arguments incomplete")
 
 
 def _select_prediction_model(
@@ -378,7 +1211,16 @@ def _evaluate_astronomy(
     selected_prediction_model: T._CSelectedPredictionModel,
     utc_instant: T._CUtcInstant,
 ) -> T._CAstronomicalTerms:
-    raise NotImplementedError("B41 construction-only; body incomplete")
+    if not isinstance(selected_prediction_model, T._PreparedModel):
+        raise NotImplementedError("B41 requires the genuine prepared native receiver")
+    year = (
+        _astro.utc(utc_instant).year
+        if not isinstance(selected_prediction_model, _BoundModel)
+        or selected_prediction_model.native_year is None
+        else selected_prediction_model.native_year
+    )
+    origin, terms = selected_prediction_model.native_sum._year(year)
+    return T._AstronomicalTerms(year, tuple(terms), (utc_instant - origin) / 3600.0)
 
 
 def _evaluate_harmonic_height(
@@ -387,7 +1229,21 @@ def _evaluate_harmonic_height(
     prediction_instants: T._CPredictionInstants,
     requested_datum: T._CRequestedDatum,
 ) -> T._CHeightValues:
-    raise NotImplementedError("B42 construction-only; body incomplete")
+    if not isinstance(selected_prediction_model, T._PreparedModel):
+        raise NotImplementedError("B42 requires the genuine prepared native receiver")
+    context = selected_prediction_model.native_context
+    selected_prediction_model.native_sum.mean = _engine._datum(
+        selected_prediction_model.constant_set.raw.get("datum"),
+        requested_datum,
+        context,
+    )
+    values = []
+    for instant in prediction_instants:
+        _evaluate_astronomy(
+            selected_prediction_model=selected_prediction_model, utc_instant=instant
+        )
+        values.append(selected_prediction_model.native_sum.value(instant))
+    return tuple(values)
 
 
 def _find_tide_events(
@@ -459,7 +1315,9 @@ def _dispatch_auxiliary_result(
 def _retain_raw_source_record(
     *, source_record: T._CSourceRecord, native_profile: T._CNativeProfile
 ) -> T._CRawRecord:
-    raise NotImplementedError("B08.raw construction-only; body incomplete")
+    result = _models.freeze(_mutable_source(source_record))
+    assert isinstance(result, Mapping)
+    return result
 
 
 def _check_station_origin(
@@ -524,7 +1382,24 @@ def _find_unrounded_tide_events(
     selected_prediction_model: T._CSelectedPredictionModel,
     prediction_window: T._CPredictionWindow,
 ) -> T._CUnroundedTideEvents:
-    raise NotImplementedError("B43.roots construction-only; body incomplete")
+    if not isinstance(selected_prediction_model, T._PreparedModel):
+        raise NotImplementedError(
+            "B43.roots requires the genuine prepared native receiver"
+        )
+    if not isinstance(prediction_window, T._PredictionWindow):
+        raise _errors.InvalidArgumentError(
+            "event search requires a start and stop window"
+        )
+    total = _AstronomyBoundSum(
+        selected_prediction_model.native_sum, selected_prediction_model
+    )
+    roots = _harmonic._unrounded_events(
+        total, prediction_window.start, prediction_window.stop
+    )
+    return tuple(
+        T._UnroundedTideEvent(t, kind, value, order)
+        for order, (t, kind, value) in enumerate(roots)
+    )
 
 
 def _find_unrounded_current_events(
@@ -533,7 +1408,29 @@ def _find_unrounded_current_events(
     prediction_window: T._CPredictionWindow,
     current_request: T._CCurrentRequest,
 ) -> T._CUnroundedCurrentEvents:
-    raise NotImplementedError("B44.roots construction-only; body incomplete")
+    if not isinstance(selected_prediction_model, T._PreparedModel):
+        raise NotImplementedError(
+            "B44.roots requires the genuine prepared native receiver"
+        )
+    if not isinstance(prediction_window, T._PredictionWindow):
+        raise _errors.InvalidArgumentError(
+            "event search requires a start and stop window"
+        )
+
+    def source(total: _harmonic.Sum, start: float, stop: float, *, slack: bool = False):
+        receiver = _AstronomyBoundSum(total, selected_prediction_model)
+        return _harmonic._unrounded_events(receiver, start, stop, slack=slack)
+
+    roots = _engine._unrounded_current_events(
+        selected_prediction_model.native_context,
+        prediction_window.start,
+        prediction_window.stop,
+        event_source=source,
+    )
+    return tuple(
+        T._UnroundedCurrentEvent(t, kind, velocity, direction, order)
+        for order, (t, kind, velocity, direction) in enumerate(roots)
+    )
 
 
 def _acquire_checksum_sidecar(

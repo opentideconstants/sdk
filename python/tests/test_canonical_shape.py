@@ -1,11 +1,18 @@
 """Construction proof: candidate native entries, never runtime behavior acceptance."""
 
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, fields, is_dataclass
 import json
 from pathlib import Path
 import sys
 import pytest
+from contextlib import contextmanager
+import datetime as dt
+import math
+from types import MappingProxyType
+from collections.abc import MutableMapping
+from dataclasses import replace
+from types import FrameType
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "src"))
@@ -14,6 +21,8 @@ sys.path.insert(0, str(ROOT / "python" / "src"))
 from opentideconstants import OpenTideConstants  # noqa: E402
 from opentideconstants import _canonical as canonical  # noqa: E402
 from opentideconstants import _canonical_types as types  # noqa: E402
+from opentideconstants import _client, _models, _release, _errors, _enums  # noqa: E402
+from opentideconstants._predict import _engine, _harmonic, _astro  # noqa: E402
 
 
 def test_missing_checksum_seam_constructs_and_refuses():
@@ -645,88 +654,44 @@ def _record_entry(
         evidence.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
-def test_construction_B01(inputs: _Inputs) -> None:
-    try:
+def test_construction_B01(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B01", "_validate_operation_arguments"):
         canonical._validate_operation_arguments(
             operation=inputs.operation,
             arguments=inputs.arguments,
             member_contract=inputs.member_contract,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B01",
-            refusal,
-            {
-                "operation": repr(inputs.operation),
-                "arguments": repr(inputs.arguments),
-                "member_contract": repr(inputs.member_contract),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B02(inputs: _Inputs) -> None:
-    try:
+def test_construction_B02(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B02", "_resolve_effective_options"):
         canonical._resolve_effective_options(
             explicit_options=inputs.explicit_options,
             environment=inputs.environment,
             platform_defaults=inputs.platform_defaults,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B02",
-            refusal,
-            {
-                "explicit_options": repr(inputs.explicit_options),
-                "environment": repr(inputs.environment),
-                "platform_defaults": repr(inputs.platform_defaults),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B03(inputs: _Inputs) -> None:
-    try:
+def test_construction_B03(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B03", "_select_canonical_error"):
         canonical._select_canonical_error(
             operation=inputs.operation,
             ordered_failures=inputs.ordered_failures,
             cause=inputs.cause,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B03",
-            refusal,
-            {
-                "operation": repr(inputs.operation),
-                "ordered_failures": repr(inputs.ordered_failures),
-                "cause": repr(inputs.cause),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B04(inputs: _Inputs) -> None:
-    try:
+def test_construction_B04(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B04", "_translate_native_binding"):
         canonical._translate_native_binding(
             canonical_result=inputs.canonical_result,
             canonical_error=inputs.canonical_error,
             native_profile=inputs.native_profile,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B04",
-            refusal,
-            {
-                "canonical_result": repr(inputs.canonical_result),
-                "canonical_error": repr(inputs.canonical_error),
-                "native_profile": repr(inputs.native_profile),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B05(inputs: _Inputs) -> None:
@@ -768,27 +733,15 @@ def test_construction_B06(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B07(inputs: _Inputs) -> None:
-    try:
+def test_construction_B07(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B07", "_materialize_typed_model"):
         canonical._materialize_typed_model(
             raw_fields=inputs.raw_fields,
             field_contract=inputs.field_contract,
             origin=inputs.origin,
             model_type=inputs.model_type,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B07",
-            refusal,
-            {
-                "raw_fields": repr(inputs.raw_fields),
-                "field_contract": repr(inputs.field_contract),
-                "origin": repr(inputs.origin),
-                "model_type": repr(inputs.model_type),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B08(inputs: _Inputs) -> None:
@@ -1165,25 +1118,14 @@ def test_construction_B23(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B24(inputs: _Inputs) -> None:
-    try:
+def test_construction_B24(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B24", "_project_station_index"):
         canonical._project_station_index(
             station_source_row=inputs.station_source_row,
             source_byte_span=inputs.source_byte_span,
             projection_contract=inputs.projection_contract,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B24",
-            refusal,
-            {
-                "station_source_row": repr(inputs.station_source_row),
-                "source_byte_span": repr(inputs.source_byte_span),
-                "projection_contract": repr(inputs.projection_contract),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B25(inputs: _Inputs) -> None:
@@ -1253,13 +1195,10 @@ def test_construction_B27(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B28(inputs: _Inputs) -> None:
-    try:
+def test_construction_B28(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B28", "_encode_cache_json"):
         canonical._encode_cache_json(cache_document=inputs.cache_document)
-    except NotImplementedError as refusal:
-        _record_entry("B28", refusal, {"cache_document": repr(inputs.cache_document)})
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B29(inputs: _Inputs) -> None:
@@ -1478,27 +1417,15 @@ def test_construction_B38(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B39(inputs: _Inputs) -> None:
-    try:
+def test_construction_B39(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B39", "_parse_prediction_window"):
         canonical._parse_prediction_window(
             time_inputs=inputs.time_inputs,
             window_inputs=inputs.window_inputs,
             step=inputs.step,
             local_time_profile=inputs.local_time_profile,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B39",
-            refusal,
-            {
-                "time_inputs": repr(inputs.time_inputs),
-                "window_inputs": repr(inputs.window_inputs),
-                "step": repr(inputs.step),
-                "local_time_profile": repr(inputs.local_time_profile),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B40(inputs: _Inputs) -> None:
@@ -1524,44 +1451,23 @@ def test_construction_B40(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B41(inputs: _Inputs) -> None:
-    try:
+def test_construction_B41(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B41", "_evaluate_astronomy"):
         canonical._evaluate_astronomy(
             selected_prediction_model=inputs.selected_prediction_model,
             utc_instant=inputs.utc_instant,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B41",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "utc_instant": repr(inputs.utc_instant),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B42(inputs: _Inputs) -> None:
-    try:
+def test_construction_B42(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B42", "_evaluate_harmonic_height"):
         canonical._evaluate_harmonic_height(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_instants=inputs.prediction_instants,
             requested_datum=inputs.requested_datum,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B42",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_instants": repr(inputs.prediction_instants),
-                "requested_datum": repr(inputs.requested_datum),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B43(inputs: _Inputs) -> None:
@@ -1714,22 +1620,12 @@ def test_construction_B48(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B08_raw(inputs: _Inputs) -> None:
-    try:
+def test_construction_B08_raw(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B08.raw", "_retain_raw_source_record"):
         canonical._retain_raw_source_record(
             source_record=inputs.source_record, native_profile=inputs.native_profile
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B08.raw",
-            refusal,
-            {
-                "source_record": repr(inputs.source_record),
-                "native_profile": repr(inputs.native_profile),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B08_origin(inputs: _Inputs) -> None:
@@ -1882,44 +1778,23 @@ def test_construction_B48_local(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B43_roots(inputs: _Inputs) -> None:
-    try:
+def test_construction_B43_roots(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B43.roots", "_find_unrounded_tide_events"):
         canonical._find_unrounded_tide_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B43.roots",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B44_roots(inputs: _Inputs) -> None:
-    try:
+def test_construction_B44_roots(m1_current_inputs: _Inputs) -> None:
+    inputs = m1_current_inputs
+    with _observe_reused_entry("B44.roots", "_find_unrounded_current_events"):
         canonical._find_unrounded_current_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
             current_request=inputs.current_request,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B44.roots",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-                "current_request": repr(inputs.current_request),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B17_sidecar(inputs: _Inputs) -> None:
@@ -1941,22 +1816,12 @@ def test_construction_B17_sidecar(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B08_S1_A1(inputs: _Inputs) -> None:
-    try:
+def test_construction_B08_S1_A1(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B08.S1.A1", "_retain_raw_source_record"):
         canonical._retain_raw_source_record(
             source_record=inputs.source_record, native_profile=inputs.native_profile
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B08.S1.A1",
-            refusal,
-            {
-                "source_record": repr(inputs.source_record),
-                "native_profile": repr(inputs.native_profile),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B08_S1_A2(inputs: _Inputs) -> None:
@@ -1977,46 +1842,24 @@ def test_construction_B08_S1_A2(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B09_S1_A3(inputs: _Inputs) -> None:
-    try:
+def test_construction_B09_S1_A3(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B09.S1.A3", "_validate_operation_arguments"):
         canonical._validate_operation_arguments(
             operation=inputs.operation,
             arguments=inputs.arguments,
             member_contract=inputs.member_contract,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B09.S1.A3",
-            refusal,
-            {
-                "operation": repr(inputs.operation),
-                "arguments": repr(inputs.arguments),
-                "member_contract": repr(inputs.member_contract),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B09_S1_A4(inputs: _Inputs) -> None:
-    try:
+def test_construction_B09_S1_A4(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B09.S1.A4", "_resolve_effective_options"):
         canonical._resolve_effective_options(
             explicit_options=inputs.explicit_options,
             environment=inputs.environment,
             platform_defaults=inputs.platform_defaults,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B09.S1.A4",
-            refusal,
-            {
-                "explicit_options": repr(inputs.explicit_options),
-                "environment": repr(inputs.environment),
-                "platform_defaults": repr(inputs.platform_defaults),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B09_S1_A5(inputs: _Inputs) -> None:
@@ -2314,15 +2157,10 @@ def test_construction_B11_S5_A2(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B11_S5_A4(inputs: _Inputs) -> None:
-    try:
+def test_construction_B11_S5_A4(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B11.S5.A4", "_encode_cache_json"):
         canonical._encode_cache_json(cache_document=inputs.cache_document)
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B11.S5.A4", refusal, {"cache_document": repr(inputs.cache_document)}
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B12_S1_A3(inputs: _Inputs) -> None:
@@ -2582,15 +2420,10 @@ def test_construction_B17_S5_A4(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B18_S4_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B18_S4_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B18.S4.A2", "_encode_cache_json"):
         canonical._encode_cache_json(cache_document=inputs.cache_document)
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B18.S4.A2", refusal, {"cache_document": repr(inputs.cache_document)}
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B19_S3_A2(inputs: _Inputs) -> None:
@@ -2716,36 +2549,20 @@ def test_construction_B23_S1_A7(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B25_S4_A4(inputs: _Inputs) -> None:
-    try:
+def test_construction_B25_S4_A4(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B25.S4.A4", "_project_station_index"):
         canonical._project_station_index(
             station_source_row=inputs.station_source_row,
             source_byte_span=inputs.source_byte_span,
             projection_contract=inputs.projection_contract,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B25.S4.A4",
-            refusal,
-            {
-                "station_source_row": repr(inputs.station_source_row),
-                "source_byte_span": repr(inputs.source_byte_span),
-                "projection_contract": repr(inputs.projection_contract),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B25_S4_A6(inputs: _Inputs) -> None:
-    try:
+def test_construction_B25_S4_A6(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B25.S4.A6", "_encode_cache_json"):
         canonical._encode_cache_json(cache_document=inputs.cache_document)
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B25.S4.A6", refusal, {"cache_document": repr(inputs.cache_document)}
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B27_S1_A1(inputs: _Inputs) -> None:
@@ -2831,27 +2648,15 @@ def test_construction_B29_S4_A4(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B29_S4_A8(inputs: _Inputs) -> None:
-    try:
+def test_construction_B29_S4_A8(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B29.S4.A8", "_materialize_typed_model"):
         canonical._materialize_typed_model(
             raw_fields=inputs.raw_fields,
             field_contract=inputs.field_contract,
             origin=inputs.origin,
             model_type=inputs.model_type,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B29.S4.A8",
-            refusal,
-            {
-                "raw_fields": repr(inputs.raw_fields),
-                "field_contract": repr(inputs.field_contract),
-                "origin": repr(inputs.origin),
-                "model_type": repr(inputs.model_type),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B34_S1_A1(inputs: _Inputs) -> None:
@@ -3156,63 +2961,32 @@ def test_construction_B40_S2_A4(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B42_S1_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B42_S1_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B42.S1.A2", "_evaluate_astronomy"):
         canonical._evaluate_astronomy(
             selected_prediction_model=inputs.selected_prediction_model,
             utc_instant=inputs.utc_instant,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B42.S1.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "utc_instant": repr(inputs.utc_instant),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B43_S1_A1(inputs: _Inputs) -> None:
-    try:
+def test_construction_B43_S1_A1(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B43.S1.A1", "_find_unrounded_tide_events"):
         canonical._find_unrounded_tide_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B43.S1.A1",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B44_S1_A1(inputs: _Inputs) -> None:
-    try:
+def test_construction_B44_S1_A1(m1_current_inputs: _Inputs) -> None:
+    inputs = m1_current_inputs
+    with _observe_reused_entry("B44.S1.A1", "_find_unrounded_current_events"):
         canonical._find_unrounded_current_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
             current_request=inputs.current_request,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B44.S1.A1",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-                "current_request": repr(inputs.current_request),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B45_S2_A3(inputs: _Inputs) -> None:
@@ -3263,23 +3037,13 @@ def test_construction_B45_S3_A2(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B45_S6_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B45_S6_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B45.S6.A2", "_find_unrounded_tide_events"):
         canonical._find_unrounded_tide_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B45.S6.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B45_S7_A3(inputs: _Inputs) -> None:
@@ -3305,25 +3069,14 @@ def test_construction_B45_S7_A3(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B46_S3_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B46_S3_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B46.S3.A2", "_evaluate_harmonic_height"):
         canonical._evaluate_harmonic_height(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_instants=inputs.prediction_instants,
             requested_datum=inputs.requested_datum,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B46.S3.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_instants": repr(inputs.prediction_instants),
-                "requested_datum": repr(inputs.requested_datum),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B47_S2_A2(inputs: _Inputs) -> None:
@@ -3349,25 +3102,14 @@ def test_construction_B47_S2_A2(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B47_S4_A3(inputs: _Inputs) -> None:
-    try:
+def test_construction_B47_S4_A3(m1_current_inputs: _Inputs) -> None:
+    inputs = m1_current_inputs
+    with _observe_reused_entry("B47.S4.A3", "_find_unrounded_current_events"):
         canonical._find_unrounded_current_events(
             selected_prediction_model=inputs.selected_prediction_model,
             prediction_window=inputs.prediction_window,
             current_request=inputs.current_request,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B47.S4.A3",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "prediction_window": repr(inputs.prediction_window),
-                "current_request": repr(inputs.current_request),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B48_S1_A1(inputs: _Inputs) -> None:
@@ -3475,61 +3217,31 @@ def test_construction_B48_aux_S2_A1(inputs: _Inputs) -> None:
         pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B48_aux_S2_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B48_aux_S2_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B48.aux.S2.A2", "_evaluate_astronomy"):
         canonical._evaluate_astronomy(
             selected_prediction_model=inputs.selected_prediction_model,
             utc_instant=inputs.utc_instant,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B48.aux.S2.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "utc_instant": repr(inputs.utc_instant),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B43_roots_S1_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B43_roots_S1_A2(m1_inputs: _Inputs) -> None:
+    inputs = m1_inputs
+    with _observe_reused_entry("B43.roots.S1.A2", "_evaluate_astronomy"):
         canonical._evaluate_astronomy(
             selected_prediction_model=inputs.selected_prediction_model,
             utc_instant=inputs.utc_instant,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B43.roots.S1.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "utc_instant": repr(inputs.utc_instant),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
-def test_construction_B44_roots_S2_A2(inputs: _Inputs) -> None:
-    try:
+def test_construction_B44_roots_S2_A2(m1_current_inputs: _Inputs) -> None:
+    inputs = m1_current_inputs
+    with _observe_reused_entry("B44.roots.S2.A2", "_evaluate_astronomy"):
         canonical._evaluate_astronomy(
             selected_prediction_model=inputs.selected_prediction_model,
             utc_instant=inputs.utc_instant,
         )
-    except NotImplementedError as refusal:
-        _record_entry(
-            "B44.roots.S2.A2",
-            refusal,
-            {
-                "selected_prediction_model": repr(inputs.selected_prediction_model),
-                "utc_instant": repr(inputs.utc_instant),
-            },
-        )
-    else:
-        pytest.fail("Construction stub returned a fabricated result")
 
 
 def test_construction_B17_sidecar_S1_A3(inputs: _Inputs) -> None:
@@ -3568,3 +3280,976 @@ def test_public_route_does_not_import_private_stubs() -> None:
     ) as client:
         assert client.release.datestamp == "20991231"
         assert client.release.require_station("OTC-T-0001").station_id == "OTC-T-0001"
+
+
+# M1 authentic body witnesses. These inputs are bound by the accepted CORPUS.
+@dataclass(frozen=True, slots=True)
+class _NativeModel(types._PredictionModel):
+    native_sum: _harmonic.Sum
+    native_table: _astro.AstroTable
+    native_context: _engine._Context
+
+
+@dataclass(frozen=True, slots=True)
+class _NativeFailure(types._CanonicalError):
+    native_error: _errors.OpenTideConstantsError
+
+
+class _StationContracts(tuple[types._FieldContract, ...]):
+    conventions: Mapping[str, _models.Convention]
+    licences: Mapping[str, _models.Licence]
+    kind: _enums.Kind | None
+    recommendation: str | None
+    rows: tuple[_models.Validation, ...]
+    convention: _models.Convention
+    licence: _models.Licence
+
+    def __new__(cls, release: _release.Release, station: _models.Station):
+        value = super().__new__(
+            cls, (types._FieldContract("Station.station_id", "str", False, True),)
+        )
+        value.conventions = {c.convention_id: c for c in release.conventions}
+        value.licences = {lic.licence_id: lic for lic in release.licences}
+        value.kind = station.kind
+        value.recommendation = (
+            station.recommended_set.set_id if station.recommended_set else None
+        )
+        assert station.recommended_set is not None
+        value.rows = station.validation
+        value.convention = station.recommended_set.convention
+        value.licence = station.recommended_set.licence
+        return value
+
+
+def _open_arguments(*, offline: bool = False) -> types._Arguments0:
+    return types._Arguments0(
+        member_id="Client.open",
+        release="latest",
+        file=str(ROOT / "conformance/fixtures/good/OTC_20991231.2.jsonl"),
+        cache_dir=None,
+        offline=offline,
+        mode=_enums.Mode.EAGER,
+        base_url=_client.DEFAULT_BASE_URL,
+        timeout=None,
+        proxy=None,
+        ca_file=None,
+        user_agent=None,
+        on_network_error=_enums.OnNetworkError.USE_CACHE,
+        auto_update=False,
+        update_interval=86400.0,
+        logger=None,
+        verify_on_open=False,
+        commercial_only=False,
+        commercial_basis="strict",
+        historical_offsets_policy="fallback",
+    )
+
+
+def _source_station(path: Path, station_id: str) -> Mapping[str, types._JsonValue]:
+    document: types._JsonValue = json.loads(path.read_bytes())
+    assert isinstance(document, Mapping)
+    rows = document["stations"]
+    assert isinstance(rows, list)
+    for row in rows:
+        assert isinstance(row, Mapping)
+        if row.get("station_id") == station_id:
+            return row
+    raise AssertionError("Authentic source station absent")
+
+
+def _native_model(
+    release: _release.Release, station_id: str, quantity: str
+) -> _NativeModel:
+    context = _engine._context(
+        release,
+        station_id,
+        quantity,
+        None,
+        datum="mean_level" if quantity == "water_level" else None,
+    )
+    assert isinstance(context.total, _harmonic.Sum)
+    assert isinstance(context.table, _astro.AstroTable)
+    return _NativeModel(
+        station=context.station,
+        release_view=release,
+        constant_set=context.constants,
+        convention=context.constants.convention,
+        astro_table=context.table._raw,
+        required_constituents=tuple(context.constants.raw.get("constituents") or ()),
+        reference_bin=context.reference_bin,
+        mean_term=context.total.mean,
+        datum_source=context.constants.raw.get("datum"),
+        native_sum=context.total,
+        native_table=context.table,
+        native_context=context,
+    )
+
+
+def _actual_argument_failure() -> _NativeFailure:
+    args = _open_arguments(offline=True)
+    try:
+        OpenTideConstants(file=args.file, offline=True)
+    except _errors.InvalidArgumentError as error:
+        cause = error.__cause__
+        assert cause is None or isinstance(cause, Exception)
+        return _NativeFailure("invalid_argument", {"message": str(error)}, cause, error)
+    raise AssertionError("Original native incompatible arguments did not fail")
+
+
+@pytest.fixture(scope="session")
+def m1_inputs(inputs: _Inputs) -> Iterator[_Inputs]:
+    good = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    with (
+        OpenTideConstants(file=good) as client,
+        OpenTideConstants(
+            file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+        ) as prediction,
+    ):
+        station = client.release.require_station("OTC-T-0001")
+        raw = _source_station(good, station.station_id)
+        offset = 0
+        for line in (
+            (ROOT / "conformance/fixtures/good/OTC_20991231.2.jsonl")
+            .read_bytes()
+            .splitlines(keepends=True)
+        ):
+            row = json.loads(line)
+            if row.get("station_id") == station.station_id:
+                break
+            offset += len(line)
+        else:
+            raise AssertionError("Authenticated station line absent")
+        args = _open_arguments()
+        start = dt.datetime(2010, 3, 10, 11, 22, 50, tzinfo=dt.timezone.utc)
+        stop = dt.datetime(2010, 3, 10, 18, 5, 38, tzinfo=dt.timezone.utc)
+        window = types._Arguments16(
+            "Release.extremes", "OTC-P-0001", start, stop, None, None, None
+        )
+        model = _native_model(prediction.release, "OTC-P-0001", "water_level")
+        golden = json.loads(
+            (ROOT / "conformance/canonical/cache-golden.json").read_bytes()
+        )
+        document = next(
+            c["input"]
+            for c in golden["cases"]
+            if "input" in c and isinstance(c["input"], dict)
+        )
+        yield replace(
+            inputs,
+            operation="open",
+            arguments=args,
+            member_contract=args,
+            explicit_options=types._EffectiveOptions(offline=False),
+            environment={"OPENTIDECONSTANTS_OFFLINE": "On"},
+            platform_defaults=types._EffectiveOptions(
+                base_url=_client.DEFAULT_BASE_URL, cache_dir=str(_client.default_root())
+            ),
+            ordered_failures=(_actual_argument_failure(),),
+            canonical_result=types._MemberValue0("Client.open", client),
+            canonical_error=types._Absent(),
+            raw_fields=raw,
+            source_record=raw,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type="Station",
+            station_source_row=row,
+            source_byte_span=types._SourceByteSpan(offset, len(line)),
+            cache_document=document,
+            time_inputs=window,
+            window_inputs=window,
+            step=types._OMITTED,
+            selected_prediction_model=model,
+            prediction_instants=(float(_astro.instant(start)),),
+            requested_datum="mean_level",
+            utc_instant=float(_astro.instant(start)),
+            prediction_window=types._PredictionWindow(
+                float(_astro.instant(start)), float(_astro.instant(stop)), None, None
+            ),
+        )
+
+
+@pytest.fixture(scope="session")
+def m1_current_inputs(m1_inputs: _Inputs) -> Iterator[_Inputs]:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        start = dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc)
+        stop = dt.datetime(2010, 3, 3, tzinfo=dt.timezone.utc)
+        request = types._Arguments18(
+            "Release.current_events", "OTC-P-0016", start, stop, None, None
+        )
+        yield replace(
+            m1_inputs,
+            selected_prediction_model=_native_model(
+                client.release, "OTC-P-0016", "current"
+            ),
+            prediction_window=types._PredictionWindow(
+                float(_astro.instant(start)), float(_astro.instant(stop)), None, None
+            ),
+            current_request=request,
+        )
+
+
+@contextmanager
+def _observe_reused_entry(identifier: str, name: str) -> Iterator[None]:
+    snapshots = []
+    old = sys.getprofile()
+
+    def capture(frame: FrameType, event: str, value):
+        if (
+            event == "return"
+            and frame.f_code.co_name == name
+            and Path(frame.f_code.co_filename).resolve()
+            == Path(canonical.__file__).resolve()
+        ):
+            arguments = {
+                arg: repr(frame.f_locals[arg])
+                for arg in frame.f_code.co_varnames[
+                    : frame.f_code.co_argcount + frame.f_code.co_kwonlyargcount
+                ]
+            }
+            source = Path(frame.f_code.co_filename).resolve()
+            lines = source.read_text().splitlines()
+            first = last = frame.f_code.co_firstlineno - 1
+            while not lines[last].endswith(":"):
+                last += 1
+            snapshots.append(
+                {
+                    "id": identifier,
+                    "native_entry": "opentideconstants._canonical." + name,
+                    "signature": "\n".join(lines[first : last + 1]),
+                    "arguments": arguments,
+                    "result": repr(value),
+                    "logical_result": _observed_logical_result(value),
+                    "result_member_id": (
+                        frame.f_locals["canonical_result"].member_id
+                        if name == "_translate_native_binding"
+                        else None
+                    ),
+                    "module": str(source),
+                    "line": first + 1,
+                    "cached_module": canonical.__cached__,
+                    "classification": "reused_callable",
+                    "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned",
+                }
+            )
+
+    try:
+        sys.setprofile(capture)
+        yield
+    finally:
+        sys.setprofile(old)
+    assert len(snapshots) == 1, "Required genuine candidate leaf return must occur once"
+    with (ROOT / "python/dist/canonical-shape/invocations.jsonl").open(
+        "a", encoding="utf-8"
+    ) as output:
+        output.write(json.dumps(snapshots[0], sort_keys=True) + "\n")
+
+
+def _observed_logical_result(value):
+    """Project actual native return values for the invocation observation."""
+    if isinstance(value, OpenTideConstants):
+        return {"release": value.release.datestamp, "loaded_from": value.loaded_from}
+    if isinstance(value, _models.Station):
+        return _observed_logical_result(value.raw)
+    if isinstance(value, types._PredictionWindow):
+        return {"start": value.start, "stop": value.stop, "step": value.step}
+    if isinstance(value, types._CanonicalError):
+        return {
+            "code": value.code,
+            "structured_fields": _observed_logical_result(value.structured_fields),
+            "cause": None if value.cause is None else repr(value.cause),
+        }
+    if isinstance(value, Mapping):
+        return {key: _observed_logical_result(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, bytes)):
+        return [_observed_logical_result(item) for item in value]
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _observed_logical_result(getattr(value, field.name))
+            for field in fields(value)
+            if not isinstance(getattr(value, field.name), types._Omitted)
+        }
+    if isinstance(value, (Path, dt.datetime)):
+        return str(value)
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise AssertionError(f"Unprojected actual native return {type(value).__name__}")
+
+
+def test_m1_B01_argument_order() -> None:
+    args = _open_arguments(offline=True)
+    with pytest.raises(_errors.InvalidArgumentError, match="file cannot be combined"):
+        canonical._validate_operation_arguments(
+            operation="open", arguments=args, member_contract=args
+        )
+
+
+@pytest.mark.parametrize("record_index", range(28), ids=lambda i: f"Arguments{i}")
+def test_m1_B01_selected_argument_records(record_index: int, tmp_path: Path) -> None:
+    with (
+        OpenTideConstants(
+            file=ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+        ) as client,
+        OpenTideConstants(
+            file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+        ) as predictions,
+    ):
+        release = client.release
+        station = release.require_station("OTC-T-0001")
+        constants = station.recommended_set
+        assert constants is not None
+        table = predictions.release.astro_table()
+        assert table is not None
+        start = dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc)
+        stop = dt.datetime(2010, 3, 2, tzinfo=dt.timezone.utc)
+        omitted = types._OMITTED
+        cases: tuple[tuple[types._COperation, types._CArguments], ...] = (
+            ("open", _open_arguments()),
+            ("close", types._Arguments1("Client.close")),
+            (
+                "download",
+                types._Arguments2(
+                    "Client.download",
+                    release.datestamp,
+                    str(tmp_path / "download"),
+                    (_enums.Format.JSONL,),
+                    False,
+                ),
+            ),
+            ("prune", types._Arguments3("Client.prune", 3)),
+            (
+                "convention",
+                types._Arguments4(
+                    "Release.convention", constants.convention.convention_id
+                ),
+            ),
+            (
+                "licence",
+                types._Arguments5("Release.licence", constants.licence.licence_id),
+            ),
+            ("station", types._Arguments6("Release.station", station.station_id)),
+            (
+                "station_by_alias",
+                types._Arguments7(
+                    "Release.station_by_alias",
+                    _enums.AliasSystem.NOAA,
+                    station.aliases["noaa"][0],
+                ),
+            ),
+            (
+                "stations",
+                types._Arguments8(
+                    "Release.stations", None, None, None, None, None, False, False
+                ),
+            ),
+            (
+                "search",
+                types._Arguments9(
+                    "Release.search",
+                    station.name,
+                    1,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    False,
+                    False,
+                ),
+            ),
+            (
+                "near",
+                types._Arguments10(
+                    "Release.near",
+                    station.lat,
+                    station.lon,
+                    1.0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    False,
+                    False,
+                ),
+            ),
+            (
+                "nearest",
+                types._Arguments11(
+                    "Release.nearest",
+                    station.lat,
+                    station.lon,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    False,
+                    False,
+                ),
+            ),
+            (
+                "reference_station",
+                types._Arguments12("Release.reference_station", station),
+            ),
+            ("attribution", types._Arguments13("Release.attribution", (station,))),
+            (
+                "heights",
+                types._Arguments14(
+                    "Release.heights", "OTC-P-0001", start, stop, 600, None, None, None
+                ),
+            ),
+            (
+                "heights_at",
+                types._Arguments15(
+                    "Release.heights_at", "OTC-P-0001", (start, stop), None, None, None
+                ),
+            ),
+            (
+                "extremes",
+                types._Arguments16(
+                    "Release.extremes", "OTC-P-0001", start, stop, None, None, None
+                ),
+            ),
+            (
+                "currents",
+                types._Arguments17(
+                    "Release.currents", "OTC-P-0016", start, stop, 600, None, None
+                ),
+            ),
+            (
+                "current_events",
+                types._Arguments18(
+                    "Release.current_events", "OTC-P-0016", start, stop, None, None
+                ),
+            ),
+            ("datums", types._Arguments19("Release.datums", "OTC-P-0001", None, False)),
+            ("ranges", types._Arguments20("Release.ranges", "OTC-P-0001", None)),
+            ("astro_table", types._Arguments21("Release.astro_table", omitted)),
+            ("constant_sets", types._Arguments22("Station.constant_sets", False)),
+            (
+                "constant_set",
+                types._Arguments23("Station.constant_set", constants.set_id),
+            ),
+            (
+                "constituent",
+                types._Arguments24(
+                    "ConstantSet.constituent", constants.constituents[0].name
+                ),
+            ),
+            (
+                "equilibrium_argument",
+                types._Arguments25("AstroTable.equilibrium_argument", "M2", start),
+            ),
+            (
+                "equilibrium_for_year",
+                types._Arguments26("AstroTable.equilibrium_for_year", "M2", start.year),
+            ),
+            ("to_local", types._Arguments27("HeightSeries.to_local", "UTC")),
+        )
+        operation, arguments = cases[record_index]
+        contract: types._CMemberContract = arguments
+        if isinstance(arguments, types._Arguments26):
+            contract = types._AstroMemberContract(arguments, table)
+        result = canonical._validate_operation_arguments(
+            operation=operation, arguments=arguments, member_contract=contract
+        )
+        assert result == arguments
+        assert not (tmp_path / "download").exists()
+        assert release.require_station(station.station_id) is station
+
+
+def test_m1_B01_native_constructor_preserves_policy_assignment_order() -> None:
+    class NativeClient(OpenTideConstants):
+        captured: "NativeClient | None" = None
+
+        def __new__(cls, **kwargs):
+            value = super().__new__(cls)
+            cls.captured = value
+            return value
+
+    with pytest.raises(
+        _errors.InvalidArgumentError, match="timeout must be a positive finite number"
+    ):
+        NativeClient(
+            file=ROOT / "conformance/fixtures/good/OTC_20991231.2.json",
+            timeout=-1,
+            historical_offsets_policy="exclude",
+        )
+    assert NativeClient.captured is not None
+    assert NativeClient.captured._historical_offsets_policy == "exclude"
+
+
+def test_m1_B02_offline_override() -> None:
+    result = canonical._resolve_effective_options(
+        explicit_options=types._EffectiveOptions(offline=False),
+        environment={"OPENTIDECONSTANTS_OFFLINE": "On"},
+        platform_defaults=types._EffectiveOptions(
+            base_url=_client.DEFAULT_BASE_URL, cache_dir=str(_client.default_root())
+        ),
+    )
+    assert result.offline is True
+    assert result.base_url == _client.DEFAULT_BASE_URL
+
+
+def test_m1_B02_native_cache_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    platform = str(_client.default_root())
+    selected = tmp_path / "native-cache"
+    monkeypatch.setenv("OPENTIDECONSTANTS_CACHE_DIR", str(selected))
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    ) as client:
+        result = canonical._resolve_effective_options(
+            explicit_options=types._EffectiveOptions(),
+            environment={"OPENTIDECONSTANTS_CACHE_DIR": str(selected)},
+            platform_defaults=types._EffectiveOptions(cache_dir=platform),
+        )
+        assert result.cache_dir == str(client._cache.root) == str(selected)
+
+
+def test_m1_B02_explicit_cache_precedes_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    explicit = tmp_path / "explicit"
+    environment = tmp_path / "environment"
+    platform = str(_client.default_root())
+    monkeypatch.setenv("OPENTIDECONSTANTS_CACHE_DIR", str(environment))
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/good/OTC_20991231.2.json",
+        cache_dir=explicit,
+    ) as client:
+        result = canonical._resolve_effective_options(
+            explicit_options=types._EffectiveOptions(cache_dir=str(explicit)),
+            environment={"OPENTIDECONSTANTS_CACHE_DIR": str(environment)},
+            platform_defaults=types._EffectiveOptions(cache_dir=platform),
+        )
+        assert result.cache_dir == str(client._cache.root) == str(explicit)
+        assert not environment.exists()
+
+
+def test_m1_B03_preserves_native_failure() -> None:
+    failure = _actual_argument_failure()
+    result = canonical._select_canonical_error(
+        operation="open", ordered_failures=(failure,), cause=failure.cause
+    )
+    assert result is failure
+
+
+def test_m1_B04_native_return() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    ) as client:
+        result = canonical._translate_native_binding(
+            canonical_result=types._MemberValue0(member_id="Client.open", value=client),
+            canonical_error=types._Absent(),
+            native_profile="python",
+        )
+        assert result is client
+
+
+def test_m1_B07_station_model() -> None:
+    path = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    source = _source_station(path, "OTC-T-0001")
+    with OpenTideConstants(file=path) as client:
+        station = client.release.require_station("OTC-T-0001")
+        result = canonical._materialize_typed_model(
+            raw_fields=source,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type="Station",
+        )
+        assert isinstance(result, _models.Station)
+        assert result.raw == station.raw and result.aliases == station.aliases
+        assert result._origin is station._origin
+
+
+def _source_fields(
+    source: types._JsonValue, path: tuple[str | int, ...]
+) -> Mapping[str, types._JsonValue]:
+    for component in path:
+        if isinstance(component, str):
+            assert isinstance(source, Mapping)
+            source = source[component]
+        else:
+            assert isinstance(source, (list, tuple))
+            source = source[component]
+    assert isinstance(source, Mapping)
+    return source
+
+
+@pytest.mark.parametrize(
+    ("model_type", "path", "parser"),
+    [
+        (
+            "Constituent",
+            ("constant_sets", 0, "constituents", 0),
+            _models.Constituent._parse,
+        ),
+        ("Provenance", ("constant_sets", 0, "provenance"), _models.Provenance._parse),
+        (
+            "ProvenanceBuild",
+            ("constant_sets", 0, "provenance", "build"),
+            _models.ProvenanceBuild._parse,
+        ),
+        ("TimeBase", ("constant_sets", 1, "time_base"), _models.TimeBase._parse),
+        ("QcFlag", ("constant_sets", 1, "qc_flags", 0), _models.QcFlag._parse),
+        (
+            "DroppedConstituent",
+            ("constant_sets", 1, "dropped_constituents", 0),
+            _models.DroppedConstituent._parse,
+        ),
+        ("Validation", ("validation", 0), _models.Validation._parse),
+    ],
+)
+def test_m1_B07_existing_field_parsers(
+    model_type: types._CModelType,
+    path: tuple[str | int, ...],
+    parser: Callable[[Mapping[str, types._JsonValue]], types._CTypedModel | None],
+) -> None:
+    fixture = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    source = _source_fields(_source_station(fixture, "OTC-T-0001"), path)
+    expected = parser(source)
+    assert expected is not None
+    with OpenTideConstants(file=fixture) as client:
+        station = client.release.require_station("OTC-T-0001")
+        result = canonical._materialize_typed_model(
+            raw_fields=source,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type=model_type,
+        )
+        assert type(result) is type(expected)
+        assert repr(result) == repr(expected)
+        if isinstance(expected, (_models.Constituent, _models.Provenance)):
+            assert isinstance(result, (_models.Constituent, _models.Provenance))
+            assert result.raw == expected.raw
+
+
+@pytest.mark.parametrize(
+    ("model_type", "field", "parser"),
+    [
+        ("Convention", "conventions", _models.Convention._parse),
+        ("Licence", "licences", _models.Licence._parse),
+    ],
+)
+def test_m1_B07_existing_reference_parsers(
+    model_type: types._CModelType,
+    field: str,
+    parser: Callable[[Mapping[str, types._JsonValue]], types._CTypedModel],
+) -> None:
+    fixture = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    document: types._JsonValue = json.loads(fixture.read_bytes())
+    source = _source_fields(document, (field, 0))
+    expected = parser(source)
+    with OpenTideConstants(file=fixture) as client:
+        station = client.release.require_station("OTC-T-0001")
+        result = canonical._materialize_typed_model(
+            raw_fields=source,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type=model_type,
+        )
+        assert isinstance(expected, (_models.Convention, _models.Licence))
+        assert isinstance(result, (_models.Convention, _models.Licence))
+        assert result == expected and result.raw == source
+
+
+@pytest.mark.parametrize("model_type", ["ConstantSet", "RecordSpan", "Datum"])
+def test_m1_B07_existing_row_constructors(model_type: types._CModelType) -> None:
+    fixture = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    raw = _source_station(fixture, "OTC-T-0001")
+    with OpenTideConstants(file=fixture) as client:
+        station = client.release.require_station("OTC-T-0001")
+        constants = station.recommended_set
+        assert constants is not None
+        if model_type == "ConstantSet":
+            source = _source_fields(raw, ("constant_sets", 0))
+            expected = constants
+        elif model_type == "RecordSpan":
+            source = _source_fields(raw, ("constant_sets", 0, "record_span"))
+            expected = constants.record_span
+        else:
+            source = _source_fields(raw, ("constant_sets", 0, "datum"))
+            expected = constants.datum
+        assert expected is not None
+        result = canonical._materialize_typed_model(
+            raw_fields=source,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type=model_type,
+        )
+        assert type(result) is type(expected) and repr(result) == repr(expected)
+        if isinstance(expected, _models.ConstantSet):
+            assert isinstance(result, _models.ConstantSet)
+            assert result.raw == expected.raw
+            assert (
+                result.convention is expected.convention
+                and result.licence is expected.licence
+            )
+            assert tuple(repr(c) for c in result.constituents) == tuple(
+                repr(c) for c in expected.constituents
+            )
+        elif isinstance(expected, _models.Datum):
+            assert isinstance(result, _models.Datum)
+            assert result.named == expected.named
+
+
+@pytest.mark.parametrize(
+    ("model_type", "station_id", "path", "parser"),
+    [
+        ("Tombstone", "OTC-T-0005", (), _models.Tombstone._parse),
+        (
+            "SubordinateOffsets",
+            "OTC-T-0003",
+            ("subordinate_offsets",),
+            _models.SubordinateOffsets._parse,
+        ),
+    ],
+)
+def test_m1_B07_existing_station_annotations(
+    model_type: types._CModelType,
+    station_id: str,
+    path: tuple[str | int, ...],
+    parser: Callable[[Mapping[str, types._JsonValue]], types._CTypedModel],
+) -> None:
+    fixture = ROOT / "conformance/fixtures/good/OTC_20991231.2.json"
+    source = _source_fields(_source_station(fixture, station_id), path)
+    expected = parser(source)
+    with OpenTideConstants(file=fixture) as client:
+        station = client.release.require_station("OTC-T-0001")
+        result = canonical._materialize_typed_model(
+            raw_fields=source,
+            field_contract=_StationContracts(client.release, station),
+            origin=station._origin,
+            model_type=model_type,
+        )
+        assert type(result) is type(expected) and repr(result) == repr(expected)
+        if isinstance(expected, _models.Tombstone):
+            assert isinstance(result, _models.Tombstone)
+            assert result.raw == expected.raw
+
+
+def test_m1_B07_existing_astro_constructor() -> None:
+    fixture = ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    with OpenTideConstants(file=fixture) as client:
+        model = _native_model(client.release, "OTC-P-0001", "water_level")
+        assert isinstance(model.astro_table, Mapping)
+        result = canonical._materialize_typed_model(
+            raw_fields=model.astro_table,
+            field_contract=(),
+            origin=model.station._origin,
+            model_type="AstroTable",
+        )
+        assert isinstance(result, _astro.AstroTable)
+        assert result._raw == model.native_table._raw
+        assert result.valid_range == model.native_table.valid_range
+        assert result.equilibrium_for_year(
+            "M2", 2000
+        ) == model.native_table.equilibrium_for_year("M2", 2000)
+
+
+def test_m1_B08_raw_source() -> None:
+    source = _source_station(
+        ROOT / "conformance/fixtures/good/OTC_20991231.2.json", "OTC-T-0001"
+    )
+    result = canonical._retain_raw_source_record(
+        source_record=source, native_profile="python"
+    )
+    assert result == _models.freeze(source)
+    assert isinstance(result, MappingProxyType)
+    assert not isinstance(result, MutableMapping)
+
+
+def test_m1_B24_original_span() -> None:
+    path = ROOT / "conformance/fixtures/good/OTC_20991231.2.jsonl"
+    offset = 0
+    for line in path.read_bytes().splitlines(keepends=True):
+        row = json.loads(line)
+        if row.get("station_id") == "OTC-T-0001":
+            break
+        offset += len(line)
+    else:
+        raise AssertionError("Actual JSONL row absent")
+    contract = types._ProjectionContract(
+        "existing primitive contracts",
+        "existing models",
+        "source nested values",
+        "existing projection",
+        "source fallback",
+    )
+    result = canonical._project_station_index(
+        station_source_row=row,
+        source_byte_span=types._SourceByteSpan(offset, len(line)),
+        projection_contract=contract,
+    )
+    assert result == _release._entry(row, offset, len(line))
+
+
+def test_m1_B28_existing_golden() -> None:
+    golden = json.loads((ROOT / "conformance/canonical/cache-golden.json").read_bytes())
+    case = next(
+        c for c in golden["cases"] if "input" in c and isinstance(c["input"], dict)
+    )
+    result = canonical._encode_cache_json(cache_document=case["input"])
+    assert result == case["expected"].encode("utf-8")
+
+
+def test_m1_B39_no_event_step() -> None:
+    instant = dt.datetime(2031, 1, 1, tzinfo=dt.timezone.utc)
+    args = types._Arguments16(
+        "Release.extremes", "OTC-P-0001", instant, instant, None, None, None
+    )
+    result = canonical._parse_prediction_window(
+        time_inputs=args,
+        window_inputs=args,
+        step=types._OMITTED,
+        local_time_profile=types._LocalTimeProfile(),
+    )
+    assert isinstance(result, types._PredictionWindow)
+    assert result.start == result.stop == _astro.instant(instant)
+    assert result.step is None and result.instants is None
+
+
+@pytest.mark.parametrize(
+    "times", [(), (dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc),) * 2]
+)
+def test_m1_B39_instants_have_no_window(times: tuple[dt.datetime, ...]) -> None:
+    args = types._Arguments15(
+        "Release.heights_at", "OTC-P-0001", times, None, None, None
+    )
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        native = client.release.heights_at("OTC-P-0001", times)
+        result = canonical._parse_prediction_window(
+            time_inputs=args,
+            window_inputs=args,
+            step=types._OMITTED,
+            local_time_profile=types._LocalTimeProfile(),
+        )
+        assert result.instants == tuple(
+            float(_astro.instant(point.time)) for point in native.items
+        )
+        assert not hasattr(result, "start") and not hasattr(result, "stop")
+
+
+def test_m1_B41_native_year_terms() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        model = _native_model(client.release, "OTC-P-0001", "water_level")
+        at = dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc)
+        result = canonical._evaluate_astronomy(
+            selected_prediction_model=model, utc_instant=float(_astro.instant(at))
+        )
+        assert result.utc_year == 2000 and result.epoch_hours == 0.0
+        assert result.constituent_terms == tuple(model.native_sum._year(2000)[1])
+        assert model.native_table.equilibrium_argument("M2", at) == 120.0
+        assert model.native_table.node_factor("M2", at) == 1.0
+
+
+def test_m1_B42_pinned_height_values(tmp_path: Path) -> None:
+    vectors = json.loads((ROOT / "conformance/vectors/1.0/vectors.json").read_bytes())
+    vector = next(
+        v for v in vectors["vectors"] if v["id"] == "OTC-V-NOAA-1820000/heights"
+    )
+    instants = tuple(
+        float(_astro.instant(dt.datetime.fromisoformat(s.replace("Z", "+00:00"))))
+        for s in vector["args"]["times"]
+    )
+    native_file = tmp_path / "OTC_20261011.json"
+    native_file.write_bytes(
+        (ROOT / "conformance/vectors/1.0/vectors-release.json").read_bytes()
+    )
+    with OpenTideConstants(file=native_file) as client:
+        model = _native_model(
+            client.release, vector["args"]["station_id"], "water_level"
+        )
+        result = canonical._evaluate_harmonic_height(
+            selected_prediction_model=model,
+            prediction_instants=instants,
+            requested_datum=vector["args"].get("datum", "mean_level"),
+        )
+        expected = vector["expect"]["prediction"]["items"]
+        assert len(result) == len(expected)
+        for actual, wanted in zip(result, expected):
+            assert abs(actual - wanted["height_m"]) <= vectors["tolerances"]["height_m"]
+
+
+def _prefilter_native_phase(
+    total: _harmonic.Sum, start: float, stop: float, *, slack: bool = False
+):
+    observed = []
+    old = sys.getprofile()
+
+    def capture(frame: FrameType, event: str, result):
+        if (
+            event == "return"
+            and frame.f_code.co_name in ("events", "_unrounded_events")
+            and "kept" in frame.f_locals
+        ):
+            observed.append(tuple(frame.f_locals["kept"]))
+
+    try:
+        sys.setprofile(capture)
+        _harmonic.events(total, start, stop, slack=slack)
+    finally:
+        sys.setprofile(old)
+    assert len(observed) == 1
+    return observed[0]
+
+
+def test_m1_B43_actual_excluded_boundary_root() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        model = _native_model(client.release, "OTC-P-0001", "water_level")
+        start = float(
+            _astro.instant(dt.datetime(2010, 3, 10, 11, 22, 50, tzinfo=dt.timezone.utc))
+        )
+        stop = float(
+            _astro.instant(dt.datetime(2010, 3, 10, 18, 5, 38, tzinfo=dt.timezone.utc))
+        )
+        expected = _prefilter_native_phase(model.native_sum, start, stop)
+        assert any(not start <= math.floor(root[0] + 0.5) < stop for root in expected)
+        result = canonical._find_unrounded_tide_events(
+            selected_prediction_model=model,
+            prediction_window=types._PredictionWindow(start, stop, None, None),
+        )
+        assert [(r.root_seconds, r.event_type, r.height_m) for r in result] == list(
+            expected
+        )
+
+
+def test_m1_B44_actual_current_phase() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        model = _native_model(client.release, "OTC-P-0016", "current")
+        start = float(_astro.instant(dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc)))
+        stop = float(_astro.instant(dt.datetime(2010, 3, 3, tzinfo=dt.timezone.utc)))
+        # The same native candidate phase now has an exact private entry. Before
+        # extraction the RED witness selected that phase through native tracing.
+        expected = _engine._unrounded_current_events(
+            model.native_context, start, stop, event_source=_prefilter_native_phase
+        )
+        assert any(not start <= math.floor(root[0] + 0.5) < stop for root in expected)
+        at, end = _astro.utc(start), _astro.utc(stop)
+        request = types._Arguments18(
+            "Release.current_events", "OTC-P-0016", at, end, None, None
+        )
+        result = canonical._find_unrounded_current_events(
+            selected_prediction_model=model,
+            prediction_window=types._PredictionWindow(start, stop, None, None),
+            current_request=request,
+        )
+        assert [
+            (r.root_seconds, r.event_type, r.velocity_m_s, r.direction_deg)
+            for r in result
+        ] == expected

@@ -41,6 +41,11 @@ def integer(value):
     return number(value) and value == math.floor(value)
 
 
+def _validate_year(year):
+    if not integer(year):
+        raise InvalidArgumentError('year must be an integer')
+
+
 @dataclass(frozen=True, slots=True)
 class AstroTable:
     _raw: Any = field(repr=False)
@@ -78,8 +83,7 @@ class AstroTable:
         return self._first, self._last
 
     def _index(self, year):
-        if not integer(year):
-            raise InvalidArgumentError('year must be an integer')
+        _validate_year(year)
         if not self._first <= year <= self._last:
             raise TimeOutOfRangeError(f'year {year} is outside the astro table', first_year=self._first, last_year=self._last)
         return int(year) - self._first
