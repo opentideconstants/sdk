@@ -1213,7 +1213,9 @@ class Release:
 def _check_meta(meta, what):
     if not isinstance(meta, dict):
         raise InvalidReleaseError(f"{what}: not a JSON object")
-    rel = meta.get("release") if isinstance(meta.get("release"), dict) else {}
+    rel = meta.get("release")
+    if not isinstance(rel, dict):
+        rel = {}
     check_format(meta.get("format_version"), rel.get("min_reader_version"), rel.get("datestamp"))
     if not isinstance(rel.get("min_reader_version"), str):
         raise InvalidReleaseError(f"{what}: release.min_reader_version is required")
