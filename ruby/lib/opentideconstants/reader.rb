@@ -188,7 +188,8 @@ class OpenTideConstants
             end
             lines = Enumerator.new do |y|
                 if index
-                    index.each { |e| y << [raw_from_index(e, io), e["offset"], e["length"], line_view(e)] }
+                    profile = index_profile(index)
+                    index.each { |e| y << [raw_from_index(e, io, profile: profile), e["offset"], e["length"], line_view(e, profile: profile)] }
                 else
                     pos = 0
                     io.each_line do |line|
@@ -254,16 +255,59 @@ class OpenTideConstants
         # The keys of an index entry that a line read through the index must
         # give as they are (PK-R2-07): the status, the references and the
         # sets. The other keys are used as the index gives them (spec §6.2).
-        def line_view(e, legacy: !e.key?("subordinate_offsets"))
+        def line_view(e, profile: nil, presence: nil)
             sets = e["sets"].is_a?(Array) ? e["sets"] : []
-            view = [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
-                    sets.map do |cs|
-                        fields = SET_KEYS.map { |k| cs[k] } + [cs["constituents"], cs["fallback"], cs["current_bins"]]
-                        fields += [cs["source_record_id"], cs["source_version"], cs["datum"]] unless legacy
-                        fields
-                    end]
-            view << e["subordinate_offsets"] unless legacy
-            view << e["current_offsets"]
+            presence ||= {
+                "subordinate_offsets" => e.key?("subordinate_offsets"),
+                "current_offsets" => e.key?("current_offsets"),
+                "sets" => sets.map { |cs| %w[fallback current_bins source_record_id source_version datum].select { |k| cs.key?(k) } },
+                "base_offsets" => profile && profile["base_offsets"],
+                "base_current" => profile && profile["base_current"],
+                "base_fallback" => profile && profile["base_fallback"],
+                "current_profile" => profile && profile["current_profile"]
+            }
+            values = [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
+                      sets.each_with_index.map do |cs, i|
+                          fields = SET_KEYS.map { |k| cs[k] } + [cs["constituents"]]
+                          fields += Array(presence["sets"][i]).map { |k| cs[k] }
+                          fields << cs["fallback"] unless presence["base_fallback"] || Array(presence["sets"][i]).include?("fallback")
+                          fields
+                      end]
+            values << e["subordinate_offsets"] unless !presence["subordinate_offsets"] && presence["base_offsets"]
+            if presence["current_offsets"] || !presence["base_current"]
+                rows = e.fetch("current_offsets", []) || []
+                keys = CURRENT_BASE + (presence["current_profile"] == "full" ? CURRENT_ADJUSTMENTS : [])
+                values << rows.map { |row| keys.map { |k| row[k] } }
+            end
+            Util.deep_freeze({ "presence" => presence, "values" => values })
+        end
+
+        CURRENT_BASE = %w[bin reference_bin reference_station_id licence_id].freeze
+        CURRENT_ADJUSTMENTS = %w[time_adj_max_flood_min time_adj_max_ebb_min time_adj_slack_before_flood_min time_adj_slack_before_ebb_min flood_amp_ratio ebb_amp_ratio].freeze
+
+        # Presence is document-wide; the informational writer name grants no trust.
+        def index_profile(entries)
+            return nil unless entries.is_a?(Array) && entries.all? { |e| e.is_a?(Hash) && e["sets"].is_a?(Array) && e["sets"].all?(Hash) }
+            sets = entries.flat_map { |e| e["sets"] }
+            private_masks = sets.map { |cs| %w[source_record_id source_version datum].map { |k| cs.key?(k) } }.uniq
+            return nil unless private_masks.empty? || private_masks == [[false, false, false]] || private_masks == [[true, true, true]]
+            bins = sets.map { |cs| cs.key?("current_bins") }.uniq
+            return nil if bins.size > 1
+            own = entries.any? { |e| e.key?("subordinate_offsets") }
+            return nil if own && entries.any? { |e| !e.key?("subordinate_offsets") && (e["reference_station_id"] || e["offsets_licence_id"]) }
+            rows = entries.flat_map { |e| e.key?("current_offsets") && e["current_offsets"].is_a?(Array) ? e["current_offsets"] : [] }
+            return nil unless rows.all?(Hash)
+            profiles = rows.map { |row| CURRENT_ADJUSTMENTS.count { |k| row.key?(k) } }.uniq
+            return nil unless profiles.empty? || profiles == [0] || profiles == [CURRENT_ADJUSTMENTS.size]
+            { "base_offsets" => !own, "base_current" => !own && entries.none? { |e| e.key?("current_offsets") },
+              "base_fallback" => sets.none? { |cs| cs.key?("fallback") }, "current_profile" => profiles == [CURRENT_ADJUSTMENTS.size] ? "full" : "projected" }.freeze
+        end
+
+        def policy_uncached?(view)
+            return false unless view
+            p = view["presence"]
+            !p["subordinate_offsets"] || (!p["current_offsets"] && p["base_current"]) ||
+                p["sets"].any? { |keys| %w[fallback current_bins source_record_id source_version datum].any? { |key| !keys.include?(key) } }
         end
 
         # v as an Integer when it is a JSON integer or a number with an
@@ -273,34 +317,48 @@ class OpenTideConstants
         end
 
         # True when e has every key of an index entry with the right type (spec §6.2).
-        def index_entry_ok?(e, legacy: false)
+        def index_entry_ok?(e, profile: nil)
             return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)
             return false unless e["station_id"].is_a?(String) && e["status"].is_a?(String)
             return false unless ENTRY_STR.all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(String)) }
             return false unless %w[lat lon].all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(Numeric)) }
             return false unless e["aliases"].is_a?(Hash) && e["aliases"].values.all? { |v| v.is_a?(Array) && v.all?(String) }
-            return false unless legacy || (e.key?("subordinate_offsets") && (e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash)))
-            return false unless e["current_offsets"].is_a?(Array) && e["current_offsets"].all?(Hash)
+            return false if e.key?("subordinate_offsets") && !(e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash))
+            if e.key?("current_offsets")
+                return false unless e["current_offsets"].is_a?(Array) && e["current_offsets"].all? do |row|
+                    row.is_a?(Hash) && CURRENT_BASE.all? { |k| row.key?(k) } &&
+                        %w[bin reference_bin].all? { |k| row[k].is_a?(Numeric) && row[k].finite? && row[k] == row[k].to_i && row[k].between?(1, 2**53 - 1) } &&
+                        row["reference_station_id"].is_a?(String) && (row["licence_id"].nil? || row["licence_id"].is_a?(String)) &&
+                        CURRENT_ADJUSTMENTS.all? { |k| !row.key?(k) || row[k].nil? || Release.real?(row[k]) }
+                end
+            end
             return false unless e["sets"].is_a?(Array)
-            e["sets"].all? do |cs|
+            valid = e["sets"].all? do |cs|
                 cs.is_a?(Hash) && SET_KEYS.all? { |k| cs.key?(k) && (cs[k].nil? || cs[k].is_a?(String)) } &&
-                    cs.key?("fallback") && (cs["fallback"].nil? || cs["fallback"].is_a?(Hash)) &&
-                    cs["current_bins"].is_a?(Array) && cs["current_bins"].all? { |b| b.is_a?(Numeric) && b.finite? && b == b.to_i && b.between?(1, 2**53 - 1) } &&
-                    (legacy || %w[source_record_id source_version datum].all? { |k| cs.key?(k) }) &&
+                    (!cs.key?("fallback") || cs["fallback"].nil? || cs["fallback"].is_a?(Hash)) &&
+                    (!cs.key?("current_bins") || (cs["current_bins"].is_a?(Array) && cs["current_bins"].all? { |b| b.is_a?(Numeric) && b.finite? && b == b.to_i && b.between?(1, 2**53 - 1) })) &&
                     cs["constituents"].is_a?(Array) && cs["constituents"].all?(String)
             end
+            return false unless valid
+            e["sets"].each { |cs| Release.check_set!(cs.reject { |k, _| k == "constituents" }, e["station_id"]) }
+            Release.check_historical_offsets!(e["subordinate_offsets"], e["station_id"])
+            Release.check_types!(e["subordinate_offsets"], Release::OFFSET_TYPES, e["station_id"]) if e["subordinate_offsets"]
+            true
+        rescue InvalidReleaseError, TypeError, NoMethodError
+            false
         end
 
         # The station document a load needs, from an index entry. A tombstone's
         # own line is read (the index does not hold removed_in and removed_reason).
-        def raw_from_index(e, io)
+        def raw_from_index(e, io, profile: nil)
             if e["status"] == "removed"
                 io.seek(e["offset"])
                 raw = parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
                 unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]
                     raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} is not #{e['station_id']}"
                 end
-                unless line_view(index_entry(raw, e["offset"], e["length"]), legacy: !e.key?("subordinate_offsets")) == line_view(e)
+                view = line_view(e, profile: profile)
+                unless line_view(index_entry(raw, e["offset"], e["length"]), presence: view["presence"]) == view
                     raise InvalidReleaseError, "index-v1.json: the line at #{e['offset']} does not give the entry of #{e['station_id']}"
                 end
                 return raw

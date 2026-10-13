@@ -568,7 +568,12 @@ class OpenTideConstants
                 bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : ["is not a station line", why].compact.join(": "))
             end
             check_line!(raw, e) if e.view
-            build_station(raw, e.kind, e.eff_id)
+            effective = e.eff_id
+            if @commercial_only && Reader.policy_uncached?(e.view)
+                sets = raw["constant_sets"] || []
+                effective = effective_set(sets.find { |cs| cs["set_id"] == raw["recommended_set_id"] }, sets)&.fetch("set_id")
+            end
+            build_station(raw, e.kind, effective)
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
         end
@@ -596,7 +601,7 @@ class OpenTideConstants
             rescue InvalidReleaseError => err
                 bad_line!(e, "fails a check: #{err.message}")
             end
-            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len), legacy: e.view.length == 7) == e.view
+            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len), presence: e.view["presence"]) == e.view
             bad_line!(e, "does not give the status, references and sets of its entry")
         end
 
@@ -770,9 +775,26 @@ class OpenTideConstants
             commercial_set?(cs) && (!offsets_licence || @licence_by_id[offsets_licence].commercial_use == true)
         end
 
+        # Missing cache policy is resolved from the selected record, not from defaults.
+        # Keep this temporary summary local; the stream entry retains no full fit.
+        def policy_entry(e)
+            return e unless e && Reader.policy_uncached?(e.view)
+            raw = materialize(e).raw
+            summary = Reader.index_entry(raw, e.pos, e.len)
+            candidate = e.dup
+            candidate.sets = summary["sets"].map { |cs| cs.reject { |k, _| k == "constituents" } }
+            candidate.offsets = raw["subordinate_offsets"]
+            candidate.current_offsets = raw["current_offsets"] || []
+            sets = raw["constant_sets"] || []
+            rec = sets.find { |cs| cs["set_id"] == raw["recommended_set_id"] }
+            candidate.eff_id = (@commercial_only ? effective_set(rec, sets) : rec)&.fetch("set_id")
+            candidate.freeze
+        end
+
         def eligible_paths(e, flagged, fallback, historical: true)
+            e = policy_entry(e)
             paths = e.sets.select { |cs| set_eligible?(cs, flagged, fallback) }
-            ref = @by_id[e.reference_id]
+            ref = policy_entry(@by_id[e.reference_id])
             off = e.offsets || {}
             if off["offset_id"]
                 paths << off if historical && historical_discovery?(e)
@@ -781,7 +803,7 @@ class OpenTideConstants
                 paths << cs if set_eligible?(cs, flagged, fallback, e.offsets_licence_id)
             end
             e.current_offsets.each do |co|
-                parent = @by_id[co["reference_station_id"]]
+                parent = policy_entry(@by_id[co["reference_station_id"]])
                 n = co["reference_bin"]
                 own = co["bin"]
                 next unless parent && [n, own].all? { |i| i.is_a?(Numeric) && i == i.to_i && i.between?(1, 2**53 - 1) }
@@ -796,7 +818,7 @@ class OpenTideConstants
             return false if e.sets.any? { |cs| cs["set_id"] == e.eff_id && %w[ok flagged].include?(cs["qc_status"]) }
             return false unless eligible_paths(e, false, false, historical: false).empty?
             off = e.offsets
-            ref = @by_id[off["reference_station_id"]]
+            ref = policy_entry(@by_id[off["reference_station_id"]])
             return false unless ref
             cs = ref.sets.find { |v| offsets_reference_set?(v) }
             binding = off.dig("provenance", "reference_binding")

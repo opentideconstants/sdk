@@ -45,6 +45,128 @@ class StreamIndexTest < Minitest::Test
         File.write(index_path(cache), JSON.generate(idx))
     end
 
+    def test_dense_foreign_and_sparse_nullable_profiles_preserve_index_bytes
+        c = nil
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        built = JSON.parse(File.read(index_path(cache)))
+        [false, true].each do |sparse|
+            idx = Marshal.load(Marshal.dump(built))
+            idx["discovery_index_version"] = 1
+            idx["stations"].each do |row|
+                row["sets"].each do |cs|
+                    %w[source_record_id source_version datum].each { |key| cs.delete(key) }
+                    cs.delete("fallback") if sparse && cs["fallback"].nil?
+                end
+                row.delete("subordinate_offsets") if sparse && row["subordinate_offsets"].nil?
+                row.delete("current_offsets") if sparse && row["current_offsets"].empty?
+            end
+            idx["stations"].find { |row| row["station_id"] == "OTC-T-0011" }["country"] = "ZZ"
+            File.write(index_path(cache), JSON.generate(idx))
+            sha = Digest::SHA256.file(index_path(cache)).hexdigest
+            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+            assert_equal %w[OTC-T-0011], c.stations(country: "ZZ").map(&:station_id)
+            assert_equal "OTC-T-0001", c.station("OTC-T-0001").station_id
+            assert_equal sha, Digest::SHA256.file(index_path(cache)).hexdigest
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
+    def test_present_invalid_marker_and_mixed_private_metadata_rebuild
+        c = nil
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        built = JSON.parse(File.read(index_path(cache)))
+        mutations = [nil, true, "1", 0, 1.5, 2].map { |value| ->(idx) { idx["discovery_index_version"] = value } }
+        mutations << ->(idx) { idx["stations"].first["sets"].first.delete("source_record_id") }
+        mutations << ->(idx) { %w[source_record_id source_version datum].each { |k| idx["stations"].first["sets"].first.delete(k) } }
+        mutations << ->(idx) { idx["stations"].first["sets"].first["fallback"] = false }
+        mutations << ->(idx) { idx["stations"].first["sets"].first["current_bins"] = nil }
+        mutations.each do |mutate|
+            idx = Marshal.load(Marshal.dump(built))
+            mutate.call(idx)
+            File.write(index_path(cache), JSON.generate(idx))
+            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+            assert_equal built, JSON.parse(File.read(index_path(cache)))
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
+    def test_foreign_cached_set_and_constituent_tamper_is_refused_lazily
+        c = nil
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        built = JSON.parse(File.read(index_path(cache)))
+        mutations = [->(cs) { cs["set_id"] = "wrong-set" }, ->(cs) { cs["constituents"].pop }]
+        mutations.each do |mutate|
+            idx = Marshal.load(Marshal.dump(built))
+            idx["stations"].each { |row| row["sets"].each { |cs| %w[source_record_id source_version datum].each { |k| cs.delete(k) } } }
+            row = idx["stations"].first
+            mutate.call(row["sets"].first)
+            row["recommended_set_id"] = row["sets"].first["set_id"]
+            File.write(index_path(cache), JSON.generate(idx))
+            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+            assert File.file?(index_path(cache))
+            assert_raises(OTC::InvalidReleaseError) { c.station("OTC-T-0001") }
+            refute File.exist?(index_path(cache))
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
+    def test_integral_float_index_and_nul_alias_keep_original_bytes
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        idx = JSON.parse(File.read(index_path(cache)))
+        idx["index_version"] = 1.0
+        idx["discovery_index_version"] = 1.0
+        idx["jsonl_size"] = idx["jsonl_size"].to_f
+        idx["stations"].each do |row|
+            %w[offset length].each { |key| row[key] = row[key].to_f }
+        end
+        idx["stations"].first["aliases"]["test"] = ["a\0b"]
+        File.write(index_path(cache), JSON.generate(idx))
+        sha = Digest::SHA256.file(index_path(cache)).hexdigest
+        c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+        assert_equal "OTC-T-0001", c.station_by_alias("test", "a\0b").station_id
+        assert_equal sha, Digest::SHA256.file(index_path(cache)).hexdigest
+    ensure
+        c&.close
+    end
+
+    def test_dense_foreign_policy_reads_only_after_a_matching_query
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        tamper_index(cache) do |rows|
+            rows.each { |row| row["sets"].each { |cs| %w[source_record_id source_version datum].each { |key| cs.delete(key) } } }
+        end
+        c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+        io = c.release.instance_variable_get(:@io)
+        reads = 0
+        original_read = io.method(:read)
+        io.define_singleton_method(:read) do |*args|
+            reads += 1
+            original_read.call(*args)
+        end
+        assert_empty c.stations(country: "not-a-country")
+        assert_equal 0, reads, "an unmatched query read station lines"
+        assert_includes c.stations(country: "USA").map(&:station_id), "OTC-T-0001"
+        assert_operator reads, :>, 0, "selected private policy metadata was not read"
+        assert c.release.instance_variable_get(:@entries).all? { |entry| entry.station.nil? }
+    ensure
+        c&.close
+    end
+
     def test_complete_legacy_index_stays_lazy_and_reads_full_records
         srv = serve
         cache = tmpdir
