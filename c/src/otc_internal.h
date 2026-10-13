@@ -285,6 +285,8 @@ typedef struct otc__entry {
     uint64_t           offset;
     size_t             length;
     uint64_t           view;            /* index_used: the hash of the entry's status, references and sets */
+    unsigned           index_view_fields; /* admitted entry presence plus document-wide profile */
+    bool               index_policy_missing; /* admitted projection needs actual policy metadata */
 } otc__entry;
 
 typedef struct otc__tomb {
@@ -324,6 +326,7 @@ struct otc_release {
     char            created[21];        /* release.created in UTC (spec 4.3); "" when absent or not a time */
     otc_loaded_from loaded_from;
     int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
+    unsigned        index_fields; /* admitted optional-field/profile descriptor; never written */
     bool            commercial_only;   /* the open option (spec 4.2, K-NC DR106) */
     bool            commercial_upstream;
     bool            historical_excluded;

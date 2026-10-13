@@ -89,6 +89,33 @@ static cJSON *same_offsets(cJSON *doc)
     return doc;
 }
 
+static cJSON *no_optional_marker(cJSON *doc)
+{
+    cJSON_DeleteItemFromObjectCaseSensitive(doc, "discovery_index_version");
+    return doc;
+}
+
+static cJSON *invalid_optional_marker(cJSON *doc)
+{
+    replace(doc, "discovery_index_version", cJSON_CreateNull());
+    return doc;
+}
+
+static cJSON *base_projection(cJSON *doc)
+{
+    cJSON *e, *s;
+    no_optional_marker(doc);
+    cJSON_ArrayForEach(e, cJSON_GetObjectItemCaseSensitive(doc, "stations")) {
+        cJSON_DeleteItemFromObjectCaseSensitive(e, "subordinate_offsets");
+        cJSON_DeleteItemFromObjectCaseSensitive(e, "current_offsets");
+        cJSON_ArrayForEach(s, cJSON_GetObjectItemCaseSensitive(e, "sets")) {
+            cJSON_DeleteItemFromObjectCaseSensitive(s, "fallback");
+            cJSON_DeleteItemFromObjectCaseSensitive(s, "current_bins");
+        }
+    }
+    return doc;
+}
+
 static void check_station(const char *id, const char *want_name, int want_index)
 {
     otc_release *rel = NULL;
@@ -112,6 +139,23 @@ int main(void)
     char sums[512], hex_l[65], hex_m[65], *ixp, *mp;
     otc_release *rel = NULL;
     otc_station_t *st = NULL;
+    const char *native = getenv("OTC_INDEX_NATIVE_JSONL");
+    if (native) {
+        cJSON *document;
+        char hex[65], *text;
+        CHECK_STATUS(otc_open_file(native, NULL, &rel), OTC_OK);
+        if (!rel) return test_done("test_index native writer");
+        sha256_or_die(native, hex);
+        document = otc__index_doc(rel, hex, "native C regression");
+        if (!document) die("actual native index writer failed");
+        text = cJSON_PrintUnformatted(document);
+        if (!text) die("actual native index serialization failed");
+        puts(text);
+        cJSON_free(text);
+        cJSON_Delete(document);
+        otc_close(rel);
+        return test_done("test_index native writer");
+    }
     g_dir = test_tmpdir();
     test_write(g_dir, "OTC_20990101.meta.json", TEST_META("20990101"));
     test_write(g_dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "First") "\n" TEST_STATION("OTC-X-2", "Second") "\n");
@@ -125,6 +169,12 @@ int main(void)
 
     /* a fresh index is used */
     write_index(NULL);
+    check_station("OTC-X-1", "First", 1);
+    write_index(no_optional_marker);
+    check_station("OTC-X-1", "First", 1);
+    write_index(invalid_optional_marker);
+    check_station("OTC-X-1", "First", 0);
+    write_index(base_projection);
     check_station("OTC-X-1", "First", 1);
 
     /* swapped ids: invalid_release, never the other station, and the index goes */

@@ -139,7 +139,11 @@ otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length
 
 static const char *path_base(const char *path);
 static const char *line_problem(const otc_release *r, const cJSON *root, char *buf, size_t cap);
-static uint64_t line_view(const cJSON *root);
+static uint64_t line_view(const cJSON *root, unsigned fields);
+enum {
+    IX_OWN = 1u, IX_CURRENT = 2u, IX_FALLBACK = 4u, IX_BINS = 8u,
+    IX_PRIVATE = 16u, IX_CURRENT_FULL = 32u
+};
 
 otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64_t offset, size_t length,
                                   uint64_t view, cJSON **out)
@@ -155,7 +159,11 @@ otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64
         /* PK-R2-07: a line read through the index gets the checks of the full pass, and
          * it gives its entry's status, references and sets */
         why = line_problem(rel, *out, wbuf, sizeof wbuf);
-        if (!why && line_view(*out) == view) return OTC_OK;
+        {
+            const otc__entry *entry = otc__find_entry(rel, id);
+            unsigned fields = entry ? entry->index_view_fields : rel->index_fields;
+            if (!why && line_view(*out, fields) == view) return OTC_OK;
+        }
         snprintf(got, sizeof got, "%s", why ? why : "a line that does not give the status, references and sets of its entry");
     } else {
         snprintf(got, sizeof got, "%s", st != OTC_OK ? "not JSON"
@@ -791,6 +799,14 @@ static otc_status index_parsed(builder *b, const cJSON *root, size_t len, uint64
                 cJSON *copy = val ? (!strcmp(keys[ki], "current_bins") ? bin_numbers(val) : otc__json_dup(val)) : NULL;
                 if (val && (!copy || !cJSON_AddItemToObject(summary, keys[ki], copy))) { cJSON_Delete(copy); cJSON_Delete(summary); return OTC_E_NOMEM; }
             }
+            if (r->index_fields & IX_PRIVATE) {
+                static const char *const private_keys[] = {"source_version", "datum", NULL};
+                for (ki = 0; private_keys[ki]; ki++) {
+                    const cJSON *value = cJSON_GetObjectItemCaseSensitive(s, private_keys[ki]);
+                    cJSON *copy = value ? otc__json_dup(value) : NULL;
+                    if (value && (!copy || !cJSON_AddItemToObject(summary, private_keys[ki], copy))) { cJSON_Delete(copy); cJSON_Delete(summary); return OTC_E_NOMEM; }
+                }
+            }
             if (!cJSON_AddItemToArray(e->sets_json, summary)) { cJSON_Delete(summary); return OTC_E_NOMEM; }
         }
         e->own_offsets = off ? otc__json_dup(off) : NULL;
@@ -958,6 +974,82 @@ static int str_or_null_ok(const cJSON *v) { return v && (cJSON_IsNull(v) || cJSO
 static int num_or_null_ok(const cJSON *v) { return v && (cJSON_IsNull(v) || cJSON_IsNumber(v)); }
 static int whole_ok(const cJSON *v) { return cJSON_IsNumber(v) && v->valuedouble >= 0 && v->valuedouble == floor(v->valuedouble); }
 
+static const char *const CURRENT_ADJUST[] = {
+    "time_adj_max_flood_min", "time_adj_max_ebb_min", "time_adj_slack_before_flood_min",
+    "time_adj_slack_before_ebb_min", "flood_amp_ratio", "ebb_amp_ratio", NULL
+};
+
+/* Recognized extensions are optional, but their presence cannot change profile
+ * halfway through a document. Unknown keys and the informational by stay out. */
+static int index_profile(const cJSON *doc, unsigned *fields)
+{
+    const cJSON *e, *s, *v, *co;
+    int private_mode = -1, current_mode = -1, any_bins = 0, missing_bins = 0;
+    unsigned mask = 0;
+    cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
+        v = jraw(e, "subordinate_offsets");
+        if (v) {
+            if (!cJSON_IsNull(v)) {
+                static const char *const required[] = {"reference_station_id", "time_offset_high_min", "time_offset_low_min", "height_offset_high", "height_offset_low", "height_adjusted_type", NULL};
+                size_t k;
+                mask |= IX_OWN;
+                if (!cJSON_IsObject(v) || wrong_field(v, OFFSET_TYPES)) return 0;
+                for (k = 0; required[k]; k++) if (!jraw(v, required[k])) return 0;
+            }
+        }
+        v = jraw(e, "current_offsets");
+        if (v) {
+            mask |= IX_CURRENT;
+            if (!cJSON_IsArray(v)) return 0;
+            cJSON_ArrayForEach(co, v) {
+                size_t k, count = 0;
+                const cJSON *bin = jraw(co, "bin"), *rb = jraw(co, "reference_bin");
+                if (!cJSON_IsObject(co) || !whole_ok(bin) || bin->valuedouble < 1 || bin->valuedouble > 9007199254740991.0
+                    || !whole_ok(rb) || rb->valuedouble < 1 || rb->valuedouble > 9007199254740991.0
+                    || !cJSON_IsString(jraw(co, "reference_station_id")) || !str_or_null_ok(jraw(co, "licence_id"))) return 0;
+                for (k = 0; CURRENT_ADJUST[k]; k++) {
+                    const cJSON *a = jraw(co, CURRENT_ADJUST[k]);
+                    if (a) { count++; if (!finite_number(a)) return 0; }
+                }
+                if (count && count != 6) return 0;
+                if (current_mode >= 0 && current_mode != (count == 6)) return 0;
+                current_mode = count == 6;
+            }
+        }
+        cJSON_ArrayForEach(s, otc__jget(e, "sets")) {
+            int presence = !!jraw(s, "source_record_id") + !!jraw(s, "source_version") + !!jraw(s, "datum");
+            if (presence != 0 && presence != 3) return 0;
+            if (private_mode >= 0 && private_mode != (presence == 3)) return 0;
+            private_mode = presence == 3;
+            if (presence == 3 && (!str_or_null_ok(jraw(s, "source_record_id")) || !str_or_null_ok(jraw(s, "source_version"))
+                || (!cJSON_IsNull(jraw(s, "datum")) && !cJSON_IsObject(jraw(s, "datum")))
+                || wrong_field(otc__jget(s, "datum"), DATUM_TYPES)
+                || !numbers_only(otc__jget(otc__jget(s, "datum"), "named"), 0))) return 0;
+            v = jraw(s, "fallback");
+            if (v) {
+                mask |= IX_FALLBACK;
+                if (!cJSON_IsNull(v) && (!cJSON_IsObject(v) || wrong_field(v, FALLBACK_TYPES))) return 0;
+            }
+            v = jraw(s, "current_bins");
+            if (v) {
+                const cJSON *b;
+                any_bins = 1;
+                if (!cJSON_IsArray(v)) return 0;
+                cJSON_ArrayForEach(b, v) if (!whole_ok(b) || b->valuedouble < 1 || b->valuedouble > 9007199254740991.0) return 0;
+            } else missing_bins = 1;
+        }
+    }
+    if (any_bins && missing_bins) return 0;
+    if (any_bins) mask |= IX_BINS;
+    if (private_mode == 1) mask |= IX_PRIVATE;
+    if (current_mode == 1) mask |= IX_CURRENT_FULL;
+    if (mask & IX_OWN) cJSON_ArrayForEach(e, otc__jget(doc, "stations")) {
+        if (!jraw(e, "subordinate_offsets") && (otc__jstr(e, "reference_station_id") || otc__jstr(e, "offsets_licence_id"))) return 0;
+    }
+    *fields = mask;
+    return 1;
+}
+
 /* Every key of an index entry, with its type (spec 6.2). */
 static int entry_ok(const cJSON *e, int64_t size)
 {
@@ -1016,9 +1108,9 @@ static cJSON *line_from_entry(const cJSON *e)
         const cJSON *n;
         size_t k;
 for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k], &ok);
-{ static const char *const more[] = {"fallback", NULL};
-  for (k = 0; more[k]; k++) dup_if_set(s, cs, more[k], more[k], &ok); }
-        { const cJSON *b; cJSON *bins = cJSON_CreateArray();
+{ static const char *const more[] = {"fallback", "source_record_id", "source_version", "datum", NULL};
+  for (k = 0; more[k]; k++) { const cJSON *value = jraw(cs, more[k]); if (value) put(s, more[k], otc__json_dup(value), &ok); } }
+        if (jraw(cs, "current_bins")) { const cJSON *b; cJSON *bins = cJSON_CreateArray();
           cJSON_ArrayForEach(b, otc__jget(cs, "current_bins")) { cJSON *bin = cJSON_CreateObject(); put(bin, "bin", otc__json_dup(b), &ok); put(bins, NULL, bin, &ok); }
           put(s, "current_bins", bins, &ok); }
 
@@ -1033,7 +1125,7 @@ for (k = 0; SET_KEYS[k]; k++) dup_if_set(s, cs, SET_KEYS[k], SET_KEYS[k], &ok);
     dup_if_set(o, e, "current_offsets", "current_offsets", &ok);
     dup_if_set(o, e, "subordinate_offsets", "subordinate_offsets", &ok);
     put(o, "constant_sets", sets, &ok);
-    if (!otc__jget(e, "subordinate_offsets") && (otc__jstr(e, "reference_station_id") || otc__jstr(e, "offsets_licence_id"))) {
+    if (!jraw(e, "subordinate_offsets") && (otc__jstr(e, "reference_station_id") || otc__jstr(e, "offsets_licence_id"))) {
         cJSON *off = cJSON_CreateObject();
         dup_if_set(off, e, "reference_station_id", "reference_station_id", &ok);
         dup_if_set(off, e, "offsets_licence_id", "licence_id", &ok);
@@ -1081,7 +1173,7 @@ static uint64_t json_view(const cJSON *value)
  * (PK-R2-07): station_id, status, recommended_set_id, the two references and
  * every set's keys and constituent names. from_line: root is a .jsonl line;
  * else an index-v1.json entry. */
-static uint64_t view_of(const cJSON *root, int from_line)
+static uint64_t view_of(const cJSON *root, int from_line, unsigned fields)
 {
     uint64_t h = 1469598103934665603ull;
     const cJSON *off = from_line ? otc__jget(root, "subordinate_offsets") : root, *cs, *c;
@@ -1102,22 +1194,34 @@ static uint64_t view_of(const cJSON *root, int from_line)
     }
     {
     const cJSON *curr = otc__jget(root, "current_offsets");
-    cJSON *summary = current_summaries(curr);
-    h ^= json_view(otc__jget(root, "subordinate_offsets"));
-    h ^= json_view(summary);
-    cJSON_Delete(summary);
+    if (fields & IX_OWN) h ^= json_view(otc__jget(root, "subordinate_offsets"));
+    if (fields & (IX_OWN | IX_CURRENT | IX_FALLBACK | IX_BINS)) {
+        cJSON *summary = current_summaries(curr);
+        const cJSON *row;
+        h ^= json_view(summary);
+        cJSON_Delete(summary);
+        if (fields & IX_CURRENT_FULL) cJSON_ArrayForEach(row, curr) {
+            for (k = 0; CURRENT_ADJUST[k]; k++) h = (h ^ json_view(jraw(row, CURRENT_ADJUST[k]))) * 1099511628211ull;
+        }
+    }
     cJSON_ArrayForEach(cs, otc__jget(root, from_line ? "constant_sets" : "sets")) {
-        cJSON *bins = bin_numbers(otc__jget(cs, "current_bins"));
-        h = (h ^ json_view(otc__jget(cs, "fallback"))) * 1099511628211ull;
-        h = (h ^ json_view(bins)) * 1099511628211ull;
-        cJSON_Delete(bins);
+        if (fields & IX_FALLBACK) h = (h ^ json_view(otc__jget(cs, "fallback"))) * 1099511628211ull;
+        if (fields & IX_BINS) {
+            cJSON *bins = bin_numbers(otc__jget(cs, "current_bins"));
+            h = (h ^ json_view(bins)) * 1099511628211ull;
+            cJSON_Delete(bins);
+        }
+        if (fields & IX_PRIVATE) {
+            static const char *const keys[] = {"source_record_id", "source_version", "datum", NULL};
+            for (k = 0; keys[k]; k++) h = (h ^ json_view(jraw(cs, keys[k]))) * 1099511628211ull;
+        }
     }
 }
     return h;
 }
 
 static uint64_t line_view
-(const cJSON *root) { return view_of(root, 1); }
+(const cJSON *root, unsigned fields) { return view_of(root, 1, fields); }
 
 /* Indexes the release from index-v1.json in dir when it is fresh (spec 6.2).
  * OTC_E_NOT_FOUND: no fresh index (nothing was added). Another status: the
@@ -1137,8 +1241,8 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
     if (otc__path_size(path) < 0 || otc__read_all(path, &text, &len) != OTC_OK) goto done;
     /* strings with a NUL keep their full length (CR2 DR33) */
     if (otc__json_parse_st(text, len, &doc) == OTC_E_NOMEM) { st = OTC_E_NOMEM; goto done; }
-    v = otc__jget(doc, "discovery_index_version");
-    if (!cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
+    v = jraw(doc, "discovery_index_version");
+    if (v && (!cJSON_IsNumber(v) || v->valuedouble != 1.0)) goto done;
     v = otc__jget(doc, "index_version");
     if (!cJSON_IsObject(doc) || !cJSON_IsNumber(v) || v->valuedouble != 1.0) goto done;
     if (otc__strcmp_null(otc__jstr(doc, "datestamp"), ds) || otc__strcmp_null(otc__jstr(doc, "jsonl"), jsonl_name)
@@ -1146,6 +1250,7 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
         goto done;
     v = otc__jget(doc, "jsonl_size");
     if (!cJSON_IsNumber(v) || v->valuedouble != (double)size || !cJSON_IsArray(otc__jget(doc, "stations"))) goto done;
+    if (!index_profile(doc, &b->rel->index_fields)) goto done;
     {
         /* each offset is at least the previous offset + the previous length + 1 (the
          * line end), so that no two entries overlap (spec 6.2, CR2 DR9) */
@@ -1165,10 +1270,18 @@ static otc_status index_from_file(builder *b, const char *dir, const char *jsonl
                           (uint64_t)otc__jget(e, "offset")->valuedouble);
         cJSON_Delete(line);
         if (st != OTC_OK) break;
-        if (b->rel->n_st > n_st) b->rel->st[n_st].view = view_of(e, 0);
-        if (b->rel->n_tomb > n_tomb) b->rel->tomb[n_tomb].view = view_of(e, 0);
+        if (b->rel->n_st > n_st) {
+            otc__entry *added = &b->rel->st[n_st];
+            const cJSON *s;
+            added->index_view_fields = b->rel->index_fields | (jraw(e, "subordinate_offsets") ? IX_OWN : 0u);
+            added->view = view_of(e, 0, added->index_view_fields);
+            added->index_policy_missing = !jraw(e, "subordinate_offsets") || !jraw(e, "current_offsets");
+            cJSON_ArrayForEach(s, otc__jget(e, "sets")) if (!jraw(s, "fallback") || !jraw(s, "current_bins")) added->index_policy_missing = true;
+        }
+        if (b->rel->n_tomb > n_tomb) b->rel->tomb[n_tomb].view = view_of(e, 0, b->rel->index_fields);
     }
 done:
+    if (st == OTC_E_NOT_FOUND) b->rel->index_fields = 0;
     cJSON_Delete(doc);
     free(text);
     free(path);

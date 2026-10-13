@@ -40,6 +40,23 @@ static int usable(const cJSON *s)
     const char *qc = otc__jstr(s, "qc_status");
     return qc && (!strcmp(qc, "ok") || !strcmp(qc, "flagged"));
 }
+
+/* A base/sparse index does not supply policy facts. Borrow actual metadata for
+ * this decision only; discovery summaries and the release remain immutable. */
+static otc_status policy_entry(const otc_release *rel, const otc__entry *e, otc__entry *view, cJSON **record)
+{
+    otc_status st;
+    *record = NULL;
+    *view = *e;
+    if (!rel->index_used || !e->index_policy_missing) return OTC_OK;
+    st = otc__read_station_line(rel, e->id, e->offset, e->length, e->view, record);
+    if (st != OTC_OK) return st;
+    view->sets_json = (cJSON *)otc__jget(*record, "constant_sets");
+    view->own_offsets = (cJSON *)otc__jget(*record, "subordinate_offsets");
+    view->current_offsets = (cJSON *)otc__jget(*record, "current_offsets");
+    view->has_offsets = cJSON_IsObject(view->own_offsets);
+    return OTC_OK;
+}
 static const cJSON *first_reference(const otc__entry *ref, const char *quantity, int64_t bin)
 {
     const cJSON *s;
@@ -62,16 +79,35 @@ static int ordinary_paths(const otc_release *rel, const otc_filter *f, const otc
     const otc__entry *ref;
     cJSON_ArrayForEach(s, e->sets_json) if (eligible(rel, s, f, NULL) && source_matches(s, f)) return 1;
     if (!otc__jstr(e->own_offsets, "offset_id") && e->has_offsets) {
+        otc__entry view;
+        cJSON *record = NULL;
+        otc_status st;
+        int matched;
         ref = otc__find_entry(rel, e->ref_id);
-        s = first_reference(ref, "water_level", 0);
-        if (s && eligible(rel, s, f, e->off_licence) && source_matches(s, f)) return 1;
+        if (ref) {
+            st = policy_entry(rel, ref, &view, &record);
+            if (st != OTC_OK) return -(int)st;
+            s = first_reference(&view, "water_level", 0);
+            matched = s && eligible(rel, s, f, e->off_licence) && source_matches(s, f);
+            cJSON_Delete(record);
+            if (matched) return 1;
+        }
     }
     cJSON_ArrayForEach(co, e->current_offsets) {
         int64_t bin = otc__jint(co, "bin"), rb = otc__jint(co, "reference_bin");
         if (bin < 1 || rb < 1 || bin > INT64_C(9007199254740991) || rb > INT64_C(9007199254740991)) continue;
         ref = otc__find_entry(rel, otc__jstr(co, "reference_station_id"));
-        s = first_reference(ref, "current", rb);
-        if (s && eligible(rel, s, f, otc__jstr(co, "licence_id")) && source_matches(s, f)) return 1;
+        if (ref) {
+            otc__entry view;
+            cJSON *record = NULL;
+            otc_status st = policy_entry(rel, ref, &view, &record);
+            int matched;
+            if (st != OTC_OK) return -(int)st;
+            s = first_reference(&view, "current", rb);
+            matched = s && eligible(rel, s, f, otc__jstr(co, "licence_id")) && source_matches(s, f);
+            cJSON_Delete(record);
+            if (matched) return 1;
+        }
     }
     return 0;
 }
@@ -106,7 +142,15 @@ static int historical_table_ok(const otc_release *rel, const cJSON *conv, const 
 }
 
 int otc__ordinary_path(const otc_release *rel, const otc__entry *e)
-{ return e && ordinary_paths(rel, NULL, e); }
+{
+    otc__entry view;
+    cJSON *record = NULL;
+    int result;
+    if (!e || policy_entry(rel, e, &view, &record) != OTC_OK) return 0;
+    result = ordinary_paths(rel, NULL, &view);
+    cJSON_Delete(record);
+    return result > 0;
+}
 
 static int historical_path(const otc_release *rel, const otc__entry *e)
 {
@@ -115,16 +159,28 @@ static int historical_path(const otc_release *rel, const otc__entry *e)
     otc_station_t *st = NULL;
     const otc_set *set;
     const char *sid;
-    int ok;
+    int ok, ordinary;
+    otc__entry reference;
+    cJSON *record = NULL;
+    otc_status status;
     if (!otc__jstr(off, "offset_id") || rel->historical_excluded) return 0;
-    if ((rel->commercial_only ? e->eff_pos >= 0 : e->has_rec) || ordinary_paths(rel, NULL, e)) return 0;
+    if (rel->commercial_only ? e->eff_pos >= 0 : e->has_rec) return 0;
+    ordinary = ordinary_paths(rel, NULL, e);
+    if (ordinary) return ordinary < 0 ? ordinary : 0;
     ref = otc__find_entry(rel, otc__jstr(off, "reference_station_id"));
-    s = first_reference(ref, "water_level", 0);
-    if (!s || !otc__jstr_is(otc__jstr_item(s, "qc_status"), "ok") || otc__jget(s, "fallback")) return 0;
-    if (rel->commercial_only && (!commercial(rel, otc__jstr(off, "licence_id")) || !commercial(rel, otc__jstr(s, "licence_id")))) return 0;
+    if (!ref) return 0;
+    status = policy_entry(rel, ref, &reference, &record);
+    if (status != OTC_OK) return -(int)status;
+    s = first_reference(&reference, "water_level", 0);
+    if (!s || !otc__jstr_is(otc__jstr_item(s, "qc_status"), "ok") || otc__jget(s, "fallback")) { cJSON_Delete(record); return 0; }
+    if (rel->commercial_only && (!commercial(rel, otc__jstr(off, "licence_id")) || !commercial(rel, otc__jstr(s, "licence_id")))) { cJSON_Delete(record); return 0; }
     sid = otc__jstr(s, "set_id");
-    if (!sid || otc_station(rel, ref->id, &st) != OTC_OK) return 0;
-    if (otc_station_set(st, sid, &set) != OTC_OK) { otc_station_free(st); return 0; }
+    if (!sid) { cJSON_Delete(record); return 0; }
+    status = otc_station(rel, ref->id, &st);
+    if (status != OTC_OK) { cJSON_Delete(record); return -(int)status; }
+    status = otc_station_set(st, sid, &set);
+    cJSON_Delete(record);
+    if (status != OTC_OK) { otc_station_free(st); return -(int)status; }
     s = set->json;
     datum = otc__jget(s, "datum"); conv = set->conv ? set->conv->json : NULL;
     ok = otc__jstr_is(otc__jstr_item(s, "source_record_id"), otc__jstr(otc__jget(otc__jget(off, "provenance"), "reference_binding"), "noaa_id"))
@@ -141,10 +197,22 @@ static int historical_path(const otc_release *rel, const otc__entry *e)
 
 int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e)
 {
+    otc__entry view;
+    cJSON *record = NULL;
+    otc_status status;
+    int result;
     if (f && f->country && otc__strcmp_null(e->country, f->country)) return 0;
     if (f && f->type && !typed_is(otc_station_type_name(e->type), f->type)) return 0;
     if (f && f->kind && !typed_is(otc_kind_name(e->kind), f->kind)) return 0;
-    return ordinary_paths(rel, f, e) || (historical_path(rel, e) && source_matches(e->own_offsets, f));
+    status = policy_entry(rel, e, &view, &record);
+    if (status != OTC_OK) return -(int)status;
+    result = ordinary_paths(rel, f, &view);
+    if (!result) {
+        result = historical_path(rel, &view);
+        if (result > 0) result = source_matches(view.own_offsets, f);
+    }
+    cJSON_Delete(record);
+    return result;
 }
 
 static int filter_ok(const otc_filter *f)
@@ -250,7 +318,9 @@ otc_status otc_stations(const otc_release *rel, const otc_filter *filter, const 
     if (!rel || !count || (!ids && cap) || !filter_ok(filter))
         return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_stations: bad argument");
     for (i = 0; i < rel->n_st; i++) {
-        if (!otc__filter_match(rel, filter, &rel->st[i])) continue;
+        int match = otc__filter_match(rel, filter, &rel->st[i]);
+        if (match < 0) { *count = 0; return (otc_status)-match; }
+        if (!match) continue;
         if (ids && n < cap) ids[n] = rel->st[i].id;
         n++;
     }
@@ -300,7 +370,9 @@ otc_status otc_iter_next(otc_iter *it, otc_station_t **out)
     if (!it || !out) return OTC_E_INVALID_ARGUMENT;
     while (it->pos < it->rel->n_st) {
         const otc__entry *e = &it->rel->st[it->pos++];
-        if (otc__filter_match(it->rel, &it->filter, e)) return load_entry(it->rel, e, out);
+        int match = otc__filter_match(it->rel, &it->filter, e);
+        if (match < 0) return (otc_status)-match;
+        if (match) return load_entry(it->rel, e, out);
     }
     return OTC_E_NOT_FOUND;
 }
@@ -377,8 +449,9 @@ otc_status otc_search(const otc_release *rel, const char *name, const otc_filter
     r = (ranked *)malloc((rel->n_st ? rel->n_st : 1) * sizeof *r);
     if (!r) { free(q); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
     for (i = 0; i < rel->n_st; i++) {
-        int k;
-        if (!otc__filter_match(rel, filter, &rel->st[i])) continue;
+        int k, match = otc__filter_match(rel, filter, &rel->st[i]);
+        if (match < 0) { free(q); free(r); *count = 0; return (otc_status)-match; }
+        if (!match) continue;
         k = name_rank(rel->st[i].folded, rel->st[i].folded_len, q, filter && filter->match_exact);
         if (k < 0) continue;
         r[n].rank = k;
@@ -435,7 +508,11 @@ static otc_status geo_scan(const otc_release *rel, double lat, double lon, doubl
         const otc__entry *e = &rel->st[i];
         double d;
         if (fabs(e->lat - lat) > band) continue;
-        if (!otc__filter_match(rel, f, e)) continue;
+        {
+            int match = otc__filter_match(rel, f, e);
+            if (match < 0) { free(hits); return (otc_status)-match; }
+            if (!match) continue;
+        }
         d = haversine(lat, lon, e->lat, e->lon);
         if (d > max_km) continue;
         hits[n].id = e->id;
@@ -460,7 +537,7 @@ otc_status otc_near(const otc_release *rel, double lat, double lon, double radiu
     if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
     if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
     st = geo_scan(rel, lat, lon, radius_km, filter, &hits, &n);
-    if (st != OTC_OK) return otc__fail(rel, st, "out of memory");
+    if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
     total = limit < n ? limit : n;
     for (i = 0; out && i < total && i < cap; i++) out[i] = hits[i];
     free(hits);
@@ -484,7 +561,7 @@ otc_status otc_nearest(const otc_release *rel, double lat, double lon, double ma
     if (isnan(max_km)) max_km = INFINITY;
     if (max_km < 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "max_km must be >= 0");
     st = geo_scan(rel, lat, lon, max_km, filter, &hits, &n);
-    if (st != OTC_OK) return otc__fail(rel, st, "out of memory");
+    if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
     if (n == 0) {
         free(hits);
         return OTC_E_NOT_FOUND;
