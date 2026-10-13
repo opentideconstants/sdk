@@ -3,6 +3,7 @@ require "json"
 require "securerandom"
 require "socket"
 require "time"
+require_relative "cache_json"
 
 class OpenTideConstants
     # The on-disk cache shared by every SDK on one machine (spec §5.4):
@@ -24,6 +25,10 @@ class OpenTideConstants
         LOCK_REMOVE_ATTEMPTS = 3
 
         attr_reader :root
+
+        def self.encode_cache_json(cache_document)
+            CacheJSON.encode(cache_document).encode(Encoding::UTF_8)
+        end
 
         def self.default_root
             if (dir = ENV["OPENTIDECONSTANTS_CACHE_DIR"]) && !dir.empty?
@@ -227,7 +232,7 @@ class OpenTideConstants
             VERIFIED_INFO.each do |k|
                 doc[k] = info.key?(k) ? info[k] : prev&.dig(k)
             end
-            write_atomic(path, JSON.pretty_generate(doc) + "\n")
+            write_atomic(path, Cache.encode_cache_json(doc))
         end
 
         # Stores the version DOI of a pointer or index entry in the .verified
