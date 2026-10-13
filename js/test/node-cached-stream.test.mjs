@@ -79,6 +79,173 @@ const diskDir = (f, overrides = {}) => ({
     ...overrides,
 });
 
+function retainIndexSpecimen(f, name) {
+    if (!process.env.OTC_INDEX_PROOF) return;
+    const dir = path.join(process.env.OTC_INDEX_PROOF, name);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const file of [`OTC_${f.date}.jsonl`, `OTC_${f.date}.meta.json`, 'index-v1.json']) {
+        fs.copyFileSync(path.join(f.dir, file), path.join(dir, file));
+    }
+}
+
+test('INDEX-TS actual current writer projects four offset keys', async () => {
+    const predict = new URL('../../conformance/fixtures/predict/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.7.jsonl', predict)), '20991231.7', predict.pathname);
+    try {
+        const client = await open(f);
+        try {
+            const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+            retainIndexSpecimen(f, 'current');
+            const offsets = index.stations.find(row => row.station_id === 'OTC-P-0050').current_offsets;
+            assert.ok(offsets.length > 0);
+            for (const row of offsets) assert.deepEqual(Object.keys(row).sort(), ['bin', 'licence_id', 'reference_bin', 'reference_station_id']);
+            assert.deepEqual(client.requireStation('OTC-P-0050').raw, JSON.parse(f.jsonl.toString().split('\n').find(line => line.includes('"OTC-P-0050"'))));
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native original span retains lone terminal CR', async () => {
+    const good = new URL('../../conformance/fixtures/good/', import.meta.url);
+    const original = fs.readFileSync(new URL('OTC_20991231.2.jsonl', good));
+    const jsonl = Buffer.concat([Buffer.from(' \t\v\f\r\n'), original.subarray(0, original.length - 1), Buffer.from('\r')]);
+    const f = fixture(jsonl, '20991231.2', good.pathname);
+    try {
+        const client = await open(f);
+        try {
+            const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+            retainIndexSpecimen(f, 'lone-cr');
+            const last = index.stations.at(-1);
+            assert.equal(last.offset + last.length, jsonl.length, 'terminal CR belongs to original body without LF');
+            assert.equal(indexJsonl(headerFromMeta(f.meta), jsonl, false).entries.at(-1).length, last.length);
+            assert.deepEqual(client.requireStation(index.stations[0].station_id).raw, JSON.parse(original.toString().split('\n')[0]));
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native represented station name tamper refuses and removes index', async () => {
+    const good = new URL('../../conformance/fixtures/good/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.2.jsonl', good)), '20991231.2', good.pathname);
+    try {
+        const initial = await open(f); initial.close();
+        retainIndexSpecimen(f, 'tide');
+        const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+        index.stations[0].name = 'represented tamper';
+        index.stations[0].name_folded = 'represented tamper';
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(index));
+        const client = await open(f);
+        try {
+            assert.throws(() => client.requireStation(index.stations[0].station_id), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+            assert.equal(fs.existsSync(path.join(f.dir, 'index-v1.json')), false);
+            assert.ok(fs.existsSync(path.join(f.dir, '.verified')));
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native represented legacy offset depth tamper refuses', async () => {
+    const predict = new URL('../../conformance/fixtures/predict/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.7.jsonl', predict)), '20991231.7', predict.pathname);
+    try {
+        const specimen = process.env.OTC_INDEX_LEGACY_SPECIMEN;
+        const initial = await open(f); initial.close();
+        const index = JSON.parse(fs.readFileSync(specimen ?? path.join(f.dir, 'index-v1.json')));
+        if (!specimen) {
+            // Reader compatibility control for the former native writer's full source-offset profile.
+            const sourceRows = f.jsonl.toString().trimEnd().split('\n').map(line => JSON.parse(line));
+            for (const entry of index.stations) entry.current_offsets = sourceRows.find(row => row.station_id === entry.station_id).current_offsets ?? [];
+        }
+        const row = index.stations.find(entry => entry.station_id === 'OTC-P-0050');
+        assert.equal(index.jsonl_sha256, hash(f.jsonl), 'retained actual baseline writer has identical source bytes');
+        const depth = row.current_offsets[0].depth_m;
+        assert.equal(typeof depth, 'number');
+        row.current_offsets[0].depth_m += 1;
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(index));
+        const client = await open(f);
+        try {
+            assert.throws(() => client.requireStation('OTC-P-0050'), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+            assert.equal(fs.existsSync(path.join(f.dir, 'index-v1.json')), false);
+        } finally { client.close(); }
+        if (process.env.OTC_INDEX_BOUNDARY) {
+            fs.writeFileSync(path.join(f.dir, 'index-v1.json'), '{broken');
+            const indexPath = path.join(f.dir, 'index-v1.json');
+            const events = [];
+            const native = diskDir(f);
+            const rel = loadCached(diskDir(f, {
+                removeIndex: () => { events.push('remove'); native.removeIndex(); },
+                writeIndex: bytes => {
+                    events.push({ action: 'write', staleIndexStillPresent: fs.existsSync(indexPath) });
+                    native.writeIndex(bytes);
+                },
+            }), f.verified, f.date, 'stream');
+            rel._close();
+            console.log(JSON.stringify({ surface: 'core stale index rebuild', events, contract: 'delete stale index before rebuild', status: events[0] === 'remove' ? 'GREEN' : 'RED', dependency: 'read-only js/src/core.ts' }));
+        }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native represented absent unknown offset null refuses', async () => {
+    const predict = new URL('../../conformance/fixtures/predict/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.7.jsonl', predict)), '20991231.7', predict.pathname);
+    try {
+        const initial = await open(f); initial.close();
+        const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+        index.stations.find(row => row.station_id === 'OTC-P-0050').current_offsets[0].future_null = null;
+        fs.writeFileSync(path.join(f.dir, 'index-v1.json'), JSON.stringify(index));
+        const client = await open(f);
+        try {
+            assert.throws(() => client.requireStation('OTC-P-0050'), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+            assert.equal(fs.existsSync(path.join(f.dir, 'index-v1.json')), false);
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native cold source name tamper refuses', async () => {
+    const good = new URL('../../conformance/fixtures/good/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.2.jsonl', good)), '20991231.2', good.pathname);
+    try {
+        const client = await open(f);
+        try {
+            const row = JSON.parse(f.jsonl.toString().split('\n')[0]);
+            const token = Buffer.from(JSON.stringify(row.name));
+            const at = f.jsonl.indexOf(token);
+            assert.ok(at >= 0);
+            const changed = Buffer.from(f.jsonl);
+            // Alter one ASCII byte in the private copied source, preserving the exact original span and file size.
+            const letter = token.findIndex((byte, i) => i > 0 && byte >= 65 && byte <= 122);
+            assert.ok(letter > 0);
+            changed[at + letter] = token[letter] === 88 ? 89 : 88;
+            fs.writeFileSync(path.join(f.dir, 'OTC_20991231.2.jsonl'), changed);
+            assert.throws(() => client.requireStation(row.station_id), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+            assert.equal(fs.existsSync(path.join(f.dir, 'index-v1.json')), false);
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+});
+
+test('INDEX-TS native ASCII framing and nonblank byte refusals', async () => {
+    const good = new URL('../../conformance/fixtures/good/', import.meta.url);
+    const original = fs.readFileSync(new URL('OTC_20991231.2.jsonl', good));
+    const framed = Buffer.from(` \t\v\f\r\n${original.toString().replaceAll('\n', '\r\n \t\v\f\r\n')}`);
+    const sourceRows = original.toString().trimEnd().split('\n').map(line => JSON.parse(line));
+    const f = fixture(framed, '20991231.2', good.pathname);
+    try {
+        const client = await open(f);
+        try {
+            const index = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+            for (const entry of index.stations) {
+                assert.equal(framed[entry.offset + entry.length], 13);
+                assert.equal(framed[entry.offset + entry.length + 1], 10);
+                const value = entry.status === 'active' ? client.requireStation(entry.station_id) : client.tombstone(entry.station_id);
+                assert.deepEqual(value.raw, sourceRows.find(row => row.station_id === entry.station_id));
+            }
+            assert.deepEqual(fs.readFileSync(path.join(f.dir, 'OTC_20991231.2.jsonl')), framed);
+        } finally { client.close(); }
+    } finally { f.cleanup(); }
+    for (const body of [Buffer.from('\u00a0\n'), Buffer.from([0, 10])]) {
+        const invalid = fixture(Buffer.concat([original, body]), '20991231.2', good.pathname);
+        try { await assert.rejects(open(invalid), error => error.code === 'invalid_release'); }
+        finally { invalid.cleanup(); }
+    }
+});
+
 test('native Node cached stream shared foreign presence profiles', async () => {
     const proof = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/proofs/G0/cross-final-deps/native-specimens';
     const good = new URL('../../conformance/fixtures/good/', import.meta.url);
@@ -108,9 +275,10 @@ test('native Node cached stream shared foreign presence profiles', async () => {
                 const client = await sdk.OpenTideConstants.open({ release: date, cacheDir: root, offline: true, mode: 'stream' });
                 try {
                     assert.equal(receipts.reads.filter(row => row.file?.endsWith('.jsonl')).length, 0, `${language}: valid foreign index stays lazy`);
-                    assert.deepEqual(client.stations({ country: 'ZZ', includeFlagged: true, includeFallback: true }).map(row => row.station_id), ['OTC-T-0011']);
-                    assert.deepEqual(client.requireStation('OTC-T-0001').raw, JSON.parse(jsonl.toString().split('\n')[0]));
                     assert.deepEqual(fs.readFileSync(path.join(dir, 'index-v1.json')), bytes);
+                    assert.throws(() => client.stations({ country: 'ZZ', includeFlagged: true, includeFallback: true }), error => error.code === 'invalid_release' && error.message.includes('index-v1.json'));
+                    assert.equal(fs.existsSync(path.join(dir, 'index-v1.json')), false, `${language}: represented country tamper removes the index`);
+                    assert.deepEqual(client.requireStation('OTC-T-0001').raw, JSON.parse(jsonl.toString().split('\n')[0]));
                 } finally { client.close(); }
                 assert.equal(receipts.active.size, 0);
             });
@@ -157,6 +325,9 @@ test('native Node cached stream shared current offset presence', async () => {
         const initial = await open(f);
         initial.close();
         const full = JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json')));
+        // Retain the old complete native offset profile as a reader control after the writer becomes compact.
+        const sourceRows = f.jsonl.toString().trimEnd().split('\n').map(line => JSON.parse(line));
+        for (const entry of full.stations) entry.current_offsets = sourceRows.find(row => row.station_id === entry.station_id).current_offsets ?? [];
         const header = headerFromMeta(f.meta);
         const conventions = new Set(header.conventions.map(row => row.convention_id));
         const licences = new Set(header.licences.map(row => row.licence_id));
@@ -364,6 +535,7 @@ test('native Node cached stream absent-invalid-valid index', async () => {
                     assert.equal(client.loadedFrom, 'cache');
                     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.dir, 'index-v1.json'), 'utf8')).stations,
                         storedIndex(entries, date, hash(f.jsonl), f.jsonl.length, 'test').stations);
+                    if (variant === 'absent') retainIndexSpecimen(f, 'history');
                     assert.ok(!receipts.bodies.includes(path.join(f.dir, `${stem}.jsonl`)), 'cached index rebuild must not read whole JSONL');
                     const readers = receipts.opened.filter(row => row.file.endsWith('.jsonl'));
                     assert.equal(readers.length, 1, 'same owned reader scans and serves lazy reads');
