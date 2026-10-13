@@ -244,7 +244,7 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
                 await store.remove(`${rel}.etag`);
                 await store.write(rel, res.body);
                 const tag = res.header("etag");
-                if (tag) await store.write(`${rel}.etag`, enc.encode(tag));
+                if (tag && tag.length <= 256 && /^[\x20-\x7e]+$/.test(tag)) await store.write(`${rel}.etag`, enc.encode(tag));
             } finally {
                 await releaseLock(ctx, unlock);
             }

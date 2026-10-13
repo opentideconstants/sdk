@@ -11,6 +11,55 @@ import * as nodeRuntime from '../dist/node.js';
 import { checkBytes, syncZenodo } from '../dist/core.js';
 import { encodeCacheJson } from '../dist/cache-json.js';
 
+for (const [label, tag, accepted] of [
+    ['unquoted', 'not-an-entity-tag', true], ['weak-space', 'W/"native opaque"', true],
+    ['ascii-256', 'a'.repeat(256), true], ['non-ascii', '\u00ff', false], ['ascii-257', 'a'.repeat(257), false],
+]) {
+    test(`COMMON-TS-ETAG-WRITER actual HTTP response ${label}`, async () => {
+        const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+        const root = fs.mkdtempSync(path.join(process.env.OTC_ETAG_WRITER_PROOF ?? os.tmpdir(), `native-writer-${label}-`));
+        const pointerPath = path.join(root, 'v1/pointer/OTC_latest-f1.json');
+        const etagPath = `${pointerPath}.etag`;
+        const pointer = fs.readFileSync(path.join(source, 'OTC_latest-f1.json'));
+        const requests = [];
+        let activeTag = '"previous-valid"';
+        const server = createServer((request, response) => {
+            requests.push({ path: request.url, if_none_match: request.headers['if-none-match'] ?? null });
+            const filename = path.join(source, request.url.slice(1));
+            if (!fs.existsSync(filename)) { response.writeHead(404); response.end(); return; }
+            if (request.url === '/OTC_latest-f1.json') response.setHeader('ETag', activeTag);
+            response.end(fs.readFileSync(filename));
+        });
+        await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+        const options = { baseUrl: `http://127.0.0.1:${server.address().port}/`, cacheDir: root,
+            mode: 'stream', onNetworkError: 'raise' };
+        let opened;
+        try {
+            opened = await sdk.OpenTideConstants.open(options); opened.close(); opened = undefined;
+            assert.deepEqual(fs.readFileSync(etagPath), Buffer.from(activeTag));
+            activeTag = tag; requests.length = 0;
+            opened = await sdk.OpenTideConstants.open(options);
+            const actual = fs.existsSync(etagPath) ? fs.readFileSync(etagPath) : null;
+            console.log(JSON.stringify({ surface: 'actual HTTP metadata writer', label, response_tag_latin1_hex: Buffer.from(tag, 'latin1').toString('hex'),
+                response_tag_length: Buffer.byteLength(tag, 'latin1'), accepted, actual_hex: actual?.toString('hex') ?? null,
+                requests, datestamp: opened.release.datestamp, loaded_from: opened.loadedFrom,
+                pointer_sha256: nodeRuntime.sha256Sync(fs.readFileSync(pointerPath)) }));
+            assert.equal(opened.release.datestamp, '20991231.2');
+            assert.equal(opened.loadedFrom, 'cache');
+            assert.deepEqual(fs.readFileSync(pointerPath), pointer);
+            assert.equal(requests.find(request => request.path === '/OTC_latest-f1.json').if_none_match, '"previous-valid"');
+            if (accepted) assert.deepEqual(actual, Buffer.from(tag));
+            else assert.equal(actual, null, 'invalid response ETag must remove the previous sidecar and publish no replacement');
+            assert.deepEqual(opened.requireStation('OTC-T-0001').raw,
+                fs.readFileSync(path.join(source, 'OTC_20991231.2.jsonl')).toString().split('\n')
+                    .map(line => line ? JSON.parse(line) : null).find(station => station?.station_id === 'OTC-T-0001'));
+        } finally {
+            opened?.close(); await new Promise(resolve => server.close(resolve));
+            if (!process.env.OTC_ETAG_WRITER_PROOF) fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+}
+
 // SC18 is a private forward-format control over the existing knc station. It is not upstream science data.
 for (const mode of ['eager', 'stream']) {
     for (const [label, originalQuantity, replacementQuantity, expected] of [
