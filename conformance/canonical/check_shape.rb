@@ -3,7 +3,8 @@ require "digest"
 require "optparse"
 require "pathname"
 
-# Construction evidence only. Nothing in this verifier accepts SDK behavior.
+# Serialized compatibility only. Claims, hashes and source text cannot prove
+# native execution. Independent VALUE must execute builds/fixtures for acceptance.
 module NativeShape
     DIRECTORY = File.expand_path(__dir__)
     class Invalid < StandardError; end
@@ -302,10 +303,10 @@ if $PROGRAM_NAME == __FILE__
         projection = NativeShape.read(options.fetch("native-projection"))
         NativeShape.verify_projection(projection, p, options.fetch("root"), options.fetch("profile"))
         observations = NativeShape.read(options.fetch("observations"))
-        accepted = NativeShape.verify_observations(observations, projection, options.fetch("native-projection"), p, options.fetch("root"), options.fetch("profile"))
-        report["status"] = accepted ? "NATIVE_SHAPE_VALID" : "STRUCTURAL_CONTROL_VALID"
+        native_metadata_valid = NativeShape.verify_observations(observations, projection, options.fetch("native-projection"), p, options.fetch("root"), options.fetch("profile"))
+        report["status"] = native_metadata_valid ? "EXECUTION_UNVERIFIED" : "STRUCTURAL_CONTROL_VALID"
         report["protocol_valid"] = true
-        report["shape_accepted"] = accepted
+        report["shape_accepted"] = false
         report["construction_incomplete"] = projection.fetch("runtime").select { |r| r.fetch("declaration").fetch("status") == "private_unimplemented_refusal" }.map { |r| r.fetch("id") }
         report["counts"] = { "runtime" => projection.fetch("runtime").length, "call_actions" => projection.fetch("call_actions").length }
         %w[foundation native-projection observations].each { |key| report.fetch("input_sha256")[key] = Digest::SHA256.file(options.fetch(key)).hexdigest }

@@ -428,7 +428,7 @@
         "status": {
           "enum": [
             "STRUCTURAL_CONTROL_VALID",
-            "NATIVE_SHAPE_VALID",
+            "EXECUTION_UNVERIFIED",
             "REJECTED",
             "INCOMPLETE"
           ]
@@ -437,7 +437,7 @@
           "type": "boolean"
         },
         "shape_accepted": {
-          "type": "boolean"
+          "const": false
         },
         "behavior_accepted": {
           "const": false
@@ -492,7 +492,8 @@
         "counts",
         "input_sha256"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Serialized compatibility validation cannot prove native execution. Independent VALUE must personally run actual native builds and fixtures before SHAPE-ALL acceptance; this report never grants it."
     },
     "observations": {
       "type": "object",
