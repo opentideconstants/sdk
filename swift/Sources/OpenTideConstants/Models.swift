@@ -258,11 +258,24 @@ public struct ConstantSet: Sendable, Equatable {
     public var fallback: Fallback? { raw["fallback"].isNull ? nil : Fallback(raw["fallback"]) }
 }
 public struct Station: Sendable, Equatable {
+    private var originToken: UUID?
     public let raw: JSONValue
     public let kind: Kind?
     public let recommendedSet: ConstantSet?
     public let sourceRecords: [SourceRecord]
     internal let sets: [ConstantSet]
+    internal init(raw: JSONValue, kind: Kind?, recommendedSet: ConstantSet?, sourceRecords: [SourceRecord], sets: [ConstantSet]) {
+        self.raw=raw;self.kind=kind;self.recommendedSet=recommendedSet;self.sourceRecords=sourceRecords;self.sets=sets
+    }
+    internal func withOrigin(_ token: UUID) -> Station {
+        var station=self
+        station.originToken=token
+        return station
+    }
+    internal func hasOrigin(_ token: UUID) -> Bool { originToken==token }
+    public static func == (lhs: Station, rhs: Station) -> Bool {
+        lhs.raw==rhs.raw && lhs.kind==rhs.kind && lhs.recommendedSet==rhs.recommendedSet && lhs.sourceRecords==rhs.sourceRecords && lhs.sets==rhs.sets
+    }
     public var stationId: String { raw["station_id"].string! }
     public var name: String? { raw["name"].string }
     public var country: String? { raw["country"].string }

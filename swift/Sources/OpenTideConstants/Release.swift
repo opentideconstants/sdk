@@ -1,6 +1,7 @@
 import Foundation
 
 public final class Release {
+    private let originToken=UUID()
     internal let meta:JSONValue
     internal let commercialOnly:Bool
     internal let commercialBasis:String
@@ -94,7 +95,7 @@ public final class Release {
     public func station(stationId:String)throws->Station? {
         try checkOpen();guard let e=byId[stationId],e.status=="active" else { return nil }
         if let s=lru[stationId] { return s }
-        let s=try autoreleasepool { try Reader.station(rawStation(e),conventions:convById,licences:licById,kind:e.kind,recommended:effective(e)) }
+        let s=try autoreleasepool { try Reader.station(rawStation(e),conventions:convById,licences:licById,kind:e.kind,recommended:effective(e)).withOrigin(originToken) }
         lru[stationId]=s;lruOrder.append(stationId);if lruOrder.count>256 { lru.removeValue(forKey:lruOrder.removeFirst()) };return s
     }
     public func requireStation(stationId:String)throws->Station {
@@ -184,7 +185,7 @@ public func near(lat:Double,lon:Double,radiusKm:Double,limit:Int64?=nil,country:
 public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->Nearby? {
     try near(lat:lat,lon:lon,radiusKm:maxKm ?? .infinity,limit:1,country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback).first
 }
-    internal func own(_ s:Station)throws { guard let actual=try station(stationId:s.stationId),actual.raw==s.raw else { throw OpenTideConstantsError.invalidArgument("foreign station") } }
+    internal func own(_ s:Station)throws { try checkOpen();guard s.hasOrigin(originToken),let actual=try station(stationId:s.stationId),actual.raw==s.raw else { throw OpenTideConstantsError.invalidArgument("foreign station") } }
     public func referenceStation(station:Station)throws->Station? { try checkOpen();try own(station);guard station.isSubordinate,let id=station.subordinateOffsets?.referenceStationId else { return nil };return try self.station(stationId:id) }
     public func subordinatesOf(station:Station)throws->[Station] { try checkOpen();try own(station);return try entries.filter { $0.status=="active" && $0.summary["type"].string=="subordinate" && $0.summary["reference_station_id"].string==station.stationId }.map { try requireStation(stationId:$0.id) } }
     private func tideSourceLicences(_ entry:IndexEntry)->[String] {

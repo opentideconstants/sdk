@@ -1,6 +1,51 @@
 import XCTest
 @testable import OpenTideConstants
 final class CoreNativeTests:XCTestCase {
+    func testForeignStationOwnershipWithEqualRaw() async throws {
+        let fixtures=try path("OTC_MD6_FIXTURES")
+        let cache=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:cache) }
+        for mode in [Mode.eager,Mode.stream] {
+            let old=try await OpenTideConstants.open(file:fixtures+"/OTC_20991231.jsonl",cacheDir:cache.path,mode:mode)
+            let current=try await OpenTideConstants.open(file:fixtures+"/OTC_20991231.2.jsonl",cacheDir:cache.path,mode:mode)
+            defer { old.close();current.close() }
+            XCTAssertEqual(old.release.datestamp,"20991231");XCTAssertEqual(current.release.datestamp,"20991231.2")
+            for id in ["OTC-T-0001","OTC-T-0002","OTC-T-0003"] {
+                let foreign=try old.requireStation(stationId:id),own=try current.requireStation(stationId:id)
+                XCTAssertEqual(foreign.raw,own.raw);XCTAssertEqual(foreign,own)
+                let expected=try current.attribution(stations:[own])
+                XCTAssertFalse(expected.isEmpty)
+                var code:String?
+                do { _=try current.attribution(stations:[foreign]) } catch { code=(error as? OpenTideConstantsError)?.code }
+                print("MD6_VALUE mode=\(mode.rawValue) station=\(id) raw_equal=\(foreign.raw==own.raw) value_equal=\(foreign==own) own=pass foreign_code=\(code ?? "accepted")")
+                XCTAssertEqual(code,"invalid_argument")
+                current.release.lru.removeAll();current.release.lruOrder.removeAll()
+                let rematerialized=try current.requireStation(stationId:id)
+                XCTAssertEqual(rematerialized,own);XCTAssertEqual(rematerialized.raw,own.raw)
+                XCTAssertEqual(try current.attribution(stations:[own]),expected)
+                XCTAssertEqual(try current.attribution(stations:[rematerialized]),expected)
+                XCTAssertEqual(try current.station(stationId:id),own)
+                XCTAssertEqual(rematerialized.sourceRecords,own.sourceRecords)
+                XCTAssertEqual(rematerialized.constantSets(includeNoConstants:true),own.constantSets(includeNoConstants:true))
+            }
+            let retained=try current.requireStation(stationId:"OTC-T-0001")
+            current.close()
+            XCTAssertThrowsError(try current.attribution(stations:[retained])) { error in XCTAssertEqual((error as? OpenTideConstantsError)?.code,"io") }
+            XCTAssertEqual(retained.stationId,"OTC-T-0001")
+        }
+        weak var weakRelease:Release?
+        func detached() async throws -> Station {
+            let client=try await OpenTideConstants.open(file:fixtures+"/OTC_20991231.2.jsonl",cacheDir:cache.path,mode:.stream)
+            weakRelease=client.release
+            let station=try client.requireStation(stationId:"OTC-T-0001")
+            client.close()
+            return station
+        }
+        let retained=try await detached()
+        XCTAssertNil(weakRelease,"Station ownership must not retain Release or Reader data")
+        XCTAssertEqual(retained.stationId,"OTC-T-0001")
+        print("MD6_CONTROL same_release_lru=pass raw_values=pass source_provenance=pass id_api=pass closed=io retained_release=none equality=unchanged hash=not_Hashable")
+    }
 func phase(_ value:String) { FileHandle.standardError.write(Data(("PHASE " + value + "\n").utf8)) }
 func count(_ phaseName:String,_ call:()throws->[Station]) rethrows -> Int {
     phase(phaseName + "_begin")
