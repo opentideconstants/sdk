@@ -70,6 +70,82 @@ final class CacheTests:XCTestCase {
         }
         deinit { if process.isRunning { try? input.fileHandleForWriting.close();_ = exited.wait(timeout:.now()+10) } }
     }
+    private func assertNativeReceipt(_ fixture:NativeFixture,doi:String?=nil)throws {
+        let directory=URL(fileURLWithPath:fixture.cache).appendingPathComponent("v1/releases/20991231.2")
+        let bytes=try Data(contentsOf:directory.appendingPathComponent(".verified")),marker=try JSONValue.parse(bytes)
+        XCTAssertEqual(Set(marker.object.keys),Set(["datestamp","files","format_version","min_reader_version","zenodo_version_doi","verified_at","by"]))
+        XCTAssertEqual(marker["zenodo_version_doi"],doi.map(JSONValue.string) ?? .null)
+        XCTAssertEqual(marker["format_version"],.string("1.0"));XCTAssertEqual(marker["min_reader_version"],.string("1.0"))
+        XCTAssertEqual(bytes,try marker.data())
+        let original=URL(fileURLWithPath:fixture.ready["fixture_root"].string!)
+        for (name,row) in marker["files"].object {
+            XCTAssertEqual(Set(row.object.keys),Set(["sha256","size","url"]))
+            let path=directory.appendingPathComponent(name),data=try Data(contentsOf:path)
+            XCTAssertEqual(data,try Data(contentsOf:original.appendingPathComponent(name)))
+            XCTAssertEqual(row["sha256"],.string(SHA256.digest(data)))
+            XCTAssertEqual(row["size"],.integer(Int64(data.count)))
+            XCTAssertFalse(name.hasSuffix(".sha256"))
+        }
+        XCTAssertEqual(try Data(contentsOf:directory.appendingPathComponent("OTC_20991231.2.sha256")),try Data(contentsOf:original.appendingPathComponent("OTC_20991231.2.sha256")))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath:directory.path).contains { $0.hasPrefix(".tmp-") || $0==".lock" })
+    }
+    func testNativeReceiptAcquisitionAndOtherModeMerge()async throws {
+        for mode in [Mode.eager,.stream] {
+            let fixture=try NativeFixture()
+            let client=try await OpenTideConstants.open(release:"20991231.2",cacheDir:fixture.cache,mode:mode,baseUrl:fixture.base,verifyOnOpen:true)
+            XCTAssertEqual(client.loadedFrom,.download);XCTAssertNotNil(try client.station(stationId:"OTC-T-0001"));client.close()
+            try assertNativeReceipt(fixture)
+            if mode == .eager {
+                let receipt=URL(fileURLWithPath:fixture.cache).appendingPathComponent("v1/releases/20991231.2/.verified")
+                var old=try JSONValue.parse(Data(contentsOf:receipt)).object,row=old["files"]!["OTC_20991231.2.json"].object
+                old["zenodo_version_doi"] = .string("10.5072/zenodo.9")
+                row.removeValue(forKey:"url");row["future_private"] = .bool(true)
+                row["sha256"] = .string(row["sha256"]!.string!.uppercased())
+                old["files"] = .object(["OTC_20991231.2.json":.object(row)])
+                try Cache.atomic(JSONValue.object(old).data(),receipt)
+                let stream=try await OpenTideConstants.open(release:"20991231.2",cacheDir:fixture.cache,mode:.stream,baseUrl:fixture.base,verifyOnOpen:true)
+                XCTAssertEqual(stream.loadedFrom,.download);XCTAssertEqual(stream.release.zenodoVersionDoi,"10.5072/zenodo.9");stream.close()
+                try assertNativeReceipt(fixture,doi:"10.5072/zenodo.9")
+                let marker=try JSONValue.parse(Data(contentsOf:receipt))
+                XCTAssertEqual(marker["files"].object.count,3);XCTAssertEqual(marker["files"]["OTC_20991231.2.json"]["url"],.null)
+            }
+            for cachedMode in [Mode.eager,.stream] where mode == .stream || cachedMode == .eager || FileManager.default.fileExists(atPath:URL(fileURLWithPath:fixture.cache).appendingPathComponent("v1/releases/20991231.2/OTC_20991231.2.jsonl").path) {
+                let cached=try await OpenTideConstants.open(release:"20991231.2",cacheDir:fixture.cache,offline:true,mode:cachedMode,verifyOnOpen:true)
+                XCTAssertEqual(cached.loadedFrom,.cache);XCTAssertNotNil(try cached.station(stationId:"OTC-T-0001"));cached.close()
+            }
+            _=try fixture.finish()
+        }
+    }
+    func testNativeReceiptLockedReread()async throws {
+        for state in ["valid","malformed","absent"] {
+            let fixture=try NativeFixture(),cache=Cache(root:URL(fileURLWithPath:fixture.cache))
+            let eager=try await OpenTideConstants.open(release:"20991231.2",cacheDir:fixture.cache,baseUrl:fixture.base);eager.close()
+            let directory=try cache.releaseDir("20991231.2"),receipt=directory.appendingPathComponent(".verified")
+            let original=try JSONValue.parse(Data(contentsOf:receipt))
+            let token=try await cache.takeLock(directory)
+            let cachePath=fixture.cache,base=fixture.base
+            let task=Task {
+                let client=try await OpenTideConstants.open(release:"20991231.2",cacheDir:cachePath,mode:.stream,baseUrl:base,verifyOnOpen:true)
+                defer { client.close() }
+                return (client.loadedFrom.rawValue,try client.station(stationId:"OTC-T-0001") != nil)
+            }
+            try await Task.sleep(nanoseconds:600_000_000)
+            XCTAssertEqual(try Data(contentsOf:receipt),try original.data())
+            if state == "valid" {
+                var current=original.object;current["zenodo_version_doi"] = .string("10.5072/zenodo.8")
+                try Cache.atomic(JSONValue.object(current).data(),receipt)
+            } else if state == "malformed" { try Cache.atomic(Data("malformed".utf8),receipt) }
+            else { try FileManager.default.removeItem(at:receipt) }
+            cache.releaseLock(directory,token)
+            let result=try await task.value
+            XCTAssertEqual(result.0,"download");XCTAssertTrue(result.1)
+            try assertNativeReceipt(fixture,doi:state == "valid" ? "10.5072/zenodo.8":nil)
+            let marker=try JSONValue.parse(Data(contentsOf:receipt))
+            XCTAssertEqual(marker["files"].object.count,state == "valid" ? 3:2)
+            print("RECEIPT-SW locked reread \(state): rows=\(marker["files"].object.count) DOI=\(String(describing:marker["zenodo_version_doi"].string))")
+            _=try fixture.finish()
+        }
+    }
     func testNativeDownloadThenOfflineCache()async throws {
         let fixture=try NativeFixture()
         let client=try await OpenTideConstants.open(cacheDir:fixture.cache,baseUrl:fixture.base,userAgent:"native-io-proof",verifyOnOpen:true)
