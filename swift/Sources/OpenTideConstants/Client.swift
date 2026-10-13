@@ -331,6 +331,10 @@ private struct ClientIO:@unchecked Sendable {
         catch { throw OpenTideConstantsError.network("HTTP200 pointer is not JSON",["url":.string(url.absoluteString),"status":.integer(200)]) }
         guard pointerShape(name,doc) else { throw OpenTideConstantsError.network("HTTP200 pointer has wrong shape",["url":.string(url.absoluteString),"status":.integer(200)]) }
         do {
+            let directory=path.deletingLastPathComponent(),token=try await cache.takeLock(directory)
+            defer { cache.releaseLock(directory,token) }
+            let tagPath=path.appendingPathExtension("etag")
+            if FileManager.default.fileExists(atPath:tagPath.path) { try FileManager.default.removeItem(at:tagPath) }
             try Cache.atomic(response.bytes,path)
             if let etag=response.etag,(1...256).contains(etag.utf8.count),etag.utf8.allSatisfy({ (32...126).contains($0) }) { try Cache.atomic(Data(etag.utf8),path.appendingPathExtension("etag")) }
             else { try? FileManager.default.removeItem(at:path.appendingPathExtension("etag")) }
