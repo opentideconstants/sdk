@@ -13,6 +13,7 @@ public final class Release {
     internal var documents:[String:JSONValue]
     internal let jsonl:URL?
     internal let indexPath:URL?
+    private var reader:FileHandle?
     internal var astroCache:[String:AstroTable]=[:]
     internal var closed=false
     internal var lru:[String:Station]=[:]
@@ -57,6 +58,7 @@ public final class Release {
         }
         self.entries=entries.map { e in var e=e;var s=e.summary.object;s["kind"]=resolve(e,[],0).map { .string($0.rawValue) } ?? .null;e.summary = .object(s);return e }.sorted { $0.id<$1.id }
         byId=Dictionary(uniqueKeysWithValues:self.entries.map { ($0.id,$0) })
+        if let jsonl { reader=try FileHandle(forReadingFrom:jsonl) }
     }
     internal func checkOpen()throws { if closed { throw OpenTideConstantsError.io("the release is closed") } }
     public var conventions:[Convention] { get throws { try checkOpen();return meta["conventions"].array.map(Convention.init) } }
@@ -85,17 +87,69 @@ public final class Release {
     }
     internal func rawStation(_ e:IndexEntry)throws->JSONValue {
         if let d=documents[e.id] { return d }
-        guard let path=jsonl,let offset=e.offset,let length=e.length else { throw OpenTideConstantsError.invalidRelease("no station data") }
-        let f=try FileHandle(forReadingFrom:path);defer { try? f.close() };try f.seek(toOffset:offset)
-        guard let bytes=try f.read(upToCount:length),bytes.count==length else { throw OpenTideConstantsError.invalidRelease("short indexed line") }
-        let d=try JSONValue.parse(bytes);let actual=IndexEntry.make(d,offset:offset,length:length)
-        let keys=["station_id","status","recommended_set_id","reference_station_id","offsets_licence_id","sets","current_offsets","subordinate_offsets"]
-        if keys.contains(where: { actual.summary[$0] != e.summary[$0] }) { if let indexPath { try? FileManager.default.removeItem(at:indexPath) };throw OpenTideConstantsError.invalidRelease("index-v1.json does not match release") }
-        return d
+        guard let reader,let offset=e.offset,let length=e.length else { throw OpenTideConstantsError.invalidRelease("no station data") }
+        do {
+            try reader.seek(toOffset:offset)
+            guard let bytes=try reader.read(upToCount:length),bytes.count==length else { throw OpenTideConstantsError.invalidRelease("short indexed line") }
+            let d=try JSONValue.parse(bytes)
+            try compare_station_source(e,d)
+            return d
+        } catch {
+            if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+            throw error
+        }
+    }
+    internal func compare_station_source(_ e:IndexEntry,_ d:JSONValue)throws {
+        var actual=IndexEntry.make(d,offset:e.offset,length:e.length).summary.object
+        if actual["kind"]?.isNull==true,actual["type"]?.string=="subordinate",let ref=actual["reference_station_id"]?.string { actual["kind"]=byId[ref]?.summary["kind"] ?? .null }
+        func require(_ ok:Bool)throws { if !ok { throw OpenTideConstantsError.invalidRelease("index-v1.json does not match release") } }
+        let common=["station_id","status","name","name_folded","country","type","lat","lon","kind","aliases","reference_station_id","offsets_licence_id","recommended_set_id"]
+        try require(common.allSatisfy { indexValueMatches(e.summary[$0],actual[$0]!) })
+        let sourceSets=d["constant_sets"].array,projected=actual["sets"]!.array
+        try require(e.sets.count==projected.count)
+        for (index,set) in e.sets.enumerated() {
+            let common=["set_id","source","source_type","quantity","qc_status","convention_id","licence_id","constituents"]
+            try require(common.allSatisfy { indexValueMatches(set[$0],projected[index][$0]) })
+            for key in ["fallback","current_bins"] {
+                if set.object.keys.contains(key) { try require(indexValueMatches(set[key],projected[index][key])) }
+                else if key=="fallback",e.presence?.fallback==true { try require(projected[index][key].isNull) }
+            }
+            if e.presence?.privateFields==true {
+                for key in ["source_record_id","source_version","datum"] { try require(indexValueMatches(set[key],sourceSets[index][key])) }
+            }
+        }
+        if e.summary.object.keys.contains("subordinate_offsets") { try require(indexValueMatches(e.summary["subordinate_offsets"],actual["subordinate_offsets"]!)) }
+        else if e.presence?.subordinateOffsets==true { try require(actual["subordinate_offsets"]!.isNull) }
+        if e.summary.object.keys.contains("current_offsets") {
+            let offsets=e.summary["current_offsets"].array,source=d["current_offsets"].array
+            try require(offsets.count==source.count)
+            let keys=["bin","reference_bin","reference_station_id","licence_id"]
+            for (index,row) in offsets.enumerated() {
+                if e.presence?.fullCurrentOffsets==true {
+                    var full=source[index].object
+                    for key in keys { full[key]=source[index][key] }
+                    try require(indexValueMatches(row,.object(full)))
+                } else { try require(keys.allSatisfy { indexValueMatches(row[$0],source[index][$0]) }) }
+            }
+        } else { try require(d["current_offsets"].array.isEmpty) }
+    }
+    internal func hydratePolicy(stationId:String?=nil)throws {
+        for index in entries.indices {
+            let e=entries[index]
+            guard e.status=="active",stationId==nil || stationId==e.id else { continue }
+            let missing=e.presence != nil && (!e.summary.object.keys.contains("subordinate_offsets") || !e.summary.object.keys.contains("current_offsets") || e.sets.contains { !$0.object.keys.contains("fallback") || !$0.object.keys.contains("current_bins") })
+            guard missing else { continue }
+            let row=try rawStation(e)
+            _ = try Reader.station(row,conventions:convById,licences:licById,kind:e.kind,recommended:e.summary["recommended_set_id"].string)
+            var full=IndexEntry.make(row,offset:e.offset,length:e.length)
+            var summary=full.summary.object;summary["kind"]=e.summary["kind"];full.summary = .object(summary)
+            entries[index]=full;byId[e.id]=full
+        }
     }
     public func station(stationId:String)throws->Station? {
+        try checkOpen();try hydratePolicy(stationId:stationId)
         try checkOpen();guard let e=byId[stationId],e.status=="active" else { return nil }
-        if let s=lru[stationId] { return s }
+        if let s=lru[stationId] { lruOrder.removeAll { $0==stationId };lruOrder.append(stationId);return s }
         let s=try autoreleasepool { try Reader.station(rawStation(e),conventions:convById,licences:licById,kind:e.kind,recommended:effective(e)).withOrigin(originToken) }
         lru[stationId]=s;lruOrder.append(stationId);if lruOrder.count>256 { lru.removeValue(forKey:lruOrder.removeFirst()) };return s
     }
@@ -143,6 +197,7 @@ internal func historicalEligible(_ e:IndexEntry)->Bool {
     }
 internal func filteredEntries(country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[IndexEntry] {
     try checkOpen()
+    try hydratePolicy()
     return entries.filter { e in
         e.status=="active" && (country==nil || e.summary["country"].string==country) && (type==nil || StationType(value:e.summary["type"]).rawValue==type) && (kind==nil || e.kind?.rawValue==kind) && paths(e,flagged:includeFlagged,fallback:includeFallback).contains { (source==nil || $0["source"].string==source) && (sourceType==nil || SourceType(value:$0["source_type"]).rawValue==sourceType) }
     }
@@ -212,7 +267,8 @@ public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,
         if !nc.isEmpty { text += ". Non-commercial use only: "+nc.map { "\($0.raw["provider"].string ?? $0.licenceId) (\($0.spdx), \($0.termsUrl ?? ""))" }.joined(separator:"; ") }
         return text
     }
-    internal func close() { closed=true;lru.removeAll();lruOrder.removeAll() }
+    internal func close() { closed=true;try? reader?.close();reader=nil;lru.removeAll();lruOrder.removeAll() }
+    deinit { try? reader?.close() }
 }
 
 public extension Release {

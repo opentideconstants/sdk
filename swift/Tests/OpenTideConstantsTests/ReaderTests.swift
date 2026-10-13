@@ -1,6 +1,218 @@
 import XCTest
+import Darwin
 @testable import OpenTideConstants
 final class ReaderTests: XCTestCase {
+    private func indexFixture(_ label: String, source: URL) throws -> URL {
+        let proof = try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_INDEX_PROOF_ROOT"])
+        let directory = URL(fileURLWithPath: proof).appendingPathComponent(label)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let local = directory.appendingPathComponent(source.lastPathComponent)
+        for path in [local, local.deletingPathExtension().appendingPathExtension("meta.json"), directory.appendingPathComponent("index-v1.json")] {
+            if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
+        }
+        try FileManager.default.copyItem(at: source, to: local)
+        try FileManager.default.copyItem(at: source.deletingPathExtension().appendingPathExtension("meta.json"), to: local.deletingPathExtension().appendingPathExtension("meta.json"))
+        return local
+    }
+    private var indexGoodSource: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("conformance/fixtures/good/OTC_20991231.jsonl")
+    }
+    private func indexDescriptors(_ path: URL) -> Int {
+        (0..<1024).filter { descriptor in
+            var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            return fcntl(Int32(descriptor), F_GETPATH, &buffer) == 0 && String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == path.path
+        }.count
+    }
+    func testIndexActualNativeProducers() async throws {
+        let repository = indexGoodSource.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let historical = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_INDEX_HISTORY_JSONL"]))
+        for (label, source) in [("tide", indexGoodSource), ("current", repository.appendingPathComponent("conformance/fixtures/knc-predict/OTC_20991231.2.jsonl")), ("history", historical)] {
+            let local = try indexFixture(label, source: source)
+            let client = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+            let bytes = try Data(contentsOf: index)
+            let document = try JSONValue.parse(bytes)
+            XCTAssertEqual(bytes, try encode_cache_json(document), "\(label): native actualwriter bytes")
+            var sourceRows: [JSONValue] = []
+            try eachLine(local) { data, _ in sourceRows.append(try JSONValue.parse(data)) }
+            XCTAssertEqual(document["stations"].array.map { $0["station_id"] }, sourceRows.map { $0["station_id"] }, "source line order")
+            for row in sourceRows where row["status"].string != "removed" {
+                let id = try XCTUnwrap(row["station_id"].string)
+                XCTAssertEqual(try client.requireStation(stationId: id).raw, row)
+            }
+            print("INDEX_PRODUCER label=\(label) source_sha=\(try SHA256.file(local)) native_sha=\(SHA256.digest(bytes)) canonical=\(bytes == (try encode_cache_json(document))) rows=\(sourceRows.count)")
+            client.close()
+        }
+    }
+    func testIndexActualWarmReuseAndDescriptor() async throws {
+        let local = try indexFixture("warm", source: indexGoodSource)
+        let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+        let cold = try await OpenTideConstants.open(file: local.path, mode: .stream)
+        cold.close()
+        let bytes = try Data(contentsOf: index)
+        let date = Date(timeIntervalSince1970: 1_600_000_000)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: index.path)
+        let warm = try await OpenTideConstants.open(file: local.path, mode: .stream)
+        defer { warm.close() }
+        XCTAssertEqual(try Data(contentsOf: index), bytes)
+        let actualDate = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: index.path)[.modificationDate] as? Date)
+        XCTAssertEqual(actualDate, date, "B25 actual index must not be rewritten")
+        XCTAssertEqual(warm.release.lru.count, 0)
+        XCTAssertEqual(indexDescriptors(local), 1, "B27 release owns one reader descriptor")
+        let id = try XCTUnwrap(warm.release.entries.first { $0.status == "active" }?.id)
+        let first = try warm.requireStation(stationId: id)
+        let second = try warm.requireStation(stationId: id)
+        XCTAssertEqual(first.raw, second.raw)
+        XCTAssertEqual(warm.release.lru.count, 1)
+        XCTAssertEqual(indexDescriptors(local), 1)
+        print("INDEX_WARM rewrite=\(actualDate != date) row_cache=\(warm.release.lru.count) fd=\(indexDescriptors(local)) hash_equal=\(try Data(contentsOf: index) == bytes)")
+        warm.close()
+        XCTAssertEqual(indexDescriptors(local), 0)
+    }
+    func testIndexActualRepresentedCountryTamper() async throws {
+        for marker in [true, false] {
+            let local = try indexFixture(marker ? "tamper-current" : "tamper-legacy", source: indexGoodSource)
+            let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+            let cold = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            cold.close()
+            var doc = try JSONValue.parse(Data(contentsOf: index)).object
+            if !marker { doc.removeValue(forKey: "discovery_index_version") }
+            var rows = doc["stations"]!.array
+            let position = try XCTUnwrap(rows.firstIndex { $0["status"].string == "active" })
+            var row = rows[position].object
+            let id = try XCTUnwrap(row["station_id"]?.string)
+            row["country"] = .string("ZZ"); rows[position] = .object(row); doc["stations"] = .array(rows)
+            let modified = try encode_cache_json(.object(doc))
+            try modified.write(to: index)
+            let warm = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            defer { warm.close() }
+            XCTAssertEqual(try Data(contentsOf: index), modified, "admit lazily without source rescan/rewrite")
+            XCTAssertEqual(warm.release.lru.count, 0)
+            XCTAssertThrowsError(try warm.requireStation(stationId: id)) { error in
+                XCTAssertEqual((error as? OpenTideConstantsError)?.code, "invalid_release")
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: index.path))
+            print("INDEX_TAMPER marker=\(marker) id=\(id) index_deleted=\(!FileManager.default.fileExists(atPath: index.path))")
+        }
+    }
+    func testIndexActualWarmSourceRowsStayLazy() async throws {
+        let local = try indexFixture("warm-rowread", source: indexGoodSource)
+        let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+        let cold = try await OpenTideConstants.open(file: local.path, mode: .stream)
+        let id = try XCTUnwrap(cold.release.entries.first?.id)
+        cold.close()
+        var source = try Data(contentsOf: local)
+        source[0] = 33
+        try source.write(to: local)
+        var doc = try JSONValue.parse(Data(contentsOf: index)).object
+        doc["jsonl_sha256"] = .string(SHA256.digest(source))
+        let modified = try encode_cache_json(.object(doc))
+        try modified.write(to: index)
+        let warm = try await OpenTideConstants.open(file: local.path, mode: .stream)
+        defer { warm.close() }
+        XCTAssertEqual(try Data(contentsOf: index), modified)
+        XCTAssertEqual(warm.release.lru.count, 0)
+        XCTAssertThrowsError(try warm.requireStation(stationId: id)) { error in
+            XCTAssertEqual((error as? OpenTideConstantsError)?.code, "invalid_release")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: index.path))
+        print("INDEX_ROWREAD warm_admitted=true before_query=0 query=invalid_release deleted=true")
+    }
+    func testIndexActualASCIIWhitespaceSpans() async throws {
+        let local = try indexFixture("ascii-lines", source: indexGoodSource)
+        let original = try Data(contentsOf: local)
+        var framed = Data(" \t\u{000b}\u{000c}\r\n".utf8)
+        let lines = original.split(separator: 10, omittingEmptySubsequences: false)
+        for (position, line) in lines.enumerated() where !line.isEmpty {
+            framed.append(contentsOf: line)
+            framed.append(contentsOf: position == lines.count - 2 ? [13] : [13, 10, 32, 9, 10])
+        }
+        try framed.write(to: local)
+        let client = try await OpenTideConstants.open(file: local.path, mode: .stream)
+        defer { client.close() }
+        let doc = try JSONValue.parse(Data(contentsOf: local.deletingLastPathComponent().appendingPathComponent("index-v1.json")))
+        for row in doc["stations"].array {
+            let start = Int(try XCTUnwrap(row["offset"].integer)), length = Int(try XCTUnwrap(row["length"].integer))
+            let actual = try JSONValue.parse(framed.subdata(in: start..<start + length))
+            XCTAssertEqual(actual["station_id"], row["station_id"])
+        }
+        let last = try XCTUnwrap(doc["stations"].array.last)
+        XCTAssertEqual(framed[Int(last["offset"].integer! + last["length"].integer! - 1)], 13, "lone final CR is body")
+        print("INDEX_SPANS rows=\(doc["stations"].array.count) blank_ascii=skipped final_cr=retained")
+    }
+    func testIndexActualPublicationFailure() throws {
+        let local = try indexFixture("publication", source: indexGoodSource)
+        let blocked = local.deletingLastPathComponent().appendingPathComponent("blocked")
+        try Data("real filesystem publication obstruction".utf8).write(to: blocked)
+        var warnings: [String] = []
+        let release = try Reader.load(local, mode: .stream, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback", indexPath: blocked.appendingPathComponent("index-v1.json"), logger: { warnings.append($0) })
+        defer { release.close() }
+        XCTAssertEqual(try release.stationCount, 20)
+        XCTAssertEqual(warnings, ["opentideconstants: cannot cache index-v1.json"])
+        XCTAssertNotNil(try release.station(stationId: "OTC-T-0001"))
+        print("INDEX_PUBLICATION native_file_obstruction=true warning=\(warnings.count) result_usable=true")
+    }
+    func testIndexActualLRUEviction() throws {
+        let source = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_INDEX_LIFETIME_JSONL"]))
+        let release = try Reader.load(source, mode: .stream, commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")
+        defer { release.close() }
+        let ids = Array(release.entries.filter { $0.status == "active" }.prefix(257).map(\.id))
+        XCTAssertEqual(ids.count, 257)
+        for id in ids.prefix(256) { _ = try release.requireStation(stationId: id) }
+        _ = try release.requireStation(stationId: ids[0])
+        _ = try release.requireStation(stationId: ids[256])
+        XCTAssertEqual(release.lru.count, 256)
+        XCTAssertNotNil(release.lru[ids[0]], "recently accessed actual station must stay in LRU")
+        XCTAssertNil(release.lru[ids[1]], "least recently used actual station must be evicted")
+        print("INDEX_LRU bounded=\(release.lru.count) recent_retained=\(release.lru[ids[0]] != nil) oldest_evicted=\(release.lru[ids[1]] == nil) fd=\(indexDescriptors(source))")
+    }
+    func testIndexActualFullLegacyCurrentOffsetFields() async throws {
+        let source = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_INDEX_FULL_LEGACY_JSONL"]))
+        for label in ["matching", "changed-known-unprojected", "changed-unknown", "deleted-unknown"] {
+            let local = try indexFixture("full-legacy-\(label)", source: source)
+            var rows: [JSONValue] = []
+            try eachLine(local) { data, _ in rows.append(try JSONValue.parse(data)) }
+            let target = try XCTUnwrap(rows.first { !$0["current_offsets"].array.isEmpty })
+            let id = try XCTUnwrap(target["station_id"].string)
+            let cold = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            cold.close()
+            let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+            var doc = try JSONValue.parse(Data(contentsOf: index)).object
+            doc.removeValue(forKey: "discovery_index_version")
+            var entries = doc["stations"]!.array
+            for position in entries.indices {
+                var entry = entries[position].object
+                let original = try XCTUnwrap(rows.first { $0["station_id"] == entry["station_id"] })
+                entry["current_offsets"] = .array(original["current_offsets"].array)
+                entries[position] = .object(entry)
+            }
+            let position = try XCTUnwrap(entries.firstIndex { $0["station_id"].string == id })
+            var entry = entries[position].object, offsets = entry["current_offsets"]!.array, offset = offsets[0].object
+            if label == "changed-known-unprojected" { offset["depth_m"] = .integer(99) }
+            if label == "changed-unknown" { var unknown = offset["index_value_unknown"]!.object; unknown["enum"] = .string("tampered"); offset["index_value_unknown"] = .object(unknown) }
+            if label == "deleted-unknown" { offset.removeValue(forKey: "index_value_unknown") }
+            offsets[0] = .object(offset); entry["current_offsets"] = .array(offsets); entries[position] = .object(entry); doc["stations"] = .array(entries)
+            let modified = try encode_cache_json(.object(doc))
+            try modified.write(to: index)
+            let warm = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            defer { warm.close() }
+            XCTAssertEqual(try Data(contentsOf: index), modified, "\(label): valid full legacy shape is admitted without rewriting")
+            XCTAssertEqual(warm.release.lru.count, 0)
+            XCTAssertEqual(indexDescriptors(local), 1)
+            if label == "matching" {
+                XCTAssertEqual(try warm.requireStation(stationId: id).raw, target)
+                XCTAssertEqual(try Data(contentsOf: index), modified)
+            } else {
+                XCTAssertThrowsError(try warm.requireStation(stationId: id), label) { error in
+                    XCTAssertEqual((error as? OpenTideConstantsError)?.code, "invalid_release")
+                }
+                XCTAssertFalse(FileManager.default.fileExists(atPath: index.path), label)
+            }
+            print("INDEX_FULL_LEGACY label=\(label) id=\(id) source_sha=\(try SHA256.file(local)) cache_deleted=\(!FileManager.default.fileExists(atPath: index.path)) fd=\(indexDescriptors(local))")
+            warm.close()
+            XCTAssertEqual(indexDescriptors(local), 0)
+        }
+    }
     func testCreatedTypeActualFormats() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
