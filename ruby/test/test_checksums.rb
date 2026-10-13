@@ -1,6 +1,64 @@
 # Checksum agreement, verify and corrupt-cache recovery (spec §4.3, §4.8, §5.2 step 4, CR D20).
 require_relative "support"
 
+class CacheEncodingTest < Minitest::Test
+    include TestSupport
+    OTC = OpenTideConstants
+    D = "20991231.2".freeze
+
+    def golden
+        JSON.parse(File.read(File.join(ROOT, "conformance/canonical/cache-golden.json")))
+    end
+
+    def value_for(fixture)
+        fixture.key?("binary64_hex") ? [fixture.fetch("binary64_hex")].pack("H*").unpack1("G") : fixture.fetch("input")
+    end
+
+    def test_verified_writer_emits_approved_finite_bytes
+        golden.fetch("cases").each do |fixture|
+            cache = OTC::Cache.new(tmpdir)
+            cache.write_verified(D, {}, "format_version" => value_for(fixture))
+            bytes = File.binread(File.join(cache.release_dir(D), ".verified"))
+            document = JSON.parse(bytes)
+            assert_equal "opentideconstants-ruby/#{OTC::VERSION}", document.fetch("by")
+            assert Time.iso8601(document.fetch("verified_at"))
+            expected = '{"by":' + JSON.generate(document.fetch("by")) + ',"datestamp":"' + D +
+                       '","files":{},"format_version":' + fixture.fetch("expected") +
+                       ',"min_reader_version":null,"verified_at":' + JSON.generate(document.fetch("verified_at")) +
+                       ',"zenodo_version_doi":null}'
+            assert_equal expected.b, bytes, fixture.fetch("id")
+        end
+    end
+
+    def test_callable_matches_approved_finite_vectors
+        golden.fetch("cases").each do |fixture|
+            bytes = OTC::Cache.encode_cache_json(value_for(fixture))
+            assert_equal Encoding::UTF_8, bytes.encoding
+            assert_equal fixture.fetch("expected"), bytes, fixture.fetch("id")
+        end
+    end
+
+    def test_callable_refuses_nonfinite_invalid_unicode_and_non_json_values
+        [Float::NAN, Float::INFINITY, -Float::INFINITY, "\xed\xa0\x80".b.force_encoding(Encoding::UTF_8),
+         "\xed\xbf\xbf".b.force_encoding(Encoding::UTF_8), Object.new, { :key => 1 }].each do |value|
+            assert_raises(ArgumentError, EncodingError) { OTC::Cache.encode_cache_json(value) }
+        end
+    end
+
+    def test_encoding_preserves_input_and_original_pointer_bytes
+        document = { "unknown" => { "nested" => [nil, 1e-7, "e\u0301", { "z" => 2, "a" => 1 }] } }
+        original = Marshal.dump(document)
+        OTC::Cache.encode_cache_json(document)
+        assert_equal original, Marshal.dump(document)
+        cache = OTC::Cache.new(tmpdir)
+        pointer = "{ \"z\": 1, \"a\": 2 }\n"
+        etag = 'W/"exact-header"'
+        cache.write_pointer("OTC_latest-f1.json", pointer, etag)
+        assert_equal pointer, File.binread(File.join(cache.pointer_dir, "OTC_latest-f1.json"))
+        assert_equal etag, File.binread(File.join(cache.pointer_dir, "OTC_latest-f1.json.etag"))
+    end
+end
+
 class ChecksumTest < Minitest::Test
     include TestSupport
     OTC = OpenTideConstants
