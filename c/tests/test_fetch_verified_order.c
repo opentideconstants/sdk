@@ -10,6 +10,96 @@
 
 #define JSONL_SHA "84ba5c138d233be93c031bdec7b243caa72d27bbf6a7b3d0df14aa61fe36fab0"   /* good/OTC_20991231.2.jsonl */
 
+static cJSON *receipt_contract(const char *dir, const char *label, int nfiles, const char *doi)
+{
+    char *p = test_join(dir, ".verified"), *text = NULL, *canonical = NULL;
+    size_t len = 0;
+    cJSON *doc, *row;
+    CHECK_STATUS(otc__read_all(p, &text, &len), OTC_OK);
+    free(p);
+    doc = text ? otc__json_parse(text, len) : NULL;
+    CHECK(doc != NULL);
+    if (!doc) { free(text); return NULL; }
+    printf("receipt %s: %s\n", label, text);
+    CHECK(cJSON_GetArraySize(doc) == 7);
+    CHECK(otc__jstr(doc, "format_version") != NULL);
+    CHECK(otc__jstr(doc, "min_reader_version") != NULL);
+    CHECK(doi ? otc__jstr(doc, "zenodo_version_doi") && !strcmp(doi, otc__jstr(doc, "zenodo_version_doi"))
+              : cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(doc, "zenodo_version_doi")));
+    CHECK(cJSON_GetArraySize(otc__jget(doc, "files")) == nfiles);
+    cJSON_ArrayForEach(row, otc__jget(doc, "files")) {
+        char *file = test_join(dir, row->string), hex[65];
+        CHECK(cJSON_GetArraySize(row) == 3);
+        CHECK(cJSON_IsString(otc__jget(row, "sha256")));
+        CHECK(cJSON_IsString(cJSON_GetObjectItemCaseSensitive(row, "url"))
+              || cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(row, "url")));
+        CHECK(otc__path_size(file) == otc__jint(row, "size"));
+        CHECK_STATUS(otc__sha256_file(file, hex), OTC_OK);
+        CHECK(otc__jstr(row, "sha256") && !strcmp(hex, otc__jstr(row, "sha256")));
+        free(file);
+    }
+    CHECK_STATUS(otc__encode_cache_json(doc, &canonical), OTC_OK);
+    CHECK(canonical && !strcmp(text, canonical));
+    free(canonical);
+    free(text);
+    return doc;
+}
+
+static void two_mode_receipts(const otc_fetch_options *options)
+{
+    char *cache = test_tmpdir(), *dir = test_join(cache, "v1/releases/20991231.2");
+    char path[4096], *meta, *text = NULL, doi[128];
+    size_t need;
+    otc_fetch_options fo = *options;
+    otc_release *rel = NULL;
+    cJSON *doc, *row;
+    fo.cache_dir = cache;
+    CHECK_STATUS(otc_fetch_open(&fo, "latest", NULL, &rel), OTC_OK);
+    if (!rel) { free(dir); free(cache); return; }
+    CHECK_STATUS(otc_release_zenodo_version_doi(rel, doi, sizeof doi, &need), OTC_OK);
+    CHECK(!strcmp(doi, "10.5072/zenodo.2"));
+    otc_close(rel);
+    doc = receipt_contract(dir, "stream", 2, doi);
+    cJSON_Delete(doc);
+    fo.formats = OTC_FORMAT_JSON | OTC_FORMAT_JSONL;
+    CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", NULL, &rel), OTC_OK);
+    if (rel) {
+        CHECK_STATUS(otc_release_zenodo_version_doi(rel, doi, sizeof doi, &need), OTC_OK);
+        CHECK(!strcmp(doi, "10.5072/zenodo.2"));
+        otc_close(rel);
+    }
+    doc = receipt_contract(dir, "stream-to-eager", 3, "10.5072/zenodo.2");
+    if (doc) {
+        row = cJSON_GetObjectItemCaseSensitive(otc__jget(doc, "files"), "OTC_20991231.2.json");
+        CHECK(row != NULL);
+        if (row) {
+            CHECK(cJSON_AddStringToObject(row, "private", "must not survive") != NULL);
+            cJSON_DeleteItemFromObjectCaseSensitive(row, "url");
+        }
+        CHECK_STATUS(otc__encode_cache_json(doc, &text), OTC_OK);
+        if (text) test_write(dir, ".verified", text);
+        free(text);
+        cJSON_Delete(doc);
+    }
+    /* A stream acquisition replaces the missing META and retains verified JSON.
+     * Its legacy row must become exactly sha256/size/url with unknown URL null. */
+    meta = test_join(dir, "OTC_20991231.2.meta.json");
+    CHECK(unlink(meta) == 0);
+    free(meta);
+    fo.formats = OTC_FORMAT_JSONL;
+    CHECK_STATUS(otc_fetch_release(&fo, "20991231.2", path, sizeof path, &need), OTC_OK);
+    doc = receipt_contract(dir, "eager-to-stream", 3, "10.5072/zenodo.2");
+    row = cJSON_GetObjectItemCaseSensitive(otc__jget(doc, "files"), "OTC_20991231.2.json");
+    CHECK(cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(row, "url")));
+    cJSON_Delete(doc);
+    fo.offline = 1;
+    CHECK_STATUS(otc_fetch_open(&fo, "20991231.2", NULL, &rel), OTC_OK);
+    if (rel) otc_close(rel);
+    printf("two-mode cache: %s\n", cache);
+    free(dir);
+    free(cache);
+}
+
 static void index_contract(otc_fetch_options *fo, const char *dir, const char *jsonl)
 {
     otc_release *rel = NULL;
@@ -73,6 +163,7 @@ int main(void)
     fo.cache_dir = cache;
     fo.base_url = base;
     fo.error = &err;
+    two_mode_receipts(&fo);
     CHECK_STATUS(otc_fetch_release(&fo, "20991231.2", path, sizeof path, &need), OTC_OK);
     dir = test_join(cache, "v1/releases/20991231.2");
     vpath = test_join(dir, ".verified");

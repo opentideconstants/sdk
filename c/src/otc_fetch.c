@@ -1953,14 +1953,14 @@ static void note_entry(fctx *c, const otc_release_info *ri)
         cJSON_DeleteItemFromObjectCaseSensitive(v, "zenodo_version_doi");
         jput(v, "zenodo_version_doi", cJSON_CreateString(ri->zenodo_version_doi), &ok);   /* never null here (DR11) */
         p = path2(d, ".verified");
-        txt = p && ok ? cJSON_Print(v) : NULL;
+        if (p && ok) (void)otc__encode_cache_json(v, &txt);
         if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
             logf_(c, 2, "cannot update %s", p ? p : ri->datestamp);
             if (c->err) otc_error_init(c->err);
         }
     }
     lock_release(c, d, token);
-    cJSON_free(txt);
+    free(txt);
     free(p);
     free(d);
     cJSON_Delete(v);
@@ -2452,25 +2452,31 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
          * real size and lowercase SHA-256, and never one for OTC_{D}.sha256 (spec 5.4, CR3 DR100):
          * the old rows while their files are there (an earlier open, or a file kept above), then
          * the data files of this open */
-        if (old && cJSON_IsObject(otc__jget(old, "files"))) {
+        if (old && !(c->formats & OTC_FORMAT_JSON)) {
+            char name[NAME_CAP], *p, hex[65];
             const cJSON *f;
-            cJSON_ArrayForEach(f, otc__jget(old, "files")) {
-                char *p;
+            const char *sha, *row;
+            size_t k;
+            int matches = 1;
+            snprintf(name, sizeof name, "OTC_%s.json", ds);
+            f = otc__jget(otc__jget(old, "files"), name);
+            sha = otc__jstr(f, "sha256");
+            row = row_of(names, digests, n_rows, name);
+            p = path2(dir, name);
+            if (!p) ok = 0;
+            else if (sha && strlen(sha) == 64 && row && fs_kind(p) == 2 && otc__sha256_file(p, hex) == OTC_OK) {
                 cJSON *o;
-                if (!ok) break;
-                if (!f->string || !strcmp(f->string, sha_name) || !otc__jstr(f, "sha256")) continue;
-                p = path2(dir, f->string);
-                if (!p) { ok = 0; break; }
-                if (fs_kind(p) == 2) {
-                    o = otc__json_dup(f);
-                    if (o && cJSON_IsString(otc__jget(o, "sha256"))) {
-                        char *h = cJSON_GetStringValue(otc__jget(o, "sha256"));
-                        for (; *h; h++) *h = hex_lower(*h);
-                    }
-                    jput(files, f->string, o, &ok);
+                for (k = 0; k < 64; k++)
+                    if (hex[k] != hex_lower(sha[k]) || hex[k] != hex_lower(row[k])) matches = 0;
+                if (matches) {
+                    o = cJSON_CreateObject();
+                    jput(o, "sha256", cJSON_CreateString(hex), &ok);
+                    jput(o, "size", cJSON_CreateNumber((double)otc__path_size(p)), &ok);
+                    jput(o, "url", str_or_null(otc__jstr(f, "url")), &ok);
+                    jput(files, name, o, &ok);
                 }
-                free(p);
             }
+            free(p);
         }
         for (i = 0; ok && want_all[i]; i++) {
             char name[NAME_CAP], *p, *u, low[65];
@@ -2509,12 +2515,14 @@ static otc_status download_to_cache(fctx *c, const char *ds, const otc_release_i
         if (otc__jstr(rel->release_obj, "min_reader_version"))
             jput(ver, "min_reader_version", cJSON_CreateString(otc__jstr(rel->release_obj, "min_reader_version")), &ok);
         /* the version DOI of the entry used (spec 4.3); a pinned download reads no entry */
-        jput(ver, "zenodo_version_doi", str_or_null(info ? info->zenodo_version_doi : NULL), &ok);
+        jput(ver, "zenodo_version_doi", str_or_null(info && info->zenodo_version_doi
+             ? info->zenodo_version_doi : otc__jstr(old, "zenodo_version_doi")), &ok);
         vpath = path2(dir, ".verified");
-        txt = ok ? cJSON_Print(ver) : NULL;
+        txt = NULL;
+        if (ok) (void)otc__encode_cache_json(ver, &txt);
         if (!vpath || !txt) st = fail(c, OTC_E_NOMEM, NULL, "out of memory");
         else st = write_atomic(c, dir, vpath, txt, strlen(txt));
-        cJSON_free(txt);
+        free(txt);
         free(vpath);
     }
 out:
