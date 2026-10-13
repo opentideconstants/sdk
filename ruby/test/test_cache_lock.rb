@@ -71,6 +71,40 @@ class CacheLockTest < Minitest::Test
         assert_equal "20991231.2", ver["datestamp"]
     end
 
+    def test_mode_acquisition_emits_only_the_three_verified_row_fields
+        srv = serve
+        cache = tmpdir
+        OTC.new(base_url: srv.url("/"), cache_dir: cache).close
+        path = File.join(cache, "v1", "releases", "20991231.2", ".verified")
+        before = JSON.parse(File.binread(path))
+        before["files"].each_value do |row|
+            row["private_field"] = "an older writer's field"
+            row.delete("url")
+        end
+        File.binwrite(path, JSON.generate(before))
+        OTC.new(release: "20991231.2", base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        ver = JSON.parse(File.binread(path))
+        assert_equal %w[by datestamp files format_version min_reader_version verified_at zenodo_version_doi], ver.keys.sort
+        assert_equal 3, ver["files"].size
+        ver["files"].each_value { |row| assert_equal %w[sha256 size url], row.keys.sort }
+        assert_nil ver["files"]["OTC_20991231.2.json"]["url"]
+        assert_equal "10.5072/zenodo.2", ver["zenodo_version_doi"]
+    end
+
+    def test_public_doi_note_uses_the_exact_cache_encoder
+        srv = serve
+        cache = tmpdir
+        c = OTC.new(release: "20991231.2", base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+        c.releases
+        path = File.join(cache, "v1", "releases", "20991231.2", ".verified")
+        bytes = File.binread(path)
+        ver = JSON.parse(bytes)
+        assert_equal "10.5072/zenodo.2", ver["zenodo_version_doi"]
+        assert_equal OTC::Cache.encode_cache_json(ver), bytes
+    ensure
+        c&.close
+    end
+
     def two_cached(srv)
         cache = tmpdir
         OTC.new(release: "20991231", base_url: srv.url("/"), cache_dir: cache).close

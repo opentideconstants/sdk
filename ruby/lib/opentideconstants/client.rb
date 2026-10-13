@@ -959,13 +959,11 @@ class OpenTideConstants
                 FileUtils.rm_f(tmp_gz)
             end
         end
-        if entry.nil?
-            # A pinned download reads no pointer: take the versions from the
-            # release's own file (the sidecar, or the .json in eager mode).
-            meta = @mode == :stream ? cached_meta(d) : release_versions(File.join(dir, "OTC_#{d}.json"))
-            info["format_version"] = meta["format_version"]
-            info["min_reader_version"] = meta["release"]["min_reader_version"] if meta["release"].is_a?(Hash)
-        end
+        # The receipt keeps the versions of the checked source, including
+        # readable higher minors, rather than the pointer's advertised values.
+        meta = @mode == :stream ? cached_meta(d) : release_versions(File.join(dir, "OTC_#{d}.json"))
+        info["format_version"] = meta["format_version"]
+        info["min_reader_version"] = meta["release"].is_a?(Hash) ? meta["release"]["min_reader_version"] : nil
         cache.write_verified(d, verified, info)
     end
 end
