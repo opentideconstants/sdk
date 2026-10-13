@@ -1,6 +1,7 @@
 require "minitest/autorun"
 require "json"
 require "time"
+require "tmpdir"
 require "opentideconstants"
 
 class NoaaHistoricalNativeTest < Minitest::Test
@@ -8,6 +9,55 @@ class NoaaHistoricalNativeTest < Minitest::Test
     ORACLE = JSON.parse(File.read(ENV.fetch("OTC_NOAA_NATIVE_ORACLE")))
     START = Time.utc(2026, 10, 11)
     STOP = START + 86400
+    def test_private_table_model_mismatch_rejects_native_prediction
+        with_private_table_control do |raw|
+            raw.fetch("astro_tables").first["v0_model"] = "private_incompatible_model"
+        end
+    end
+    def test_private_declared_table_pin_mismatch_rejects_native_prediction
+        with_private_table_control do |raw|
+            raw.fetch("conventions").find { |c| c["convention_id"] == "noaa-harcon-gmt" }["tables_sha256"] = "0" * 64
+        end
+    end
+    def test_null_and_matching_optional_table_pins_allow_native_prediction
+        [nil, :matching].each do |pin|
+            with_private_table_control(reject: false) do |raw|
+                convention = raw.fetch("conventions").find { |c| c["convention_id"] == "noaa-harcon-gmt" }
+                convention["tables_sha256"] = pin == :matching ? raw.fetch("astro_tables").first.fetch("tables_sha256") : nil
+            end
+        end
+    end
+    def with_private_table_control(reject: true)
+        # These are labelled private compatibility controls over the real native release.
+        raw = JSON.parse(File.read(File.join(INPUT, "OTC_20261011.json")))
+        yield raw
+        Dir.mktmpdir("otc-private-table-control") do |dir|
+            File.write(File.join(dir, "OTC_20261011.json"), JSON.generate(raw))
+            File.write(File.join(dir, "OTC_20261011.meta.json"), JSON.generate(raw.reject { |key, _| key == "stations" }))
+            File.write(File.join(dir, "OTC_20261011.jsonl"), raw.fetch("stations").map { |row| JSON.generate(row) + "\n" }.join)
+            [:eager, :stream].each do |mode|
+                path = File.join(dir, "OTC_20261011.#{mode == :eager ? 'json' : 'jsonl'}")
+                client = OpenTideConstants.new(file: path, mode: mode)
+                begin
+                    [client, client.release].each do |caller|
+                        %w[OTC-28c56e20 OTC-541f1a73].each do |id|
+                            if reject
+                                error = assert_raises(OpenTideConstants::UnsupportedConventionError) { caller.extremes(id, start: START, stop: START, datum: "chart") }
+                                assert_includes error.message, "noaa-harcon-gmt"
+                                assert_includes error.message, raw.fetch("astro_tables").first.fetch("astro_table_id")
+                            else
+                                result = caller.extremes(id, start: START, stop: START, datum: "chart")
+                                assert result.historical_offsets
+                                assert_empty result.items
+                            end
+                        end
+                    end
+                ensure
+                    client.close
+                end
+            end
+        end
+    end
     def test_actual_source_arithmetic_labels_and_controls
         [:eager, :stream].each do |mode|
             path = File.join(INPUT, "OTC_20261011.#{mode == :eager ? 'json' : 'jsonl'}")

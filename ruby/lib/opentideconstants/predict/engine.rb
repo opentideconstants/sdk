@@ -47,7 +47,12 @@ class OpenTideConstants
                 raise UnsupportedConventionError, "unsupported convention #{convention.convention_id}"
             end
             ident = convention.raw["astro_table_id"] || ""
-            astro_table(release, ident) || (raise NoAstroTableError, "release #{release.datestamp} has no astro table \"#{ident}\" for convention \"#{convention.convention_id}\". Format 1.0 requires astro_tables when a convention uses f_u_at_prediction (since the schema revision of site PR #45); this file was written before that revision or is invalid.")
+            table = astro_table(release, ident) || (raise NoAstroTableError, "release #{release.datestamp} has no astro table \"#{ident}\" for convention \"#{convention.convention_id}\". Format 1.0 requires astro_tables when a convention uses f_u_at_prediction (since the schema revision of site PR #45); this file was written before that revision or is invalid.")
+            raw = table.instance_variable_get(:@raw)
+            unless raw["v0_model"] == convention.v0_model && (convention.tables_sha256.nil? || raw["tables_sha256"] == convention.tables_sha256)
+                raise UnsupportedConventionError, "astro table #{ident} is incompatible with convention #{convention.convention_id}"
+            end
+            table
         end
         def unavailable(missing)
             raise DatumUnavailableError.new("datum is missing #{missing}", missing: missing)
