@@ -203,7 +203,9 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
     const store = ctx.store;
     const readEtag = async () => {
         const b = store ? await store.read(`${rel}.etag`) : null;
-        return b ? dec.decode(b).trim() : null;
+        const tag = b ? dec.decode(b).trim() : null;
+        // A conditional request requires an entity-tag, not merely a sendable header value.
+        return tag !== null && /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(tag) ? tag : null;
     };
     let etag = await readEtag();
     let cached = store ? await store.read(rel) : null;
