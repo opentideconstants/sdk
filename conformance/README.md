@@ -1,6 +1,6 @@
 # SDK conformance suite
 
-The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C) must pass (SDK spec §7.1). Suite version **1.0** (it tests format 1.0, the first published format).
+The suite that every OpenTideConstants SDK (Ruby, Python, TypeScript, C, Swift) must pass (SDK spec §7.1). Suite version **1.0** (it tests format 1.0, the first published format).
 
 | Path | What it is |
 |---|---|
@@ -36,7 +36,17 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 **Profiles.** Some SDKs must have every feature, so a runner cannot pass by leaving one out. The driver takes the profile from the hello's `runner` name, or from `--profile`: `python`, `ruby` and `typescript` (Node) must claim `fs`, `fetch`, `json`, `eager` and `stream`, and `python` and `typescript` also `https_proxy`; `typescript-browser` `fetch`, `json`, `eager` and `stream`; `c` must claim `fs`, `stream` and `require_checksum`, `c-fetch` also `fetch` and `https_proxy`. With prediction (prediction spec §6.5), `python`, `ruby`, `typescript` and `typescript-browser` also claim `predict`, `localtime_module` and `localtime`, and `c` and `c-fetch` those three and `tzdir_env` (the CI runs with the optional local-time dependency installed, and C on Linux and macOS). Four more profiles: `python-no-tz` (Python without `tzdata` on an image with no system database) and `ruby-no-tz` (Ruby without `tzinfo`), each the base features plus `predict` and `localtime_module`; `c-no-localtime` (C built with `-DOTC_WITH_LOCALTIME=OFF`, and C on Windows), the features of `c` plus `predict`; `c-no-predict` (C built with `-DOTC_WITH_PREDICT=OFF`), the features of `c` without any of the four. TypeScript has no profile without `localtime` (`Intl` is built in). A runner that lacks a required feature fails the handshake (exit 2). Other runner names (`null`, `almost`) have the profile `none`.
 
-**Pending features.** `PENDING_FEATURES` in `driver.py` lists, per profile, the profile features its SDK does not have yet (today the prediction features of every profile, the driver's side of `api.json` `pending_port`). A pending feature is not required, and a runner that claims one fails the handshake (exit 2), so the port that adds it removes the entry in the same change, as it removes an `expected-failures.json` entry that passes.
+**Pending features.** `PENDING_FEATURES` lists features whose native ports still need acceptance, together with `api.json` `pending_port`. The accepted prediction ports have no pending entries. A pending feature is not required. A runner that claims a pending feature fails the handshake (exit 2).
+
+**Swift.** The `swift` profile requires `fs`, `fetch`, `json`, `eager`, `stream`, `predict`, `localtime_module` and `localtime`. The public module is `OpenTideConstants`; operations, labels, fields and enum cases use lowerCamelCase. Runner JSON retains canonical snake_case keys and object/null/array shapes. In-memory methods, iterator closures and `verify()` throw synchronously; managed I/O methods, including `prune(keep:)`, use `async throws`. `DatumsResult` preserves the one/all-set union without a JSON tag. Native acceptance currently covers macOS 26 with Swift 6.4.
+
+Build the distinct runner package with `swift build --package-path conformance/runners/otc-swift`. Its API checker requires `OTC_CORE_NATIVE_JSON` to name the frozen native fixture accepted for the SDK. Set `OTC_SWIFT_VECTOR_JSON=conformance/vectors/1.0/vectors-release.json` for the unchanged vector fixture, then run `swift run --package-path conformance/runners/otc-swift CheckAPI`. Missing native fixture input fails the checker; it does not skip value checks. Run conformance with `--runner 'conformance/runners/otc-swift/.build/debug/Runner' --profile swift --all-steps --no-expected-failures` after the build. The driver includes Swift in cross-cache writer and reader roles. It also includes Swift in the existing fractional-instant case.
+
+For Swift opens without a case cache option or cache environment variable, the driver supplies a cache directory within the case's temporary directory. Explicit case options and environment variables retain precedence. This uses the SDK's cache option and keeps each case independent of the native macOS cache.
+
+**Native indexes.** `assert_index` checks each accepted discovery summary against the same cached JSONL bytes. It also checks original offsets, lengths, fields and digests. Python, TypeScript, C and Swift write `discovery_index_version: 1`; the accepted Ruby writer retains `index_version: 1`. Ruby also retains source identity and datum summaries. Unknown fields and tampered summaries still fail.
+
+For a TZDIR restart followed by prediction, the driver reopens the same release in the fresh process. Existing network/cache restart cases retain their explicit open steps.
 
 ## Expected failures
 

@@ -12,6 +12,7 @@ on:
       - "ruby/**"
       - "js/**"
       - "c/**"
+      - "swift/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
       - ".gitattributes"
@@ -21,6 +22,7 @@ on:
       - "ruby/**"
       - "js/**"
       - "c/**"
+      - "swift/**"
       - "conformance/**"
       - ".github/workflows/cross.yml"
       - ".gitattributes"
@@ -151,4 +153,85 @@ jobs:
         with:
           name: cross-report-${{ matrix.os }}
           path: cross-report.json
+          if-no-files-found: error
+
+  # The accepted Swift source requires Apple Security and SwiftPM 6.4.
+  # This separate hosted gate qualifies macOS 26; it does not claim Linux/iOS support.
+  swift-cross:
+    name: macOS 26 / Swift 6.4.0 / five SDKs
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with: { ruby-version: "3.3" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: Select the exact Swift.org toolchain
+        run: |
+          curl --fail --location https://download.swift.org/swiftly/darwin/swiftly.pkg -o "$RUNNER_TEMP/swiftly.pkg"
+          installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
+          "$HOME/.swiftly/bin/swiftly" init --skip-install --no-modify-profile --quiet-shell-followup --assume-yes
+          "$HOME/.swiftly/bin/swiftly" install --use --assume-yes 6.4.0
+          ruby -e 'File.open(ENV.fetch("GITHUB_PATH"), "a") { |file| file.puts(File.join(ENV.fetch("HOME"), ".swiftly", "bin")) }'
+      - name: Record and require the selected native compiler
+        run: |
+          sw_vers
+          xcodebuild -version
+          command -v swift
+          ruby -ropen3 -e 'output, status = Open3.capture2e("swift", "--version"); puts output; abort "Swift 6.4.0 is required" unless status.success? && output.match?(/Swift version 6\.4(?:\.0)?(?:\s|\()/)'
+          "$HOME/.swiftly/bin/swiftly" use
+      - name: Build the other native runners
+        run: |
+          gem install tzinfo --no-document
+          npm ci --prefix js
+          npm run build --prefix js
+          cmake -S c -B c/build-fetch -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
+          cmake --build c/build-fetch --parallel 2
+      - name: Build the native Swift SDK and runner
+        run: |
+          swift build --package-path swift -Xswiftc -warnings-as-errors
+          swift build --package-path conformance/runners/otc-swift -Xswiftc -warnings-as-errors
+      - name: Check every API and its default mutation tests
+        run: |
+          python conformance/runners/python/check_api.py
+          ruby conformance/runners/ruby/check_api.rb
+          npm run check:api --prefix js
+          python c/tools/check_manifest.py
+          swift run --skip-build --package-path conformance/runners/otc-swift CheckAPI
+          python conformance/driver.py --check-cases
+      - name: Run the native Swift vectors and full profile
+        run: |
+          python conformance/tools/run_vectors.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --no-expected-failures --report swift-vectors.json
+          python conformance/driver.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --profile swift --all-steps --no-expected-failures --report swift-profile.json
+      - name: Require all thirteen managed I/O cases
+        run: |
+          python conformance/driver.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --profile swift --only '^(net/offline-cached|update/swap|net/proxy-option|load/files-file-sha256-complete|cache/files-from-verified|cache/dr100-pinned-eager-rows|cache/dr100-update-rows|update/auto|update/last-error-cleared-auto|net/500-use-cache|net/listed-file-404-sent-once|download/then-open|download/latest-network-error-use-cache)$' --all-steps --no-expected-failures --report swift-io.json
+          ruby -rjson -e 'report = JSON.parse(File.read("swift-io.json")); abort "all thirteen I/O cases must pass without skips" unless report.fetch("counts") == {"PASS" => 13, "FAIL" => 0, "SKIP" => 0, "XFAIL" => 0, "XPASS" => 0}'
+      - name: Cross-SDK cases with native Swift writer and reader roles
+        run: |
+          python conformance/driver.py \
+            --cross python="python conformance/runners/python/runner.py" \
+            --cross ruby="ruby conformance/runners/ruby/runner.rb" \
+            --cross typescript="node conformance/runners/node/runner.mjs" \
+            --cross c="c/build-fetch/otc_runner" \
+            --cross swift="swift run --skip-build --package-path conformance/runners/otc-swift Runner" \
+            --no-expected-failures --report swift-cross.json
+      - name: Upload the native qualification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: swift-native-macos-26
+          path: |
+            swift-vectors.json
+            swift-profile.json
+            swift-io.json
+            swift-cross.json
           if-no-files-found: error

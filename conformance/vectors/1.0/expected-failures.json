@@ -1,33 +1,4 @@
 {
-  "description": "Prediction ports remain pending until each port passes all vectors and required SDK mutations; remove only that ports entries.",
-  "entries": [
-    {
-      "runner": "ruby",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "ruby-no-tz",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "typescript",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "typescript-browser",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "c",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "c-fetch",
-      "reason": "Prediction port is not implemented and accepted yet."
-    },
-    {
-      "runner": "c-no-localtime",
-      "reason": "Prediction port is not implemented and accepted yet."
-    }
-  ]
+  "description": "Only unaccepted prediction profiles are listed. Ruby, TypeScript and C entries were removed after native vector and mutation acceptance; Swift uses its accepted native prediction profile.",
+  "entries": []
 }

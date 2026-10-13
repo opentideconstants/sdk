@@ -3,6 +3,8 @@ pending_port (the prediction names each SDK does not have yet)."""
 from __future__ import annotations
 
 import json
+import importlib.util
+import re
 import sys
 
 import pytest
@@ -107,6 +109,7 @@ def test_the_four_features_exist():
 @pytest.mark.parametrize("profile,want", [
     ("python", {"predict", "localtime_module", "localtime"}), ("ruby", {"predict", "localtime_module", "localtime"}),
     ("typescript", {"predict", "localtime_module", "localtime"}),
+    ("swift", {"predict", "localtime_module", "localtime"}),
     ("typescript-browser", {"predict", "localtime_module", "localtime"}),
     ("c", {"predict", "localtime_module", "localtime", "tzdir_env"}),
     ("c-fetch", {"predict", "localtime_module", "localtime", "tzdir_env"}),
@@ -129,20 +132,20 @@ def test_new_profiles_are_expected_failure_runners():
     assert {"python-no-tz", "ruby-no-tz", "c-no-localtime", "c-no-predict"} <= driver.XF_RUNNERS
 
 
-def test_pending_features_are_not_required_and_must_not_be_claimed():
+def test_accepted_prediction_profiles_require_native_features():
     base = ["fs", "fetch", "json", "eager", "stream", "https_proxy"]
-    assert driver.profile_problem("python", base) is None
-    assert driver.profile_problem("python-no-tz", base) is None
+    assert "predict" in driver.profile_problem("python", base)
+    assert "predict" in driver.profile_problem("python-no-tz", base)
     assert "stream" in driver.profile_problem("python", ["fs", "fetch", "json", "eager", "https_proxy"])
-    p = driver.profile_problem("python", base + ["predict"])
-    assert p and "pending" in p and "predict" in p
+    assert driver.profile_problem("python", base + driver.PREDICT_FEATURES) is None
+    assert driver.profile_problem("swift", driver.LANG_FEATURES + driver.PREDICT_FEATURES) is None
     assert driver.profile_problem("c-no-predict", ["fs", "stream", "require_checksum"]) is None
 
 
 @pytest.mark.parametrize("profile,claims,rc", [
-    ("python-no-tz", ["fs", "fetch", "json", "eager", "stream", "https_proxy"], 0),
+    ("python-no-tz", ["fs", "fetch", "json", "eager", "stream", "https_proxy"], 2),
     ("python-no-tz", ["fs", "fetch", "json", "eager", "stream", "https_proxy", "localtime_module"], 2),
-    ("c-no-localtime", ["fs", "stream", "require_checksum"], 0),
+    ("c-no-localtime", ["fs", "stream", "require_checksum"], 2),
     ("c-no-predict", ["fs", "stream", "require_checksum"], 0),
 ])
 def test_handshake_with_a_new_profile(tmp_path, profile, claims, rc):
@@ -151,7 +154,7 @@ def test_handshake_with_a_new_profile(tmp_path, profile, claims, rc):
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--profile", profile,
                    env={"FAKE_HELLO": hello})
     if rc == 2:
-        assert r.returncode == 2 and "pending" in r.stderr, (r.returncode, r.stderr[-300:])
+        assert r.returncode == 2 and "required features" in r.stderr, (r.returncode, r.stderr[-300:])
     else:   # the handshake passes; the one case then fails on the fake runner's empty reply
         assert r.returncode == 1 and "handshake" not in r.stderr and "1 failed" in r.stdout, (r.stdout[-300:], r.stderr[-300:])
 
@@ -159,11 +162,12 @@ def test_handshake_with_a_new_profile(tmp_path, profile, claims, rc):
 # --- api.json pending_port
 
 LANG_PROFILES = {"python": ["python", "python-no-tz"], "ruby": ["ruby", "ruby-no-tz"],
-                 "typescript": ["typescript", "typescript-browser"], "c": ["c", "c-fetch", "c-no-localtime"]}
+                 "typescript": ["typescript", "typescript-browser"], "c": ["c", "c-fetch", "c-no-localtime"],
+                 "swift": ["swift"]}
 
 
 def test_reserved_phase2_is_gone():
-    assert "reserved_phase2" not in API and set(API["pending_port"]) == {"note", "ruby", "python", "typescript", "c"}
+    assert "reserved_phase2" not in API and set(API["pending_port"]) == {"note", *LANG_PROFILES}
 
 
 @pytest.mark.parametrize("lang", sorted(LANG_PROFILES))
@@ -207,14 +211,13 @@ def test_every_prediction_error_is_in_api_json():
 # --- the C API check (c/tools/check_manifest.py) with pending names; it reads only the header, so it runs here
 
 def _c_check():
-    import importlib.util
     spec = importlib.util.spec_from_file_location("check_manifest", CONF.parent / "c" / "tools" / "check_manifest.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod, (CONF.parent / "c" / "include" / "opentideconstants.h").read_text(encoding="utf-8")
 
 
-def test_c_check_passes_with_every_prediction_name_pending():
+def test_c_check_passes_with_accepted_prediction_names_active():
     cm, header = _c_check()
     assert cm.check(API, header)[0] == []
 
@@ -222,9 +225,10 @@ def test_c_check_passes_with_every_prediction_name_pending():
 def test_c_check_allows_a_pending_status_declared_early():
     """CR D24: a port may fix a pending error's status number early; the check and its self-test still pass."""
     cm, header = _c_check()
-    early = header.replace("OTC_E_READER_TOO_OLD = 19", "OTC_E_NO_CONSTANTS = 20,\n    OTC_E_READER_TOO_OLD = 19", 1)
-    assert early != header and cm.check(API, early)[0] == []
-    assert cm.self_test(API, early) == ([], 0)
+    pending = json.loads(json.dumps(API))
+    pending["pending_port"]["c"]["errors"] = ["no_constants"]
+    assert cm.check(pending, header)[0] == []
+    assert cm.self_test(pending, header)[0] == []
 
 
 @pytest.mark.parametrize("decl,name", [("OTC_API otc_status otc_heights(void);", "otc_heights"),
@@ -233,8 +237,11 @@ def test_c_check_allows_a_pending_status_declared_early():
                                         "otc_predict_opts")])
 def test_c_check_refuses_a_pending_name_declared(decl, name):
     cm, header = _c_check()
+    pending = json.loads(json.dumps(API))
+    pending["pending_port"]["c"]["members"] = ["Release.heights", "HeightSeries.to_local"]
+    pending["pending_port"]["c"]["c_structs"] = ["otc_predict_opts"]
     bad = header.replace("OTC_API void otc_close(", decl + "\nOTC_API void otc_close(", 1)
-    assert any(p.startswith(f"{name}  (pending for C") for p in cm.check(API, bad)[0])
+    assert any(p.startswith(f"{name}  (pending for C") for p in cm.check(pending, bad)[0])
 
 
 def test_c_self_test_skips_the_mutations_of_a_ported_name():
@@ -242,9 +249,19 @@ def test_c_self_test_skips_the_mutations_of_a_ported_name():
     ported = json.loads(json.dumps(API))
     ported["pending_port"]["c"] = {"objects": [], "members": [], "enums": [], "errors": [], "c_structs": []}
     problems, _ = cm.check(ported, header)
-    assert any("otc_heights  (Release.heights: no OTC_API function)" in p for p in problems)   # the header lacks it
+    assert problems == []
+    dropped = re.sub(r"OTC_API otc_status otc_heights\([^;]*;", "", header)
+    assert dropped != header
+    assert any("otc_heights  (Release.heights: no OTC_API function)" in p for p in cm.check(ported, dropped)[0])
     failures, skipped = cm.self_test(ported, header)
     assert skipped == len(cm.NEEDS_PENDING) and not any("crashed" in f for f in failures), failures
+
+
+def test_swift_fractional_registration_keeps_other_runner_filters():
+    case = {"id": "predict-heights/fractional-instants@json", "runners": ["python", "ruby", "typescript"]}
+    assert not driver.runner_skips(case, "swift", "swift")
+    assert driver.runner_skips(case, "c", "c")
+    assert driver.runner_skips(dict(case, id="unrelated"), "swift", "swift")
 
 
 # --- the case-level runners filter (prediction spec 6.5: Python-only and not-C cases)
@@ -264,8 +281,7 @@ def test_runners_filter_is_linted(tmp_path):
 def test_runners_filter_skips_other_runners(tmp_path, hello_runner, profile, runs):
     cases = write_cases(tmp_path, [{"id": "a", "runners": ["python"], "steps": [{"op": "station_count",
                                                                                  "expect": {"count": 1}}]}])
-    feats = {"python": ["fs", "fetch", "json", "eager", "stream", "https_proxy"], "ruby": ["fs", "fetch", "json", "eager", "stream"],
-             "c": ["fs", "stream", "require_checksum"], "null": []}[hello_runner]
+    feats = driver.PROFILES[profile]
     hello = json.dumps({"hello": {"runner": hello_runner, "features": feats}})
     r = run_driver("--runner", write_fake_runner(tmp_path), "--cases", str(cases), "--profile", profile,
                    "--no-expected-failures", env={"FAKE_HELLO": hello})

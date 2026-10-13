@@ -79,6 +79,8 @@ def runner_skips(case, runner, profile):
     """Whether a case's runners filter (a list of runner or profile names) leaves this runner out. The RED runners
     (null, almost) run every case."""
     names = case.get("runners")
+    if (runner == "swift" or profile == "swift") and case["id"].split("@", 1)[0] == "predict-heights/fractional-instants":
+        return False
     return names is not None and runner not in RED_RUNNERS and runner not in names and profile not in names
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
@@ -95,7 +97,7 @@ FILTERS = ["country", "type", "kind", "source", "source_type", "include_flagged"
 OPEN_ARGS = ["release", "file", "cache_dir", "offline", "mode", "base_url", "timeout", "proxy", "ca_file", "user_agent",
              "on_network_error", "auto_update", "update_interval", "verify_on_open",
              "require_checksum",   # require_checksum: C only, so a step that passes it needs that feature (CR2 DR34)
-             "commercial_only", "commercial_basis"]    # K-NC DR106 (C: otc_open_options.commercial_only)
+             "commercial_only", "commercial_basis", "historical_offsets_policy"]
 # op -> allowed argument names (README "Operations")
 OPS = {
     "open": OPEN_ARGS, "close": [], "hold_release": ["name"], "loaded_from": [], "last_error": [],
@@ -114,9 +116,9 @@ OPS = {
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
     # prediction (prediction spec 5.2; README "Operations")
-    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id"],
-    "heights_at": ["station_id", "times", "datum", "set_id"],
-    "extremes": ["station_id", "start", "stop", "datum", "set_id"],
+    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id", "offset_id"],
+    "heights_at": ["station_id", "times", "datum", "set_id", "offset_id"],
+    "extremes": ["station_id", "start", "stop", "datum", "set_id", "offset_id"],
     "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id"],
     "current_events": ["station_id", "start", "stop", "bin_number", "set_id"],
     "datums": ["station_id", "set_id", "all_sets"], "ranges": ["station_id", "set_id"],
@@ -166,6 +168,7 @@ _C = ["fs", "stream", "require_checksum"]
 PROFILES = {
     "python": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES, "ruby": LANG_FEATURES + PREDICT_FEATURES,
     "typescript": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES,
+    "swift": LANG_FEATURES + PREDICT_FEATURES,
     "typescript-browser": ["fetch", "json", "eager", "stream"] + PREDICT_FEATURES,
     "c": _C + PREDICT_FEATURES + ["tzdir_env"],
     "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"] + PREDICT_FEATURES + ["tzdir_env"],
@@ -177,12 +180,7 @@ PROFILES = {
 }
 # Profile features an SDK does not have yet (the driver's side of api.json pending_port): they are not required, and a
 # runner must not claim them. A port removes its profiles' entries in the change that makes its runner claim them.
-PENDING_FEATURES = {
-    "ruby": PREDICT_FEATURES, "typescript": PREDICT_FEATURES,
-    "typescript-browser": PREDICT_FEATURES, "c": PREDICT_FEATURES + ["tzdir_env"],
-    "c-fetch": PREDICT_FEATURES + ["tzdir_env"],
-    "ruby-no-tz": ["predict", "localtime_module"], "c-no-localtime": ["predict"],
-}
+PENDING_FEATURES = {}
 
 
 def profile_problem(profile, features):
@@ -210,10 +208,10 @@ class CaseError(Exception):
 
 EXPECTED_FAILURES = HERE / "expected-failures.json"
 # The runner names an entry may list: the profiles (a hello's "runner"), and "cross" for a --cross run.
-XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "c", "c-fetch", "python-no-tz", "ruby-no-tz",
+XF_RUNNERS = {"python", "ruby", "typescript", "typescript-browser", "swift", "c", "c-fetch", "python-no-tz", "ruby-no-tz",
               "c-no-localtime", "c-no-predict", "cross"}
 # The --cross names the CI and the gates use; a cross entry's case pattern must match one of these expansions.
-CROSS_NAMES = ["python", "ruby", "typescript", "c"]
+CROSS_NAMES = ["python", "ruby", "typescript", "c", "swift"]
 
 
 def load_expected_failures(path):
@@ -1257,34 +1255,59 @@ def act_assert_index(a):
     except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as e:
         return [f"{jsonl}: cannot build the reference index from it ({type(e).__name__}: {e})"]
     extension_problems = []
-    if isinstance(doc, dict) and isinstance(doc.get('by'), str) and doc['by'].startswith('opentideconstants-python/'):
-        # P1b's versioned private summaries are checked against actual file data, then the original exact
-        # index-format checks run on every original field. No unknown key is discarded.
-        extension_problems += match(1, doc.get('discovery_index_version', _MISSING), 0, 'discovery_index_version')
+
+    def check_extension(summary, key, value, where):
+        actual = summary.pop(key, _MISSING)
+        if value is _MISSING:
+            return [] if actual is _MISSING else [f"{where}: should be absent"]
+        return match(value, actual, 0, where)
+
+    writers = tuple(f'opentideconstants-{language}/' for language in ('python', 'ruby', 'js', 'c', 'swift'))
+    if isinstance(doc, dict) and isinstance(doc.get('by'), str) and doc['by'].startswith(writers):
+        # Accepted native discovery summaries retain the original index-v1 fields. Check each
+        # extension against actual JSONL before comparing those fields, including offsets and digests.
+        # Ruby's accepted writer retains index_version alone; other writers also seal discovery version 1.
+        if not doc['by'].startswith('opentideconstants-ruby/') or 'discovery_index_version' in doc:
+            extension_problems += match(1, doc.get('discovery_index_version', _MISSING), 0, 'discovery_index_version')
         doc = copy.deepcopy(doc)
         doc.pop('discovery_index_version', None)
+        sparse_c = doc['by'].startswith('opentideconstants-c/')
+        full_offsets = doc['by'].startswith(('opentideconstants-c/', 'opentideconstants-ruby/', 'opentideconstants-js/'))
         records = [json.loads(line) for line in jsonl.read_bytes().splitlines() if line.strip()]
         for entry, raw in zip(doc.get('stations') or [], records):
             if not isinstance(entry, dict):
                 continue
             own_offsets = raw.get("subordinate_offsets")
-            extension_problems += match(own_offsets, entry.pop('subordinate_offsets', _MISSING), 0,
-                                        f"{entry.get('station_id')}.subordinate_offsets")
+            if sparse_c and own_offsets is None:
+                own_offsets = _MISSING
+            extension_problems += check_extension(entry, 'subordinate_offsets', own_offsets,
+                                                  f"{entry.get('station_id')}.subordinate_offsets")
             offsets = [{key: row.get(key) for key in ('bin', 'reference_bin', 'reference_station_id', 'licence_id')}
                        for row in raw.get('current_offsets') or []]
-            extension_problems += match(offsets, entry.pop('current_offsets', _MISSING), 0,
-                                        f"{entry.get('station_id')}.current_offsets")
+            if full_offsets:
+                offsets = raw.get('current_offsets', _MISSING if sparse_c else [])
+                if sparse_c and offsets is None:
+                    offsets = _MISSING
+            extension_problems += check_extension(entry, 'current_offsets', offsets,
+                                                  f"{entry.get('station_id')}.current_offsets")
             summaries = entry.get('sets')
             if not isinstance(summaries, list):
                 continue
             for summary, constants in zip(summaries, raw.get('constant_sets') or []):
                 if not isinstance(summary, dict):
                     continue
-                extension_problems += match(constants.get('fallback'), summary.pop('fallback', _MISSING), 0,
-                                            f"{summary.get('set_id')}.fallback")
+                fallback = constants.get('fallback')
+                if sparse_c and fallback is None:
+                    fallback = _MISSING
+                extension_problems += check_extension(summary, 'fallback', fallback,
+                                                      f"{summary.get('set_id')}.fallback")
                 bins = [row.get('bin') for row in constants.get('current_bins') or []]
                 extension_problems += match(bins, summary.pop('current_bins', _MISSING), 0,
                                             f"{summary.get('set_id')}.current_bins")
+                if doc['by'].startswith('opentideconstants-ruby/'):
+                    for key in ('source_record_id', 'source_version', 'datum'):
+                        extension_problems += match(constants.get(key), summary.pop(key, _MISSING), 0,
+                                                    f"{summary.get('set_id')}.{key}")
     return [f"{p.name}: {x}" for x in extension_problems + stream_index.compare(doc, ref)][:20]
 
 
@@ -1305,6 +1328,8 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     proxy.errors.clear()
     failures = []
     live = {}
+    opened = {}
+    runner_names = {}
     step_timeout = 60.0
 
     def stderr_path(role):
@@ -1313,7 +1338,7 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
     def start(role):
         r = Runner(runners[role][0], runner_env(env_extra), stderr_path(role), cwd=str(HERE.parent))
         try:
-            parse_hello(r.read(60))
+            runner_names[role] = parse_hello(r.read(60)).get("runner")
         except BaseException:
             r.close()
             raise
@@ -1359,6 +1384,15 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                             break
                     env_extra.update(restart_env)
                     live["main"] = start("main")
+                    # A TZDIR probe needs a fresh native process and the same release reopened.
+                    # Network/cache restart cases keep their explicit open steps and error expectations.
+                    next_op = case["steps"][i + 1].get("op") if i + 1 < len(case["steps"]) else None
+                    if "TZDIR" in restart_env and next_op in PREDICT_OPS and "main" in opened:
+                        reopen = dict(opened["main"], step=i)
+                        live["main"].send(reopen)
+                        if check(i, {"op": "open"}, "main", reopen, live["main"].read(step_timeout), None):
+                            if not all_steps:
+                                break
                 if problems:
                     failures.append({"step": i, "driver": st["driver"], "problems": problems})
                     if not all_steps:
@@ -1378,13 +1412,26 @@ def run_case(case, runners, srv, proxy, keep_tmp, all_steps, stats):
                         break
                 plan.append((role, expect, last))
             # every role gets the request before any reply is read, so a step with several roles runs at once
+            messages = {}
             for role, _, _ in plan:
                 cur = {"step": i, "op": st.get("op"), **({"as": role} if role != "main" else {})}
-                live[role].send(msg)
+                role_msg = msg
+                if (st["op"] == "open" and runner_names.get(role) == "swift"
+                        and "cache_dir" not in msg["args"] and "OPENTIDECONSTANTS_CACHE_DIR" not in env_extra):
+                    # Foundation resolves the actual user's cache on macOS even with HOME changed.
+                    # Pass the case's isolated native cache option; explicit options/env still win.
+                    role_msg = dict(msg, args=dict(msg["args"], cache_dir=str(tmp / "xdg-cache" / "opentideconstants")))
+                messages[role] = role_msg
+                live[role].send(role_msg)
             failed = last_step = False
             for role, expect, last in plan:
                 cur = {"step": i, "op": st.get("op"), **({"as": role} if role != "main" else {})}
-                failed |= check(i, st, role, msg, live[role].read(step_timeout), expect)
+                reply = live[role].read(step_timeout)
+                failed |= check(i, st, role, messages[role], reply, expect)
+                if isinstance(reply, dict) and reply.get("ok") is True and st["op"] == "open":
+                    opened[role] = messages[role]
+                elif isinstance(reply, dict) and reply.get("ok") is True and st["op"] == "close":
+                    opened.pop(role, None)
                 last_step |= last
             if (failed and not all_steps) or last_step:
                 break
