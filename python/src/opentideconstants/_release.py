@@ -468,14 +468,19 @@ def _check_ids(entries, conventions, licences):
 
 def _resolve_kinds(entries):
     by_id = {e["station_id"]: e for e in entries if e.get("status") == "active"}
+    own_kinds = {}
+    for sid, e in by_id.items():
+        rec = next((cs for cs in e["sets"] if e["recommended_set_id"] is not None
+                    and cs["set_id"] == e["recommended_set_id"]), None)
+        own_kinds[sid] = None if rec is None else {"water_level": "tide", "current": "current"}.get(rec["quantity"], "other")
 
-    def kind(e, seen):
-        if e.get("kind") is not None:
-            return e["kind"]
-        if e.get("type") == "subordinate" and e.get("reference_station_id"):
+    def kind(e, seen, links=0):
+        if own_kinds[e["station_id"]] is not None:
+            return own_kinds[e["station_id"]]
+        if links < _MAX_LINKS and e.get("type") == "subordinate" and e.get("reference_station_id"):
             ref = by_id.get(e["reference_station_id"])
             if ref is not None and ref["station_id"] not in seen:
-                return kind(ref, seen | {e["station_id"]})
+                return kind(ref, seen | {e["station_id"]}, links + 1)
         return None
 
     resolved = {sid: kind(e, frozenset()) for sid, e in by_id.items()}
@@ -524,7 +529,8 @@ class Release:
         self._lic_by_id = {x.licence_id: x for x in self._licences}
         parse_time(rel.get("created"), "release.created")
         _check_ids(entries, self._conventions, self._licences)
-        _resolve_kinds(entries)
+        if not all("_index_presence" in e for e in entries):
+            _resolve_kinds(entries)
         # commercial_only (spec §4.2, K-NC DR106): station_id -> the effective recommended set_id (or None)
         self._commercial_only = commercial_only
         self._commercial_basis = commercial_basis
