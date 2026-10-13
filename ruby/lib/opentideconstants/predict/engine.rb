@@ -15,9 +15,8 @@ class OpenTideConstants
             release.send(:check_open!)
             return release.require_station(station) if station.is_a?(String)
             raise InvalidArgumentError, "station must be a Station or station id" unless station.is_a?(Station)
-            actual = release.station(station.station_id)
-            raise InvalidArgumentError, "station is not from this release" unless actual && actual.raw == station.raw
-            actual
+            release.send(:own_station!, station, "prediction")
+            release.require_station(station.station_id)
         end
         def options(set_id, datum = nil, bin_number = nil)
             raise InvalidArgumentError, "set_id must be a string" unless set_id.nil? || set_id.is_a?(String)
