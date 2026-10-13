@@ -3,6 +3,7 @@ With OTC_TEST_INSTALLED=1 they test the installed package instead of python/src.
 import copy
 import dataclasses
 import gc
+import hashlib
 import json
 import os
 import operator
@@ -10,15 +11,19 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import weakref
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 if not os.environ.get("OTC_TEST_INSTALLED"):  # set it to test the installed package (a wheel) instead of python/src
     sys.path.insert(0, str(ROOT / "python" / "src"))
 
 import opentideconstants as otc  # noqa: E402
+from opentideconstants import _cache, _client  # noqa: E402
 from opentideconstants._cache import datestamp_key, lock_dir  # noqa: E402
 from opentideconstants._cache_json import encode_cache_json  # noqa: E402
 from opentideconstants._fold import fold  # noqa: E402
@@ -264,6 +269,151 @@ class _Server:
     def close(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+
+
+class ReceiptAcquisitionTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.cache = Path(self.tmp.name) / "cache"
+        self.srv = _Server()
+        self.addCleanup(self.srv.close)
+
+    def _open(self, mode, latest=False, offline=False):
+        return otc.OpenTideConstants(release="latest" if latest else "20991231.2", mode=mode,
+                                     base_url=self.srv.url, cache_dir=str(self.cache), offline=offline)
+
+    def _receipt(self):
+        return self.cache / "v1" / "releases" / "20991231.2" / ".verified"
+
+    def _check_receipt(self, cell):
+        path = self._receipt()
+        raw = path.read_bytes()
+        doc = json.loads(raw)
+        print("NATIVE_RECEIPT", cell, raw.hex(), flush=True)
+        self.assertEqual(set(doc), {"datestamp", "files", "format_version", "min_reader_version",
+                                    "zenodo_version_doi", "verified_at", "by"})
+        for name, row in doc["files"].items():
+            self.assertFalse(name.endswith(".sha256"))
+            self.assertEqual(set(row), {"sha256", "size", "url"})
+            payload = (path.parent / name).read_bytes()
+            self.assertEqual(row["sha256"], hashlib.sha256(payload).hexdigest())
+            self.assertEqual(row["size"], len(payload))
+            self.assertIs(type(row["size"]), int)
+            self.assertEqual(payload, (GOOD / name).read_bytes())
+        self.assertEqual((path.parent / "OTC_20991231.2.sha256").read_bytes(),
+                         (GOOD / "OTC_20991231.2.sha256").read_bytes())
+        self.assertEqual(raw, encode_cache_json(doc))
+        return doc
+
+    def test_actual_acquisition_emits_canonical_receipts(self):
+        for cell, mode, latest in (("pinned-eager", "eager", False),
+                                   ("pinned-stream", "stream", False),
+                                   ("latest-stream", "stream", True)):
+            with self.subTest(cell=cell), tempfile.TemporaryDirectory() as directory:
+                self.cache = Path(directory) / "cache"
+                with self._open(mode, latest=latest) as client:
+                    self.assertEqual(client.loaded_from, otc.LoadedFrom.DOWNLOAD)
+                    self.assertIsNotNone(client.station("OTC-T-0001"))
+                self._check_receipt(cell)
+                with self._open(mode, offline=True) as client:
+                    self.assertEqual(client.loaded_from, otc.LoadedFrom.CACHE)
+                    self.assertIsNotNone(client.station("OTC-T-0001"))
+
+    def test_actual_other_mode_merge_normalizes_rows_and_keeps_doi(self):
+        for first, second in (("eager", "stream"), ("stream", "eager")):
+            with self.subTest(first=first), tempfile.TemporaryDirectory() as directory:
+                self.cache = Path(directory) / "cache"
+                self._open(first).close()
+                path = self._receipt()
+                old = json.loads(path.read_bytes())
+                old["zenodo_version_doi"] = "10.5072/zenodo.9"
+                for row in old["files"].values():
+                    if first == "eager":
+                        row.pop("url")
+                        row["future_private"] = "must not be republished"
+                path.write_bytes(encode_cache_json(old))
+                self._open(second).close()
+                doc = self._check_receipt(first + "-to-" + second)
+                self.assertEqual(doc["zenodo_version_doi"], "10.5072/zenodo.9")
+                self.assertEqual(len(doc["files"]), 3 if first == "eager" else 2)
+                for mode in (first, second):
+                    with self._open(mode, offline=True) as client:
+                        self.assertEqual(client.release.zenodo_version_doi, "10.5072/zenodo.9")
+                        self.assertIsNotNone(client.station("OTC-T-0001"))
+
+    def test_public_doi_note_keeps_canonical_receipt_bytes(self):
+        with self._open("stream") as client:
+            self.assertIsNone(json.loads(self._receipt().read_bytes())["zenodo_version_doi"])
+            client.releases()
+        doc = self._check_receipt("public-doi-note")
+        self.assertEqual(doc["zenodo_version_doi"], "10.5072/zenodo.2")
+
+    def test_locked_reread_replaces_stale_state_and_publishes_receipt_last(self):
+        for replacement in ("valid", "malformed", "absent"):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                self.cache = Path(directory) / "cache"
+                self._open("eager").close()
+                path = self._receipt()
+                old = json.loads(path.read_bytes())
+                old["zenodo_version_doi"] = "10.5072/zenodo.old"
+                path.write_text(json.dumps(old))
+                reads, publications, errors = [], [], []
+                started = threading.Event()
+                read_verified = _cache.Cache.read_verified
+                atomic_write = _client.atomic_write
+
+                def read(cache, datestamp):
+                    result = read_verified(cache, datestamp)
+                    reads.append((result, (path.parent / ".lock").is_dir()))
+                    return result
+
+                def publish(target, data):
+                    if target == path:
+                        publications.append(sorted(p.name for p in path.parent.iterdir() if p.is_file()))
+                    return atomic_write(target, data)
+
+                def acquire():
+                    started.set()
+                    try:
+                        self._open("stream").close()
+                    except BaseException as error:
+                        errors.append(error)
+
+                with mock.patch.object(_cache.Cache, "read_verified", read), \
+                        mock.patch.object(_client, "atomic_write", publish), \
+                        mock.patch.object(_cache, "LOCK_POLL_S", 0.01):
+                    with lock_dir(path.parent, "receipt-test") as held:
+                        self.assertTrue(held)
+                        thread = threading.Thread(target=acquire)
+                        thread.start()
+                        self.assertTrue(started.wait(2))
+                        time.sleep(0.05)
+                        self.assertTrue(thread.is_alive())
+                        if replacement == "valid":
+                            old["zenodo_version_doi"] = "10.5072/zenodo.new"
+                            path.write_text(json.dumps(old))
+                        elif replacement == "malformed":
+                            path.write_text("{not JSON")
+                        else:
+                            path.unlink()
+                    thread.join(5)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(errors, [])
+                expected_doi = "10.5072/zenodo.new" if replacement == "valid" else None
+                doc = json.loads(path.read_bytes())
+                self.assertEqual(doc["zenodo_version_doi"], expected_doi)
+                self.assertEqual(len(doc["files"]), 3 if replacement == "valid" else 2)
+                self.assertTrue(any(held and (value is None if replacement != "valid" else
+                                             value.get("zenodo_version_doi") == expected_doi)
+                                    for value, held in reads))
+                self.assertEqual(len(publications), 1)
+                self.assertTrue(set(doc["files"]) <= set(publications[0]))
+                self.assertFalse(list(path.parent.glob(".tmp-*")))
+                self.assertFalse((path.parent / ".lock").exists())
+                with self._open("stream", offline=True) as client:
+                    self.assertIsNotNone(client.station("OTC-T-0001"))
+                print("NATIVE_LOCKED_REREAD", replacement, expected_doi, publications, flush=True)
 
 
 class PointerCacheTest(unittest.TestCase):
@@ -597,8 +747,8 @@ class StreamIndexTest(unittest.TestCase):
     def reopen(self):
         return otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
 
-    def ruby_index(self):
-        self.index.unlink()
+    def ruby_index(self, profile="current"):
+        self.index.unlink(missing_ok=True)
         writer = """client = OpenTideConstants.new(release: '20991231.2', cache_dir: ARGV.fetch(0),
                                     offline: true, mode: 'stream')
 client.close
@@ -608,9 +758,23 @@ client.close
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         index = json.loads(self.index.read_bytes())
-        self.assertNotIn("discovery_index_version", index)
-        self.assertTrue(all(all(k in cs for k in ("source_record_id", "source_version", "datum"))
+        self.assertEqual(index["discovery_index_version"], 1)
+        self.assertTrue(all(all(k not in cs for k in ("source_record_id", "source_version", "datum"))
                             for entry in index["stations"] for cs in entry["sets"]))
+        if profile == "legacy-full":
+            # A labelled legacy compatibility fixture, with private values from the actual source rows.
+            del index["discovery_index_version"]
+            with (self.index.parent / index["jsonl"]).open("rb") as handle:
+                for entry in index["stations"]:
+                    handle.seek(entry["offset"])
+                    original = json.loads(handle.read(entry["length"]))
+                    for cs in entry["sets"]:
+                        source = next(s for s in original["constant_sets"] if s["set_id"] == cs["set_id"])
+                        for key in ("source_record_id", "source_version", "datum"):
+                            cs[key] = source.get(key)
+            self.index.write_text(json.dumps(index), encoding="utf-8")
+        else:
+            self.assertEqual(profile, "current")
         return index
 
     def marked_index(self, index):
@@ -638,28 +802,30 @@ client.close
                 self.assertFalse(self.index.exists())
 
     def test_real_ruby_index_keeps_three_public_queries_and_raw(self):
-        index = self.ruby_index()
-        saved = self.index.read_bytes()
-        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
-        path = self.index.parent / "OTC_20991231.2.jsonl"
-        with path.open("rb") as handle:
-            handle.seek(entry["offset"])
-            original = json.loads(handle.read(entry["length"]))
-        with self.reopen() as client:
-            self.assertEqual(self.index.read_bytes(), saved)
-            queries = {
-                "stations": client.stations(country=entry["country"]),
-                "search": client.search(name=entry["name"], country=entry["country"]),
-                "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
-                                                             radius_km=1, country=entry["country"])),
-            }
-            for name, stations in queries.items():
-                with self.subTest(query=name):
-                    expected = ("OTC-T-0006", "OTC-T-0011") if name == "stations" else ("OTC-T-0011",)
-                    self.assertEqual(tuple(s.station_id for s in stations), expected)
-            self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
-        self.assertEqual(self.index.read_bytes(), saved)
-        self.assert_country_tampering_is_rejected(index)
+        for profile in ("current", "legacy-full"):
+            with self.subTest(profile=profile):
+                index = self.ruby_index(profile=profile)
+                saved = self.index.read_bytes()
+                entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
+                path = self.index.parent / "OTC_20991231.2.jsonl"
+                with path.open("rb") as handle:
+                    handle.seek(entry["offset"])
+                    original = json.loads(handle.read(entry["length"]))
+                with self.reopen() as client:
+                    self.assertEqual(self.index.read_bytes(), saved)
+                    queries = {
+                        "stations": client.stations(country=entry["country"]),
+                        "search": client.search(name=entry["name"], country=entry["country"]),
+                        "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
+                                                                     radius_km=1, country=entry["country"])),
+                    }
+                    for name, stations in queries.items():
+                        with self.subTest(query=name):
+                            expected = ("OTC-T-0006", "OTC-T-0011") if name == "stations" else ("OTC-T-0011",)
+                            self.assertEqual(tuple(s.station_id for s in stations), expected)
+                    self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
+                self.assertEqual(self.index.read_bytes(), saved)
+                self.assert_country_tampering_is_rejected(index)
 
     def test_sparse_null_extensions_preserve_native_index_bytes(self):
         index = json.loads(self.index.read_bytes())
@@ -682,7 +848,7 @@ client.close
         self.assert_country_tampering_is_rejected(index)
 
     def test_private_fields_must_be_complete_across_every_set(self):
-        original = self.ruby_index()
+        original = self.ruby_index(profile="legacy-full")
         for key in ("source_record_id", "source_version", "datum", "all-three", "bad-value"):
             with self.subTest(key=key):
                 index = copy.deepcopy(original)
@@ -699,7 +865,7 @@ client.close
                     self.assertEqual(client.stations(country="ZZ"), ())
 
     def test_wholly_absent_private_fields_are_a_valid_foreign_profile(self):
-        index = self.ruby_index()
+        index = self.ruby_index(profile="legacy-full")
         for entry in index["stations"]:
             for cs in entry["sets"]:
                 for field in ("source_record_id", "source_version", "datum"):
@@ -725,7 +891,7 @@ client.close
                     self.assertEqual(client.stations(country="ZZ"), ())
 
     def test_ruby_private_source_or_datum_tampering_is_rejected_at_query(self):
-        original = self.ruby_index()
+        original = self.ruby_index(profile="legacy-full")
         for field, value in (("source_record_id", "wrong-source"),
                              ("source_version", "wrong-version"), ("datum", {"msl_offset_m": 1234.0})):
             with self.subTest(field=field):
