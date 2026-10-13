@@ -1,0 +1,1313 @@
+require "minitest/autorun"
+require "json"
+require "digest"
+require "fileutils"
+require "logger"
+require "rbs"
+require "rbs/test"
+require "opentideconstants"
+require "opentideconstants/canonical"
+
+class CanonicalShapeTest < Minitest::Test
+    ROOT = File.expand_path("../..", __dir__)
+    T = OpenTideConstants.const_get(:CanonicalTypes, false)
+    C = OpenTideConstants.const_get(:Canonical, false)
+    PROTOCOL = JSON.parse(File.read(File.join(ROOT, "conformance/canonical/native-shape.json")))
+    LEDGER_PATH = File.join(ROOT, "conformance/canonical/native-ruby-shape.json")
+    LEDGER = JSON.parse(File.read(LEDGER_PATH)) if File.file?(LEDGER_PATH)
+    EVENTS = []
+
+    def setup
+        @subject = C.new
+        loader = RBS::EnvironmentLoader.new
+        loader.add(path: Pathname.new(File.join(ROOT, "ruby/sig")))
+        @environment = RBS::Environment.from_loader(loader).resolve_type_names
+        @builder = RBS::DefinitionBuilder.new(env: @environment)
+        @checker = RBS::Test::TypeCheck.new(self_class: C, builder: @builder, sample_size: nil, unchecked_classes: [])
+    end
+
+    def inert(klass)
+        klass.allocate.freeze
+    end
+
+    def describe(value)
+        case value
+        when nil, true, false, String, Integer, Float then value
+        when Array then value.map { |item| describe(item) }
+        when Hash then value.transform_values { |item| describe(item) }
+        when Time then { "native_class" => "Time", "utc_seconds" => value.to_f }
+        when Exception then { "native_class" => value.class.name, "message" => value.message }
+        else
+            fields = value.instance_variables.to_h do |variable|
+                [variable.to_s.delete_prefix("@"), describe(value.instance_variable_get(variable))]
+            end
+            { "native_class" => value.class.name, "construction_fields" => fields, "frozen" => value.frozen? }
+        end
+    end
+
+    def observe(id, callee, arguments)
+        row = LEDGER.fetch("runtime").find { |entry| entry.fetch("id") == callee }
+        declaration = row.fetch("declaration")
+        method = callee == "B28" ? OpenTideConstants::Cache.method(:encode_cache_json) : @subject.method(row.fetch("name"))
+        parameters = method.parameters
+        expected = row.fetch("inputs").map do |input|
+            [callee == "B28" ? :req : (input["required"] == false ? :key : :keyreq), input.fetch("name").to_sym]
+        end
+        assert_equal expected.sort_by(&:last), parameters.sort_by(&:last)
+        declaration.fetch("parameters").each do |parameter|
+            native = "::OpenTideConstants::CanonicalTypes::#{parameter.fetch('concept_ref')}"
+            value = arguments.fetch(parameter.fetch("canonical_name").to_sym)
+            assert @checker.value(value, RBS::Parser.parse_type(native)), "#{id} #{parameter.fetch('canonical_name')}: #{value.class} is not #{native}"
+        end
+        if callee == "B28"
+            result = yield
+            assert_instance_of String, result
+            assert_equal "{}", result
+            refusal = nil
+        else
+            assert @subject.private_methods.include?(row.fetch("name").to_sym)
+            error = assert_raises(C::Unimplemented) { yield }
+            assert_equal declaration.fetch("refusal"), error.message
+            assert_equal callee, error.behavior_id
+            refusal = error.message
+        end
+        EVENTS << { "id" => id, "callee_id" => callee, "method_owner" => method.owner.name, "parameters" => method.parameters, "actual_argument_classes" => arguments.transform_values { |value| value.class.name }, "actual_argument_values" => arguments.transform_values { |value| describe(value) }, "native_refusal" => refusal, "source_location" => method.source_location, "cleanup_observed" => true }
+    end
+
+    def test_b01
+        arguments = { operation: "astro_table", arguments: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), member_contract: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B01", "B01", arguments) do
+            @subject.__send__(:validate_operation_arguments, operation: arguments.fetch(:operation), arguments: arguments.fetch(:arguments), member_contract: arguments.fetch(:member_contract))
+        end
+    end
+
+    def test_b02
+        arguments = { explicit_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), environment: {}, platform_defaults: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B02", "B02", arguments) do
+            @subject.__send__(:resolve_effective_options, explicit_options: arguments.fetch(:explicit_options), environment: arguments.fetch(:environment), platform_defaults: arguments.fetch(:platform_defaults))
+        end
+    end
+
+    def test_b03
+        arguments = { operation: "astro_table", ordered_failures: [], cause: RuntimeError.new("native construction cause") }
+        observe("B03", "B03", arguments) do
+            @subject.__send__(:select_canonical_error, operation: arguments.fetch(:operation), ordered_failures: arguments.fetch(:ordered_failures), cause: arguments.fetch(:cause))
+        end
+    end
+
+    def test_b04
+        arguments = { canonical_result: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), canonical_error: T::CanonicalError.new(code: "invalid_argument", structured_fields: nil, cause: RuntimeError.new("native construction cause")), native_profile: "python" }
+        observe("B04", "B04", arguments) do
+            @subject.__send__(:translate_native_binding, canonical_result: arguments.fetch(:canonical_result), canonical_error: arguments.fetch(:canonical_error), native_profile: arguments.fetch(:native_profile))
+        end
+    end
+
+    def test_b05
+        arguments = { source_bytes: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1), document_kind: "release" }
+        observe("B05", "B05", arguments) do
+            @subject.__send__(:decode_release_document, source_bytes: arguments.fetch(:source_bytes), reader_version: arguments.fetch(:reader_version), document_kind: arguments.fetch(:document_kind))
+        end
+    end
+
+    def test_b06
+        arguments = { parsed_document: nil, required_links: [] }
+        observe("B06", "B06", arguments) do
+            @subject.__send__(:validate_release_links, parsed_document: arguments.fetch(:parsed_document), required_links: arguments.fetch(:required_links))
+        end
+    end
+
+    def test_b07
+        arguments = { raw_fields: nil, field_contract: T::FieldContracts.new(model_type: "Client", fields: []), origin: T::Origin.new(), model_type: "Client" }
+        observe("B07", "B07", arguments) do
+            @subject.__send__(:materialize_typed_model, raw_fields: arguments.fetch(:raw_fields), field_contract: arguments.fetch(:field_contract), origin: arguments.fetch(:origin), model_type: arguments.fetch(:model_type))
+        end
+    end
+
+    def test_b08
+        arguments = { access_kind: "raw_record", source_record: {}, station: inert(::OpenTideConstants::Station), release_origin: T::Origin.new(), native_profile: "python" }
+        observe("B08", "B08", arguments) do
+            @subject.__send__(:access_raw_record, access_kind: arguments.fetch(:access_kind), source_record: arguments.fetch(:source_record), station: arguments.fetch(:station), release_origin: arguments.fetch(:release_origin), native_profile: arguments.fetch(:native_profile))
+        end
+    end
+
+    def test_b09
+        arguments = { arguments: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), environment: {}, platform_defaults: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, native_profile: "python", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B09", "B09", arguments) do
+            @subject.__send__(:open_client_release, arguments: arguments.fetch(:arguments), environment: arguments.fetch(:environment), platform_defaults: arguments.fetch(:platform_defaults), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), native_profile: arguments.fetch(:native_profile), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b10
+        arguments = { release_request: "latest", effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B10", "B10", arguments) do
+            @subject.__send__(:resolve_release_request, release_request: arguments.fetch(:release_request), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b11
+        arguments = { metadata_request: T::MetadataRequest.new(request_url: "", document_kind: ""), trusted_cache: nil, transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B11", "B11", arguments) do
+            @subject.__send__(:exchange_release_metadata, metadata_request: arguments.fetch(:metadata_request), trusted_cache: arguments.fetch(:trusted_cache), transport_options: arguments.fetch(:transport_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b12
+        arguments = { client_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), update_request: T::MetadataRequest.new(request_url: "", document_kind: ""), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B12", "B12", arguments) do
+            @subject.__send__(:update_client_release, client_state: arguments.fetch(:client_state), update_request: arguments.fetch(:update_request), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b13
+        arguments = { client_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), query_kind: "stations", clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B13", "B13", arguments) do
+            @subject.__send__(:refresh_client_if_due, client_state: arguments.fetch(:client_state), query_kind: arguments.fetch(:query_kind), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b14
+        arguments = { held_release: inert(::OpenTideConstants::Release), query_arguments: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B14", "B14", arguments) do
+            @subject.__send__(:forward_held_release, held_release: arguments.fetch(:held_release), query_arguments: arguments.fetch(:query_arguments))
+        end
+    end
+
+    def test_b15
+        arguments = { resource_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), lifetime_action: "" }
+        observe("B15", "B15", arguments) do
+            @subject.__send__(:enforce_resource_lifetime, resource_state: arguments.fetch(:resource_state), lifetime_action: arguments.fetch(:lifetime_action))
+        end
+    end
+
+    def test_b16
+        arguments = { checksum_bytes: "", pointer_digests: {}, required_files: [] }
+        observe("B16", "B16", arguments) do
+            @subject.__send__(:bind_checksum_manifest, checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests), required_files: arguments.fetch(:required_files))
+        end
+    end
+
+    def test_b17
+        arguments = { acquisition_descriptor: T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), load_mode: "eager", cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B17", "B17", arguments) do
+            @subject.__send__(:acquire_release_files, acquisition_descriptor: arguments.fetch(:acquisition_descriptor), effective_options: arguments.fetch(:effective_options), load_mode: arguments.fetch(:load_mode), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b18
+        arguments = { locked_cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), verified_file_rows: [], release_metadata: nil }
+        observe("B18", "B18", arguments) do
+            @subject.__send__(:merge_cache_receipt, locked_cache_state: arguments.fetch(:locked_cache_state), verified_file_rows: arguments.fetch(:verified_file_rows), release_metadata: arguments.fetch(:release_metadata))
+        end
+    end
+
+    def test_b19
+        arguments = { release_candidates: [], effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0 }
+        observe("B19", "B19", arguments) do
+            @subject.__send__(:select_cached_release, release_candidates: arguments.fetch(:release_candidates), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b20
+        arguments = { release_files: [], trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {}) }
+        observe("B20", "B20", arguments) do
+            @subject.__send__(:verify_release_files, release_files: arguments.fetch(:release_files), trusted_cached_pointer: arguments.fetch(:trusted_cached_pointer))
+        end
+    end
+
+    def test_b21
+        arguments = { destination: "", format_selection: T::FormatSelection.new(formats: [], required_files: []), overwrite_policy: [], release_files: [], checksum_bytes: "", pointer_digests: {} }
+        observe("B21", "B21", arguments) do
+            @subject.__send__(:publish_download, destination: arguments.fetch(:destination), format_selection: arguments.fetch(:format_selection), overwrite_policy: arguments.fetch(:overwrite_policy), release_files: arguments.fetch(:release_files), checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests))
+        end
+    end
+
+    def test_b22
+        arguments = { inventory_action: "list", cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), keep: 1, current_cache_directory: "", clock: 0.0 }
+        observe("B22", "B22", arguments) do
+            @subject.__send__(:manage_cache_inventory, inventory_action: arguments.fetch(:inventory_action), cache_state: arguments.fetch(:cache_state), keep: arguments.fetch(:keep), current_cache_directory: arguments.fetch(:current_cache_directory), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b23
+        arguments = { io_kind: "lock", io_request: T::LockRequest.new(directory: "", operation: "take", token: ""), io_options: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B23", "B23", arguments) do
+            @subject.__send__(:perform_guarded_io, io_kind: arguments.fetch(:io_kind), io_request: arguments.fetch(:io_request), io_options: arguments.fetch(:io_options), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b24
+        arguments = { station_source_row: nil, source_byte_span: T::SourceByteSpan.new(offset_bytes: 1, length_bytes: 1), projection_contract: T::ProjectionContract.new(scalar_types: "", models: "", subordinate_offsets: "", scope: "", fallback: "") }
+        observe("B24", "B24", arguments) do
+            @subject.__send__(:project_station_index, station_source_row: arguments.fetch(:station_source_row), source_byte_span: arguments.fetch(:source_byte_span), projection_contract: arguments.fetch(:projection_contract))
+        end
+    end
+
+    def test_b25
+        arguments = { source_files: T::SourceFiles.new(jsonl: "", meta: "", jsonl_sha256: "", jsonl_size: 1, meta_sha256: "", meta_size: 1), supplied_index: T::SuppliedIndex.new(index_version: 1, discovery_index_version: 1, datestamp: "", jsonl: "", jsonl_sha256: "", jsonl_size: 1, by: "", stations: []), index_presence: {}, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B25", "B25", arguments) do
+            @subject.__send__(:authenticate_station_index, source_files: arguments.fetch(:source_files), supplied_index: arguments.fetch(:supplied_index), index_presence: arguments.fetch(:index_presence), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b26
+        arguments = { index_entry: T::IndexEntry.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []), station_source_row: nil, index_presence: {} }
+        observe("B26", "B26", arguments) do
+            @subject.__send__(:compare_station_source, index_entry: arguments.fetch(:index_entry), station_source_row: arguments.fetch(:station_source_row), index_presence: arguments.fetch(:index_presence))
+        end
+    end
+
+    def test_b27
+        arguments = { stream_reader: T::StreamReader.new(release_view: inert(::OpenTideConstants::Release), file_descriptor: 1, index: nil, index_presence: nil, station_lru: nil, closed: false), station_id: "", release_origin: T::Origin.new(), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B27", "B27", arguments) do
+            @subject.__send__(:read_station_lazily, stream_reader: arguments.fetch(:stream_reader), station_id: arguments.fetch(:station_id), release_origin: arguments.fetch(:release_origin), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b28
+        arguments = { cache_document: {} }
+        observe("B28", "B28", arguments) do
+            OpenTideConstants::Cache.encode_cache_json(arguments.fetch(:cache_document))
+        end
+    end
+
+    def test_b29
+        arguments = { release_view: inert(::OpenTideConstants::Release), identity_query: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B29", "B29", arguments) do
+            @subject.__send__(:lookup_station_identity, release_view: arguments.fetch(:release_view), identity_query: arguments.fetch(:identity_query), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b30
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false }
+        observe("B30", "B30", arguments) do
+            @subject.__send__(:select_effective_recommendation, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b31
+        arguments = { candidate_path: T::CandidatePathDirect.new(station: inert(::OpenTideConstants::Station), constant_set: inert(::OpenTideConstants::ConstantSet), release_view: inert(::OpenTideConstants::Release)), include_flagged: false, include_fallback: false }
+        observe("B31", "B31", arguments) do
+            @subject.__send__(:admit_quality_path, candidate_path: arguments.fetch(:candidate_path), include_flagged: arguments.fetch(:include_flagged), include_fallback: arguments.fetch(:include_fallback))
+        end
+    end
+
+    def test_b32
+        arguments = { candidate_path: T::CandidatePathDirect.new(station: inert(::OpenTideConstants::Station), constant_set: inert(::OpenTideConstants::ConstantSet), release_view: inert(::OpenTideConstants::Release)), commercial_only: false, commercial_basis: "strict" }
+        observe("B32", "B32", arguments) do
+            @subject.__send__(:admit_commercial_path, candidate_path: arguments.fetch(:candidate_path), commercial_only: arguments.fetch(:commercial_only), commercial_basis: arguments.fetch(:commercial_basis))
+        end
+    end
+
+    def test_b33
+        arguments = { station_source_row: nil, path_request: "", release_view: inert(::OpenTideConstants::Release) }
+        observe("B33", "B33", arguments) do
+            @subject.__send__(:resolve_reference_path, station_source_row: arguments.fetch(:station_source_row), path_request: arguments.fetch(:path_request), release_view: arguments.fetch(:release_view))
+        end
+    end
+
+    def test_b34
+        arguments = { release_view: inert(::OpenTideConstants::Release), query_kind: "stations", query_options: T::ArgsReleaseStations.new(member_id: "Release.stations"), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B34", "B34", arguments) do
+            @subject.__send__(:execute_discovery_query, release_view: arguments.fetch(:release_view), query_kind: arguments.fetch(:query_kind), query_options: arguments.fetch(:query_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b35
+        arguments = { summary_kind: "stats", release_view: inert(::OpenTideConstants::Release), station_sets: [], summary_options: T::SummaryOptions.new(original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false, include_no_constants: false) }
+        observe("B35", "B35", arguments) do
+            @subject.__send__(:summarize_station_sets, summary_kind: arguments.fetch(:summary_kind), release_view: arguments.fetch(:release_view), station_sets: arguments.fetch(:station_sets), summary_options: arguments.fetch(:summary_options))
+        end
+    end
+
+    def test_b36
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), historical_policy: "fallback", selection_kind: "discovery", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B36", "B36", arguments) do
+            @subject.__send__(:admit_historical_offset, own_offset: arguments.fetch(:own_offset), reference_path: arguments.fetch(:reference_path), historical_policy: arguments.fetch(:historical_policy), selection_kind: arguments.fetch(:selection_kind), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b37
+        arguments = { station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), commercial_only: false }
+        observe("B37", "B37", arguments) do
+            @subject.__send__(:format_attribution, station: arguments.fetch(:station), release_view: arguments.fetch(:release_view), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b38
+        arguments = { published_metadata: T::PublishedMetadata.new(contributors: nil, year: 1, concept_doi: "", zenodo_version_doi: "", dataset_url: ""), citation_style: "" }
+        observe("B38", "B38", arguments) do
+            @subject.__send__(:format_citation, published_metadata: arguments.fetch(:published_metadata), citation_style: arguments.fetch(:citation_style))
+        end
+    end
+
+    def test_b39
+        arguments = { time_inputs: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), window_inputs: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), step: 0.0, local_time_profile: T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: "") }
+        observe("B39", "B39", arguments) do
+            @subject.__send__(:parse_prediction_window, time_inputs: arguments.fetch(:time_inputs), window_inputs: arguments.fetch(:window_inputs), step: arguments.fetch(:step), local_time_profile: arguments.fetch(:local_time_profile))
+        end
+    end
+
+    def test_b40
+        arguments = { station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B40", "B40", arguments) do
+            @subject.__send__(:select_prediction_model, station_request: arguments.fetch(:station_request), release_view: arguments.fetch(:release_view), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b41
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), utc_instant: 0.0 }
+        observe("B41", "B41", arguments) do
+            @subject.__send__(:evaluate_astronomy, selected_prediction_model: arguments.fetch(:selected_prediction_model), utc_instant: arguments.fetch(:utc_instant))
+        end
+    end
+
+    def test_b42
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_instants: [], requested_datum: "" }
+        observe("B42", "B42", arguments) do
+            @subject.__send__(:evaluate_harmonic_height, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_instants: arguments.fetch(:prediction_instants), requested_datum: arguments.fetch(:requested_datum))
+        end
+    end
+
+    def test_b43
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil) }
+        observe("B43", "B43", arguments) do
+            @subject.__send__(:find_tide_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window))
+        end
+    end
+
+    def test_b44
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), current_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), current_operation: "currents" }
+        observe("B44", "B44", arguments) do
+            @subject.__send__(:evaluate_direct_current, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window), current_request: arguments.fetch(:current_request), current_operation: arguments.fetch(:current_operation))
+        end
+    end
+
+    def test_b45
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), tide_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B45", "B45", arguments) do
+            @subject.__send__(:evaluate_tide_offset, own_offset: arguments.fetch(:own_offset), reference_path: arguments.fetch(:reference_path), prediction_window: arguments.fetch(:prediction_window), tide_request: arguments.fetch(:tide_request), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b46
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_instants: [], requested_datum: "" }
+        observe("B46", "B46", arguments) do
+            @subject.__send__(:fold_equal_tide_offset, own_offset: arguments.fetch(:own_offset), reference_model: arguments.fetch(:reference_model), prediction_instants: arguments.fetch(:prediction_instants), requested_datum: arguments.fetch(:requested_datum))
+        end
+    end
+
+    def test_b47
+        arguments = { own_current_offsets: {}, reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), current_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B47", "B47", arguments) do
+            @subject.__send__(:evaluate_current_offset, own_current_offsets: arguments.fetch(:own_current_offsets), reference_path: arguments.fetch(:reference_path), prediction_window: arguments.fetch(:prediction_window), current_request: arguments.fetch(:current_request), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b48
+        arguments = { auxiliary_kind: "model_access", auxiliary_operation: "astro_table", source_values: T::AuxiliaryValuesRequiresModel.new(station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), utc_instant: 0.0), result_context: T::ResultContext.new(station_id: "", set_id: "", reference_station_id: "", bin_number: 1, datum: "", release_datestamp: "", algorithm: ""), local_time_profile: T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: ""), result_values: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), utc_result: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1), auxiliary_member_id: "Client.open" }
+        observe("B48", "B48", arguments) do
+            @subject.__send__(:dispatch_auxiliary_result, auxiliary_kind: arguments.fetch(:auxiliary_kind), auxiliary_operation: arguments.fetch(:auxiliary_operation), source_values: arguments.fetch(:source_values), result_context: arguments.fetch(:result_context), local_time_profile: arguments.fetch(:local_time_profile), result_values: arguments.fetch(:result_values), utc_result: arguments.fetch(:utc_result), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version), auxiliary_member_id: arguments.fetch(:auxiliary_member_id))
+        end
+    end
+
+    def test_b08_raw
+        arguments = { source_record: {}, native_profile: "python" }
+        observe("B08.raw", "B08.raw", arguments) do
+            @subject.__send__(:retain_raw_source_record, source_record: arguments.fetch(:source_record), native_profile: arguments.fetch(:native_profile))
+        end
+    end
+
+    def test_b08_origin
+        arguments = { station: inert(::OpenTideConstants::Station), release_origin: T::Origin.new() }
+        observe("B08.origin", "B08.origin", arguments) do
+            @subject.__send__(:check_station_origin, station: arguments.fetch(:station), release_origin: arguments.fetch(:release_origin))
+        end
+    end
+
+    def test_b23_lock
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B23.lock", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b23_http
+        arguments = { http_request: T::HttpRequest.new(url: "", conditional_etag: ""), transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "") }
+        observe("B23.http", "B23.http", arguments) do
+            @subject.__send__(:request_http_resource, http_request: arguments.fetch(:http_request), transport_options: arguments.fetch(:transport_options))
+        end
+    end
+
+    def test_b35_stats
+        arguments = { release_view: inert(::OpenTideConstants::Release) }
+        observe("B35.stats", "B35.stats", arguments) do
+            @subject.__send__(:count_release_statistics, release_view: arguments.fetch(:release_view))
+        end
+    end
+
+    def test_b35_sets
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false, include_no_constants: false }
+        observe("B35.sets", "B35.sets", arguments) do
+            @subject.__send__(:order_constant_sets, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only), include_no_constants: arguments.fetch(:include_no_constants))
+        end
+    end
+
+    def test_b48_aux
+        arguments = { auxiliary_operation: "astro_table", source_values: T::AuxiliaryValuesRequiresModel.new(station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), utc_instant: 0.0), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1), auxiliary_member_id: "Client.open" }
+        observe("B48.aux", "B48.aux", arguments) do
+            @subject.__send__(:read_auxiliary_model_value, auxiliary_operation: arguments.fetch(:auxiliary_operation), source_values: arguments.fetch(:source_values), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version), auxiliary_member_id: arguments.fetch(:auxiliary_member_id))
+        end
+    end
+
+    def test_b48_context
+        arguments = { result_values: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), result_context: T::ResultContext.new(station_id: "", set_id: "", reference_station_id: "", bin_number: 1, datum: "", release_datestamp: "", algorithm: "") }
+        observe("B48.context", "B48.context", arguments) do
+            @subject.__send__(:construct_prediction_result, result_values: arguments.fetch(:result_values), result_context: arguments.fetch(:result_context))
+        end
+    end
+
+    def test_b48_local
+        arguments = { utc_result: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), local_time_profile: T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: "") }
+        observe("B48.local", "B48.local", arguments) do
+            @subject.__send__(:convert_result_to_local_time, utc_result: arguments.fetch(:utc_result), local_time_profile: arguments.fetch(:local_time_profile))
+        end
+    end
+
+    def test_b43_roots
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil) }
+        observe("B43.roots", "B43.roots", arguments) do
+            @subject.__send__(:find_unrounded_tide_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window))
+        end
+    end
+
+    def test_b44_roots
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), current_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B44.roots", "B44.roots", arguments) do
+            @subject.__send__(:find_unrounded_current_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window), current_request: arguments.fetch(:current_request))
+        end
+    end
+
+    def test_b17_sidecar
+        arguments = { acquisition_descriptor: T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B17.sidecar", "B17.sidecar", arguments) do
+            @subject.__send__(:acquire_checksum_sidecar, acquisition_descriptor: arguments.fetch(:acquisition_descriptor), effective_options: arguments.fetch(:effective_options))
+        end
+    end
+
+    def test_b08_s1_a1
+        arguments = { source_record: {}, native_profile: "python" }
+        observe("B08.S1.A1", "B08.raw", arguments) do
+            @subject.__send__(:retain_raw_source_record, source_record: arguments.fetch(:source_record), native_profile: arguments.fetch(:native_profile))
+        end
+    end
+
+    def test_b08_s1_a2
+        arguments = { station: inert(::OpenTideConstants::Station), release_origin: T::Origin.new() }
+        observe("B08.S1.A2", "B08.origin", arguments) do
+            @subject.__send__(:check_station_origin, station: arguments.fetch(:station), release_origin: arguments.fetch(:release_origin))
+        end
+    end
+
+    def test_b09_s1_a3
+        arguments = { operation: "astro_table", arguments: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), member_contract: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B09.S1.A3", "B01", arguments) do
+            @subject.__send__(:validate_operation_arguments, operation: arguments.fetch(:operation), arguments: arguments.fetch(:arguments), member_contract: arguments.fetch(:member_contract))
+        end
+    end
+
+    def test_b09_s1_a4
+        arguments = { explicit_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), environment: {}, platform_defaults: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B09.S1.A4", "B02", arguments) do
+            @subject.__send__(:resolve_effective_options, explicit_options: arguments.fetch(:explicit_options), environment: arguments.fetch(:environment), platform_defaults: arguments.fetch(:platform_defaults))
+        end
+    end
+
+    def test_b09_s1_a5
+        arguments = { release_request: "latest", effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B09.S1.A5", "B10", arguments) do
+            @subject.__send__(:resolve_release_request, release_request: arguments.fetch(:release_request), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b09_s2_a4
+        arguments = { checksum_bytes: "", pointer_digests: {}, required_files: [] }
+        observe("B09.S2.A4", "B16", arguments) do
+            @subject.__send__(:bind_checksum_manifest, checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests), required_files: arguments.fetch(:required_files))
+        end
+    end
+
+    def test_b09_s2_a9
+        arguments = { source_bytes: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1), document_kind: "release" }
+        observe("B09.S2.A9", "B05", arguments) do
+            @subject.__send__(:decode_release_document, source_bytes: arguments.fetch(:source_bytes), reader_version: arguments.fetch(:reader_version), document_kind: arguments.fetch(:document_kind))
+        end
+    end
+
+    def test_b09_s2_a11
+        arguments = { parsed_document: nil, required_links: [] }
+        observe("B09.S2.A11", "B06", arguments) do
+            @subject.__send__(:validate_release_links, parsed_document: arguments.fetch(:parsed_document), required_links: arguments.fetch(:required_links))
+        end
+    end
+
+    def test_b10_s1_a2
+        arguments = { release_candidates: [], effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0 }
+        observe("B10.S1.A2", "B19", arguments) do
+            @subject.__send__(:select_cached_release, release_candidates: arguments.fetch(:release_candidates), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b10_s1_a5
+        arguments = { acquisition_descriptor: T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), load_mode: "eager", cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B10.S1.A5", "B17", arguments) do
+            @subject.__send__(:acquire_release_files, acquisition_descriptor: arguments.fetch(:acquisition_descriptor), effective_options: arguments.fetch(:effective_options), load_mode: arguments.fetch(:load_mode), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b10_s2_a1
+        arguments = { release_candidates: [], effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0 }
+        observe("B10.S2.A1", "B19", arguments) do
+            @subject.__send__(:select_cached_release, release_candidates: arguments.fetch(:release_candidates), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b10_s3_a4
+        arguments = { metadata_request: T::MetadataRequest.new(request_url: "", document_kind: ""), trusted_cache: nil, transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B10.S3.A4", "B11", arguments) do
+            @subject.__send__(:exchange_release_metadata, metadata_request: arguments.fetch(:metadata_request), trusted_cache: arguments.fetch(:trusted_cache), transport_options: arguments.fetch(:transport_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b10_s3_a6
+        arguments = { acquisition_descriptor: T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), load_mode: "eager", cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B10.S3.A6", "B17", arguments) do
+            @subject.__send__(:acquire_release_files, acquisition_descriptor: arguments.fetch(:acquisition_descriptor), effective_options: arguments.fetch(:effective_options), load_mode: arguments.fetch(:load_mode), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b10_s4_a1
+        arguments = { release_candidates: [], effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0 }
+        observe("B10.S4.A1", "B19", arguments) do
+            @subject.__send__(:select_cached_release, release_candidates: arguments.fetch(:release_candidates), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b11_s2_a2
+        arguments = { http_request: T::HttpRequest.new(url: "", conditional_etag: ""), transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "") }
+        observe("B11.S2.A2", "B23.http", arguments) do
+            @subject.__send__(:request_http_resource, http_request: arguments.fetch(:http_request), transport_options: arguments.fetch(:transport_options))
+        end
+    end
+
+    def test_b11_s3_a5
+        arguments = { source_bytes: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1), document_kind: "release" }
+        observe("B11.S3.A5", "B05", arguments) do
+            @subject.__send__(:decode_release_document, source_bytes: arguments.fetch(:source_bytes), reader_version: arguments.fetch(:reader_version), document_kind: arguments.fetch(:document_kind))
+        end
+    end
+
+    def test_b11_s5_a2
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B11.S5.A2", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b11_s5_a4
+        arguments = { cache_document: {} }
+        observe("B11.S5.A4", "B28", arguments) do
+            OpenTideConstants::Cache.encode_cache_json(arguments.fetch(:cache_document))
+        end
+    end
+
+    def test_b12_s1_a3
+        arguments = { resource_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), lifetime_action: "" }
+        observe("B12.S1.A3", "B15", arguments) do
+            @subject.__send__(:enforce_resource_lifetime, resource_state: arguments.fetch(:resource_state), lifetime_action: arguments.fetch(:lifetime_action))
+        end
+    end
+
+    def test_b12_s1_a7
+        arguments = { metadata_request: T::MetadataRequest.new(request_url: "", document_kind: ""), trusted_cache: nil, transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B12.S1.A7", "B11", arguments) do
+            @subject.__send__(:exchange_release_metadata, metadata_request: arguments.fetch(:metadata_request), trusted_cache: arguments.fetch(:trusted_cache), transport_options: arguments.fetch(:transport_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b12_s2_a2
+        arguments = { release_request: "latest", effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B12.S2.A2", "B10", arguments) do
+            @subject.__send__(:resolve_release_request, release_request: arguments.fetch(:release_request), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b13_s3_a2
+        arguments = { client_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), update_request: T::MetadataRequest.new(request_url: "", document_kind: ""), clock: 0.0, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B13.S3.A2", "B12", arguments) do
+            @subject.__send__(:update_client_release, client_state: arguments.fetch(:client_state), update_request: arguments.fetch(:update_request), clock: arguments.fetch(:clock), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b14_s2_a2
+        arguments = { resource_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), lifetime_action: "" }
+        observe("B14.S2.A2", "B15", arguments) do
+            @subject.__send__(:enforce_resource_lifetime, resource_state: arguments.fetch(:resource_state), lifetime_action: arguments.fetch(:lifetime_action))
+        end
+    end
+
+    def test_b17_s1_a2
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B17.S1.A2", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b17_s1_a3
+        arguments = { release_candidates: [], effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), clock: 0.0 }
+        observe("B17.S1.A3", "B19", arguments) do
+            @subject.__send__(:select_cached_release, release_candidates: arguments.fetch(:release_candidates), effective_options: arguments.fetch(:effective_options), cache_state: arguments.fetch(:cache_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b17_s2_a1
+        arguments = { acquisition_descriptor: T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B17.S2.A1", "B17.sidecar", arguments) do
+            @subject.__send__(:acquire_checksum_sidecar, acquisition_descriptor: arguments.fetch(:acquisition_descriptor), effective_options: arguments.fetch(:effective_options))
+        end
+    end
+
+    def test_b17_s2_a3
+        arguments = { checksum_bytes: "", pointer_digests: {}, required_files: [] }
+        observe("B17.S2.A3", "B16", arguments) do
+            @subject.__send__(:bind_checksum_manifest, checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests), required_files: arguments.fetch(:required_files))
+        end
+    end
+
+    def test_b17_s2_a6
+        arguments = { http_request: T::HttpRequest.new(url: "", conditional_etag: ""), transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "") }
+        observe("B17.S2.A6", "B23.http", arguments) do
+            @subject.__send__(:request_http_resource, http_request: arguments.fetch(:http_request), transport_options: arguments.fetch(:transport_options))
+        end
+    end
+
+    def test_b17_s4_a2
+        arguments = { locked_cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), verified_file_rows: [], release_metadata: nil }
+        observe("B17.S4.A2", "B18", arguments) do
+            @subject.__send__(:merge_cache_receipt, locked_cache_state: arguments.fetch(:locked_cache_state), verified_file_rows: arguments.fetch(:verified_file_rows), release_metadata: arguments.fetch(:release_metadata))
+        end
+    end
+
+    def test_b17_s5_a4
+        arguments = { source_files: T::SourceFiles.new(jsonl: "", meta: "", jsonl_sha256: "", jsonl_size: 1, meta_sha256: "", meta_size: 1), supplied_index: T::SuppliedIndex.new(index_version: 1, discovery_index_version: 1, datestamp: "", jsonl: "", jsonl_sha256: "", jsonl_size: 1, by: "", stations: []), index_presence: {}, reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B17.S5.A4", "B25", arguments) do
+            @subject.__send__(:authenticate_station_index, source_files: arguments.fetch(:source_files), supplied_index: arguments.fetch(:supplied_index), index_presence: arguments.fetch(:index_presence), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b18_s4_a2
+        arguments = { cache_document: {} }
+        observe("B18.S4.A2", "B28", arguments) do
+            OpenTideConstants::Cache.encode_cache_json(arguments.fetch(:cache_document))
+        end
+    end
+
+    def test_b19_s3_a2
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B19.S3.A2", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b20_s2_a2
+        arguments = { checksum_bytes: "", pointer_digests: {}, required_files: [] }
+        observe("B20.S2.A2", "B16", arguments) do
+            @subject.__send__(:bind_checksum_manifest, checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests), required_files: arguments.fetch(:required_files))
+        end
+    end
+
+    def test_b21_s2_a1
+        arguments = { checksum_bytes: "", pointer_digests: {}, required_files: [] }
+        observe("B21.S2.A1", "B16", arguments) do
+            @subject.__send__(:bind_checksum_manifest, checksum_bytes: arguments.fetch(:checksum_bytes), pointer_digests: arguments.fetch(:pointer_digests), required_files: arguments.fetch(:required_files))
+        end
+    end
+
+    def test_b22_s4_a2
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B22.S4.A2", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b23_s1_a5
+        arguments = { lock_request: T::LockRequest.new(directory: "", operation: "take", token: ""), lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: ""), clock: 0.0 }
+        observe("B23.S1.A5", "B23.lock", arguments) do
+            @subject.__send__(:manage_cache_lock, lock_request: arguments.fetch(:lock_request), lock_state: arguments.fetch(:lock_state), clock: arguments.fetch(:clock))
+        end
+    end
+
+    def test_b23_s1_a7
+        arguments = { http_request: T::HttpRequest.new(url: "", conditional_etag: ""), transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "") }
+        observe("B23.S1.A7", "B23.http", arguments) do
+            @subject.__send__(:request_http_resource, http_request: arguments.fetch(:http_request), transport_options: arguments.fetch(:transport_options))
+        end
+    end
+
+    def test_b25_s4_a4
+        arguments = { station_source_row: nil, source_byte_span: T::SourceByteSpan.new(offset_bytes: 1, length_bytes: 1), projection_contract: T::ProjectionContract.new(scalar_types: "", models: "", subordinate_offsets: "", scope: "", fallback: "") }
+        observe("B25.S4.A4", "B24", arguments) do
+            @subject.__send__(:project_station_index, station_source_row: arguments.fetch(:station_source_row), source_byte_span: arguments.fetch(:source_byte_span), projection_contract: arguments.fetch(:projection_contract))
+        end
+    end
+
+    def test_b25_s4_a6
+        arguments = { cache_document: {} }
+        observe("B25.S4.A6", "B28", arguments) do
+            OpenTideConstants::Cache.encode_cache_json(arguments.fetch(:cache_document))
+        end
+    end
+
+    def test_b27_s1_a1
+        arguments = { resource_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), lifetime_action: "" }
+        observe("B27.S1.A1", "B15", arguments) do
+            @subject.__send__(:enforce_resource_lifetime, resource_state: arguments.fetch(:resource_state), lifetime_action: arguments.fetch(:lifetime_action))
+        end
+    end
+
+    def test_b27_s4_a3
+        arguments = { source_bytes: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1), document_kind: "release" }
+        observe("B27.S4.A3", "B05", arguments) do
+            @subject.__send__(:decode_release_document, source_bytes: arguments.fetch(:source_bytes), reader_version: arguments.fetch(:reader_version), document_kind: arguments.fetch(:document_kind))
+        end
+    end
+
+    def test_b27_s4_a7
+        arguments = { index_entry: T::IndexEntry.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []), station_source_row: nil, index_presence: {} }
+        observe("B27.S4.A7", "B26", arguments) do
+            @subject.__send__(:compare_station_source, index_entry: arguments.fetch(:index_entry), station_source_row: arguments.fetch(:station_source_row), index_presence: arguments.fetch(:index_presence))
+        end
+    end
+
+    def test_b29_s4_a4
+        arguments = { stream_reader: T::StreamReader.new(release_view: inert(::OpenTideConstants::Release), file_descriptor: 1, index: nil, index_presence: nil, station_lru: nil, closed: false), station_id: "", release_origin: T::Origin.new(), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B29.S4.A4", "B27", arguments) do
+            @subject.__send__(:read_station_lazily, stream_reader: arguments.fetch(:stream_reader), station_id: arguments.fetch(:station_id), release_origin: arguments.fetch(:release_origin), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b29_s4_a8
+        arguments = { raw_fields: nil, field_contract: T::FieldContracts.new(model_type: "Client", fields: []), origin: T::Origin.new(), model_type: "Client" }
+        observe("B29.S4.A8", "B07", arguments) do
+            @subject.__send__(:materialize_typed_model, raw_fields: arguments.fetch(:raw_fields), field_contract: arguments.fetch(:field_contract), origin: arguments.fetch(:origin), model_type: arguments.fetch(:model_type))
+        end
+    end
+
+    def test_b34_s1_a1
+        arguments = { resource_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), lifetime_action: "" }
+        observe("B34.S1.A1", "B15", arguments) do
+            @subject.__send__(:enforce_resource_lifetime, resource_state: arguments.fetch(:resource_state), lifetime_action: arguments.fetch(:lifetime_action))
+        end
+    end
+
+    def test_b34_s2_a4
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false }
+        observe("B34.S2.A4", "B30", arguments) do
+            @subject.__send__(:select_effective_recommendation, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b34_s2_a6
+        arguments = { station_source_row: nil, path_request: "", release_view: inert(::OpenTideConstants::Release) }
+        observe("B34.S2.A6", "B33", arguments) do
+            @subject.__send__(:resolve_reference_path, station_source_row: arguments.fetch(:station_source_row), path_request: arguments.fetch(:path_request), release_view: arguments.fetch(:release_view))
+        end
+    end
+
+    def test_b34_s3_a3
+        arguments = { candidate_path: T::CandidatePathDirect.new(station: inert(::OpenTideConstants::Station), constant_set: inert(::OpenTideConstants::ConstantSet), release_view: inert(::OpenTideConstants::Release)), include_flagged: false, include_fallback: false }
+        observe("B34.S3.A3", "B31", arguments) do
+            @subject.__send__(:admit_quality_path, candidate_path: arguments.fetch(:candidate_path), include_flagged: arguments.fetch(:include_flagged), include_fallback: arguments.fetch(:include_fallback))
+        end
+    end
+
+    def test_b34_s3_a4
+        arguments = { candidate_path: T::CandidatePathDirect.new(station: inert(::OpenTideConstants::Station), constant_set: inert(::OpenTideConstants::ConstantSet), release_view: inert(::OpenTideConstants::Release)), commercial_only: false, commercial_basis: "strict" }
+        observe("B34.S3.A4", "B32", arguments) do
+            @subject.__send__(:admit_commercial_path, candidate_path: arguments.fetch(:candidate_path), commercial_only: arguments.fetch(:commercial_only), commercial_basis: arguments.fetch(:commercial_basis))
+        end
+    end
+
+    def test_b34_s3_a8
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), historical_policy: "fallback", selection_kind: "discovery", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B34.S3.A8", "B36", arguments) do
+            @subject.__send__(:admit_historical_offset, own_offset: arguments.fetch(:own_offset), reference_path: arguments.fetch(:reference_path), historical_policy: arguments.fetch(:historical_policy), selection_kind: arguments.fetch(:selection_kind), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b35_s1_a1
+        arguments = { release_view: inert(::OpenTideConstants::Release) }
+        observe("B35.S1.A1", "B35.stats", arguments) do
+            @subject.__send__(:count_release_statistics, release_view: arguments.fetch(:release_view))
+        end
+    end
+
+    def test_b35_s1_a2
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false, include_no_constants: false }
+        observe("B35.S1.A2", "B35.sets", arguments) do
+            @subject.__send__(:order_constant_sets, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only), include_no_constants: arguments.fetch(:include_no_constants))
+        end
+    end
+
+    def test_b36_s7_a2
+        arguments = { station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B36.S7.A2", "B40", arguments) do
+            @subject.__send__(:select_prediction_model, station_request: arguments.fetch(:station_request), release_view: arguments.fetch(:release_view), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b37_s1_a2
+        arguments = { station: inert(::OpenTideConstants::Station), release_origin: T::Origin.new() }
+        observe("B37.S1.A2", "B08.origin", arguments) do
+            @subject.__send__(:check_station_origin, station: arguments.fetch(:station), release_origin: arguments.fetch(:release_origin))
+        end
+    end
+
+    def test_b37_s2_a3
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false }
+        observe("B37.S2.A3", "B30", arguments) do
+            @subject.__send__(:select_effective_recommendation, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b37_s2_a5
+        arguments = { station_source_row: nil, path_request: "", release_view: inert(::OpenTideConstants::Release) }
+        observe("B37.S2.A5", "B33", arguments) do
+            @subject.__send__(:resolve_reference_path, station_source_row: arguments.fetch(:station_source_row), path_request: arguments.fetch(:path_request), release_view: arguments.fetch(:release_view))
+        end
+    end
+
+    def test_b40_s1_a2
+        arguments = { station: inert(::OpenTideConstants::Station), release_origin: T::Origin.new() }
+        observe("B40.S1.A2", "B08.origin", arguments) do
+            @subject.__send__(:check_station_origin, station: arguments.fetch(:station), release_origin: arguments.fetch(:release_origin))
+        end
+    end
+
+    def test_b40_s1_a3
+        arguments = { release_view: inert(::OpenTideConstants::Release), identity_query: "", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B40.S1.A3", "B29", arguments) do
+            @subject.__send__(:lookup_station_identity, release_view: arguments.fetch(:release_view), identity_query: arguments.fetch(:identity_query), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b40_s2_a4
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false }
+        observe("B40.S2.A4", "B30", arguments) do
+            @subject.__send__(:select_effective_recommendation, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b42_s1_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), utc_instant: 0.0 }
+        observe("B42.S1.A2", "B41", arguments) do
+            @subject.__send__(:evaluate_astronomy, selected_prediction_model: arguments.fetch(:selected_prediction_model), utc_instant: arguments.fetch(:utc_instant))
+        end
+    end
+
+    def test_b43_s1_a1
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil) }
+        observe("B43.S1.A1", "B43.roots", arguments) do
+            @subject.__send__(:find_unrounded_tide_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window))
+        end
+    end
+
+    def test_b44_s1_a1
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), current_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B44.S1.A1", "B44.roots", arguments) do
+            @subject.__send__(:find_unrounded_current_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window), current_request: arguments.fetch(:current_request))
+        end
+    end
+
+    def test_b45_s2_a3
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), historical_policy: "fallback", selection_kind: "discovery", reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B45.S2.A3", "B36", arguments) do
+            @subject.__send__(:admit_historical_offset, own_offset: arguments.fetch(:own_offset), reference_path: arguments.fetch(:reference_path), historical_policy: arguments.fetch(:historical_policy), selection_kind: arguments.fetch(:selection_kind), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b45_s3_a2
+        arguments = { station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B45.S3.A2", "B40", arguments) do
+            @subject.__send__(:select_prediction_model, station_request: arguments.fetch(:station_request), release_view: arguments.fetch(:release_view), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b45_s6_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil) }
+        observe("B45.S6.A2", "B43.roots", arguments) do
+            @subject.__send__(:find_unrounded_tide_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window))
+        end
+    end
+
+    def test_b45_s7_a3
+        arguments = { own_offset: inert(::OpenTideConstants::SubordinateOffsets), reference_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_instants: [], requested_datum: "" }
+        observe("B45.S7.A3", "B46", arguments) do
+            @subject.__send__(:fold_equal_tide_offset, own_offset: arguments.fetch(:own_offset), reference_model: arguments.fetch(:reference_model), prediction_instants: arguments.fetch(:prediction_instants), requested_datum: arguments.fetch(:requested_datum))
+        end
+    end
+
+    def test_b46_s3_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_instants: [], requested_datum: "" }
+        observe("B46.S3.A2", "B42", arguments) do
+            @subject.__send__(:evaluate_harmonic_height, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_instants: arguments.fetch(:prediction_instants), requested_datum: arguments.fetch(:requested_datum))
+        end
+    end
+
+    def test_b47_s2_a2
+        arguments = { station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B47.S2.A2", "B40", arguments) do
+            @subject.__send__(:select_prediction_model, station_request: arguments.fetch(:station_request), release_view: arguments.fetch(:release_view), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b47_s4_a3
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), prediction_window: T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil), current_request: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: "") }
+        observe("B47.S4.A3", "B44.roots", arguments) do
+            @subject.__send__(:find_unrounded_current_events, selected_prediction_model: arguments.fetch(:selected_prediction_model), prediction_window: arguments.fetch(:prediction_window), current_request: arguments.fetch(:current_request))
+        end
+    end
+
+    def test_b48_s1_a1
+        arguments = { auxiliary_operation: "astro_table", source_values: T::AuxiliaryValuesRequiresModel.new(station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), utc_instant: 0.0), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1), auxiliary_member_id: "Client.open" }
+        observe("B48.S1.A1", "B48.aux", arguments) do
+            @subject.__send__(:read_auxiliary_model_value, auxiliary_operation: arguments.fetch(:auxiliary_operation), source_values: arguments.fetch(:source_values), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version), auxiliary_member_id: arguments.fetch(:auxiliary_member_id))
+        end
+    end
+
+    def test_b48_s1_a2
+        arguments = { result_values: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), result_context: T::ResultContext.new(station_id: "", set_id: "", reference_station_id: "", bin_number: 1, datum: "", release_datestamp: "", algorithm: "") }
+        observe("B48.S1.A2", "B48.context", arguments) do
+            @subject.__send__(:construct_prediction_result, result_values: arguments.fetch(:result_values), result_context: arguments.fetch(:result_context))
+        end
+    end
+
+    def test_b48_s1_a3
+        arguments = { utc_result: T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)), local_time_profile: T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: "") }
+        observe("B48.S1.A3", "B48.local", arguments) do
+            @subject.__send__(:convert_result_to_local_time, utc_result: arguments.fetch(:utc_result), local_time_profile: arguments.fetch(:local_time_profile))
+        end
+    end
+
+    def test_b35_sets_s1_a1
+        arguments = { station_sets: [], original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false }
+        observe("B35.sets.S1.A1", "B30", arguments) do
+            @subject.__send__(:select_effective_recommendation, station_sets: arguments.fetch(:station_sets), original_recommendation: arguments.fetch(:original_recommendation), commercial_only: arguments.fetch(:commercial_only))
+        end
+    end
+
+    def test_b48_aux_s2_a1
+        arguments = { station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), reader_version: T::ReaderVersion.new(major: 1, minor: 1) }
+        observe("B48.aux.S2.A1", "B40", arguments) do
+            @subject.__send__(:select_prediction_model, station_request: arguments.fetch(:station_request), release_view: arguments.fetch(:release_view), selection_options: arguments.fetch(:selection_options), reader_version: arguments.fetch(:reader_version))
+        end
+    end
+
+    def test_b48_aux_s2_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), utc_instant: 0.0 }
+        observe("B48.aux.S2.A2", "B41", arguments) do
+            @subject.__send__(:evaluate_astronomy, selected_prediction_model: arguments.fetch(:selected_prediction_model), utc_instant: arguments.fetch(:utc_instant))
+        end
+    end
+
+    def test_b43_roots_s1_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), utc_instant: 0.0 }
+        observe("B43.roots.S1.A2", "B41", arguments) do
+            @subject.__send__(:evaluate_astronomy, selected_prediction_model: arguments.fetch(:selected_prediction_model), utc_instant: arguments.fetch(:utc_instant))
+        end
+    end
+
+    def test_b44_roots_s2_a2
+        arguments = { selected_prediction_model: T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil), utc_instant: 0.0 }
+        observe("B44.roots.S2.A2", "B41", arguments) do
+            @subject.__send__(:evaluate_astronomy, selected_prediction_model: arguments.fetch(:selected_prediction_model), utc_instant: arguments.fetch(:utc_instant))
+        end
+    end
+
+    def test_b17_sidecar_s1_a3
+        arguments = { http_request: T::HttpRequest.new(url: "", conditional_etag: ""), transport_options: T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "") }
+        observe("B17.sidecar.S1.A3", "B23.http", arguments) do
+            @subject.__send__(:request_http_resource, http_request: arguments.fetch(:http_request), transport_options: arguments.fetch(:transport_options))
+        end
+    end
+
+    def test_b04_omitted_nullable_no_value_and_native_exception_inputs
+        nullable = T::SelectedResult23.new(member_id: 'Release.station', value: nil)
+        no_value = T::SelectedResult11.new(member_id: 'Client.close', value: T::NoValue.new)
+        type = RBS::Parser.parse_type("::OpenTideConstants::CanonicalTypes::canonical_result")
+        assert @checker.value(nullable, type)
+        assert @checker.value(no_value, type)
+        refute_equal T::ABSENT, nullable
+        refute_equal T::ABSENT, no_value
+        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, native_profile: "ruby") }
+        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_result: nullable, native_profile: "ruby") }
+        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_result: no_value, native_profile: "ruby") }
+        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_error: T::CanonicalError.new(code: "invalid_argument", structured_fields: {}, cause: ArgumentError.new("source")), native_profile: "ruby") }
+    end
+
+    def check_record(value)
+        name = RBS::Parser.parse_type("::#{value.class.name}").name
+        definition = @builder.build_instance(name)
+        value.instance_variables.each do |variable|
+            field = variable.to_s.delete_prefix("@").to_sym
+            actual = value.public_send(field)
+            type = definition.methods.fetch(field).method_types.first.type.return_type
+            assert @checker.value(actual, type), "#{value.class}##{field}: #{actual.class} is not #{type}"
+            assert actual.finite? if actual.is_a?(Float)
+        end
+        assert value.frozen?
+    end
+
+    def test_private_record_constructors_and_typed_fields
+        check_record(T::Origin.new())
+        check_record(T::AbsentValue.new())
+        check_record(T::NoValue.new())
+        check_record(T::RequiredLink.new(source_model: "", source_field: "", target_model: "", target_field: ""))
+        check_record(T::FieldContract.new(member_id: "Client.open", native_type: "", nullable: false))
+        check_record(T::FieldContracts.new(model_type: "Client", fields: []))
+        check_record(T::StationLookupActive.new(station: inert(::OpenTideConstants::Station)))
+        check_record(T::StationLookupRemoved.new(tombstone: inert(::OpenTideConstants::Tombstone)))
+        check_record(T::StationLookupAbsent.new())
+        check_record(T::PredictionModel.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), convention: inert(::OpenTideConstants::Convention), astro_table: nil, required_constituents: [], reference_bin: 1, mean_term: 0.0, datum_source: nil))
+        check_record(T::PredictionWindow.new(start: 0.0, stop: 0.0, step: 0.0, instants: nil))
+        check_record(T::ArgsClientOpenSelected.new(member_id: "Client.open", offline: false, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: ""))
+        check_record(T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""))
+        check_record(T::LockState.new(cache_root: "", owner: nil, held_token: ""))
+        check_record(T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")))
+        check_record(T::ReleaseDescriptor.new(datestamp: "", files: [], checksum_bytes: "", pointer_digests: {}, required_file_request: nil, metadata: nil))
+        check_record(T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1))
+        check_record(T::CandidatePathDirect.new(station: inert(::OpenTideConstants::Station), constant_set: inert(::OpenTideConstants::ConstantSet), release_view: inert(::OpenTideConstants::Release)))
+        check_record(T::CandidatePathTideOffset.new(reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), own_offset: nil))
+        check_record(T::CandidatePathCurrentOffset.new(reference_path: T::ReferencePath.new(station: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), constant_set: inert(::OpenTideConstants::ConstantSet), own_offset: nil, reference_bin: 1), own_current_offset: nil))
+        check_record(T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""))
+        check_record(T::ArgsReleaseExtremesSelected.new(member_id: "Release.extremes", datum: "", set_id: "", offset_id: ""))
+        check_record(T::ArgsReleaseCurrentsSelected.new(member_id: "Release.currents", bin_number: 1, set_id: ""))
+        check_record(T::ArgsReleaseCurrentEventsSelected.new(member_id: "Release.current_events", bin_number: 1, set_id: ""))
+        check_record(T::ArgsReleaseStations.new(member_id: "Release.stations"))
+        check_record(T::ArgsReleaseIterStations.new(member_id: "Release.iter_stations"))
+        check_record(T::ArgsReleaseSearch.new(member_id: "Release.search", name: "", limit: 1, match: :exact))
+        check_record(T::ArgsReleaseNear.new(member_id: "Release.near", lat: 0.0, lon: 0.0, radius_km: 0.0, limit: 1))
+        check_record(T::ArgsReleaseNearest.new(member_id: "Release.nearest", lat: 0.0, lon: 0.0, max_km: 0.0))
+        check_record(T::UnroundedTideEvent.new(root_seconds: 0.0, event_type: "high", height_m: 0.0, reference_order: 1))
+        check_record(T::UnroundedCurrentEvent.new(root_seconds: 0.0, event_type: "max_flood", velocity_m_s: 0.0, direction_deg: 0.0, reference_order: 1))
+        check_record(T::AuxiliaryValuesRequiresModel.new(station_request: inert(::OpenTideConstants::Station), release_view: inert(::OpenTideConstants::Release), selection_options: T::ArgsReleaseHeightsSelected.new(member_id: "Release.heights", datum: "", set_id: "", offset_id: ""), utc_instant: 0.0))
+        check_record(T::AuxiliaryValuesSourceAccess.new(raw_source_value: nil, arguments: nil))
+        check_record(T::ResultContext.new(station_id: "", set_id: "", reference_station_id: "", bin_number: 1, datum: "", release_datestamp: "", algorithm: ""))
+        check_record(T::AcceptanceDecision.new(accepted: false, mandatory_findings: []))
+        check_record(T::ArgsClientReleases.new(member_id: "Client.releases"))
+        check_record(T::ArgsClientLatest.new(member_id: "Client.latest"))
+        check_record(T::ArgsClientCheckForUpdate.new(member_id: "Client.check_for_update"))
+        check_record(T::ArgsClientUpdate.new(member_id: "Client.update"))
+        check_record(T::ArgsClientDownload.new(member_id: "Client.download", release: "", to: "", formats: [], overwrite: false))
+        check_record(T::ArgsClientVerify.new(member_id: "Client.verify"))
+        check_record(T::ArgsClientCachedReleases.new(member_id: "Client.cached_releases"))
+        check_record(T::ArgsClientPrune.new(member_id: "Client.prune", keep: 1))
+        check_record(T::ArgsClientClose.new(member_id: "Client.close"))
+        check_record(T::ArgsReleaseConvention.new(member_id: "Release.convention", convention_id: ""))
+        check_record(T::ArgsReleaseLicence.new(member_id: "Release.licence", licence_id: ""))
+        check_record(T::ArgsReleaseStation.new(member_id: "Release.station", station_id: ""))
+        check_record(T::ArgsReleaseRequireStation.new(member_id: "Release.require_station", station_id: ""))
+        check_record(T::ArgsReleaseTombstone.new(member_id: "Release.tombstone", station_id: ""))
+        check_record(T::ArgsReleaseStationByAlias.new(member_id: "Release.station_by_alias", system: :noaa, alias_id: ""))
+        check_record(T::ArgsReleaseReferenceStation.new(member_id: "Release.reference_station", station: inert(::OpenTideConstants::Station)))
+        check_record(T::ArgsReleaseSubordinatesOf.new(member_id: "Release.subordinates_of", station: inert(::OpenTideConstants::Station)))
+        check_record(T::ArgsReleaseAttribution.new(member_id: "Release.attribution", stations: []))
+        check_record(T::ArgsReleaseHeights.new(member_id: "Release.heights", station: inert(::OpenTideConstants::Station), start: Time.at(0).utc, stop: Time.at(0).utc, step_s: 1, datum: "", set_id: "", offset_id: ""))
+        check_record(T::ArgsReleaseHeightsAt.new(member_id: "Release.heights_at", station: inert(::OpenTideConstants::Station), times: [], datum: "", set_id: "", offset_id: ""))
+        check_record(T::ArgsReleaseExtremes.new(member_id: "Release.extremes", station: inert(::OpenTideConstants::Station), start: Time.at(0).utc, stop: Time.at(0).utc, datum: "", set_id: "", offset_id: ""))
+        check_record(T::ArgsReleaseCurrents.new(member_id: "Release.currents", station: inert(::OpenTideConstants::Station), start: Time.at(0).utc, stop: Time.at(0).utc, step_s: 1, bin_number: 1, set_id: ""))
+        check_record(T::ArgsReleaseCurrentEvents.new(member_id: "Release.current_events", station: inert(::OpenTideConstants::Station), start: Time.at(0).utc, stop: Time.at(0).utc, bin_number: 1, set_id: ""))
+        check_record(T::ArgsReleaseDatums.new(member_id: "Release.datums", station: inert(::OpenTideConstants::Station), set_id: "", all_sets: false))
+        check_record(T::ArgsReleaseRanges.new(member_id: "Release.ranges", station: inert(::OpenTideConstants::Station), set_id: ""))
+        check_record(T::ArgsReleaseAstroTable.new(member_id: "Release.astro_table", id: ""))
+        check_record(T::ArgsStationConstantSets.new(member_id: "Station.constant_sets", include_no_constants: false))
+        check_record(T::ArgsStationConstantSet.new(member_id: "Station.constant_set", set_id: ""))
+        check_record(T::ArgsConstantSetConstituent.new(member_id: "ConstantSet.constituent", name: ""))
+        check_record(T::ArgsAstroTableEquilibriumArgument.new(member_id: "AstroTable.equilibrium_argument", name: "", at: Time.at(0).utc))
+        check_record(T::ArgsAstroTableNodeFactor.new(member_id: "AstroTable.node_factor", name: "", at: Time.at(0).utc))
+        check_record(T::ArgsAstroTableEquilibriumForYear.new(member_id: "AstroTable.equilibrium_for_year", name: "", year: 1))
+        check_record(T::ArgsAstroTableNodeFactorForYear.new(member_id: "AstroTable.node_factor_for_year", name: "", year: 1))
+        check_record(T::ArgsHeightPointLocalDatetime.new(member_id: "HeightPoint.local_datetime"))
+        check_record(T::ArgsExtremeLocalDatetime.new(member_id: "Extreme.local_datetime"))
+        check_record(T::ArgsCurrentPointLocalDatetime.new(member_id: "CurrentPoint.local_datetime"))
+        check_record(T::ArgsCurrentEventLocalDatetime.new(member_id: "CurrentEvent.local_datetime"))
+        check_record(T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: ""))
+        check_record(T::ArgsExtremeListToLocal.new(member_id: "ExtremeList.to_local", tz: ""))
+        check_record(T::ArgsCurrentSeriesToLocal.new(member_id: "CurrentSeries.to_local", tz: ""))
+        check_record(T::ArgsCurrentEventListToLocal.new(member_id: "CurrentEventList.to_local", tz: ""))
+        check_record(T::AstronomicalTerms.new(utc_year: 1, constituent_terms: [], epoch_hours: 0.0))
+        check_record(T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}))
+        check_record(T::AuthenticatedIndexStationsItemSetsItem.new(set_id: "", source: "", source_type: "", quantity: "", qc_status: "", convention_id: "", licence_id: "", constituents: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), current_bins: []))
+        check_record(T::SchemaQcFlag.new(flag: "", reason: "", values: {}, source_extensions: {}))
+        check_record(T::SchemaHistoricalOffsetVintageRemovalEventsItem.new(source_clock_timestamp: "", name: "", operation: "Removed", source_timezone: nil, evidence_sha256: "", source_extensions: {}))
+        check_record(T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}))
+        check_record(T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}))
+        check_record(T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}))
+        check_record(T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}))
+        check_record(T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}))
+        check_record(T::AuthenticatedIndexStationsItemCurrentOffsetsItem.new(bin: 1, reference_bin: 1, reference_station_id: "", licence_id: ""))
+        check_record(T::AuthenticatedIndexStationsItem.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []))
+        check_record(T::AuthenticatedIndex.new(index_version: 1, discovery_index_version: 1, datestamp: "", jsonl: "", jsonl_sha256: "", jsonl_size: 1, by: "", stations: []))
+        check_record(T::SelectedResult0.new(member_id: "Client.open", value: inert(::OpenTideConstants)))
+        check_record(T::SelectedResult1.new(member_id: "Client.release", value: inert(::OpenTideConstants::Release)))
+        check_record(T::SelectedResult2.new(member_id: "Client.loaded_from", value: :download))
+        check_record(T::SelectedResult3.new(member_id: "Client.last_error", value: inert(::OpenTideConstants::Error)))
+        check_record(T::SelectedResult4.new(member_id: "Client.releases", value: []))
+        check_record(T::SelectedResult5.new(member_id: "Client.latest", value: inert(::OpenTideConstants::ReleaseInfo)))
+        check_record(T::SelectedResult6.new(member_id: "Client.check_for_update", value: inert(::OpenTideConstants::ReleaseInfo)))
+        check_record(T::SelectedResult7.new(member_id: "Client.newer_format_major", value: 1))
+        check_record(T::SelectedResult8.new(member_id: "Client.update", value: inert(::OpenTideConstants::UpdateResult)))
+        check_record(T::SelectedResult9.new(member_id: "Client.download", value: []))
+        check_record(T::SelectedResult10.new(member_id: "Client.verify", value: false))
+        check_record(T::SelectedResult11.new(member_id: "Client.close", value: T::NoValue.new()))
+        check_record(T::SelectedResult12.new(member_id: "Release.datestamp", value: ""))
+        check_record(T::SelectedResult13.new(member_id: "Release.created", value: Time.at(0).utc))
+        check_record(T::SelectedResult14.new(member_id: "Release.zenodo_version_doi", value: ""))
+        check_record(T::SelectedResult15.new(member_id: "Release.source_versions", value: {}))
+        check_record(T::SelectedResult16.new(member_id: "Release.files", value: []))
+        check_record(T::SelectedResult17.new(member_id: "Release.conventions", value: []))
+        check_record(T::SelectedResult18.new(member_id: "Release.convention", value: inert(::OpenTideConstants::Convention)))
+        check_record(T::SelectedResult19.new(member_id: "Release.licences", value: []))
+        check_record(T::SelectedResult20.new(member_id: "Release.licence", value: inert(::OpenTideConstants::Licence)))
+        check_record(T::SelectedResult21.new(member_id: "Release.stats", value: inert(::OpenTideConstants::Stats)))
+        check_record(T::SelectedResult22.new(member_id: "Release.station_count", value: 1))
+        check_record(T::SelectedResult23.new(member_id: "Release.station", value: inert(::OpenTideConstants::Station)))
+        check_record(T::SelectedResult24.new(member_id: "Release.require_station", value: inert(::OpenTideConstants::Station)))
+        check_record(T::SelectedResult25.new(member_id: "Release.tombstone", value: inert(::OpenTideConstants::Tombstone)))
+        check_record(T::SelectedResult26.new(member_id: "Release.stations", value: []))
+        check_record(T::SelectedResult27.new(member_id: "Release.iter_stations", value: [].each))
+        check_record(T::SelectedResult28.new(member_id: "Release.near", value: []))
+        check_record(T::SelectedResult29.new(member_id: "Release.nearest", value: inert(::OpenTideConstants::Nearby)))
+        check_record(T::SelectedResult30.new(member_id: "Release.heights", value: inert(::OpenTideConstants::HeightSeries)))
+        check_record(T::SelectedResult31.new(member_id: "Release.extremes", value: inert(::OpenTideConstants::ExtremeList)))
+        check_record(T::SelectedResult32.new(member_id: "Release.currents", value: inert(::OpenTideConstants::CurrentSeries)))
+        check_record(T::SelectedResult33.new(member_id: "Release.current_events", value: inert(::OpenTideConstants::CurrentEventList)))
+        check_record(T::SelectedResult34.new(member_id: "Release.datums", value: inert(::OpenTideConstants::DatumInfo)))
+        check_record(T::SelectedResult35.new(member_id: "Release.ranges", value: inert(::OpenTideConstants::Ranges)))
+        check_record(T::SelectedResult36.new(member_id: "Release.astro_table", value: inert(::OpenTideConstants::AstroTable)))
+        check_record(T::SelectedResult37.new(member_id: "Station.lat", value: 0.0))
+        check_record(T::SelectedResult38.new(member_id: "Station.type", value: :reference))
+        check_record(T::SelectedResult39.new(member_id: "Station.kind", value: :tide))
+        check_record(T::SelectedResult40.new(member_id: "Station.aliases", value: {}))
+        check_record(T::SelectedResult41.new(member_id: "Station.status", value: :active))
+        check_record(T::SelectedResult42.new(member_id: "Station.recommended_set", value: inert(::OpenTideConstants::ConstantSet)))
+        check_record(T::SelectedResult43.new(member_id: "Station.constant_sets", value: []))
+        check_record(T::SelectedResult44.new(member_id: "Station.subordinate_offsets", value: inert(::OpenTideConstants::SubordinateOffsets)))
+        check_record(T::SelectedResult45.new(member_id: "Station.validation", value: []))
+        check_record(T::SelectedResult46.new(member_id: "Station.raw", value: nil))
+        check_record(T::SelectedResult47.new(member_id: "Station.recommended_is_fallback", value: false))
+        check_record(T::SelectedResult48.new(member_id: "Station.source_records", value: []))
+        check_record(T::SelectedResult49.new(member_id: "Tombstone.removed_reason", value: :merged))
+        check_record(T::SelectedResult50.new(member_id: "ConstantSet.source_type", value: :official))
+        check_record(T::SelectedResult51.new(member_id: "ConstantSet.quantity", value: :water_level))
+        check_record(T::SelectedResult52.new(member_id: "ConstantSet.record_span", value: inert(::OpenTideConstants::RecordSpan)))
+        check_record(T::SelectedResult53.new(member_id: "ConstantSet.datum", value: inert(::OpenTideConstants::Datum)))
+        check_record(T::SelectedResult54.new(member_id: "ConstantSet.qc_status", value: :ok))
+        check_record(T::SelectedResult55.new(member_id: "ConstantSet.qc_flags", value: []))
+        check_record(T::SelectedResult56.new(member_id: "ConstantSet.dropped_constituents", value: []))
+        check_record(T::SelectedResult57.new(member_id: "ConstantSet.time_base", value: inert(::OpenTideConstants::TimeBase)))
+        check_record(T::SelectedResult58.new(member_id: "ConstantSet.convention", value: inert(::OpenTideConstants::Convention)))
+        check_record(T::SelectedResult59.new(member_id: "ConstantSet.licence", value: inert(::OpenTideConstants::Licence)))
+        check_record(T::SelectedResult60.new(member_id: "ConstantSet.provenance", value: inert(::OpenTideConstants::Provenance)))
+        check_record(T::SelectedResult61.new(member_id: "ConstantSet.constituents", value: []))
+        check_record(T::SelectedResult62.new(member_id: "ConstantSet.constituent", value: inert(::OpenTideConstants::Constituent)))
+        check_record(T::SelectedResult63.new(member_id: "ConstantSet.fallback", value: inert(::OpenTideConstants::Fallback)))
+        check_record(T::SelectedResult64.new(member_id: "Constituent.amp_uncertainty_m", value: 0.0))
+        check_record(T::SelectedResult65.new(member_id: "Convention.phase_reference", value: :greenwich_utc))
+        check_record(T::SelectedResult66.new(member_id: "Convention.nodal_handling", value: :f_u_at_prediction))
+        check_record(T::SelectedResult67.new(member_id: "Convention.nodal_formula_ids", value: {}))
+        check_record(T::SelectedResult68.new(member_id: "Convention.canary", value: nil))
+        check_record(T::SelectedResult69.new(member_id: "Provenance.input_sha256", value: []))
+        check_record(T::SelectedResult70.new(member_id: "Provenance.build", value: inert(::OpenTideConstants::ProvenanceBuild)))
+        check_record(T::SelectedResult71.new(member_id: "ProvenanceBuild.built_at", value: Time.at(0).utc))
+        check_record(T::SelectedResult72.new(member_id: "ProvenanceBuild.tool_versions", value: {}))
+        check_record(T::SelectedResult73.new(member_id: "TimeBase.code", value: :verified))
+        check_record(T::SelectedResult74.new(member_id: "TimeBase.evidence", value: []))
+        check_record(T::SelectedResult75.new(member_id: "QcFlag.flag", value: :time_base))
+        check_record(T::SelectedResult76.new(member_id: "QcFlag.values", value: {}))
+        check_record(T::SelectedResult77.new(member_id: "DroppedConstituent.dropped_reason", value: :rayleigh))
+        check_record(T::SelectedResult78.new(member_id: "SubordinateOffsets.height_adjusted_type", value: :R))
+        check_record(T::SelectedResult79.new(member_id: "SubordinateOffsets.source_type", value: :official))
+        check_record(T::SelectedResult80.new(member_id: "SubordinateOffsets.qc_status", value: :ok))
+        check_record(T::SelectedResult81.new(member_id: "SubordinateOffsets.vintage", value: inert(::OpenTideConstants::HistoricalOffsetVintage)))
+        check_record(T::SelectedResult82.new(member_id: "SubordinateOffsets.provenance", value: inert(::OpenTideConstants::HistoricalOffsetProvenance)))
+        check_record(T::SelectedResult83.new(member_id: "Datum.named", value: {}))
+        check_record(T::SelectedResult84.new(member_id: "Stats.type", value: {}))
+        check_record(T::SelectedResult85.new(member_id: "AstroTable.valid_range", value: [1, 1]))
+        check_record(T::SelectedResult86.new(member_id: "HeightPoint.time", value: Time.at(0).utc))
+        check_record(T::SelectedResult87.new(member_id: "Extreme.type", value: :high))
+        check_record(T::SelectedResult88.new(member_id: "CurrentEvent.type", value: :max_flood))
+        check_record(T::SelectedResult89.new(member_id: "HeightSeries.items", value: []))
+        check_record(T::SelectedResult90.new(member_id: "HeightSeries.method", value: :harmonic))
+        check_record(T::SelectedResult91.new(member_id: "ExtremeList.items", value: []))
+        check_record(T::SelectedResult92.new(member_id: "CurrentSeries.items", value: []))
+        check_record(T::SelectedResult93.new(member_id: "CurrentEventList.items", value: []))
+        check_record(T::SelectedResult94.new(member_id: "CurrentEventList.omitted_event_types", value: []))
+        check_record(T::SelectedResult95.new(member_id: "DatumInfo.levels", value: []))
+        check_record(T::SelectedResult96.new(member_id: "Fallback.reason", value: :time_base_disputed))
+        check_record(T::SelectedResult97.new(member_id: "Fallback.raw", value: {}))
+        check_record(T::SelectedResult98.new(member_id: "SourceRecord.role", value: :gauge_station))
+        check_record(T::SelectedResult99.new(member_id: "SourceRecord.disposition", value: :metadata_only))
+        check_record(T::SelectedResult100.new(member_id: "SourceRecord.original_harmonics", value: {}))
+        check_record(T::SelectedResult101.new(member_id: "HistoricalOffsetVintage.removal_events", value: []))
+        check_record(T::CacheDocumentStreamIndexStationsItemSetsItem.new(set_id: "", source: "", source_type: "", quantity: "", qc_status: "", convention_id: "", licence_id: "", constituents: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), current_bins: []))
+        check_record(T::CacheDocumentStreamIndexStationsItemCurrentOffsetsItem.new(bin: 1, reference_bin: 1, reference_station_id: "", licence_id: ""))
+        check_record(T::CacheDocumentStreamIndexStationsItem.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []))
+        check_record(T::CacheDocumentStreamIndex.new(index_version: 1, discovery_index_version: 1, datestamp: "", jsonl: "", jsonl_sha256: "", jsonl_size: 1, by: "", stations: []))
+        check_record(T::CacheDocumentVerifiedReceiptFilesValue.new(sha256: "", size: 1, url: ""))
+        check_record(T::CacheDocumentVerifiedReceipt.new(datestamp: "", files: {}, format_version: "", min_reader_version: "", zenodo_version_doi: "", verified_at: "", by: ""))
+        check_record(T::CanonicalError.new(code: "invalid_argument", structured_fields: nil, cause: RuntimeError.new("native construction cause")))
+        check_record(T::ClientAndRelease.new(client_state: T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false), loaded_release: inert(::OpenTideConstants::Release)))
+        check_record(T::ClientState.new(current_release: inert(::OpenTideConstants::Release), effective_options: T::ArgsClientOpen.new(member_id: "Client.open", release: "", file: "", cache_dir: "", offline: false, mode: :eager, base_url: "", timeout: 0.0, proxy: "", ca_file: "", user_agent: "", on_network_error: :use_cache, auto_update: false, update_interval: 0.0, logger: Logger.new(File::NULL), verify_on_open: false, commercial_only: false, commercial_basis: "", historical_offsets_policy: ""), cache_state: T::CacheState.new(cache_root: "", release_candidates: [], pointer_cache: nil, lock_state: T::LockState.new(cache_root: "", owner: nil, held_token: "")), last_error: nil, last_update_check: 0.0, closed: false))
+        check_record(T::CommercialAdmission.new(admitted: false, reason: ""))
+        check_record(T::EvidenceBundle.new(scenario: T::Scenario.new(behavior_ids: [], input: nil, expected_output: nil, expected_error: T::CanonicalError.new(code: "invalid_argument", structured_fields: nil, cause: RuntimeError.new("native construction cause")), expected_state: nil), expected_result: nil, actual_profile_results: nil, red_output: "", green_output: ""))
+        check_record(T::FormatSelection.new(formats: [], required_files: []))
+        check_record(T::HistoricalAdmission.new(admitted: false, reason: ""))
+        check_record(T::HttpRequest.new(url: "", conditional_etag: ""))
+        check_record(T::HttpResponse.new(status_code: 1, body: "", etag: "", request_url: ""))
+        check_record(T::IdentityQuery1.new(system: "", id: ""))
+        check_record(T::IndexEntrySetsItem.new(set_id: "", source: "", source_type: "", quantity: "", qc_status: "", convention_id: "", licence_id: "", constituents: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), current_bins: []))
+        check_record(T::IndexEntryCurrentOffsetsItem.new(bin: 1, reference_bin: 1, reference_station_id: "", licence_id: ""))
+        check_record(T::IndexEntry.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []))
+        check_record(T::LockOutcome.new(acquired: false, token: "", owned: false))
+        check_record(T::LockRequest.new(directory: "", operation: "take", token: ""))
+        check_record(T::MergedReceiptFilesValue.new(sha256: "", size: 1, url: ""))
+        check_record(T::MergedReceipt.new(datestamp: "", files: {}, format_version: "", min_reader_version: "", zenodo_version_doi: "", verified_at: "", by: ""))
+        check_record(T::MetadataRequest.new(request_url: "", document_kind: ""))
+        check_record(T::ProjectionContract.new(scalar_types: "", models: "", subordinate_offsets: "", scope: "", fallback: ""))
+        check_record(T::PublishedMetadata.new(contributors: nil, year: 1, concept_doi: "", zenodo_version_doi: "", dataset_url: ""))
+        check_record(T::QualityAdmission.new(admitted: false, reason: ""))
+        check_record(T::ReaderVersion.new(major: 1, minor: 1))
+        check_record(T::Scenario.new(behavior_ids: [], input: nil, expected_output: nil, expected_error: T::CanonicalError.new(code: "invalid_argument", structured_fields: nil, cause: RuntimeError.new("native construction cause")), expected_state: nil))
+        check_record(T::ScenarioComparison.new(accepted: false, mandatory_findings: []))
+        check_record(T::SourceByteSpan.new(offset_bytes: 1, length_bytes: 1))
+        check_record(T::SourceFiles.new(jsonl: "", meta: "", jsonl_sha256: "", jsonl_size: 1, meta_sha256: "", meta_size: 1))
+        check_record(T::StationIndexEntrySetsItem.new(set_id: "", source: "", source_type: "", quantity: "", qc_status: "", convention_id: "", licence_id: "", constituents: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), current_bins: []))
+        check_record(T::StationIndexEntryCurrentOffsetsItem.new(bin: 1, reference_bin: 1, reference_station_id: "", licence_id: ""))
+        check_record(T::StationIndexEntry.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []))
+        check_record(T::StreamReader.new(release_view: inert(::OpenTideConstants::Release), file_descriptor: 1, index: nil, index_presence: nil, station_lru: nil, closed: false))
+        check_record(T::SummaryOptions.new(original_recommendation: inert(::OpenTideConstants::ConstantSet), commercial_only: false, include_no_constants: false))
+        check_record(T::SuppliedIndexStationsItemSetsItem.new(set_id: "", source: "", source_type: "", quantity: "", qc_status: "", convention_id: "", licence_id: "", constituents: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), current_bins: []))
+        check_record(T::SuppliedIndexStationsItemCurrentOffsetsItem.new(bin: 1, reference_bin: 1, reference_station_id: "", licence_id: ""))
+        check_record(T::SuppliedIndexStationsItem.new(station_id: "", status: "", name: "", name_folded: "", country: "", type: "", kind: "", reference_station_id: "", offsets_licence_id: "", recommended_set_id: "", lat: 0.0, lon: 0.0, offset: 1, length: 1, aliases: {}, sets: [], subordinate_offsets: T::SchemaSubordinateOffsets.new(reference_station_id: "", time_offset_high_min: 0.0, time_offset_low_min: 0.0, height_offset_high: 0.0, height_offset_low: 0.0, height_adjusted_type: "", licence_id: "", datum: {}, offset_id: "", source: "", source_type: "", source_version: "", source_record_id: "", qc_status: "", qc_flags: [], fallback: T::SchemaFallback.new(reason: "", basis: "", otc_finding: "", preferred_set_id: "", source_extensions: {}), vintage: T::SchemaHistoricalOffsetVintage.new(publication_year: 2020, source_lifecycle: "retired", removal_events: [], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: "", reference_2020_equivalence_sha256: "", source_extensions: {}), provenance: T::SchemaHistoricalOffsetProvenance.new(source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: [], book: "", annual_table_row: 1, printed_page: 1, pdf_page: 1, raw_row_text: "", raw_values_json: "", id_crosswalk: T::SchemaHistoricalOffsetProvenanceIdCrosswalk.new(legacy_id: "", status: "inferred", modern_alias_verified: false, evidence_sha256: [], source_extensions: {}), reference_binding: T::SchemaHistoricalOffsetProvenanceReferenceBinding.new(noaa_id: "", station_id: "", mapping_status: "primary_name_position", evidence_sha256: [], source_extensions: {}), acceptance_report_sha256: "", source_extensions: {}), source_extensions: {}), current_offsets: []))
+        check_record(T::SuppliedIndex.new(index_version: 1, discovery_index_version: 1, datestamp: "", jsonl: "", jsonl_sha256: "", jsonl_size: 1, by: "", stations: []))
+        check_record(T::TrustedCachedPointer.new(digests: {}))
+        check_record(T::ValidatedMetadata.new(document: nil, selected_datestamp: "", request_url: "", files: []))
+    end
+
+    Minitest.after_run do
+        directory = File.join(ROOT, "ruby/build/canonical-shape")
+        FileUtils.mkdir_p(directory)
+        File.write(File.join(directory, "invocations.json"), JSON.pretty_generate(EVENTS.sort_by { |event| event.fetch("id") }) + "\n")
+        puts "ACTUAL_NATIVE_INVOCATIONS runtime=#{EVENTS.count { |event| !event.fetch('id').include?('.S') }} actions=#{EVENTS.count { |event| event.fetch('id').include?('.S') }}"
+    end
+end

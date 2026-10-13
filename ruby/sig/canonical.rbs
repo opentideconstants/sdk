@@ -1,0 +1,1841 @@
+class OpenTideConstants
+    class Release
+    end
+    class ReleaseInfo
+    end
+    class FileInfo
+    end
+    class Station
+    end
+    class Tombstone
+    end
+    class ConstantSet
+    end
+    class Constituent
+    end
+    class Convention
+    end
+    class Licence
+    end
+    class Provenance
+    end
+    class ProvenanceBuild
+    end
+    class TimeBase
+    end
+    class QcFlag
+    end
+    class DroppedConstituent
+    end
+    class Validation
+    end
+    class SubordinateOffsets
+    end
+    class Nearby
+    end
+    class UpdateResult
+    end
+    class RecordSpan
+    end
+    class Datum
+    end
+    class Stats
+    end
+    class AstroTable
+    end
+    class HeightPoint
+    end
+    class Extreme
+    end
+    class CurrentPoint
+    end
+    class CurrentEvent
+    end
+    class HeightSeries
+    end
+    class ExtremeList
+    end
+    class CurrentSeries
+    end
+    class CurrentEventList
+    end
+    class DatumInfo
+    end
+    class DatumLevel
+    end
+    class Ranges
+    end
+    class Fallback
+    end
+    class SourceRecord
+    end
+    class HistoricalOffsetVintage
+    end
+    class HistoricalOffsetProvenance
+    end
+    class Error < StandardError
+    end
+    module CanonicalTypes
+        interface _Logger
+            def debug: (String) -> void
+            def info: (String) -> void
+            def warn: (String) -> void
+        end
+        class Origin
+            def self.new: () -> Origin
+        end
+        class AbsentValue
+            def self.new: () -> AbsentValue
+        end
+        class NoValue
+            def self.new: () -> NoValue
+        end
+        class RequiredLink
+            def self.new: (source_model: String, source_field: String, target_model: String, target_field: String) -> RequiredLink
+            attr_reader source_model: String
+            attr_reader source_field: String
+            attr_reader target_model: String
+            attr_reader target_field: String
+        end
+        class FieldContract
+            def self.new: (member_id: "Client.open" | "Client.release" | "Client.loaded_from" | "Client.last_error" | "Client.releases" | "Client.latest" | "Client.check_for_update" | "Client.newer_format_major" | "Client.update" | "Client.download" | "Client.verify" | "Client.cached_releases" | "Client.prune" | "Client.close" | "Release.datestamp" | "Release.created" | "Release.format_version" | "Release.zenodo_version_doi" | "Release.concept_doi" | "Release.source_versions" | "Release.build_commit" | "Release.changelog_url" | "Release.files" | "Release.conventions" | "Release.convention" | "Release.licences" | "Release.licence" | "Release.constituent_names" | "Release.stats" | "Release.station_count" | "Release.tombstone_count" | "Release.citation" | "Release.station" | "Release.require_station" | "Release.tombstone" | "Release.station_by_alias" | "Release.stations" | "Release.iter_stations" | "Release.search" | "Release.near" | "Release.nearest" | "Release.reference_station" | "Release.subordinates_of" | "Release.attribution" | "Release.heights" | "Release.heights_at" | "Release.extremes" | "Release.currents" | "Release.current_events" | "Release.datums" | "Release.ranges" | "Release.astro_table" | "Release.historical_offsets_policy" | "ReleaseInfo.datestamp" | "ReleaseInfo.format_version" | "ReleaseInfo.concept_doi" | "ReleaseInfo.zenodo_version_doi" | "ReleaseInfo.content_sha256" | "ReleaseInfo.files" | "FileInfo.name" | "FileInfo.url" | "FileInfo.size" | "FileInfo.sha256" | "Station.station_id" | "Station.name" | "Station.country" | "Station.lat" | "Station.lon" | "Station.type" | "Station.kind" | "Station.timezone" | "Station.aliases" | "Station.status" | "Station.is_reference" | "Station.is_subordinate" | "Station.is_tide" | "Station.is_current" | "Station.recommended_set" | "Station.constant_sets" | "Station.constant_set" | "Station.subordinate_offsets" | "Station.validation" | "Station.raw" | "Station.recommended_is_fallback" | "Station.source_records" | "Tombstone.station_id" | "Tombstone.name" | "Tombstone.status" | "Tombstone.removed_in" | "Tombstone.removed_reason" | "Tombstone.merged_into" | "Tombstone.detail" | "Tombstone.raw" | "ConstantSet.set_id" | "ConstantSet.source" | "ConstantSet.source_type" | "ConstantSet.quantity" | "ConstantSet.source_record_id" | "ConstantSet.source_version" | "ConstantSet.record_span" | "ConstantSet.datum" | "ConstantSet.qc_status" | "ConstantSet.qc_flags" | "ConstantSet.dropped_constituents" | "ConstantSet.time_base" | "ConstantSet.is_recommended" | "ConstantSet.convention" | "ConstantSet.licence" | "ConstantSet.provenance" | "ConstantSet.validation" | "ConstantSet.constituents" | "ConstantSet.constituent" | "ConstantSet.raw" | "ConstantSet.fallback" | "Constituent.name" | "Constituent.source_name" | "Constituent.doodson" | "Constituent.speed_deg_per_hour" | "Constituent.amplitude_m" | "Constituent.phase_deg" | "Constituent.amp_uncertainty_m" | "Constituent.phase_uncertainty_deg" | "Constituent.kept_reason" | "Constituent.raw" | "Convention.convention_id" | "Convention.phase_reference" | "Convention.utc_offset_hours" | "Convention.v0_model" | "Convention.nodal_handling" | "Convention.nodal_formula_ids" | "Convention.constituent_table_version" | "Convention.tables_sha256" | "Convention.canary" | "Convention.raw" | "Licence.licence_id" | "Licence.spdx" | "Licence.provider" | "Licence.citation" | "Licence.attribution" | "Licence.url" | "Licence.commercial_use" | "Licence.restriction" | "Licence.terms_url" | "Licence.raw" | "Provenance.adapter_version" | "Provenance.input_sha256" | "Provenance.selection_reason" | "Provenance.decision" | "Provenance.build" | "Provenance.carried_from_release" | "Provenance.raw" | "ProvenanceBuild.build_commit" | "ProvenanceBuild.built_at" | "ProvenanceBuild.fetched_at" | "ProvenanceBuild.run_id" | "ProvenanceBuild.tool_versions" | "TimeBase.code" | "TimeBase.reason" | "TimeBase.declared" | "TimeBase.published" | "TimeBase.correction" | "TimeBase.months_dropped" | "TimeBase.decided_in" | "TimeBase.decided_build_commit" | "TimeBase.evidence" | "QcFlag.flag" | "QcFlag.reason" | "QcFlag.values" | "DroppedConstituent.name" | "DroppedConstituent.dropped_reason" | "DroppedConstituent.detail" | "Validation.set_id" | "Validation.reference_source" | "Validation.reference_station" | "Validation.reference_distance_km" | "Validation.window" | "Validation.time_mae_min" | "Validation.time_p95_min" | "Validation.time_bias_min" | "Validation.height_mae_m" | "Validation.range_error_m" | "Validation.missed_events" | "Validation.extra_events" | "Validation.previous_release" | "SubordinateOffsets.reference_station_id" | "SubordinateOffsets.time_offset_high_min" | "SubordinateOffsets.time_offset_low_min" | "SubordinateOffsets.height_offset_high" | "SubordinateOffsets.height_offset_low" | "SubordinateOffsets.height_adjusted_type" | "SubordinateOffsets.licence_id" | "SubordinateOffsets.offset_id" | "SubordinateOffsets.source" | "SubordinateOffsets.source_type" | "SubordinateOffsets.source_version" | "SubordinateOffsets.source_record_id" | "SubordinateOffsets.qc_status" | "SubordinateOffsets.qc_flags" | "SubordinateOffsets.fallback" | "SubordinateOffsets.vintage" | "SubordinateOffsets.provenance" | "Nearby.station" | "Nearby.distance_km" | "UpdateResult.updated" | "UpdateResult.from" | "UpdateResult.to" | "RecordSpan.start" | "RecordSpan.end" | "RecordSpan.good_samples" | "Datum.msl_offset_m" | "Datum.named" | "Stats.type" | "Stats.kind" | "Stats.country" | "Stats.source" | "Stats.qc_status" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "AstroTable.valid_range" | "HeightPoint.time" | "HeightPoint.height_m" | "HeightPoint.local_time" | "HeightPoint.utc_offset_s" | "HeightPoint.local_datetime" | "HeightPoint.local_time_object" | "Extreme.time" | "Extreme.type" | "Extreme.height_m" | "Extreme.local_time" | "Extreme.utc_offset_s" | "Extreme.local_datetime" | "Extreme.local_time_object" | "CurrentPoint.time" | "CurrentPoint.velocity_major_ms" | "CurrentPoint.velocity_minor_ms" | "CurrentPoint.speed_ms" | "CurrentPoint.direction_deg" | "CurrentPoint.local_time" | "CurrentPoint.utc_offset_s" | "CurrentPoint.local_datetime" | "CurrentPoint.local_time_object" | "CurrentEvent.time" | "CurrentEvent.type" | "CurrentEvent.velocity_ms" | "CurrentEvent.direction_deg" | "CurrentEvent.local_time" | "CurrentEvent.utc_offset_s" | "CurrentEvent.local_datetime" | "CurrentEvent.local_time_object" | "HeightSeries.items" | "HeightSeries.station_id" | "HeightSeries.timezone" | "HeightSeries.method" | "HeightSeries.set_id" | "HeightSeries.convention_id" | "HeightSeries.astro_table_id" | "HeightSeries.reference_station_id" | "HeightSeries.reference_bin" | "HeightSeries.datum" | "HeightSeries.datum_name" | "HeightSeries.datum_kind" | "HeightSeries.datum_uncertainty_m" | "HeightSeries.tz" | "HeightSeries.tz_version" | "HeightSeries.release" | "HeightSeries.algorithm" | "HeightSeries.to_local" | "HeightSeries.offset_id" | "HeightSeries.offset_source" | "HeightSeries.offset_source_version" | "HeightSeries.historical_offsets" | "HeightSeries.current_validity" | "HeightSeries.current_accuracy" | "HeightSeries.reference_set_id" | "HeightSeries.reference_source_version" | "HeightSeries.reference_2020_equivalence" | "HeightSeries.source_note" | "ExtremeList.items" | "ExtremeList.station_id" | "ExtremeList.timezone" | "ExtremeList.method" | "ExtremeList.set_id" | "ExtremeList.convention_id" | "ExtremeList.astro_table_id" | "ExtremeList.reference_station_id" | "ExtremeList.reference_bin" | "ExtremeList.datum" | "ExtremeList.datum_name" | "ExtremeList.datum_kind" | "ExtremeList.datum_uncertainty_m" | "ExtremeList.tz" | "ExtremeList.tz_version" | "ExtremeList.release" | "ExtremeList.algorithm" | "ExtremeList.to_local" | "ExtremeList.offset_id" | "ExtremeList.offset_source" | "ExtremeList.offset_source_version" | "ExtremeList.historical_offsets" | "ExtremeList.current_validity" | "ExtremeList.current_accuracy" | "ExtremeList.reference_set_id" | "ExtremeList.reference_source_version" | "ExtremeList.reference_2020_equivalence" | "ExtremeList.source_note" | "CurrentSeries.items" | "CurrentSeries.station_id" | "CurrentSeries.timezone" | "CurrentSeries.method" | "CurrentSeries.set_id" | "CurrentSeries.convention_id" | "CurrentSeries.astro_table_id" | "CurrentSeries.reference_station_id" | "CurrentSeries.reference_bin" | "CurrentSeries.datum" | "CurrentSeries.datum_name" | "CurrentSeries.datum_kind" | "CurrentSeries.datum_uncertainty_m" | "CurrentSeries.bin_number" | "CurrentSeries.tz" | "CurrentSeries.tz_version" | "CurrentSeries.release" | "CurrentSeries.algorithm" | "CurrentSeries.to_local" | "CurrentEventList.items" | "CurrentEventList.station_id" | "CurrentEventList.timezone" | "CurrentEventList.method" | "CurrentEventList.set_id" | "CurrentEventList.convention_id" | "CurrentEventList.astro_table_id" | "CurrentEventList.reference_station_id" | "CurrentEventList.reference_bin" | "CurrentEventList.datum" | "CurrentEventList.datum_name" | "CurrentEventList.datum_kind" | "CurrentEventList.datum_uncertainty_m" | "CurrentEventList.bin_number" | "CurrentEventList.omitted_event_types" | "CurrentEventList.tz" | "CurrentEventList.tz_version" | "CurrentEventList.release" | "CurrentEventList.algorithm" | "CurrentEventList.to_local" | "DatumInfo.set_id" | "DatumInfo.zero" | "DatumInfo.zero_name" | "DatumInfo.chart_datum" | "DatumInfo.msl_offset_m" | "DatumInfo.levels" | "DatumLevel.key" | "DatumLevel.value_m" | "DatumLevel.above_chart_m" | "DatumLevel.kind" | "DatumLevel.method" | "DatumLevel.source_name" | "DatumLevel.epoch" | "DatumLevel.data_span" | "DatumLevel.control_station_id" | "DatumLevel.control_set_id" | "DatumLevel.control_source_id" | "DatumLevel.uncertainty_m" | "DatumLevel.uncertainty_basis" | "DatumLevel.flags" | "Ranges.mn" | "Ranges.gt" | "Ranges.dhq" | "Ranges.dlq" | "Fallback.reason" | "Fallback.basis" | "Fallback.otc_finding" | "Fallback.preferred_set_id" | "Fallback.raw" | "SourceRecord.source" | "SourceRecord.source_version" | "SourceRecord.source_record_id" | "SourceRecord.role" | "SourceRecord.disposition" | "SourceRecord.detail" | "SourceRecord.licence_id" | "SourceRecord.upstream_licence_id" | "SourceRecord.published_set_ids" | "SourceRecord.provenance" | "SourceRecord.original_metadata" | "SourceRecord.original_harmonics" | "SourceRecord.licence" | "SourceRecord.upstream_licence" | "SourceRecord.raw" | "HistoricalOffsetVintage.publication_year" | "HistoricalOffsetVintage.source_lifecycle" | "HistoricalOffsetVintage.removal_events" | "HistoricalOffsetVintage.current_validity" | "HistoricalOffsetVintage.current_accuracy" | "HistoricalOffsetVintage.reference_2020_equivalence" | "HistoricalOffsetVintage.reference_2020_equivalence_sha256" | "HistoricalOffsetProvenance.source_manifest_sha256" | "HistoricalOffsetProvenance.input_sha256" | "HistoricalOffsetProvenance.book" | "HistoricalOffsetProvenance.annual_table_row" | "HistoricalOffsetProvenance.printed_page" | "HistoricalOffsetProvenance.pdf_page" | "HistoricalOffsetProvenance.raw_row_text" | "HistoricalOffsetProvenance.raw_values_json" | "HistoricalOffsetProvenance.id_crosswalk" | "HistoricalOffsetProvenance.reference_binding" | "HistoricalOffsetProvenance.acceptance_report_sha256", native_type: String, nullable: bool) -> FieldContract
+            attr_reader member_id: "Client.open" | "Client.release" | "Client.loaded_from" | "Client.last_error" | "Client.releases" | "Client.latest" | "Client.check_for_update" | "Client.newer_format_major" | "Client.update" | "Client.download" | "Client.verify" | "Client.cached_releases" | "Client.prune" | "Client.close" | "Release.datestamp" | "Release.created" | "Release.format_version" | "Release.zenodo_version_doi" | "Release.concept_doi" | "Release.source_versions" | "Release.build_commit" | "Release.changelog_url" | "Release.files" | "Release.conventions" | "Release.convention" | "Release.licences" | "Release.licence" | "Release.constituent_names" | "Release.stats" | "Release.station_count" | "Release.tombstone_count" | "Release.citation" | "Release.station" | "Release.require_station" | "Release.tombstone" | "Release.station_by_alias" | "Release.stations" | "Release.iter_stations" | "Release.search" | "Release.near" | "Release.nearest" | "Release.reference_station" | "Release.subordinates_of" | "Release.attribution" | "Release.heights" | "Release.heights_at" | "Release.extremes" | "Release.currents" | "Release.current_events" | "Release.datums" | "Release.ranges" | "Release.astro_table" | "Release.historical_offsets_policy" | "ReleaseInfo.datestamp" | "ReleaseInfo.format_version" | "ReleaseInfo.concept_doi" | "ReleaseInfo.zenodo_version_doi" | "ReleaseInfo.content_sha256" | "ReleaseInfo.files" | "FileInfo.name" | "FileInfo.url" | "FileInfo.size" | "FileInfo.sha256" | "Station.station_id" | "Station.name" | "Station.country" | "Station.lat" | "Station.lon" | "Station.type" | "Station.kind" | "Station.timezone" | "Station.aliases" | "Station.status" | "Station.is_reference" | "Station.is_subordinate" | "Station.is_tide" | "Station.is_current" | "Station.recommended_set" | "Station.constant_sets" | "Station.constant_set" | "Station.subordinate_offsets" | "Station.validation" | "Station.raw" | "Station.recommended_is_fallback" | "Station.source_records" | "Tombstone.station_id" | "Tombstone.name" | "Tombstone.status" | "Tombstone.removed_in" | "Tombstone.removed_reason" | "Tombstone.merged_into" | "Tombstone.detail" | "Tombstone.raw" | "ConstantSet.set_id" | "ConstantSet.source" | "ConstantSet.source_type" | "ConstantSet.quantity" | "ConstantSet.source_record_id" | "ConstantSet.source_version" | "ConstantSet.record_span" | "ConstantSet.datum" | "ConstantSet.qc_status" | "ConstantSet.qc_flags" | "ConstantSet.dropped_constituents" | "ConstantSet.time_base" | "ConstantSet.is_recommended" | "ConstantSet.convention" | "ConstantSet.licence" | "ConstantSet.provenance" | "ConstantSet.validation" | "ConstantSet.constituents" | "ConstantSet.constituent" | "ConstantSet.raw" | "ConstantSet.fallback" | "Constituent.name" | "Constituent.source_name" | "Constituent.doodson" | "Constituent.speed_deg_per_hour" | "Constituent.amplitude_m" | "Constituent.phase_deg" | "Constituent.amp_uncertainty_m" | "Constituent.phase_uncertainty_deg" | "Constituent.kept_reason" | "Constituent.raw" | "Convention.convention_id" | "Convention.phase_reference" | "Convention.utc_offset_hours" | "Convention.v0_model" | "Convention.nodal_handling" | "Convention.nodal_formula_ids" | "Convention.constituent_table_version" | "Convention.tables_sha256" | "Convention.canary" | "Convention.raw" | "Licence.licence_id" | "Licence.spdx" | "Licence.provider" | "Licence.citation" | "Licence.attribution" | "Licence.url" | "Licence.commercial_use" | "Licence.restriction" | "Licence.terms_url" | "Licence.raw" | "Provenance.adapter_version" | "Provenance.input_sha256" | "Provenance.selection_reason" | "Provenance.decision" | "Provenance.build" | "Provenance.carried_from_release" | "Provenance.raw" | "ProvenanceBuild.build_commit" | "ProvenanceBuild.built_at" | "ProvenanceBuild.fetched_at" | "ProvenanceBuild.run_id" | "ProvenanceBuild.tool_versions" | "TimeBase.code" | "TimeBase.reason" | "TimeBase.declared" | "TimeBase.published" | "TimeBase.correction" | "TimeBase.months_dropped" | "TimeBase.decided_in" | "TimeBase.decided_build_commit" | "TimeBase.evidence" | "QcFlag.flag" | "QcFlag.reason" | "QcFlag.values" | "DroppedConstituent.name" | "DroppedConstituent.dropped_reason" | "DroppedConstituent.detail" | "Validation.set_id" | "Validation.reference_source" | "Validation.reference_station" | "Validation.reference_distance_km" | "Validation.window" | "Validation.time_mae_min" | "Validation.time_p95_min" | "Validation.time_bias_min" | "Validation.height_mae_m" | "Validation.range_error_m" | "Validation.missed_events" | "Validation.extra_events" | "Validation.previous_release" | "SubordinateOffsets.reference_station_id" | "SubordinateOffsets.time_offset_high_min" | "SubordinateOffsets.time_offset_low_min" | "SubordinateOffsets.height_offset_high" | "SubordinateOffsets.height_offset_low" | "SubordinateOffsets.height_adjusted_type" | "SubordinateOffsets.licence_id" | "SubordinateOffsets.offset_id" | "SubordinateOffsets.source" | "SubordinateOffsets.source_type" | "SubordinateOffsets.source_version" | "SubordinateOffsets.source_record_id" | "SubordinateOffsets.qc_status" | "SubordinateOffsets.qc_flags" | "SubordinateOffsets.fallback" | "SubordinateOffsets.vintage" | "SubordinateOffsets.provenance" | "Nearby.station" | "Nearby.distance_km" | "UpdateResult.updated" | "UpdateResult.from" | "UpdateResult.to" | "RecordSpan.start" | "RecordSpan.end" | "RecordSpan.good_samples" | "Datum.msl_offset_m" | "Datum.named" | "Stats.type" | "Stats.kind" | "Stats.country" | "Stats.source" | "Stats.qc_status" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "AstroTable.valid_range" | "HeightPoint.time" | "HeightPoint.height_m" | "HeightPoint.local_time" | "HeightPoint.utc_offset_s" | "HeightPoint.local_datetime" | "HeightPoint.local_time_object" | "Extreme.time" | "Extreme.type" | "Extreme.height_m" | "Extreme.local_time" | "Extreme.utc_offset_s" | "Extreme.local_datetime" | "Extreme.local_time_object" | "CurrentPoint.time" | "CurrentPoint.velocity_major_ms" | "CurrentPoint.velocity_minor_ms" | "CurrentPoint.speed_ms" | "CurrentPoint.direction_deg" | "CurrentPoint.local_time" | "CurrentPoint.utc_offset_s" | "CurrentPoint.local_datetime" | "CurrentPoint.local_time_object" | "CurrentEvent.time" | "CurrentEvent.type" | "CurrentEvent.velocity_ms" | "CurrentEvent.direction_deg" | "CurrentEvent.local_time" | "CurrentEvent.utc_offset_s" | "CurrentEvent.local_datetime" | "CurrentEvent.local_time_object" | "HeightSeries.items" | "HeightSeries.station_id" | "HeightSeries.timezone" | "HeightSeries.method" | "HeightSeries.set_id" | "HeightSeries.convention_id" | "HeightSeries.astro_table_id" | "HeightSeries.reference_station_id" | "HeightSeries.reference_bin" | "HeightSeries.datum" | "HeightSeries.datum_name" | "HeightSeries.datum_kind" | "HeightSeries.datum_uncertainty_m" | "HeightSeries.tz" | "HeightSeries.tz_version" | "HeightSeries.release" | "HeightSeries.algorithm" | "HeightSeries.to_local" | "HeightSeries.offset_id" | "HeightSeries.offset_source" | "HeightSeries.offset_source_version" | "HeightSeries.historical_offsets" | "HeightSeries.current_validity" | "HeightSeries.current_accuracy" | "HeightSeries.reference_set_id" | "HeightSeries.reference_source_version" | "HeightSeries.reference_2020_equivalence" | "HeightSeries.source_note" | "ExtremeList.items" | "ExtremeList.station_id" | "ExtremeList.timezone" | "ExtremeList.method" | "ExtremeList.set_id" | "ExtremeList.convention_id" | "ExtremeList.astro_table_id" | "ExtremeList.reference_station_id" | "ExtremeList.reference_bin" | "ExtremeList.datum" | "ExtremeList.datum_name" | "ExtremeList.datum_kind" | "ExtremeList.datum_uncertainty_m" | "ExtremeList.tz" | "ExtremeList.tz_version" | "ExtremeList.release" | "ExtremeList.algorithm" | "ExtremeList.to_local" | "ExtremeList.offset_id" | "ExtremeList.offset_source" | "ExtremeList.offset_source_version" | "ExtremeList.historical_offsets" | "ExtremeList.current_validity" | "ExtremeList.current_accuracy" | "ExtremeList.reference_set_id" | "ExtremeList.reference_source_version" | "ExtremeList.reference_2020_equivalence" | "ExtremeList.source_note" | "CurrentSeries.items" | "CurrentSeries.station_id" | "CurrentSeries.timezone" | "CurrentSeries.method" | "CurrentSeries.set_id" | "CurrentSeries.convention_id" | "CurrentSeries.astro_table_id" | "CurrentSeries.reference_station_id" | "CurrentSeries.reference_bin" | "CurrentSeries.datum" | "CurrentSeries.datum_name" | "CurrentSeries.datum_kind" | "CurrentSeries.datum_uncertainty_m" | "CurrentSeries.bin_number" | "CurrentSeries.tz" | "CurrentSeries.tz_version" | "CurrentSeries.release" | "CurrentSeries.algorithm" | "CurrentSeries.to_local" | "CurrentEventList.items" | "CurrentEventList.station_id" | "CurrentEventList.timezone" | "CurrentEventList.method" | "CurrentEventList.set_id" | "CurrentEventList.convention_id" | "CurrentEventList.astro_table_id" | "CurrentEventList.reference_station_id" | "CurrentEventList.reference_bin" | "CurrentEventList.datum" | "CurrentEventList.datum_name" | "CurrentEventList.datum_kind" | "CurrentEventList.datum_uncertainty_m" | "CurrentEventList.bin_number" | "CurrentEventList.omitted_event_types" | "CurrentEventList.tz" | "CurrentEventList.tz_version" | "CurrentEventList.release" | "CurrentEventList.algorithm" | "CurrentEventList.to_local" | "DatumInfo.set_id" | "DatumInfo.zero" | "DatumInfo.zero_name" | "DatumInfo.chart_datum" | "DatumInfo.msl_offset_m" | "DatumInfo.levels" | "DatumLevel.key" | "DatumLevel.value_m" | "DatumLevel.above_chart_m" | "DatumLevel.kind" | "DatumLevel.method" | "DatumLevel.source_name" | "DatumLevel.epoch" | "DatumLevel.data_span" | "DatumLevel.control_station_id" | "DatumLevel.control_set_id" | "DatumLevel.control_source_id" | "DatumLevel.uncertainty_m" | "DatumLevel.uncertainty_basis" | "DatumLevel.flags" | "Ranges.mn" | "Ranges.gt" | "Ranges.dhq" | "Ranges.dlq" | "Fallback.reason" | "Fallback.basis" | "Fallback.otc_finding" | "Fallback.preferred_set_id" | "Fallback.raw" | "SourceRecord.source" | "SourceRecord.source_version" | "SourceRecord.source_record_id" | "SourceRecord.role" | "SourceRecord.disposition" | "SourceRecord.detail" | "SourceRecord.licence_id" | "SourceRecord.upstream_licence_id" | "SourceRecord.published_set_ids" | "SourceRecord.provenance" | "SourceRecord.original_metadata" | "SourceRecord.original_harmonics" | "SourceRecord.licence" | "SourceRecord.upstream_licence" | "SourceRecord.raw" | "HistoricalOffsetVintage.publication_year" | "HistoricalOffsetVintage.source_lifecycle" | "HistoricalOffsetVintage.removal_events" | "HistoricalOffsetVintage.current_validity" | "HistoricalOffsetVintage.current_accuracy" | "HistoricalOffsetVintage.reference_2020_equivalence" | "HistoricalOffsetVintage.reference_2020_equivalence_sha256" | "HistoricalOffsetProvenance.source_manifest_sha256" | "HistoricalOffsetProvenance.input_sha256" | "HistoricalOffsetProvenance.book" | "HistoricalOffsetProvenance.annual_table_row" | "HistoricalOffsetProvenance.printed_page" | "HistoricalOffsetProvenance.pdf_page" | "HistoricalOffsetProvenance.raw_row_text" | "HistoricalOffsetProvenance.raw_values_json" | "HistoricalOffsetProvenance.id_crosswalk" | "HistoricalOffsetProvenance.reference_binding" | "HistoricalOffsetProvenance.acceptance_report_sha256"
+            attr_reader native_type: String
+            attr_reader nullable: bool
+        end
+        class FieldContracts
+            def self.new: (model_type: "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance", fields: Array[FieldContract]) -> FieldContracts
+            attr_reader model_type: "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance"
+            attr_reader fields: Array[FieldContract]
+        end
+        class StationLookupActive
+            def self.new: (station: ::OpenTideConstants::Station) -> StationLookupActive
+            attr_reader station: ::OpenTideConstants::Station
+        end
+        class StationLookupRemoved
+            def self.new: (tombstone: ::OpenTideConstants::Tombstone) -> StationLookupRemoved
+            attr_reader tombstone: ::OpenTideConstants::Tombstone
+        end
+        class StationLookupAbsent
+            def self.new: () -> StationLookupAbsent
+        end
+        class PredictionModel
+            def self.new: (station: ::OpenTideConstants::Station, release_view: ::OpenTideConstants::Release, constant_set: ::OpenTideConstants::ConstantSet, convention: ::OpenTideConstants::Convention, astro_table: json_value, required_constituents: Array[json_value], reference_bin: Integer | nil, mean_term: Float | Integer, datum_source: json_value | nil) -> PredictionModel
+            attr_reader station: ::OpenTideConstants::Station
+            attr_reader release_view: ::OpenTideConstants::Release
+            attr_reader constant_set: ::OpenTideConstants::ConstantSet
+            attr_reader convention: ::OpenTideConstants::Convention
+            attr_reader astro_table: json_value
+            attr_reader required_constituents: Array[json_value]
+            attr_reader reference_bin: Integer | nil
+            attr_reader mean_term: Float | Integer
+            attr_reader datum_source: json_value | nil
+        end
+        class PredictionWindow
+            def self.new: (start: Float | Integer, stop: Float | Integer, step: Float | Integer | nil, instants: json_value | nil) -> PredictionWindow
+            attr_reader start: Float | Integer
+            attr_reader stop: Float | Integer
+            attr_reader step: Float | Integer | nil
+            attr_reader instants: json_value | nil
+        end
+        class ArgsClientOpenSelected
+            def self.new: (member_id: "Client.open", offline: bool | AbsentValue, base_url: String | AbsentValue, timeout: Float | Integer | nil | AbsentValue, proxy: String | nil | AbsentValue, ca_file: String | nil | AbsentValue, user_agent: String | nil | AbsentValue) -> ArgsClientOpenSelected
+            attr_reader member_id: "Client.open"
+            attr_reader offline: bool | AbsentValue
+            attr_reader base_url: String | AbsentValue
+            attr_reader timeout: Float | Integer | nil | AbsentValue
+            attr_reader proxy: String | nil | AbsentValue
+            attr_reader ca_file: String | nil | AbsentValue
+            attr_reader user_agent: String | nil | AbsentValue
+        end
+        class ArgsClientOpen
+            def self.new: (member_id: "Client.open", release: String | :latest | AbsentValue, file: String | nil | AbsentValue, cache_dir: String | nil | AbsentValue, offline: bool | AbsentValue, mode: :eager | :stream | :other | AbsentValue, base_url: String | AbsentValue, timeout: Float | Integer | nil | AbsentValue, proxy: String | nil | AbsentValue, ca_file: String | nil | AbsentValue, user_agent: String | nil | AbsentValue, on_network_error: :use_cache | :raise | :other | AbsentValue, auto_update: bool | AbsentValue, update_interval: Float | Integer | AbsentValue, logger: _Logger | nil | AbsentValue, verify_on_open: bool | AbsentValue, commercial_only: bool | AbsentValue, commercial_basis: String | AbsentValue, historical_offsets_policy: String | AbsentValue) -> ArgsClientOpen
+            attr_reader member_id: "Client.open"
+            attr_reader release: String | :latest | AbsentValue
+            attr_reader file: String | nil | AbsentValue
+            attr_reader cache_dir: String | nil | AbsentValue
+            attr_reader offline: bool | AbsentValue
+            attr_reader mode: :eager | :stream | :other | AbsentValue
+            attr_reader base_url: String | AbsentValue
+            attr_reader timeout: Float | Integer | nil | AbsentValue
+            attr_reader proxy: String | nil | AbsentValue
+            attr_reader ca_file: String | nil | AbsentValue
+            attr_reader user_agent: String | nil | AbsentValue
+            attr_reader on_network_error: :use_cache | :raise | :other | AbsentValue
+            attr_reader auto_update: bool | AbsentValue
+            attr_reader update_interval: Float | Integer | AbsentValue
+            attr_reader logger: _Logger | nil | AbsentValue
+            attr_reader verify_on_open: bool | AbsentValue
+            attr_reader commercial_only: bool | AbsentValue
+            attr_reader commercial_basis: String | AbsentValue
+            attr_reader historical_offsets_policy: String | AbsentValue
+        end
+        class LockState
+            def self.new: (cache_root: String, owner: json_value | nil, held_token: String | nil) -> LockState
+            attr_reader cache_root: String
+            attr_reader owner: json_value | nil
+            attr_reader held_token: String | nil
+        end
+        class CacheState
+            def self.new: (cache_root: String, release_candidates: Array[String], pointer_cache: json_value | nil, lock_state: domain_lock_state) -> CacheState
+            attr_reader cache_root: String
+            attr_reader release_candidates: Array[String]
+            attr_reader pointer_cache: json_value | nil
+            attr_reader lock_state: domain_lock_state
+        end
+        class ReleaseDescriptor
+            def self.new: (datestamp: String, files: domain_file_rows, checksum_bytes: String | nil, pointer_digests: domain_digest_map, required_file_request: json_value | nil, metadata: json_value) -> ReleaseDescriptor
+            attr_reader datestamp: String
+            attr_reader files: domain_file_rows
+            attr_reader checksum_bytes: String | nil
+            attr_reader pointer_digests: domain_digest_map
+            attr_reader required_file_request: json_value | nil
+            attr_reader metadata: json_value
+        end
+        class ReferencePath
+            def self.new: (station: ::OpenTideConstants::Station, release_view: ::OpenTideConstants::Release, constant_set: ::OpenTideConstants::ConstantSet | nil, own_offset: json_value | nil, reference_bin: Integer | nil) -> ReferencePath
+            attr_reader station: ::OpenTideConstants::Station
+            attr_reader release_view: ::OpenTideConstants::Release
+            attr_reader constant_set: ::OpenTideConstants::ConstantSet | nil
+            attr_reader own_offset: json_value | nil
+            attr_reader reference_bin: Integer | nil
+        end
+        class CandidatePathDirect
+            def self.new: (station: ::OpenTideConstants::Station, constant_set: ::OpenTideConstants::ConstantSet, release_view: ::OpenTideConstants::Release) -> CandidatePathDirect
+            attr_reader station: ::OpenTideConstants::Station
+            attr_reader constant_set: ::OpenTideConstants::ConstantSet
+            attr_reader release_view: ::OpenTideConstants::Release
+        end
+        class CandidatePathTideOffset
+            def self.new: (reference_path: domain_reference_path, own_offset: json_value) -> CandidatePathTideOffset
+            attr_reader reference_path: domain_reference_path
+            attr_reader own_offset: json_value
+        end
+        class CandidatePathCurrentOffset
+            def self.new: (reference_path: domain_reference_path, own_current_offset: json_value) -> CandidatePathCurrentOffset
+            attr_reader reference_path: domain_reference_path
+            attr_reader own_current_offset: json_value
+        end
+        class ArgsReleaseHeightsSelected
+            def self.new: (member_id: "Release.heights", datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseHeightsSelected
+            attr_reader member_id: "Release.heights"
+            attr_reader datum: String | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader offset_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseExtremesSelected
+            def self.new: (member_id: "Release.extremes", datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseExtremesSelected
+            attr_reader member_id: "Release.extremes"
+            attr_reader datum: String | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader offset_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseCurrentsSelected
+            def self.new: (member_id: "Release.currents", bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrentsSelected
+            attr_reader member_id: "Release.currents"
+            attr_reader bin_number: Integer | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseCurrentEventsSelected
+            def self.new: (member_id: "Release.current_events", bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrentEventsSelected
+            attr_reader member_id: "Release.current_events"
+            attr_reader bin_number: Integer | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseStations
+            def self.new: (member_id: "Release.stations") -> ArgsReleaseStations
+            attr_reader member_id: "Release.stations"
+        end
+        class ArgsReleaseIterStations
+            def self.new: (member_id: "Release.iter_stations") -> ArgsReleaseIterStations
+            attr_reader member_id: "Release.iter_stations"
+        end
+        class ArgsReleaseSearch
+            def self.new: (member_id: "Release.search", name: String, limit: Integer | nil | AbsentValue, match: :exact | :other | nil | AbsentValue) -> ArgsReleaseSearch
+            attr_reader member_id: "Release.search"
+            attr_reader name: String
+            attr_reader limit: Integer | nil | AbsentValue
+            attr_reader match: :exact | :other | nil | AbsentValue
+        end
+        class ArgsReleaseNear
+            def self.new: (member_id: "Release.near", lat: Float | Integer, lon: Float | Integer, radius_km: Float | Integer, limit: Integer | nil | AbsentValue) -> ArgsReleaseNear
+            attr_reader member_id: "Release.near"
+            attr_reader lat: Float | Integer
+            attr_reader lon: Float | Integer
+            attr_reader radius_km: Float | Integer
+            attr_reader limit: Integer | nil | AbsentValue
+        end
+        class ArgsReleaseNearest
+            def self.new: (member_id: "Release.nearest", lat: Float | Integer, lon: Float | Integer, max_km: Float | Integer | nil | AbsentValue) -> ArgsReleaseNearest
+            attr_reader member_id: "Release.nearest"
+            attr_reader lat: Float | Integer
+            attr_reader lon: Float | Integer
+            attr_reader max_km: Float | Integer | nil | AbsentValue
+        end
+        class UnroundedTideEvent
+            def self.new: (root_seconds: Float | Integer, event_type: "high" | "low", height_m: Float | Integer, reference_order: Integer) -> UnroundedTideEvent
+            attr_reader root_seconds: Float | Integer
+            attr_reader event_type: "high" | "low"
+            attr_reader height_m: Float | Integer
+            attr_reader reference_order: Integer
+        end
+        class UnroundedCurrentEvent
+            def self.new: (root_seconds: Float | Integer, event_type: "max_flood" | "max_ebb" | "slack_before_flood" | "slack_before_ebb", velocity_m_s: Float | Integer, direction_deg: Float | Integer | nil, reference_order: Integer) -> UnroundedCurrentEvent
+            attr_reader root_seconds: Float | Integer
+            attr_reader event_type: "max_flood" | "max_ebb" | "slack_before_flood" | "slack_before_ebb"
+            attr_reader velocity_m_s: Float | Integer
+            attr_reader direction_deg: Float | Integer | nil
+            attr_reader reference_order: Integer
+        end
+        class AuxiliaryValuesRequiresModel
+            def self.new: (station_request: ::OpenTideConstants::Station | String, release_view: ::OpenTideConstants::Release, selection_options: domain_selection_options, utc_instant: Float | Integer | nil) -> AuxiliaryValuesRequiresModel
+            attr_reader station_request: ::OpenTideConstants::Station | String
+            attr_reader release_view: ::OpenTideConstants::Release
+            attr_reader selection_options: domain_selection_options
+            attr_reader utc_instant: Float | Integer | nil
+        end
+        class AuxiliaryValuesSourceAccess
+            def self.new: (raw_source_value: json_value, arguments: json_value) -> AuxiliaryValuesSourceAccess
+            attr_reader raw_source_value: json_value
+            attr_reader arguments: json_value
+        end
+        class ResultContext
+            def self.new: (station_id: String, set_id: String | nil, reference_station_id: String | nil, bin_number: Integer | nil, datum: String | nil, release_datestamp: String, algorithm: String) -> ResultContext
+            attr_reader station_id: String
+            attr_reader set_id: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader bin_number: Integer | nil
+            attr_reader datum: String | nil
+            attr_reader release_datestamp: String
+            attr_reader algorithm: String
+        end
+        class AcceptanceDecision
+            def self.new: (accepted: bool, mandatory_findings: Array[String]) -> AcceptanceDecision
+            attr_reader accepted: bool
+            attr_reader mandatory_findings: Array[String]
+        end
+        class ArgsClientReleases
+            def self.new: (member_id: "Client.releases") -> ArgsClientReleases
+            attr_reader member_id: "Client.releases"
+        end
+        class ArgsClientLatest
+            def self.new: (member_id: "Client.latest") -> ArgsClientLatest
+            attr_reader member_id: "Client.latest"
+        end
+        class ArgsClientCheckForUpdate
+            def self.new: (member_id: "Client.check_for_update") -> ArgsClientCheckForUpdate
+            attr_reader member_id: "Client.check_for_update"
+        end
+        class ArgsClientUpdate
+            def self.new: (member_id: "Client.update") -> ArgsClientUpdate
+            attr_reader member_id: "Client.update"
+        end
+        class ArgsClientDownload
+            def self.new: (member_id: "Client.download", release: String | :latest | AbsentValue, to: String, formats: Array[:json | :"json.gz" | :jsonl | :other] | AbsentValue, overwrite: bool | AbsentValue) -> ArgsClientDownload
+            attr_reader member_id: "Client.download"
+            attr_reader release: String | :latest | AbsentValue
+            attr_reader to: String
+            attr_reader formats: Array[:json | :"json.gz" | :jsonl | :other] | AbsentValue
+            attr_reader overwrite: bool | AbsentValue
+        end
+        class ArgsClientVerify
+            def self.new: (member_id: "Client.verify") -> ArgsClientVerify
+            attr_reader member_id: "Client.verify"
+        end
+        class ArgsClientCachedReleases
+            def self.new: (member_id: "Client.cached_releases") -> ArgsClientCachedReleases
+            attr_reader member_id: "Client.cached_releases"
+        end
+        class ArgsClientPrune
+            def self.new: (member_id: "Client.prune", keep: Integer | AbsentValue) -> ArgsClientPrune
+            attr_reader member_id: "Client.prune"
+            attr_reader keep: Integer | AbsentValue
+        end
+        class ArgsClientClose
+            def self.new: (member_id: "Client.close") -> ArgsClientClose
+            attr_reader member_id: "Client.close"
+        end
+        class ArgsReleaseConvention
+            def self.new: (member_id: "Release.convention", convention_id: String) -> ArgsReleaseConvention
+            attr_reader member_id: "Release.convention"
+            attr_reader convention_id: String
+        end
+        class ArgsReleaseLicence
+            def self.new: (member_id: "Release.licence", licence_id: String) -> ArgsReleaseLicence
+            attr_reader member_id: "Release.licence"
+            attr_reader licence_id: String
+        end
+        class ArgsReleaseStation
+            def self.new: (member_id: "Release.station", station_id: String) -> ArgsReleaseStation
+            attr_reader member_id: "Release.station"
+            attr_reader station_id: String
+        end
+        class ArgsReleaseRequireStation
+            def self.new: (member_id: "Release.require_station", station_id: String) -> ArgsReleaseRequireStation
+            attr_reader member_id: "Release.require_station"
+            attr_reader station_id: String
+        end
+        class ArgsReleaseTombstone
+            def self.new: (member_id: "Release.tombstone", station_id: String) -> ArgsReleaseTombstone
+            attr_reader member_id: "Release.tombstone"
+            attr_reader station_id: String
+        end
+        class ArgsReleaseStationByAlias
+            def self.new: (member_id: "Release.station_by_alias", system: :noaa | :gesla | :ticon | :xtide | :kartverket | :slackwater | :webcaltides | :linz | :shom | :pegelonline | :rws | :mi | :dmi | :smhi | :fmi | :uhslc | :other, alias_id: String) -> ArgsReleaseStationByAlias
+            attr_reader member_id: "Release.station_by_alias"
+            attr_reader system: :noaa | :gesla | :ticon | :xtide | :kartverket | :slackwater | :webcaltides | :linz | :shom | :pegelonline | :rws | :mi | :dmi | :smhi | :fmi | :uhslc | :other
+            attr_reader alias_id: String
+        end
+        class ArgsReleaseReferenceStation
+            def self.new: (member_id: "Release.reference_station", station: ::OpenTideConstants::Station) -> ArgsReleaseReferenceStation
+            attr_reader member_id: "Release.reference_station"
+            attr_reader station: ::OpenTideConstants::Station
+        end
+        class ArgsReleaseSubordinatesOf
+            def self.new: (member_id: "Release.subordinates_of", station: ::OpenTideConstants::Station) -> ArgsReleaseSubordinatesOf
+            attr_reader member_id: "Release.subordinates_of"
+            attr_reader station: ::OpenTideConstants::Station
+        end
+        class ArgsReleaseAttribution
+            def self.new: (member_id: "Release.attribution", stations: Array[::OpenTideConstants::Station] | nil | AbsentValue) -> ArgsReleaseAttribution
+            attr_reader member_id: "Release.attribution"
+            attr_reader stations: Array[::OpenTideConstants::Station] | nil | AbsentValue
+        end
+        class ArgsReleaseHeights
+            def self.new: (member_id: "Release.heights", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseHeights
+            attr_reader member_id: "Release.heights"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader start: Time | String | Float | Integer
+            attr_reader stop: Time | String | Float | Integer
+            attr_reader step_s: Integer | AbsentValue
+            attr_reader datum: String | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader offset_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseHeightsAt
+            def self.new: (member_id: "Release.heights_at", station: ::OpenTideConstants::Station | String, times: Array[Time | String | Float | Integer], datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseHeightsAt
+            attr_reader member_id: "Release.heights_at"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader times: Array[Time | String | Float | Integer]
+            attr_reader datum: String | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader offset_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseExtremes
+            def self.new: (member_id: "Release.extremes", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseExtremes
+            attr_reader member_id: "Release.extremes"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader start: Time | String | Float | Integer
+            attr_reader stop: Time | String | Float | Integer
+            attr_reader datum: String | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader offset_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseCurrents
+            def self.new: (member_id: "Release.currents", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrents
+            attr_reader member_id: "Release.currents"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader start: Time | String | Float | Integer
+            attr_reader stop: Time | String | Float | Integer
+            attr_reader step_s: Integer | AbsentValue
+            attr_reader bin_number: Integer | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseCurrentEvents
+            def self.new: (member_id: "Release.current_events", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrentEvents
+            attr_reader member_id: "Release.current_events"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader start: Time | String | Float | Integer
+            attr_reader stop: Time | String | Float | Integer
+            attr_reader bin_number: Integer | nil | AbsentValue
+            attr_reader set_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseDatums
+            def self.new: (member_id: "Release.datums", station: ::OpenTideConstants::Station | String, set_id: String | nil | AbsentValue, all_sets: bool | AbsentValue) -> ArgsReleaseDatums
+            attr_reader member_id: "Release.datums"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader set_id: String | nil | AbsentValue
+            attr_reader all_sets: bool | AbsentValue
+        end
+        class ArgsReleaseRanges
+            def self.new: (member_id: "Release.ranges", station: ::OpenTideConstants::Station | String, set_id: String | nil | AbsentValue) -> ArgsReleaseRanges
+            attr_reader member_id: "Release.ranges"
+            attr_reader station: ::OpenTideConstants::Station | String
+            attr_reader set_id: String | nil | AbsentValue
+        end
+        class ArgsReleaseAstroTable
+            def self.new: (member_id: "Release.astro_table", id: String | nil | AbsentValue) -> ArgsReleaseAstroTable
+            attr_reader member_id: "Release.astro_table"
+            attr_reader id: String | nil | AbsentValue
+        end
+        class ArgsStationConstantSets
+            def self.new: (member_id: "Station.constant_sets", include_no_constants: bool | AbsentValue) -> ArgsStationConstantSets
+            attr_reader member_id: "Station.constant_sets"
+            attr_reader include_no_constants: bool | AbsentValue
+        end
+        class ArgsStationConstantSet
+            def self.new: (member_id: "Station.constant_set", set_id: String) -> ArgsStationConstantSet
+            attr_reader member_id: "Station.constant_set"
+            attr_reader set_id: String
+        end
+        class ArgsConstantSetConstituent
+            def self.new: (member_id: "ConstantSet.constituent", name: String) -> ArgsConstantSetConstituent
+            attr_reader member_id: "ConstantSet.constituent"
+            attr_reader name: String
+        end
+        class ArgsAstroTableEquilibriumArgument
+            def self.new: (member_id: "AstroTable.equilibrium_argument", name: String, at: Time | String | Float | Integer) -> ArgsAstroTableEquilibriumArgument
+            attr_reader member_id: "AstroTable.equilibrium_argument"
+            attr_reader name: String
+            attr_reader at: Time | String | Float | Integer
+        end
+        class ArgsAstroTableNodeFactor
+            def self.new: (member_id: "AstroTable.node_factor", name: String, at: Time | String | Float | Integer) -> ArgsAstroTableNodeFactor
+            attr_reader member_id: "AstroTable.node_factor"
+            attr_reader name: String
+            attr_reader at: Time | String | Float | Integer
+        end
+        class ArgsAstroTableEquilibriumForYear
+            def self.new: (member_id: "AstroTable.equilibrium_for_year", name: String, year: Integer) -> ArgsAstroTableEquilibriumForYear
+            attr_reader member_id: "AstroTable.equilibrium_for_year"
+            attr_reader name: String
+            attr_reader year: Integer
+        end
+        class ArgsAstroTableNodeFactorForYear
+            def self.new: (member_id: "AstroTable.node_factor_for_year", name: String, year: Integer) -> ArgsAstroTableNodeFactorForYear
+            attr_reader member_id: "AstroTable.node_factor_for_year"
+            attr_reader name: String
+            attr_reader year: Integer
+        end
+        class ArgsHeightPointLocalDatetime
+            def self.new: (member_id: "HeightPoint.local_datetime") -> ArgsHeightPointLocalDatetime
+            attr_reader member_id: "HeightPoint.local_datetime"
+        end
+        class ArgsExtremeLocalDatetime
+            def self.new: (member_id: "Extreme.local_datetime") -> ArgsExtremeLocalDatetime
+            attr_reader member_id: "Extreme.local_datetime"
+        end
+        class ArgsCurrentPointLocalDatetime
+            def self.new: (member_id: "CurrentPoint.local_datetime") -> ArgsCurrentPointLocalDatetime
+            attr_reader member_id: "CurrentPoint.local_datetime"
+        end
+        class ArgsCurrentEventLocalDatetime
+            def self.new: (member_id: "CurrentEvent.local_datetime") -> ArgsCurrentEventLocalDatetime
+            attr_reader member_id: "CurrentEvent.local_datetime"
+        end
+        class ArgsHeightSeriesToLocal
+            def self.new: (member_id: "HeightSeries.to_local", tz: String | AbsentValue) -> ArgsHeightSeriesToLocal
+            attr_reader member_id: "HeightSeries.to_local"
+            attr_reader tz: String | AbsentValue
+        end
+        class ArgsExtremeListToLocal
+            def self.new: (member_id: "ExtremeList.to_local", tz: String | AbsentValue) -> ArgsExtremeListToLocal
+            attr_reader member_id: "ExtremeList.to_local"
+            attr_reader tz: String | AbsentValue
+        end
+        class ArgsCurrentSeriesToLocal
+            def self.new: (member_id: "CurrentSeries.to_local", tz: String | AbsentValue) -> ArgsCurrentSeriesToLocal
+            attr_reader member_id: "CurrentSeries.to_local"
+            attr_reader tz: String | AbsentValue
+        end
+        class ArgsCurrentEventListToLocal
+            def self.new: (member_id: "CurrentEventList.to_local", tz: String | AbsentValue) -> ArgsCurrentEventListToLocal
+            attr_reader member_id: "CurrentEventList.to_local"
+            attr_reader tz: String | AbsentValue
+        end
+        class AstronomicalTerms
+            def self.new: (utc_year: Integer, constituent_terms: Array[json_value], epoch_hours: Float | Integer) -> AstronomicalTerms
+            attr_reader utc_year: Integer
+            attr_reader constituent_terms: Array[json_value]
+            attr_reader epoch_hours: Float | Integer
+        end
+        class SchemaFallback
+            def self.new: (reason: String, basis: String, otc_finding: String, preferred_set_id: String | AbsentValue, source_extensions: Hash[String, json_value]) -> SchemaFallback
+            attr_reader reason: String
+            attr_reader basis: String
+            attr_reader otc_finding: String
+            attr_reader preferred_set_id: String | AbsentValue
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class AuthenticatedIndexStationsItemSetsItem
+            def self.new: (set_id: String | nil, source: String | nil, source_type: String | nil, quantity: String | nil, qc_status: String | nil, convention_id: String | nil, licence_id: String | nil, constituents: Array[String], fallback: SchemaFallback | nil, current_bins: Array[Integer]) -> AuthenticatedIndexStationsItemSetsItem
+            attr_reader set_id: String | nil
+            attr_reader source: String | nil
+            attr_reader source_type: String | nil
+            attr_reader quantity: String | nil
+            attr_reader qc_status: String | nil
+            attr_reader convention_id: String | nil
+            attr_reader licence_id: String | nil
+            attr_reader constituents: Array[String]
+            attr_reader fallback: SchemaFallback | nil
+            attr_reader current_bins: Array[Integer]
+        end
+        class SchemaQcFlag
+            def self.new: (flag: String, reason: String, values: Hash[String, json_value] | AbsentValue, source_extensions: Hash[String, json_value]) -> SchemaQcFlag
+            attr_reader flag: String
+            attr_reader reason: String
+            attr_reader values: Hash[String, json_value] | AbsentValue
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaHistoricalOffsetVintageRemovalEventsItem
+            def self.new: (source_clock_timestamp: String, name: String, operation: "Removed", source_timezone: nil, evidence_sha256: String, source_extensions: Hash[String, json_value]) -> SchemaHistoricalOffsetVintageRemovalEventsItem
+            attr_reader source_clock_timestamp: String
+            attr_reader name: String
+            attr_reader operation: "Removed"
+            attr_reader source_timezone: nil
+            attr_reader evidence_sha256: String
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaHistoricalOffsetVintage
+            def self.new: (publication_year: 2020, source_lifecycle: "retired", removal_events: Array[SchemaHistoricalOffsetVintageRemovalEventsItem], current_validity: "unestablished", current_accuracy: "unverified", reference_2020_equivalence: String, reference_2020_equivalence_sha256: String | AbsentValue, source_extensions: Hash[String, json_value]) -> SchemaHistoricalOffsetVintage
+            attr_reader publication_year: 2020
+            attr_reader source_lifecycle: "retired"
+            attr_reader removal_events: Array[SchemaHistoricalOffsetVintageRemovalEventsItem]
+            attr_reader current_validity: "unestablished"
+            attr_reader current_accuracy: "unverified"
+            attr_reader reference_2020_equivalence: String
+            attr_reader reference_2020_equivalence_sha256: String | AbsentValue
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaHistoricalOffsetProvenanceIdCrosswalk
+            def self.new: (legacy_id: String, status: "inferred", modern_alias_verified: false, evidence_sha256: Array[String], source_extensions: Hash[String, json_value]) -> SchemaHistoricalOffsetProvenanceIdCrosswalk
+            attr_reader legacy_id: String
+            attr_reader status: "inferred"
+            attr_reader modern_alias_verified: false
+            attr_reader evidence_sha256: Array[String]
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaHistoricalOffsetProvenanceReferenceBinding
+            def self.new: (noaa_id: String, station_id: String, mapping_status: "primary_name_position", evidence_sha256: Array[String], source_extensions: Hash[String, json_value]) -> SchemaHistoricalOffsetProvenanceReferenceBinding
+            attr_reader noaa_id: String
+            attr_reader station_id: String
+            attr_reader mapping_status: "primary_name_position"
+            attr_reader evidence_sha256: Array[String]
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaHistoricalOffsetProvenance
+            def self.new: (source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7", input_sha256: Array[String], book: String, annual_table_row: Integer, printed_page: Integer, pdf_page: Integer, raw_row_text: String, raw_values_json: String, id_crosswalk: SchemaHistoricalOffsetProvenanceIdCrosswalk, reference_binding: SchemaHistoricalOffsetProvenanceReferenceBinding, acceptance_report_sha256: String, source_extensions: Hash[String, json_value]) -> SchemaHistoricalOffsetProvenance
+            attr_reader source_manifest_sha256: "667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7"
+            attr_reader input_sha256: Array[String]
+            attr_reader book: String
+            attr_reader annual_table_row: Integer
+            attr_reader printed_page: Integer
+            attr_reader pdf_page: Integer
+            attr_reader raw_row_text: String
+            attr_reader raw_values_json: String
+            attr_reader id_crosswalk: SchemaHistoricalOffsetProvenanceIdCrosswalk
+            attr_reader reference_binding: SchemaHistoricalOffsetProvenanceReferenceBinding
+            attr_reader acceptance_report_sha256: String
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class SchemaSubordinateOffsets
+            def self.new: (reference_station_id: String, time_offset_high_min: Float | Integer | AbsentValue, time_offset_low_min: Float | Integer | AbsentValue, height_offset_high: Float | Integer | AbsentValue, height_offset_low: Float | Integer | AbsentValue, height_adjusted_type: String, licence_id: String | AbsentValue, datum: Hash[String, json_value] | AbsentValue, offset_id: String | AbsentValue, source: String | AbsentValue, source_type: String | AbsentValue, source_version: String | AbsentValue, source_record_id: String | AbsentValue, qc_status: String | AbsentValue, qc_flags: Array[SchemaQcFlag] | AbsentValue, fallback: SchemaFallback | AbsentValue, vintage: SchemaHistoricalOffsetVintage | AbsentValue, provenance: SchemaHistoricalOffsetProvenance | AbsentValue, source_extensions: Hash[String, json_value]) -> SchemaSubordinateOffsets
+            attr_reader reference_station_id: String
+            attr_reader time_offset_high_min: Float | Integer | AbsentValue
+            attr_reader time_offset_low_min: Float | Integer | AbsentValue
+            attr_reader height_offset_high: Float | Integer | AbsentValue
+            attr_reader height_offset_low: Float | Integer | AbsentValue
+            attr_reader height_adjusted_type: String
+            attr_reader licence_id: String | AbsentValue
+            attr_reader datum: Hash[String, json_value] | AbsentValue
+            attr_reader offset_id: String | AbsentValue
+            attr_reader source: String | AbsentValue
+            attr_reader source_type: String | AbsentValue
+            attr_reader source_version: String | AbsentValue
+            attr_reader source_record_id: String | AbsentValue
+            attr_reader qc_status: String | AbsentValue
+            attr_reader qc_flags: Array[SchemaQcFlag] | AbsentValue
+            attr_reader fallback: SchemaFallback | AbsentValue
+            attr_reader vintage: SchemaHistoricalOffsetVintage | AbsentValue
+            attr_reader provenance: SchemaHistoricalOffsetProvenance | AbsentValue
+            attr_reader source_extensions: Hash[String, json_value]
+        end
+        class AuthenticatedIndexStationsItemCurrentOffsetsItem
+            def self.new: (bin: Integer, reference_bin: Integer, reference_station_id: String | nil, licence_id: String | nil) -> AuthenticatedIndexStationsItemCurrentOffsetsItem
+            attr_reader bin: Integer
+            attr_reader reference_bin: Integer
+            attr_reader reference_station_id: String | nil
+            attr_reader licence_id: String | nil
+        end
+        class AuthenticatedIndexStationsItem
+            def self.new: (station_id: String, status: String, name: String | nil, name_folded: String | nil, country: String | nil, type: String | nil, kind: String | nil, reference_station_id: String | nil, offsets_licence_id: String | nil, recommended_set_id: String | nil, lat: Float | Integer | nil, lon: Float | Integer | nil, offset: Integer, length: Integer, aliases: Hash[String, Array[String]], sets: Array[AuthenticatedIndexStationsItemSetsItem], subordinate_offsets: SchemaSubordinateOffsets | nil, current_offsets: Array[AuthenticatedIndexStationsItemCurrentOffsetsItem]) -> AuthenticatedIndexStationsItem
+            attr_reader station_id: String
+            attr_reader status: String
+            attr_reader name: String | nil
+            attr_reader name_folded: String | nil
+            attr_reader country: String | nil
+            attr_reader type: String | nil
+            attr_reader kind: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader offsets_licence_id: String | nil
+            attr_reader recommended_set_id: String | nil
+            attr_reader lat: Float | Integer | nil
+            attr_reader lon: Float | Integer | nil
+            attr_reader offset: Integer
+            attr_reader length: Integer
+            attr_reader aliases: Hash[String, Array[String]]
+            attr_reader sets: Array[AuthenticatedIndexStationsItemSetsItem]
+            attr_reader subordinate_offsets: SchemaSubordinateOffsets | nil
+            attr_reader current_offsets: Array[AuthenticatedIndexStationsItemCurrentOffsetsItem]
+        end
+        class AuthenticatedIndex
+            def self.new: (index_version: 1, discovery_index_version: 1, datestamp: String, jsonl: String, jsonl_sha256: String, jsonl_size: Integer, by: String, stations: Array[AuthenticatedIndexStationsItem]) -> AuthenticatedIndex
+            attr_reader index_version: 1
+            attr_reader discovery_index_version: 1
+            attr_reader datestamp: String
+            attr_reader jsonl: String
+            attr_reader jsonl_sha256: String
+            attr_reader jsonl_size: Integer
+            attr_reader by: String
+            attr_reader stations: Array[AuthenticatedIndexStationsItem]
+        end
+        class SelectedResult0
+            def self.new: (member_id: "Client.open", value: ::OpenTideConstants) -> SelectedResult0
+            attr_reader member_id: "Client.open"
+            attr_reader value: ::OpenTideConstants
+        end
+        class SelectedResult1
+            def self.new: (member_id: "Client.release", value: ::OpenTideConstants::Release) -> SelectedResult1
+            attr_reader member_id: "Client.release"
+            attr_reader value: ::OpenTideConstants::Release
+        end
+        class SelectedResult2
+            def self.new: (member_id: "Client.loaded_from", value: :download | :cache | :cache_after_error | :file | :file_unverified | :other) -> SelectedResult2
+            attr_reader member_id: "Client.loaded_from"
+            attr_reader value: :download | :cache | :cache_after_error | :file | :file_unverified | :other
+        end
+        class SelectedResult3
+            def self.new: (member_id: "Client.last_error", value: ::OpenTideConstants::Error | nil) -> SelectedResult3
+            attr_reader member_id: "Client.last_error"
+            attr_reader value: ::OpenTideConstants::Error | nil
+        end
+        class SelectedResult4
+            def self.new: (member_id: "Client.releases", value: Array[::OpenTideConstants::ReleaseInfo]) -> SelectedResult4
+            attr_reader member_id: "Client.releases"
+            attr_reader value: Array[::OpenTideConstants::ReleaseInfo]
+        end
+        class SelectedResult5
+            def self.new: (member_id: "Client.latest", value: ::OpenTideConstants::ReleaseInfo) -> SelectedResult5
+            attr_reader member_id: "Client.latest"
+            attr_reader value: ::OpenTideConstants::ReleaseInfo
+        end
+        class SelectedResult6
+            def self.new: (member_id: "Client.check_for_update", value: ::OpenTideConstants::ReleaseInfo | nil) -> SelectedResult6
+            attr_reader member_id: "Client.check_for_update"
+            attr_reader value: ::OpenTideConstants::ReleaseInfo | nil
+        end
+        class SelectedResult7
+            def self.new: (member_id: "Client.newer_format_major" | "FileInfo.size" | "Validation.missed_events" | "Validation.extra_events" | "RecordSpan.good_samples" | "HeightPoint.utc_offset_s" | "Extreme.utc_offset_s" | "CurrentPoint.utc_offset_s" | "CurrentEvent.utc_offset_s" | "HeightSeries.reference_bin" | "ExtremeList.reference_bin" | "CurrentSeries.reference_bin" | "CurrentEventList.reference_bin", value: Integer | nil) -> SelectedResult7
+            attr_reader member_id: "Client.newer_format_major" | "FileInfo.size" | "Validation.missed_events" | "Validation.extra_events" | "RecordSpan.good_samples" | "HeightPoint.utc_offset_s" | "Extreme.utc_offset_s" | "CurrentPoint.utc_offset_s" | "CurrentEvent.utc_offset_s" | "HeightSeries.reference_bin" | "ExtremeList.reference_bin" | "CurrentSeries.reference_bin" | "CurrentEventList.reference_bin"
+            attr_reader value: Integer | nil
+        end
+        class SelectedResult8
+            def self.new: (member_id: "Client.update", value: ::OpenTideConstants::UpdateResult) -> SelectedResult8
+            attr_reader member_id: "Client.update"
+            attr_reader value: ::OpenTideConstants::UpdateResult
+        end
+        class SelectedResult9
+            def self.new: (member_id: "Client.download" | "Client.cached_releases" | "Client.prune" | "Release.constituent_names" | "TimeBase.months_dropped" | "DatumLevel.flags" | "SourceRecord.published_set_ids" | "HistoricalOffsetProvenance.input_sha256", value: Array[String]) -> SelectedResult9
+            attr_reader member_id: "Client.download" | "Client.cached_releases" | "Client.prune" | "Release.constituent_names" | "TimeBase.months_dropped" | "DatumLevel.flags" | "SourceRecord.published_set_ids" | "HistoricalOffsetProvenance.input_sha256"
+            attr_reader value: Array[String]
+        end
+        class SelectedResult10
+            def self.new: (member_id: "Client.verify" | "Station.is_reference" | "Station.is_subordinate" | "Station.is_tide" | "Station.is_current" | "ConstantSet.is_recommended" | "Licence.commercial_use" | "UpdateResult.updated" | "HeightSeries.historical_offsets" | "ExtremeList.historical_offsets", value: bool) -> SelectedResult10
+            attr_reader member_id: "Client.verify" | "Station.is_reference" | "Station.is_subordinate" | "Station.is_tide" | "Station.is_current" | "ConstantSet.is_recommended" | "Licence.commercial_use" | "UpdateResult.updated" | "HeightSeries.historical_offsets" | "ExtremeList.historical_offsets"
+            attr_reader value: bool
+        end
+        class SelectedResult11
+            def self.new: (member_id: "Client.close", value: NoValue) -> SelectedResult11
+            attr_reader member_id: "Client.close"
+            attr_reader value: NoValue
+        end
+        class SelectedResult12
+            def self.new: (member_id: "Release.datestamp" | "Release.format_version" | "Release.citation" | "Release.attribution" | "Release.historical_offsets_policy" | "ReleaseInfo.datestamp" | "ReleaseInfo.format_version" | "ReleaseInfo.content_sha256" | "FileInfo.name" | "Station.station_id" | "Station.name" | "Station.timezone" | "Tombstone.station_id" | "Tombstone.removed_in" | "Tombstone.merged_into" | "ConstantSet.set_id" | "ConstantSet.source" | "ConstantSet.source_record_id" | "ConstantSet.source_version" | "Constituent.name" | "Convention.convention_id" | "Convention.v0_model" | "Convention.constituent_table_version" | "Licence.licence_id" | "Licence.spdx" | "Licence.provider" | "Licence.attribution" | "ProvenanceBuild.build_commit" | "TimeBase.reason" | "TimeBase.declared" | "TimeBase.published" | "TimeBase.decided_in" | "QcFlag.reason" | "DroppedConstituent.name" | "Validation.set_id" | "Validation.reference_source" | "Validation.window" | "SubordinateOffsets.reference_station_id" | "HeightSeries.station_id" | "HeightSeries.timezone" | "HeightSeries.set_id" | "HeightSeries.convention_id" | "HeightSeries.astro_table_id" | "HeightSeries.release" | "HeightSeries.algorithm" | "ExtremeList.station_id" | "ExtremeList.timezone" | "ExtremeList.set_id" | "ExtremeList.convention_id" | "ExtremeList.astro_table_id" | "ExtremeList.release" | "ExtremeList.algorithm" | "CurrentSeries.station_id" | "CurrentSeries.timezone" | "CurrentSeries.set_id" | "CurrentSeries.convention_id" | "CurrentSeries.astro_table_id" | "CurrentSeries.release" | "CurrentSeries.algorithm" | "CurrentEventList.station_id" | "CurrentEventList.timezone" | "CurrentEventList.set_id" | "CurrentEventList.convention_id" | "CurrentEventList.astro_table_id" | "CurrentEventList.release" | "CurrentEventList.algorithm" | "DatumLevel.key" | "DatumLevel.kind" | "DatumLevel.method" | "Fallback.basis" | "Fallback.otc_finding" | "SourceRecord.source" | "SourceRecord.source_version" | "SourceRecord.source_record_id" | "SourceRecord.detail" | "HistoricalOffsetVintage.source_lifecycle" | "HistoricalOffsetVintage.current_validity" | "HistoricalOffsetVintage.current_accuracy" | "HistoricalOffsetVintage.reference_2020_equivalence" | "HistoricalOffsetProvenance.source_manifest_sha256" | "HistoricalOffsetProvenance.book" | "HistoricalOffsetProvenance.raw_row_text" | "HistoricalOffsetProvenance.raw_values_json" | "HistoricalOffsetProvenance.acceptance_report_sha256", value: String) -> SelectedResult12
+            attr_reader member_id: "Release.datestamp" | "Release.format_version" | "Release.citation" | "Release.attribution" | "Release.historical_offsets_policy" | "ReleaseInfo.datestamp" | "ReleaseInfo.format_version" | "ReleaseInfo.content_sha256" | "FileInfo.name" | "Station.station_id" | "Station.name" | "Station.timezone" | "Tombstone.station_id" | "Tombstone.removed_in" | "Tombstone.merged_into" | "ConstantSet.set_id" | "ConstantSet.source" | "ConstantSet.source_record_id" | "ConstantSet.source_version" | "Constituent.name" | "Convention.convention_id" | "Convention.v0_model" | "Convention.constituent_table_version" | "Licence.licence_id" | "Licence.spdx" | "Licence.provider" | "Licence.attribution" | "ProvenanceBuild.build_commit" | "TimeBase.reason" | "TimeBase.declared" | "TimeBase.published" | "TimeBase.decided_in" | "QcFlag.reason" | "DroppedConstituent.name" | "Validation.set_id" | "Validation.reference_source" | "Validation.window" | "SubordinateOffsets.reference_station_id" | "HeightSeries.station_id" | "HeightSeries.timezone" | "HeightSeries.set_id" | "HeightSeries.convention_id" | "HeightSeries.astro_table_id" | "HeightSeries.release" | "HeightSeries.algorithm" | "ExtremeList.station_id" | "ExtremeList.timezone" | "ExtremeList.set_id" | "ExtremeList.convention_id" | "ExtremeList.astro_table_id" | "ExtremeList.release" | "ExtremeList.algorithm" | "CurrentSeries.station_id" | "CurrentSeries.timezone" | "CurrentSeries.set_id" | "CurrentSeries.convention_id" | "CurrentSeries.astro_table_id" | "CurrentSeries.release" | "CurrentSeries.algorithm" | "CurrentEventList.station_id" | "CurrentEventList.timezone" | "CurrentEventList.set_id" | "CurrentEventList.convention_id" | "CurrentEventList.astro_table_id" | "CurrentEventList.release" | "CurrentEventList.algorithm" | "DatumLevel.key" | "DatumLevel.kind" | "DatumLevel.method" | "Fallback.basis" | "Fallback.otc_finding" | "SourceRecord.source" | "SourceRecord.source_version" | "SourceRecord.source_record_id" | "SourceRecord.detail" | "HistoricalOffsetVintage.source_lifecycle" | "HistoricalOffsetVintage.current_validity" | "HistoricalOffsetVintage.current_accuracy" | "HistoricalOffsetVintage.reference_2020_equivalence" | "HistoricalOffsetProvenance.source_manifest_sha256" | "HistoricalOffsetProvenance.book" | "HistoricalOffsetProvenance.raw_row_text" | "HistoricalOffsetProvenance.raw_values_json" | "HistoricalOffsetProvenance.acceptance_report_sha256"
+            attr_reader value: String
+        end
+        class SelectedResult13
+            def self.new: (member_id: "Release.created" | "RecordSpan.start" | "RecordSpan.end", value: Time) -> SelectedResult13
+            attr_reader member_id: "Release.created" | "RecordSpan.start" | "RecordSpan.end"
+            attr_reader value: Time
+        end
+        class SelectedResult14
+            def self.new: (member_id: "Release.zenodo_version_doi" | "Release.concept_doi" | "Release.build_commit" | "Release.changelog_url" | "ReleaseInfo.concept_doi" | "ReleaseInfo.zenodo_version_doi" | "FileInfo.url" | "FileInfo.sha256" | "Station.country" | "Tombstone.name" | "Tombstone.detail" | "Constituent.source_name" | "Constituent.doodson" | "Constituent.kept_reason" | "Convention.tables_sha256" | "Licence.citation" | "Licence.url" | "Licence.restriction" | "Licence.terms_url" | "Provenance.adapter_version" | "Provenance.selection_reason" | "Provenance.carried_from_release" | "ProvenanceBuild.run_id" | "TimeBase.decided_build_commit" | "DroppedConstituent.detail" | "Validation.reference_station" | "SubordinateOffsets.licence_id" | "SubordinateOffsets.offset_id" | "SubordinateOffsets.source" | "SubordinateOffsets.source_version" | "SubordinateOffsets.source_record_id" | "UpdateResult.from" | "UpdateResult.to" | "HeightPoint.local_time" | "Extreme.local_time" | "CurrentPoint.local_time" | "CurrentEvent.local_time" | "HeightSeries.reference_station_id" | "HeightSeries.datum" | "HeightSeries.datum_name" | "HeightSeries.datum_kind" | "HeightSeries.tz" | "HeightSeries.tz_version" | "HeightSeries.offset_id" | "HeightSeries.offset_source" | "HeightSeries.offset_source_version" | "HeightSeries.current_validity" | "HeightSeries.current_accuracy" | "HeightSeries.reference_set_id" | "HeightSeries.reference_source_version" | "HeightSeries.reference_2020_equivalence" | "HeightSeries.source_note" | "ExtremeList.reference_station_id" | "ExtremeList.datum" | "ExtremeList.datum_name" | "ExtremeList.datum_kind" | "ExtremeList.tz" | "ExtremeList.tz_version" | "ExtremeList.offset_id" | "ExtremeList.offset_source" | "ExtremeList.offset_source_version" | "ExtremeList.current_validity" | "ExtremeList.current_accuracy" | "ExtremeList.reference_set_id" | "ExtremeList.reference_source_version" | "ExtremeList.reference_2020_equivalence" | "ExtremeList.source_note" | "CurrentSeries.reference_station_id" | "CurrentSeries.datum" | "CurrentSeries.datum_name" | "CurrentSeries.datum_kind" | "CurrentSeries.tz" | "CurrentSeries.tz_version" | "CurrentEventList.reference_station_id" | "CurrentEventList.datum" | "CurrentEventList.datum_name" | "CurrentEventList.datum_kind" | "CurrentEventList.tz" | "CurrentEventList.tz_version" | "DatumInfo.set_id" | "DatumInfo.zero" | "DatumInfo.zero_name" | "DatumInfo.chart_datum" | "DatumLevel.source_name" | "DatumLevel.control_station_id" | "DatumLevel.control_set_id" | "DatumLevel.control_source_id" | "DatumLevel.uncertainty_basis" | "Fallback.preferred_set_id" | "SourceRecord.licence_id" | "SourceRecord.upstream_licence_id" | "HistoricalOffsetVintage.reference_2020_equivalence_sha256", value: String | nil) -> SelectedResult14
+            attr_reader member_id: "Release.zenodo_version_doi" | "Release.concept_doi" | "Release.build_commit" | "Release.changelog_url" | "ReleaseInfo.concept_doi" | "ReleaseInfo.zenodo_version_doi" | "FileInfo.url" | "FileInfo.sha256" | "Station.country" | "Tombstone.name" | "Tombstone.detail" | "Constituent.source_name" | "Constituent.doodson" | "Constituent.kept_reason" | "Convention.tables_sha256" | "Licence.citation" | "Licence.url" | "Licence.restriction" | "Licence.terms_url" | "Provenance.adapter_version" | "Provenance.selection_reason" | "Provenance.carried_from_release" | "ProvenanceBuild.run_id" | "TimeBase.decided_build_commit" | "DroppedConstituent.detail" | "Validation.reference_station" | "SubordinateOffsets.licence_id" | "SubordinateOffsets.offset_id" | "SubordinateOffsets.source" | "SubordinateOffsets.source_version" | "SubordinateOffsets.source_record_id" | "UpdateResult.from" | "UpdateResult.to" | "HeightPoint.local_time" | "Extreme.local_time" | "CurrentPoint.local_time" | "CurrentEvent.local_time" | "HeightSeries.reference_station_id" | "HeightSeries.datum" | "HeightSeries.datum_name" | "HeightSeries.datum_kind" | "HeightSeries.tz" | "HeightSeries.tz_version" | "HeightSeries.offset_id" | "HeightSeries.offset_source" | "HeightSeries.offset_source_version" | "HeightSeries.current_validity" | "HeightSeries.current_accuracy" | "HeightSeries.reference_set_id" | "HeightSeries.reference_source_version" | "HeightSeries.reference_2020_equivalence" | "HeightSeries.source_note" | "ExtremeList.reference_station_id" | "ExtremeList.datum" | "ExtremeList.datum_name" | "ExtremeList.datum_kind" | "ExtremeList.tz" | "ExtremeList.tz_version" | "ExtremeList.offset_id" | "ExtremeList.offset_source" | "ExtremeList.offset_source_version" | "ExtremeList.current_validity" | "ExtremeList.current_accuracy" | "ExtremeList.reference_set_id" | "ExtremeList.reference_source_version" | "ExtremeList.reference_2020_equivalence" | "ExtremeList.source_note" | "CurrentSeries.reference_station_id" | "CurrentSeries.datum" | "CurrentSeries.datum_name" | "CurrentSeries.datum_kind" | "CurrentSeries.tz" | "CurrentSeries.tz_version" | "CurrentEventList.reference_station_id" | "CurrentEventList.datum" | "CurrentEventList.datum_name" | "CurrentEventList.datum_kind" | "CurrentEventList.tz" | "CurrentEventList.tz_version" | "DatumInfo.set_id" | "DatumInfo.zero" | "DatumInfo.zero_name" | "DatumInfo.chart_datum" | "DatumLevel.source_name" | "DatumLevel.control_station_id" | "DatumLevel.control_set_id" | "DatumLevel.control_source_id" | "DatumLevel.uncertainty_basis" | "Fallback.preferred_set_id" | "SourceRecord.licence_id" | "SourceRecord.upstream_licence_id" | "HistoricalOffsetVintage.reference_2020_equivalence_sha256"
+            attr_reader value: String | nil
+        end
+        class SelectedResult15
+            def self.new: (member_id: "Release.source_versions", value: Hash[String, String]) -> SelectedResult15
+            attr_reader member_id: "Release.source_versions"
+            attr_reader value: Hash[String, String]
+        end
+        class SelectedResult16
+            def self.new: (member_id: "Release.files" | "ReleaseInfo.files", value: Array[::OpenTideConstants::FileInfo]) -> SelectedResult16
+            attr_reader member_id: "Release.files" | "ReleaseInfo.files"
+            attr_reader value: Array[::OpenTideConstants::FileInfo]
+        end
+        class SelectedResult17
+            def self.new: (member_id: "Release.conventions", value: Array[::OpenTideConstants::Convention]) -> SelectedResult17
+            attr_reader member_id: "Release.conventions"
+            attr_reader value: Array[::OpenTideConstants::Convention]
+        end
+        class SelectedResult18
+            def self.new: (member_id: "Release.convention", value: ::OpenTideConstants::Convention | nil) -> SelectedResult18
+            attr_reader member_id: "Release.convention"
+            attr_reader value: ::OpenTideConstants::Convention | nil
+        end
+        class SelectedResult19
+            def self.new: (member_id: "Release.licences", value: Array[::OpenTideConstants::Licence]) -> SelectedResult19
+            attr_reader member_id: "Release.licences"
+            attr_reader value: Array[::OpenTideConstants::Licence]
+        end
+        class SelectedResult20
+            def self.new: (member_id: "Release.licence" | "SourceRecord.licence" | "SourceRecord.upstream_licence", value: ::OpenTideConstants::Licence | nil) -> SelectedResult20
+            attr_reader member_id: "Release.licence" | "SourceRecord.licence" | "SourceRecord.upstream_licence"
+            attr_reader value: ::OpenTideConstants::Licence | nil
+        end
+        class SelectedResult21
+            def self.new: (member_id: "Release.stats", value: ::OpenTideConstants::Stats) -> SelectedResult21
+            attr_reader member_id: "Release.stats"
+            attr_reader value: ::OpenTideConstants::Stats
+        end
+        class SelectedResult22
+            def self.new: (member_id: "Release.station_count" | "Release.tombstone_count" | "CurrentSeries.bin_number" | "CurrentEventList.bin_number", value: Integer) -> SelectedResult22
+            attr_reader member_id: "Release.station_count" | "Release.tombstone_count" | "CurrentSeries.bin_number" | "CurrentEventList.bin_number"
+            attr_reader value: Integer
+        end
+        class SelectedResult23
+            def self.new: (member_id: "Release.station" | "Release.station_by_alias" | "Release.reference_station", value: ::OpenTideConstants::Station | nil) -> SelectedResult23
+            attr_reader member_id: "Release.station" | "Release.station_by_alias" | "Release.reference_station"
+            attr_reader value: ::OpenTideConstants::Station | nil
+        end
+        class SelectedResult24
+            def self.new: (member_id: "Release.require_station" | "Nearby.station", value: ::OpenTideConstants::Station) -> SelectedResult24
+            attr_reader member_id: "Release.require_station" | "Nearby.station"
+            attr_reader value: ::OpenTideConstants::Station
+        end
+        class SelectedResult25
+            def self.new: (member_id: "Release.tombstone", value: ::OpenTideConstants::Tombstone | nil) -> SelectedResult25
+            attr_reader member_id: "Release.tombstone"
+            attr_reader value: ::OpenTideConstants::Tombstone | nil
+        end
+        class SelectedResult26
+            def self.new: (member_id: "Release.stations" | "Release.search" | "Release.subordinates_of", value: Array[::OpenTideConstants::Station]) -> SelectedResult26
+            attr_reader member_id: "Release.stations" | "Release.search" | "Release.subordinates_of"
+            attr_reader value: Array[::OpenTideConstants::Station]
+        end
+        class SelectedResult27
+            def self.new: (member_id: "Release.iter_stations", value: Enumerator[::OpenTideConstants::Station, void]) -> SelectedResult27
+            attr_reader member_id: "Release.iter_stations"
+            attr_reader value: Enumerator[::OpenTideConstants::Station, void]
+        end
+        class SelectedResult28
+            def self.new: (member_id: "Release.near", value: Array[::OpenTideConstants::Nearby]) -> SelectedResult28
+            attr_reader member_id: "Release.near"
+            attr_reader value: Array[::OpenTideConstants::Nearby]
+        end
+        class SelectedResult29
+            def self.new: (member_id: "Release.nearest", value: ::OpenTideConstants::Nearby | nil) -> SelectedResult29
+            attr_reader member_id: "Release.nearest"
+            attr_reader value: ::OpenTideConstants::Nearby | nil
+        end
+        class SelectedResult30
+            def self.new: (member_id: "Release.heights" | "Release.heights_at" | "HeightSeries.to_local", value: ::OpenTideConstants::HeightSeries) -> SelectedResult30
+            attr_reader member_id: "Release.heights" | "Release.heights_at" | "HeightSeries.to_local"
+            attr_reader value: ::OpenTideConstants::HeightSeries
+        end
+        class SelectedResult31
+            def self.new: (member_id: "Release.extremes" | "ExtremeList.to_local", value: ::OpenTideConstants::ExtremeList) -> SelectedResult31
+            attr_reader member_id: "Release.extremes" | "ExtremeList.to_local"
+            attr_reader value: ::OpenTideConstants::ExtremeList
+        end
+        class SelectedResult32
+            def self.new: (member_id: "Release.currents" | "CurrentSeries.to_local", value: ::OpenTideConstants::CurrentSeries) -> SelectedResult32
+            attr_reader member_id: "Release.currents" | "CurrentSeries.to_local"
+            attr_reader value: ::OpenTideConstants::CurrentSeries
+        end
+        class SelectedResult33
+            def self.new: (member_id: "Release.current_events" | "CurrentEventList.to_local", value: ::OpenTideConstants::CurrentEventList) -> SelectedResult33
+            attr_reader member_id: "Release.current_events" | "CurrentEventList.to_local"
+            attr_reader value: ::OpenTideConstants::CurrentEventList
+        end
+        class SelectedResult34
+            def self.new: (member_id: "Release.datums", value: ::OpenTideConstants::DatumInfo | Array[::OpenTideConstants::DatumInfo]) -> SelectedResult34
+            attr_reader member_id: "Release.datums"
+            attr_reader value: ::OpenTideConstants::DatumInfo | Array[::OpenTideConstants::DatumInfo]
+        end
+        class SelectedResult35
+            def self.new: (member_id: "Release.ranges", value: ::OpenTideConstants::Ranges) -> SelectedResult35
+            attr_reader member_id: "Release.ranges"
+            attr_reader value: ::OpenTideConstants::Ranges
+        end
+        class SelectedResult36
+            def self.new: (member_id: "Release.astro_table", value: ::OpenTideConstants::AstroTable | nil) -> SelectedResult36
+            attr_reader member_id: "Release.astro_table"
+            attr_reader value: ::OpenTideConstants::AstroTable | nil
+        end
+        class SelectedResult37
+            def self.new: (member_id: "Station.lat" | "Station.lon" | "Constituent.speed_deg_per_hour" | "Constituent.amplitude_m" | "Constituent.phase_deg" | "Validation.time_mae_min" | "Validation.height_mae_m" | "Nearby.distance_km" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "HeightPoint.height_m" | "Extreme.height_m" | "CurrentPoint.velocity_major_ms" | "CurrentPoint.velocity_minor_ms" | "CurrentPoint.speed_ms" | "CurrentEvent.velocity_ms" | "DatumLevel.value_m" | "HistoricalOffsetVintage.publication_year" | "HistoricalOffsetProvenance.annual_table_row" | "HistoricalOffsetProvenance.printed_page" | "HistoricalOffsetProvenance.pdf_page", value: Float | Integer) -> SelectedResult37
+            attr_reader member_id: "Station.lat" | "Station.lon" | "Constituent.speed_deg_per_hour" | "Constituent.amplitude_m" | "Constituent.phase_deg" | "Validation.time_mae_min" | "Validation.height_mae_m" | "Nearby.distance_km" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "HeightPoint.height_m" | "Extreme.height_m" | "CurrentPoint.velocity_major_ms" | "CurrentPoint.velocity_minor_ms" | "CurrentPoint.speed_ms" | "CurrentEvent.velocity_ms" | "DatumLevel.value_m" | "HistoricalOffsetVintage.publication_year" | "HistoricalOffsetProvenance.annual_table_row" | "HistoricalOffsetProvenance.printed_page" | "HistoricalOffsetProvenance.pdf_page"
+            attr_reader value: Float | Integer
+        end
+        class SelectedResult38
+            def self.new: (member_id: "Station.type", value: :reference | :subordinate | :other) -> SelectedResult38
+            attr_reader member_id: "Station.type"
+            attr_reader value: :reference | :subordinate | :other
+        end
+        class SelectedResult39
+            def self.new: (member_id: "Station.kind", value: :tide | :current | :other | nil) -> SelectedResult39
+            attr_reader member_id: "Station.kind"
+            attr_reader value: :tide | :current | :other | nil
+        end
+        class SelectedResult40
+            def self.new: (member_id: "Station.aliases", value: Hash[String, Array[String]]) -> SelectedResult40
+            attr_reader member_id: "Station.aliases"
+            attr_reader value: Hash[String, Array[String]]
+        end
+        class SelectedResult41
+            def self.new: (member_id: "Station.status" | "Tombstone.status", value: :active | :removed | :other) -> SelectedResult41
+            attr_reader member_id: "Station.status" | "Tombstone.status"
+            attr_reader value: :active | :removed | :other
+        end
+        class SelectedResult42
+            def self.new: (member_id: "Station.recommended_set" | "Station.constant_set", value: ::OpenTideConstants::ConstantSet | nil) -> SelectedResult42
+            attr_reader member_id: "Station.recommended_set" | "Station.constant_set"
+            attr_reader value: ::OpenTideConstants::ConstantSet | nil
+        end
+        class SelectedResult43
+            def self.new: (member_id: "Station.constant_sets", value: Array[::OpenTideConstants::ConstantSet]) -> SelectedResult43
+            attr_reader member_id: "Station.constant_sets"
+            attr_reader value: Array[::OpenTideConstants::ConstantSet]
+        end
+        class SelectedResult44
+            def self.new: (member_id: "Station.subordinate_offsets", value: ::OpenTideConstants::SubordinateOffsets | nil) -> SelectedResult44
+            attr_reader member_id: "Station.subordinate_offsets"
+            attr_reader value: ::OpenTideConstants::SubordinateOffsets | nil
+        end
+        class SelectedResult45
+            def self.new: (member_id: "Station.validation" | "ConstantSet.validation", value: Array[::OpenTideConstants::Validation]) -> SelectedResult45
+            attr_reader member_id: "Station.validation" | "ConstantSet.validation"
+            attr_reader value: Array[::OpenTideConstants::Validation]
+        end
+        class SelectedResult46
+            def self.new: (member_id: "Station.raw" | "Tombstone.raw" | "ConstantSet.raw" | "Constituent.raw" | "Convention.raw" | "Licence.raw" | "Provenance.raw", value: json_value) -> SelectedResult46
+            attr_reader member_id: "Station.raw" | "Tombstone.raw" | "ConstantSet.raw" | "Constituent.raw" | "Convention.raw" | "Licence.raw" | "Provenance.raw"
+            attr_reader value: json_value
+        end
+        class SelectedResult47
+            def self.new: (member_id: "Station.recommended_is_fallback", value: bool | nil) -> SelectedResult47
+            attr_reader member_id: "Station.recommended_is_fallback"
+            attr_reader value: bool | nil
+        end
+        class SelectedResult48
+            def self.new: (member_id: "Station.source_records", value: Array[::OpenTideConstants::SourceRecord]) -> SelectedResult48
+            attr_reader member_id: "Station.source_records"
+            attr_reader value: Array[::OpenTideConstants::SourceRecord]
+        end
+        class SelectedResult49
+            def self.new: (member_id: "Tombstone.removed_reason", value: :merged | :duplicate | :other) -> SelectedResult49
+            attr_reader member_id: "Tombstone.removed_reason"
+            attr_reader value: :merged | :duplicate | :other
+        end
+        class SelectedResult50
+            def self.new: (member_id: "ConstantSet.source_type", value: :official | :gauge | :model | :other) -> SelectedResult50
+            attr_reader member_id: "ConstantSet.source_type"
+            attr_reader value: :official | :gauge | :model | :other
+        end
+        class SelectedResult51
+            def self.new: (member_id: "ConstantSet.quantity", value: :water_level | :current | :other) -> SelectedResult51
+            attr_reader member_id: "ConstantSet.quantity"
+            attr_reader value: :water_level | :current | :other
+        end
+        class SelectedResult52
+            def self.new: (member_id: "ConstantSet.record_span", value: ::OpenTideConstants::RecordSpan | nil) -> SelectedResult52
+            attr_reader member_id: "ConstantSet.record_span"
+            attr_reader value: ::OpenTideConstants::RecordSpan | nil
+        end
+        class SelectedResult53
+            def self.new: (member_id: "ConstantSet.datum", value: ::OpenTideConstants::Datum | nil) -> SelectedResult53
+            attr_reader member_id: "ConstantSet.datum"
+            attr_reader value: ::OpenTideConstants::Datum | nil
+        end
+        class SelectedResult54
+            def self.new: (member_id: "ConstantSet.qc_status", value: :ok | :flagged | :no_constants | :other) -> SelectedResult54
+            attr_reader member_id: "ConstantSet.qc_status"
+            attr_reader value: :ok | :flagged | :no_constants | :other
+        end
+        class SelectedResult55
+            def self.new: (member_id: "ConstantSet.qc_flags" | "SubordinateOffsets.qc_flags", value: Array[::OpenTideConstants::QcFlag]) -> SelectedResult55
+            attr_reader member_id: "ConstantSet.qc_flags" | "SubordinateOffsets.qc_flags"
+            attr_reader value: Array[::OpenTideConstants::QcFlag]
+        end
+        class SelectedResult56
+            def self.new: (member_id: "ConstantSet.dropped_constituents", value: Array[::OpenTideConstants::DroppedConstituent]) -> SelectedResult56
+            attr_reader member_id: "ConstantSet.dropped_constituents"
+            attr_reader value: Array[::OpenTideConstants::DroppedConstituent]
+        end
+        class SelectedResult57
+            def self.new: (member_id: "ConstantSet.time_base", value: ::OpenTideConstants::TimeBase | nil) -> SelectedResult57
+            attr_reader member_id: "ConstantSet.time_base"
+            attr_reader value: ::OpenTideConstants::TimeBase | nil
+        end
+        class SelectedResult58
+            def self.new: (member_id: "ConstantSet.convention", value: ::OpenTideConstants::Convention) -> SelectedResult58
+            attr_reader member_id: "ConstantSet.convention"
+            attr_reader value: ::OpenTideConstants::Convention
+        end
+        class SelectedResult59
+            def self.new: (member_id: "ConstantSet.licence", value: ::OpenTideConstants::Licence) -> SelectedResult59
+            attr_reader member_id: "ConstantSet.licence"
+            attr_reader value: ::OpenTideConstants::Licence
+        end
+        class SelectedResult60
+            def self.new: (member_id: "ConstantSet.provenance", value: ::OpenTideConstants::Provenance) -> SelectedResult60
+            attr_reader member_id: "ConstantSet.provenance"
+            attr_reader value: ::OpenTideConstants::Provenance
+        end
+        class SelectedResult61
+            def self.new: (member_id: "ConstantSet.constituents", value: Array[::OpenTideConstants::Constituent]) -> SelectedResult61
+            attr_reader member_id: "ConstantSet.constituents"
+            attr_reader value: Array[::OpenTideConstants::Constituent]
+        end
+        class SelectedResult62
+            def self.new: (member_id: "ConstantSet.constituent", value: ::OpenTideConstants::Constituent | nil) -> SelectedResult62
+            attr_reader member_id: "ConstantSet.constituent"
+            attr_reader value: ::OpenTideConstants::Constituent | nil
+        end
+        class SelectedResult63
+            def self.new: (member_id: "ConstantSet.fallback" | "SubordinateOffsets.fallback", value: ::OpenTideConstants::Fallback | nil) -> SelectedResult63
+            attr_reader member_id: "ConstantSet.fallback" | "SubordinateOffsets.fallback"
+            attr_reader value: ::OpenTideConstants::Fallback | nil
+        end
+        class SelectedResult64
+            def self.new: (member_id: "Constituent.amp_uncertainty_m" | "Constituent.phase_uncertainty_deg" | "Convention.utc_offset_hours" | "Validation.reference_distance_km" | "Validation.time_p95_min" | "Validation.time_bias_min" | "Validation.range_error_m" | "SubordinateOffsets.time_offset_high_min" | "SubordinateOffsets.time_offset_low_min" | "SubordinateOffsets.height_offset_high" | "SubordinateOffsets.height_offset_low" | "Datum.msl_offset_m" | "CurrentPoint.direction_deg" | "CurrentEvent.direction_deg" | "HeightSeries.datum_uncertainty_m" | "ExtremeList.datum_uncertainty_m" | "CurrentSeries.datum_uncertainty_m" | "CurrentEventList.datum_uncertainty_m" | "DatumInfo.msl_offset_m" | "DatumLevel.above_chart_m" | "DatumLevel.uncertainty_m" | "Ranges.mn" | "Ranges.gt" | "Ranges.dhq" | "Ranges.dlq", value: Float | Integer | nil) -> SelectedResult64
+            attr_reader member_id: "Constituent.amp_uncertainty_m" | "Constituent.phase_uncertainty_deg" | "Convention.utc_offset_hours" | "Validation.reference_distance_km" | "Validation.time_p95_min" | "Validation.time_bias_min" | "Validation.range_error_m" | "SubordinateOffsets.time_offset_high_min" | "SubordinateOffsets.time_offset_low_min" | "SubordinateOffsets.height_offset_high" | "SubordinateOffsets.height_offset_low" | "Datum.msl_offset_m" | "CurrentPoint.direction_deg" | "CurrentEvent.direction_deg" | "HeightSeries.datum_uncertainty_m" | "ExtremeList.datum_uncertainty_m" | "CurrentSeries.datum_uncertainty_m" | "CurrentEventList.datum_uncertainty_m" | "DatumInfo.msl_offset_m" | "DatumLevel.above_chart_m" | "DatumLevel.uncertainty_m" | "Ranges.mn" | "Ranges.gt" | "Ranges.dhq" | "Ranges.dlq"
+            attr_reader value: Float | Integer | nil
+        end
+        class SelectedResult65
+            def self.new: (member_id: "Convention.phase_reference", value: :greenwich_utc | :local | :other) -> SelectedResult65
+            attr_reader member_id: "Convention.phase_reference"
+            attr_reader value: :greenwich_utc | :local | :other
+        end
+        class SelectedResult66
+            def self.new: (member_id: "Convention.nodal_handling", value: :f_u_at_prediction | :none | :other) -> SelectedResult66
+            attr_reader member_id: "Convention.nodal_handling"
+            attr_reader value: :f_u_at_prediction | :none | :other
+        end
+        class SelectedResult67
+            def self.new: (member_id: "Convention.nodal_formula_ids", value: Hash[String, String | Integer] | nil) -> SelectedResult67
+            attr_reader member_id: "Convention.nodal_formula_ids"
+            attr_reader value: Hash[String, String | Integer] | nil
+        end
+        class SelectedResult68
+            def self.new: (member_id: "Convention.canary" | "Provenance.decision" | "TimeBase.correction" | "Validation.previous_release" | "DatumLevel.epoch" | "DatumLevel.data_span", value: json_value | nil) -> SelectedResult68
+            attr_reader member_id: "Convention.canary" | "Provenance.decision" | "TimeBase.correction" | "Validation.previous_release" | "DatumLevel.epoch" | "DatumLevel.data_span"
+            attr_reader value: json_value | nil
+        end
+        class SelectedResult69
+            def self.new: (member_id: "Provenance.input_sha256", value: Array[String] | nil) -> SelectedResult69
+            attr_reader member_id: "Provenance.input_sha256"
+            attr_reader value: Array[String] | nil
+        end
+        class SelectedResult70
+            def self.new: (member_id: "Provenance.build", value: ::OpenTideConstants::ProvenanceBuild | nil) -> SelectedResult70
+            attr_reader member_id: "Provenance.build"
+            attr_reader value: ::OpenTideConstants::ProvenanceBuild | nil
+        end
+        class SelectedResult71
+            def self.new: (member_id: "ProvenanceBuild.built_at" | "ProvenanceBuild.fetched_at" | "HeightPoint.local_datetime" | "HeightPoint.local_time_object" | "Extreme.local_datetime" | "Extreme.local_time_object" | "CurrentPoint.local_datetime" | "CurrentPoint.local_time_object" | "CurrentEvent.local_datetime" | "CurrentEvent.local_time_object", value: Time | nil) -> SelectedResult71
+            attr_reader member_id: "ProvenanceBuild.built_at" | "ProvenanceBuild.fetched_at" | "HeightPoint.local_datetime" | "HeightPoint.local_time_object" | "Extreme.local_datetime" | "Extreme.local_time_object" | "CurrentPoint.local_datetime" | "CurrentPoint.local_time_object" | "CurrentEvent.local_datetime" | "CurrentEvent.local_time_object"
+            attr_reader value: Time | nil
+        end
+        class SelectedResult72
+            def self.new: (member_id: "ProvenanceBuild.tool_versions", value: Hash[String, String] | nil) -> SelectedResult72
+            attr_reader member_id: "ProvenanceBuild.tool_versions"
+            attr_reader value: Hash[String, String] | nil
+        end
+        class SelectedResult73
+            def self.new: (member_id: "TimeBase.code", value: :verified | :corrected | :unverified | :disputed | :other) -> SelectedResult73
+            attr_reader member_id: "TimeBase.code"
+            attr_reader value: :verified | :corrected | :unverified | :disputed | :other
+        end
+        class SelectedResult74
+            def self.new: (member_id: "TimeBase.evidence", value: Array[json_value]) -> SelectedResult74
+            attr_reader member_id: "TimeBase.evidence"
+            attr_reader value: Array[json_value]
+        end
+        class SelectedResult75
+            def self.new: (member_id: "QcFlag.flag", value: :time_base | :broken_record | :microtidal | :non_tidal_signal | :short_record | :sibling_disagreement | :carried_over | :"fallback:time_base_disputed" | :"fallback:time_base_unresolved" | :"fallback:refused_fit" | :"fallback:short_record_uncalibrated" | :"fallback:short_record_long_period" | :"fallback:published_full_list" | :"fallback:reliability_withheld" | :"fallback:licence_reading" | :"fallback:datum_gate_failed" | :"fallback:not_in_otc_input" | :"fallback:historical_offsets" | :other) -> SelectedResult75
+            attr_reader member_id: "QcFlag.flag"
+            attr_reader value: :time_base | :broken_record | :microtidal | :non_tidal_signal | :short_record | :sibling_disagreement | :carried_over | :"fallback:time_base_disputed" | :"fallback:time_base_unresolved" | :"fallback:refused_fit" | :"fallback:short_record_uncalibrated" | :"fallback:short_record_long_period" | :"fallback:published_full_list" | :"fallback:reliability_withheld" | :"fallback:licence_reading" | :"fallback:datum_gate_failed" | :"fallback:not_in_otc_input" | :"fallback:historical_offsets" | :other
+        end
+        class SelectedResult76
+            def self.new: (member_id: "QcFlag.values", value: Hash[String, Float | Integer | nil] | nil) -> SelectedResult76
+            attr_reader member_id: "QcFlag.values"
+            attr_reader value: Hash[String, Float | Integer | nil] | nil
+        end
+        class SelectedResult77
+            def self.new: (member_id: "DroppedConstituent.dropped_reason", value: :rayleigh | :noise | :long_period_rule | :non_tidal_rule | :convention | :other | :other) -> SelectedResult77
+            attr_reader member_id: "DroppedConstituent.dropped_reason"
+            attr_reader value: :rayleigh | :noise | :long_period_rule | :non_tidal_rule | :convention | :other | :other
+        end
+        class SelectedResult78
+            def self.new: (member_id: "SubordinateOffsets.height_adjusted_type", value: :R | :A | :other) -> SelectedResult78
+            attr_reader member_id: "SubordinateOffsets.height_adjusted_type"
+            attr_reader value: :R | :A | :other
+        end
+        class SelectedResult79
+            def self.new: (member_id: "SubordinateOffsets.source_type", value: :official | :gauge | :model | :other | nil) -> SelectedResult79
+            attr_reader member_id: "SubordinateOffsets.source_type"
+            attr_reader value: :official | :gauge | :model | :other | nil
+        end
+        class SelectedResult80
+            def self.new: (member_id: "SubordinateOffsets.qc_status", value: :ok | :flagged | :no_constants | :other | nil) -> SelectedResult80
+            attr_reader member_id: "SubordinateOffsets.qc_status"
+            attr_reader value: :ok | :flagged | :no_constants | :other | nil
+        end
+        class SelectedResult81
+            def self.new: (member_id: "SubordinateOffsets.vintage", value: ::OpenTideConstants::HistoricalOffsetVintage | nil) -> SelectedResult81
+            attr_reader member_id: "SubordinateOffsets.vintage"
+            attr_reader value: ::OpenTideConstants::HistoricalOffsetVintage | nil
+        end
+        class SelectedResult82
+            def self.new: (member_id: "SubordinateOffsets.provenance", value: ::OpenTideConstants::HistoricalOffsetProvenance | nil) -> SelectedResult82
+            attr_reader member_id: "SubordinateOffsets.provenance"
+            attr_reader value: ::OpenTideConstants::HistoricalOffsetProvenance | nil
+        end
+        class SelectedResult83
+            def self.new: (member_id: "Datum.named", value: Hash[String, Float | Integer] | nil) -> SelectedResult83
+            attr_reader member_id: "Datum.named"
+            attr_reader value: Hash[String, Float | Integer] | nil
+        end
+        class SelectedResult84
+            def self.new: (member_id: "Stats.type" | "Stats.kind" | "Stats.country" | "Stats.source" | "Stats.qc_status", value: Hash[String, Integer]) -> SelectedResult84
+            attr_reader member_id: "Stats.type" | "Stats.kind" | "Stats.country" | "Stats.source" | "Stats.qc_status"
+            attr_reader value: Hash[String, Integer]
+        end
+        class SelectedResult85
+            def self.new: (member_id: "AstroTable.valid_range", value: [Integer, Integer]) -> SelectedResult85
+            attr_reader member_id: "AstroTable.valid_range"
+            attr_reader value: [Integer, Integer]
+        end
+        class SelectedResult86
+            def self.new: (member_id: "HeightPoint.time" | "Extreme.time" | "CurrentPoint.time" | "CurrentEvent.time", value: Time | String | Float | Integer) -> SelectedResult86
+            attr_reader member_id: "HeightPoint.time" | "Extreme.time" | "CurrentPoint.time" | "CurrentEvent.time"
+            attr_reader value: Time | String | Float | Integer
+        end
+        class SelectedResult87
+            def self.new: (member_id: "Extreme.type", value: :high | :low | :other) -> SelectedResult87
+            attr_reader member_id: "Extreme.type"
+            attr_reader value: :high | :low | :other
+        end
+        class SelectedResult88
+            def self.new: (member_id: "CurrentEvent.type", value: :max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other) -> SelectedResult88
+            attr_reader member_id: "CurrentEvent.type"
+            attr_reader value: :max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other
+        end
+        class SelectedResult89
+            def self.new: (member_id: "HeightSeries.items", value: Array[::OpenTideConstants::HeightPoint]) -> SelectedResult89
+            attr_reader member_id: "HeightSeries.items"
+            attr_reader value: Array[::OpenTideConstants::HeightPoint]
+        end
+        class SelectedResult90
+            def self.new: (member_id: "HeightSeries.method" | "ExtremeList.method" | "CurrentSeries.method" | "CurrentEventList.method", value: :harmonic | :folded_offsets | :offsets | :other) -> SelectedResult90
+            attr_reader member_id: "HeightSeries.method" | "ExtremeList.method" | "CurrentSeries.method" | "CurrentEventList.method"
+            attr_reader value: :harmonic | :folded_offsets | :offsets | :other
+        end
+        class SelectedResult91
+            def self.new: (member_id: "ExtremeList.items", value: Array[::OpenTideConstants::Extreme]) -> SelectedResult91
+            attr_reader member_id: "ExtremeList.items"
+            attr_reader value: Array[::OpenTideConstants::Extreme]
+        end
+        class SelectedResult92
+            def self.new: (member_id: "CurrentSeries.items", value: Array[::OpenTideConstants::CurrentPoint]) -> SelectedResult92
+            attr_reader member_id: "CurrentSeries.items"
+            attr_reader value: Array[::OpenTideConstants::CurrentPoint]
+        end
+        class SelectedResult93
+            def self.new: (member_id: "CurrentEventList.items", value: Array[::OpenTideConstants::CurrentEvent]) -> SelectedResult93
+            attr_reader member_id: "CurrentEventList.items"
+            attr_reader value: Array[::OpenTideConstants::CurrentEvent]
+        end
+        class SelectedResult94
+            def self.new: (member_id: "CurrentEventList.omitted_event_types", value: Array[:max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other] | nil) -> SelectedResult94
+            attr_reader member_id: "CurrentEventList.omitted_event_types"
+            attr_reader value: Array[:max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other] | nil
+        end
+        class SelectedResult95
+            def self.new: (member_id: "DatumInfo.levels", value: Array[::OpenTideConstants::DatumLevel]) -> SelectedResult95
+            attr_reader member_id: "DatumInfo.levels"
+            attr_reader value: Array[::OpenTideConstants::DatumLevel]
+        end
+        class SelectedResult96
+            def self.new: (member_id: "Fallback.reason", value: :time_base_disputed | :time_base_unresolved | :refused_fit | :short_record_uncalibrated | :short_record_long_period | :published_full_list | :reliability_withheld | :licence_reading | :datum_gate_failed | :not_in_otc_input | :historical_offsets | :other) -> SelectedResult96
+            attr_reader member_id: "Fallback.reason"
+            attr_reader value: :time_base_disputed | :time_base_unresolved | :refused_fit | :short_record_uncalibrated | :short_record_long_period | :published_full_list | :reliability_withheld | :licence_reading | :datum_gate_failed | :not_in_otc_input | :historical_offsets | :other
+        end
+        class SelectedResult97
+            def self.new: (member_id: "Fallback.raw" | "SourceRecord.provenance" | "SourceRecord.original_metadata" | "SourceRecord.raw" | "HistoricalOffsetProvenance.id_crosswalk" | "HistoricalOffsetProvenance.reference_binding", value: Hash[String, json_value]) -> SelectedResult97
+            attr_reader member_id: "Fallback.raw" | "SourceRecord.provenance" | "SourceRecord.original_metadata" | "SourceRecord.raw" | "HistoricalOffsetProvenance.id_crosswalk" | "HistoricalOffsetProvenance.reference_binding"
+            attr_reader value: Hash[String, json_value]
+        end
+        class SelectedResult98
+            def self.new: (member_id: "SourceRecord.role", value: :gauge_station | :published_harmonic_record | :model | :reference | :other) -> SelectedResult98
+            attr_reader member_id: "SourceRecord.role"
+            attr_reader value: :gauge_station | :published_harmonic_record | :model | :reference | :other
+        end
+        class SelectedResult99
+            def self.new: (member_id: "SourceRecord.disposition", value: :metadata_only | :not_fitted | :licence_restricted | :unavailable | :retained | :other) -> SelectedResult99
+            attr_reader member_id: "SourceRecord.disposition"
+            attr_reader value: :metadata_only | :not_fitted | :licence_restricted | :unavailable | :retained | :other
+        end
+        class SelectedResult100
+            def self.new: (member_id: "SourceRecord.original_harmonics", value: Hash[String, json_value] | nil) -> SelectedResult100
+            attr_reader member_id: "SourceRecord.original_harmonics"
+            attr_reader value: Hash[String, json_value] | nil
+        end
+        class SelectedResult101
+            def self.new: (member_id: "HistoricalOffsetVintage.removal_events", value: Array[Hash[String, json_value]]) -> SelectedResult101
+            attr_reader member_id: "HistoricalOffsetVintage.removal_events"
+            attr_reader value: Array[Hash[String, json_value]]
+        end
+        class CacheDocumentStreamIndexStationsItemSetsItem
+            def self.new: (set_id: String | nil, source: String | nil, source_type: String | nil, quantity: String | nil, qc_status: String | nil, convention_id: String | nil, licence_id: String | nil, constituents: Array[String], fallback: SchemaFallback | nil, current_bins: Array[Integer]) -> CacheDocumentStreamIndexStationsItemSetsItem
+            attr_reader set_id: String | nil
+            attr_reader source: String | nil
+            attr_reader source_type: String | nil
+            attr_reader quantity: String | nil
+            attr_reader qc_status: String | nil
+            attr_reader convention_id: String | nil
+            attr_reader licence_id: String | nil
+            attr_reader constituents: Array[String]
+            attr_reader fallback: SchemaFallback | nil
+            attr_reader current_bins: Array[Integer]
+        end
+        class CacheDocumentStreamIndexStationsItemCurrentOffsetsItem
+            def self.new: (bin: Integer, reference_bin: Integer, reference_station_id: String | nil, licence_id: String | nil) -> CacheDocumentStreamIndexStationsItemCurrentOffsetsItem
+            attr_reader bin: Integer
+            attr_reader reference_bin: Integer
+            attr_reader reference_station_id: String | nil
+            attr_reader licence_id: String | nil
+        end
+        class CacheDocumentStreamIndexStationsItem
+            def self.new: (station_id: String, status: String, name: String | nil, name_folded: String | nil, country: String | nil, type: String | nil, kind: String | nil, reference_station_id: String | nil, offsets_licence_id: String | nil, recommended_set_id: String | nil, lat: Float | Integer | nil, lon: Float | Integer | nil, offset: Integer, length: Integer, aliases: Hash[String, Array[String]], sets: Array[CacheDocumentStreamIndexStationsItemSetsItem], subordinate_offsets: SchemaSubordinateOffsets | nil, current_offsets: Array[CacheDocumentStreamIndexStationsItemCurrentOffsetsItem]) -> CacheDocumentStreamIndexStationsItem
+            attr_reader station_id: String
+            attr_reader status: String
+            attr_reader name: String | nil
+            attr_reader name_folded: String | nil
+            attr_reader country: String | nil
+            attr_reader type: String | nil
+            attr_reader kind: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader offsets_licence_id: String | nil
+            attr_reader recommended_set_id: String | nil
+            attr_reader lat: Float | Integer | nil
+            attr_reader lon: Float | Integer | nil
+            attr_reader offset: Integer
+            attr_reader length: Integer
+            attr_reader aliases: Hash[String, Array[String]]
+            attr_reader sets: Array[CacheDocumentStreamIndexStationsItemSetsItem]
+            attr_reader subordinate_offsets: SchemaSubordinateOffsets | nil
+            attr_reader current_offsets: Array[CacheDocumentStreamIndexStationsItemCurrentOffsetsItem]
+        end
+        class CacheDocumentStreamIndex
+            def self.new: (index_version: 1, discovery_index_version: 1, datestamp: String, jsonl: String, jsonl_sha256: String, jsonl_size: Integer, by: String, stations: Array[CacheDocumentStreamIndexStationsItem]) -> CacheDocumentStreamIndex
+            attr_reader index_version: 1
+            attr_reader discovery_index_version: 1
+            attr_reader datestamp: String
+            attr_reader jsonl: String
+            attr_reader jsonl_sha256: String
+            attr_reader jsonl_size: Integer
+            attr_reader by: String
+            attr_reader stations: Array[CacheDocumentStreamIndexStationsItem]
+        end
+        class CacheDocumentVerifiedReceiptFilesValue
+            def self.new: (sha256: String, size: Integer, url: String | nil) -> CacheDocumentVerifiedReceiptFilesValue
+            attr_reader sha256: String
+            attr_reader size: Integer
+            attr_reader url: String | nil
+        end
+        class CacheDocumentVerifiedReceipt
+            def self.new: (datestamp: String, files: Hash[String, CacheDocumentVerifiedReceiptFilesValue], format_version: String, min_reader_version: String, zenodo_version_doi: String | nil, verified_at: String, by: String) -> CacheDocumentVerifiedReceipt
+            attr_reader datestamp: String
+            attr_reader files: Hash[String, CacheDocumentVerifiedReceiptFilesValue]
+            attr_reader format_version: String
+            attr_reader min_reader_version: String
+            attr_reader zenodo_version_doi: String | nil
+            attr_reader verified_at: String
+            attr_reader by: String
+        end
+        class CanonicalError
+            def self.new: (code: "invalid_argument" | "network" | "release_not_found" | "offline_unavailable" | "checksum_mismatch" | "unsupported_format" | "reader_too_old" | "invalid_release" | "cache" | "io" | "unsupported" | "pinned_release" | "buffer_too_small" | "file_exists" | "not_built" | "station_not_found" | "station_removed" | "no_constants" | "quantity_mismatch" | "unsupported_convention" | "no_astro_table" | "unsupported_constituent" | "time_out_of_range" | "datum_unavailable" | "reference_unavailable" | "extremes_only" | "historical_offsets_excluded" | "bin_not_found" | "local_time_unavailable" | "unknown_time_zone", structured_fields: json_value, cause: Exception | nil) -> CanonicalError
+            attr_reader code: "invalid_argument" | "network" | "release_not_found" | "offline_unavailable" | "checksum_mismatch" | "unsupported_format" | "reader_too_old" | "invalid_release" | "cache" | "io" | "unsupported" | "pinned_release" | "buffer_too_small" | "file_exists" | "not_built" | "station_not_found" | "station_removed" | "no_constants" | "quantity_mismatch" | "unsupported_convention" | "no_astro_table" | "unsupported_constituent" | "time_out_of_range" | "datum_unavailable" | "reference_unavailable" | "extremes_only" | "historical_offsets_excluded" | "bin_not_found" | "local_time_unavailable" | "unknown_time_zone"
+            attr_reader structured_fields: json_value
+            attr_reader cause: Exception | nil
+        end
+        class ClientAndRelease
+            def self.new: (client_state: client_state, loaded_release: ::OpenTideConstants::Release) -> ClientAndRelease
+            attr_reader client_state: client_state
+            attr_reader loaded_release: ::OpenTideConstants::Release
+        end
+        class ClientState
+            def self.new: (current_release: ::OpenTideConstants::Release, effective_options: domain_effective_options, cache_state: domain_cache_state, last_error: json_value | nil, last_update_check: Float | Integer | nil, closed: bool) -> ClientState
+            attr_reader current_release: ::OpenTideConstants::Release
+            attr_reader effective_options: domain_effective_options
+            attr_reader cache_state: domain_cache_state
+            attr_reader last_error: json_value | nil
+            attr_reader last_update_check: Float | Integer | nil
+            attr_reader closed: bool
+        end
+        class CommercialAdmission
+            def self.new: (admitted: bool, reason: String | nil) -> CommercialAdmission
+            attr_reader admitted: bool
+            attr_reader reason: String | nil
+        end
+        class EvidenceBundle
+            def self.new: (scenario: scenario, expected_result: json_value, actual_profile_results: json_value, red_output: String, green_output: String) -> EvidenceBundle
+            attr_reader scenario: scenario
+            attr_reader expected_result: json_value
+            attr_reader actual_profile_results: json_value
+            attr_reader red_output: String
+            attr_reader green_output: String
+        end
+        class FormatSelection
+            def self.new: (formats: Array[String], required_files: domain_file_rows) -> FormatSelection
+            attr_reader formats: Array[String]
+            attr_reader required_files: domain_file_rows
+        end
+        class HistoricalAdmission
+            def self.new: (admitted: bool, reason: String | nil) -> HistoricalAdmission
+            attr_reader admitted: bool
+            attr_reader reason: String | nil
+        end
+        class HttpRequest
+            def self.new: (url: String, conditional_etag: String | nil) -> HttpRequest
+            attr_reader url: String
+            attr_reader conditional_etag: String | nil
+        end
+        class HttpResponse
+            def self.new: (status_code: Integer, body: String, etag: String | nil, request_url: String) -> HttpResponse
+            attr_reader status_code: Integer
+            attr_reader body: String
+            attr_reader etag: String | nil
+            attr_reader request_url: String
+        end
+        class IdentityQuery1
+            def self.new: (system: String, id: String) -> IdentityQuery1
+            attr_reader system: String
+            attr_reader id: String
+        end
+        class IndexEntrySetsItem
+            def self.new: (set_id: String | nil, source: String | nil, source_type: String | nil, quantity: String | nil, qc_status: String | nil, convention_id: String | nil, licence_id: String | nil, constituents: Array[String], fallback: SchemaFallback | nil, current_bins: Array[Integer]) -> IndexEntrySetsItem
+            attr_reader set_id: String | nil
+            attr_reader source: String | nil
+            attr_reader source_type: String | nil
+            attr_reader quantity: String | nil
+            attr_reader qc_status: String | nil
+            attr_reader convention_id: String | nil
+            attr_reader licence_id: String | nil
+            attr_reader constituents: Array[String]
+            attr_reader fallback: SchemaFallback | nil
+            attr_reader current_bins: Array[Integer]
+        end
+        class IndexEntryCurrentOffsetsItem
+            def self.new: (bin: Integer, reference_bin: Integer, reference_station_id: String | nil, licence_id: String | nil) -> IndexEntryCurrentOffsetsItem
+            attr_reader bin: Integer
+            attr_reader reference_bin: Integer
+            attr_reader reference_station_id: String | nil
+            attr_reader licence_id: String | nil
+        end
+        class IndexEntry
+            def self.new: (station_id: String, status: String, name: String | nil, name_folded: String | nil, country: String | nil, type: String | nil, kind: String | nil, reference_station_id: String | nil, offsets_licence_id: String | nil, recommended_set_id: String | nil, lat: Float | Integer | nil, lon: Float | Integer | nil, offset: Integer, length: Integer, aliases: Hash[String, Array[String]], sets: Array[IndexEntrySetsItem], subordinate_offsets: SchemaSubordinateOffsets | nil, current_offsets: Array[IndexEntryCurrentOffsetsItem]) -> IndexEntry
+            attr_reader station_id: String
+            attr_reader status: String
+            attr_reader name: String | nil
+            attr_reader name_folded: String | nil
+            attr_reader country: String | nil
+            attr_reader type: String | nil
+            attr_reader kind: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader offsets_licence_id: String | nil
+            attr_reader recommended_set_id: String | nil
+            attr_reader lat: Float | Integer | nil
+            attr_reader lon: Float | Integer | nil
+            attr_reader offset: Integer
+            attr_reader length: Integer
+            attr_reader aliases: Hash[String, Array[String]]
+            attr_reader sets: Array[IndexEntrySetsItem]
+            attr_reader subordinate_offsets: SchemaSubordinateOffsets | nil
+            attr_reader current_offsets: Array[IndexEntryCurrentOffsetsItem]
+        end
+        class LockOutcome
+            def self.new: (acquired: bool, token: String | nil, owned: bool) -> LockOutcome
+            attr_reader acquired: bool
+            attr_reader token: String | nil
+            attr_reader owned: bool
+        end
+        class LockRequest
+            def self.new: (directory: String, operation: "take" | "nonblocking_take" | "release" | "delete" | "heartbeat" | "ownership_check", token: String | nil) -> LockRequest
+            attr_reader directory: String
+            attr_reader operation: "take" | "nonblocking_take" | "release" | "delete" | "heartbeat" | "ownership_check"
+            attr_reader token: String | nil
+        end
+        class MergedReceiptFilesValue
+            def self.new: (sha256: String, size: Integer, url: String | nil) -> MergedReceiptFilesValue
+            attr_reader sha256: String
+            attr_reader size: Integer
+            attr_reader url: String | nil
+        end
+        class MergedReceipt
+            def self.new: (datestamp: String, files: Hash[String, MergedReceiptFilesValue], format_version: String, min_reader_version: String, zenodo_version_doi: String | nil, verified_at: String, by: String) -> MergedReceipt
+            attr_reader datestamp: String
+            attr_reader files: Hash[String, MergedReceiptFilesValue]
+            attr_reader format_version: String
+            attr_reader min_reader_version: String
+            attr_reader zenodo_version_doi: String | nil
+            attr_reader verified_at: String
+            attr_reader by: String
+        end
+        class MetadataRequest
+            def self.new: (request_url: String, document_kind: String) -> MetadataRequest
+            attr_reader request_url: String
+            attr_reader document_kind: String
+        end
+        class ProjectionContract
+            def self.new: (scalar_types: String, models: String, subordinate_offsets: String, scope: String, fallback: String) -> ProjectionContract
+            attr_reader scalar_types: String
+            attr_reader models: String
+            attr_reader subordinate_offsets: String
+            attr_reader scope: String
+            attr_reader fallback: String
+        end
+        class PublishedMetadata
+            def self.new: (contributors: json_value, year: Integer, concept_doi: String | nil, zenodo_version_doi: String | nil, dataset_url: String) -> PublishedMetadata
+            attr_reader contributors: json_value
+            attr_reader year: Integer
+            attr_reader concept_doi: String | nil
+            attr_reader zenodo_version_doi: String | nil
+            attr_reader dataset_url: String
+        end
+        class QualityAdmission
+            def self.new: (admitted: bool, reason: String | nil) -> QualityAdmission
+            attr_reader admitted: bool
+            attr_reader reason: String | nil
+        end
+        class ReaderVersion
+            def self.new: (major: Integer, minor: Integer) -> ReaderVersion
+            attr_reader major: Integer
+            attr_reader minor: Integer
+        end
+        class Scenario
+            def self.new: (behavior_ids: Array[String], input: json_value, expected_output: json_value, expected_error: canonical_error | nil, expected_state: json_value) -> Scenario
+            attr_reader behavior_ids: Array[String]
+            attr_reader input: json_value
+            attr_reader expected_output: json_value
+            attr_reader expected_error: canonical_error | nil
+            attr_reader expected_state: json_value
+        end
+        class ScenarioComparison
+            def self.new: (accepted: bool, mandatory_findings: Array[String]) -> ScenarioComparison
+            attr_reader accepted: bool
+            attr_reader mandatory_findings: Array[String]
+        end
+        class SourceByteSpan
+            def self.new: (offset_bytes: Integer, length_bytes: Integer) -> SourceByteSpan
+            attr_reader offset_bytes: Integer
+            attr_reader length_bytes: Integer
+        end
+        class SourceFiles
+            def self.new: (jsonl: String, meta: String, jsonl_sha256: String, jsonl_size: Integer, meta_sha256: String, meta_size: Integer) -> SourceFiles
+            attr_reader jsonl: String
+            attr_reader meta: String
+            attr_reader jsonl_sha256: String
+            attr_reader jsonl_size: Integer
+            attr_reader meta_sha256: String
+            attr_reader meta_size: Integer
+        end
+        class StationIndexEntrySetsItem
+            def self.new: (set_id: String | nil, source: String | nil, source_type: String | nil, quantity: String | nil, qc_status: String | nil, convention_id: String | nil, licence_id: String | nil, constituents: Array[String], fallback: SchemaFallback | nil, current_bins: Array[Integer]) -> StationIndexEntrySetsItem
+            attr_reader set_id: String | nil
+            attr_reader source: String | nil
+            attr_reader source_type: String | nil
+            attr_reader quantity: String | nil
+            attr_reader qc_status: String | nil
+            attr_reader convention_id: String | nil
+            attr_reader licence_id: String | nil
+            attr_reader constituents: Array[String]
+            attr_reader fallback: SchemaFallback | nil
+            attr_reader current_bins: Array[Integer]
+        end
+        class StationIndexEntryCurrentOffsetsItem
+            def self.new: (bin: Integer, reference_bin: Integer, reference_station_id: String | nil, licence_id: String | nil) -> StationIndexEntryCurrentOffsetsItem
+            attr_reader bin: Integer
+            attr_reader reference_bin: Integer
+            attr_reader reference_station_id: String | nil
+            attr_reader licence_id: String | nil
+        end
+        class StationIndexEntry
+            def self.new: (station_id: String, status: String, name: String | nil, name_folded: String | nil, country: String | nil, type: String | nil, kind: String | nil, reference_station_id: String | nil, offsets_licence_id: String | nil, recommended_set_id: String | nil, lat: Float | Integer | nil, lon: Float | Integer | nil, offset: Integer, length: Integer, aliases: Hash[String, Array[String]], sets: Array[StationIndexEntrySetsItem], subordinate_offsets: SchemaSubordinateOffsets | nil, current_offsets: Array[StationIndexEntryCurrentOffsetsItem]) -> StationIndexEntry
+            attr_reader station_id: String
+            attr_reader status: String
+            attr_reader name: String | nil
+            attr_reader name_folded: String | nil
+            attr_reader country: String | nil
+            attr_reader type: String | nil
+            attr_reader kind: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader offsets_licence_id: String | nil
+            attr_reader recommended_set_id: String | nil
+            attr_reader lat: Float | Integer | nil
+            attr_reader lon: Float | Integer | nil
+            attr_reader offset: Integer
+            attr_reader length: Integer
+            attr_reader aliases: Hash[String, Array[String]]
+            attr_reader sets: Array[StationIndexEntrySetsItem]
+            attr_reader subordinate_offsets: SchemaSubordinateOffsets | nil
+            attr_reader current_offsets: Array[StationIndexEntryCurrentOffsetsItem]
+        end
+        class StreamReader
+            def self.new: (release_view: ::OpenTideConstants::Release, file_descriptor: Integer, index: json_value, index_presence: json_value, station_lru: json_value, closed: bool) -> StreamReader
+            attr_reader release_view: ::OpenTideConstants::Release
+            attr_reader file_descriptor: Integer
+            attr_reader index: json_value
+            attr_reader index_presence: json_value
+            attr_reader station_lru: json_value
+            attr_reader closed: bool
+        end
+        class SummaryOptions
+            def self.new: (original_recommendation: ::OpenTideConstants::ConstantSet | nil, commercial_only: bool, include_no_constants: bool) -> SummaryOptions
+            attr_reader original_recommendation: ::OpenTideConstants::ConstantSet | nil
+            attr_reader commercial_only: bool
+            attr_reader include_no_constants: bool
+        end
+        class SuppliedIndexStationsItemSetsItem
+            def self.new: (set_id: String | nil, source: String | nil, source_type: String | nil, quantity: String | nil, qc_status: String | nil, convention_id: String | nil, licence_id: String | nil, constituents: Array[String], fallback: SchemaFallback | nil, current_bins: Array[Integer]) -> SuppliedIndexStationsItemSetsItem
+            attr_reader set_id: String | nil
+            attr_reader source: String | nil
+            attr_reader source_type: String | nil
+            attr_reader quantity: String | nil
+            attr_reader qc_status: String | nil
+            attr_reader convention_id: String | nil
+            attr_reader licence_id: String | nil
+            attr_reader constituents: Array[String]
+            attr_reader fallback: SchemaFallback | nil
+            attr_reader current_bins: Array[Integer]
+        end
+        class SuppliedIndexStationsItemCurrentOffsetsItem
+            def self.new: (bin: Integer, reference_bin: Integer, reference_station_id: String | nil, licence_id: String | nil) -> SuppliedIndexStationsItemCurrentOffsetsItem
+            attr_reader bin: Integer
+            attr_reader reference_bin: Integer
+            attr_reader reference_station_id: String | nil
+            attr_reader licence_id: String | nil
+        end
+        class SuppliedIndexStationsItem
+            def self.new: (station_id: String, status: String, name: String | nil, name_folded: String | nil, country: String | nil, type: String | nil, kind: String | nil, reference_station_id: String | nil, offsets_licence_id: String | nil, recommended_set_id: String | nil, lat: Float | Integer | nil, lon: Float | Integer | nil, offset: Integer, length: Integer, aliases: Hash[String, Array[String]], sets: Array[SuppliedIndexStationsItemSetsItem], subordinate_offsets: SchemaSubordinateOffsets | nil, current_offsets: Array[SuppliedIndexStationsItemCurrentOffsetsItem]) -> SuppliedIndexStationsItem
+            attr_reader station_id: String
+            attr_reader status: String
+            attr_reader name: String | nil
+            attr_reader name_folded: String | nil
+            attr_reader country: String | nil
+            attr_reader type: String | nil
+            attr_reader kind: String | nil
+            attr_reader reference_station_id: String | nil
+            attr_reader offsets_licence_id: String | nil
+            attr_reader recommended_set_id: String | nil
+            attr_reader lat: Float | Integer | nil
+            attr_reader lon: Float | Integer | nil
+            attr_reader offset: Integer
+            attr_reader length: Integer
+            attr_reader aliases: Hash[String, Array[String]]
+            attr_reader sets: Array[SuppliedIndexStationsItemSetsItem]
+            attr_reader subordinate_offsets: SchemaSubordinateOffsets | nil
+            attr_reader current_offsets: Array[SuppliedIndexStationsItemCurrentOffsetsItem]
+        end
+        class SuppliedIndex
+            def self.new: (index_version: 1, discovery_index_version: 1, datestamp: String, jsonl: String, jsonl_sha256: String, jsonl_size: Integer, by: String, stations: Array[SuppliedIndexStationsItem]) -> SuppliedIndex
+            attr_reader index_version: 1
+            attr_reader discovery_index_version: 1
+            attr_reader datestamp: String
+            attr_reader jsonl: String
+            attr_reader jsonl_sha256: String
+            attr_reader jsonl_size: Integer
+            attr_reader by: String
+            attr_reader stations: Array[SuppliedIndexStationsItem]
+        end
+        class TrustedCachedPointer
+            def self.new: (digests: domain_digest_map) -> TrustedCachedPointer
+            attr_reader digests: domain_digest_map
+        end
+        class ValidatedMetadata
+            def self.new: (document: json_value, selected_datestamp: String, request_url: String, files: domain_file_rows) -> ValidatedMetadata
+            attr_reader document: json_value
+            attr_reader selected_datestamp: String
+            attr_reader request_url: String
+            attr_reader files: domain_file_rows
+        end
+        type json_value = nil | bool | Float | Integer | String | Array[json_value] | Hash[String, json_value]
+        type domain_station_row = json_value
+        type domain_station_lookup = StationLookupActive | StationLookupRemoved | StationLookupAbsent
+        type domain_prediction_model = PredictionModel
+        type domain_prediction_window = PredictionWindow
+        type domain_transport_options = ArgsClientOpenSelected
+        type domain_effective_options = ArgsClientOpen
+        type domain_file_rows = Array[json_value]
+        type domain_digest_map = Hash[String, String]
+        type domain_lock_state = LockState
+        type domain_cache_state = CacheState
+        type domain_release_descriptor = ReleaseDescriptor
+        type domain_reference_path = ReferencePath
+        type domain_candidate_path = CandidatePathDirect | CandidatePathTideOffset | CandidatePathCurrentOffset
+        type domain_selection_options = ArgsReleaseHeightsSelected | ArgsReleaseExtremesSelected | ArgsReleaseCurrentsSelected | ArgsReleaseCurrentEventsSelected | ArgsClientOpenSelected
+        type domain_query_options = ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsClientOpen
+        type domain_unrounded_tide_event = UnroundedTideEvent
+        type domain_unrounded_current_event = UnroundedCurrentEvent
+        type domain_auxiliary_values = AuxiliaryValuesRequiresModel | AuxiliaryValuesSourceAccess
+        type domain_result_context = ResultContext
+        type acceptance_decision = AcceptanceDecision
+        type access_kind = "raw_record" | "station_object"
+        type acquisition_descriptor = domain_release_descriptor
+        type actual_profile_results = Hash[String, json_value]
+        type arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type astronomical_terms = AstronomicalTerms
+        type attribution_text = String
+        type authenticated_index = AuthenticatedIndex
+        type auxiliary_kind = "model_access" | "result_context" | "local_time"
+        type auxiliary_model_value = member_result
+        type auxiliary_operation = "astro_table" | "datums" | "ranges" | "constituent" | "constituents" | "constituent_names" | "convention" | "conventions" | "licence" | "licences" | "provenance" | "set_validation" | "station_validation" | "valid_range" | "equilibrium_argument" | "equilibrium_for_year" | "node_factor" | "node_factor_for_year" | "raw" | "release_files" | "release_metadata" | "station_count" | "tombstone_count" | "subordinate_offsets"
+        type auxiliary_result = member_result | prediction_result | local_time_result
+        type bound_checksums = domain_digest_map
+        type cache_bytes = String
+        type cache_document = CacheDocumentStreamIndex | CacheDocumentVerifiedReceipt | json_value
+        type cache_inventory_result = Array[String]
+        type cache_state = domain_cache_state
+        type candidate_path = domain_candidate_path
+        type canonical_error = CanonicalError
+        type canonical_result = member_result
+        type cause = Exception | nil
+        type changed_behaviors = Array[String]
+        type checksum_bytes = String
+        type citation_style = String
+        type citation_text = String
+        type client_and_release = ClientAndRelease
+        type client_state = ClientState
+        type clock = Float | Integer
+        type commercial_admission = CommercialAdmission
+        type commercial_basis = "strict" | "as_published_upstream"
+        type commercial_only = bool
+        type compared_station_row = domain_station_row
+        type current_cache_directory = String
+        type current_request = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type destination = String
+        type direct_current_result = ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList
+        type document_kind = "release" | "station_row" | "pointer" | "catalogue" | "cache"
+        type download_result = Array[String]
+        type effective_options = domain_effective_options
+        type effective_recommendation = ::OpenTideConstants::ConstantSet | nil
+        type environment = Hash[String, String]
+        type evidence_bundle = EvidenceBundle
+        type expected_result = json_value
+        type explicit_options = domain_effective_options
+        type field_contract = FieldContracts
+        type folded_height_values = ::OpenTideConstants::HeightSeries
+        type format_selection = FormatSelection
+        type height_values = ::OpenTideConstants::HeightSeries
+        type held_release = ::OpenTideConstants::Release
+        type held_release_result = member_result
+        type historical_admission = HistoricalAdmission
+        type historical_policy = "fallback" | "exclude"
+        type http_request = HttpRequest
+        type http_response = HttpResponse
+        type identity_query = String | IdentityQuery1
+        type include_fallback = bool
+        type include_flagged = bool
+        type include_no_constants = bool
+        type index_entry = IndexEntry
+        type index_presence = Hash[String, bool]
+        type inventory_action = "list" | "prune"
+        type io_kind = "lock" | "http"
+        type io_options = lock_state | transport_options
+        type io_request = lock_request | http_request
+        type io_result = lock_outcome | http_response
+        type keep = Integer
+        type lifetime_action = String
+        type load_mode = "eager" | "stream"
+        type loaded_release = ::OpenTideConstants::Release
+        type local_time_profile = ArgsHeightSeriesToLocal
+        type local_time_result = member_result
+        type lock_outcome = LockOutcome
+        type lock_request = LockRequest
+        type lock_state = domain_lock_state
+        type locked_cache_state = domain_cache_state
+        type member_contract = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type merged_receipt = MergedReceipt
+        type metadata_request = MetadataRequest
+        type native_profile = "python" | "ruby" | "typescript_node" | "typescript_browser" | "c" | "swift"
+        type native_result = member_result
+        type offset_current_result = ::OpenTideConstants::CurrentEventList
+        type offset_tide_result = ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList
+        type operation = "astro_table" | "attribution" | "cached_releases" | "check_for_update" | "citation" | "close" | "constant_set" | "constant_sets" | "constituent" | "constituent_names" | "constituents" | "convention" | "conventions" | "current_events" | "currents" | "datums" | "download" | "equilibrium_argument" | "equilibrium_for_year" | "extremes" | "heights" | "heights_at" | "hold_release" | "iter_stations" | "last_error" | "latest" | "licence" | "licences" | "loaded_from" | "near" | "nearest" | "newer_format_major" | "node_factor" | "node_factor_for_year" | "open" | "provenance" | "prune" | "ranges" | "raw" | "recommended_set" | "reference_station" | "release_files" | "release_metadata" | "releases" | "require_station" | "search" | "set_validation" | "station" | "station_by_alias" | "station_count" | "station_validation" | "stations" | "stats" | "subordinate_offsets" | "subordinates_of" | "to_local" | "tombstone" | "tombstone_count" | "update" | "valid_range" | "verify"
+        type ordered_constant_sets = Array[::OpenTideConstants::ConstantSet]
+        type ordered_failures = Array[canonical_error]
+        type ordered_station_results = Array[::OpenTideConstants::Station]
+        type origin = Origin
+        type original_recommendation = ::OpenTideConstants::ConstantSet | nil
+        type overwrite_policy = Array[String]
+        type own_current_offsets = Hash[String, json_value] | nil
+        type own_offset = ::OpenTideConstants::SubordinateOffsets | nil
+        type parsed_document = domain_station_row | json_value
+        type path_request = String
+        type platform_defaults = domain_effective_options
+        type pointer_digests = domain_digest_map
+        type prediction_instants = Array[Float | Integer]
+        type prediction_result = ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList
+        type prediction_window = domain_prediction_window
+        type projection_contract = ProjectionContract
+        type published_metadata = PublishedMetadata
+        type quality_admission = QualityAdmission
+        type query_arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type query_client_state = client_state
+        type query_kind = "stations" | "iter_stations" | "search" | "near" | "nearest"
+        type query_options = domain_query_options
+        type raw_fields = json_value
+        type raw_record = json_value
+        type raw_record_or_valid_station = json_value | ::OpenTideConstants::Station
+        type reader_version = ReaderVersion
+        type reference_model = domain_prediction_model
+        type reference_path = domain_reference_path
+        type release_candidates = Array[String]
+        type release_files = Array[::OpenTideConstants::FileInfo]
+        type release_metadata = json_value
+        type release_origin = Origin
+        type release_request = "latest" | String
+        type release_statistics = ::OpenTideConstants::Stats
+        type release_view = ::OpenTideConstants::Release
+        type requested_datum = String
+        type required_files = domain_file_rows
+        type required_links = Array[RequiredLink]
+        type resource_state = client_state | ::OpenTideConstants::Release | stream_reader
+        type resource_state_or_error = client_state | ::OpenTideConstants::Release | stream_reader
+        type result_context = domain_result_context
+        type result_values = member_result
+        type review_reports = Array[String]
+        type scenario = Scenario
+        type scenario_comparison = ScenarioComparison
+        type selected_prediction_model = domain_prediction_model
+        type selected_reference_path = domain_reference_path
+        type selection_kind = "discovery" | "explicit_prediction" | "default_prediction"
+        type selection_options = domain_selection_options
+        type source_byte_span = SourceByteSpan
+        type source_bytes = String
+        type source_files = SourceFiles
+        type source_record = Hash[String, json_value]
+        type source_values = domain_auxiliary_values
+        type station = ::OpenTideConstants::Station
+        type station_id = String
+        type station_index_entry = StationIndexEntry
+        type station_or_tombstone_or_null = domain_station_lookup
+        type station_request = ::OpenTideConstants::Station | String
+        type station_sets = Array[::OpenTideConstants::ConstantSet]
+        type station_source_row = domain_station_row
+        type station_summary = release_statistics | ordered_constant_sets
+        type step = Float | Integer
+        type stream_reader = StreamReader
+        type summary_kind = "stats" | "constant_sets"
+        type summary_options = SummaryOptions
+        type supplied_index = SuppliedIndex | nil
+        type tide_events = ::OpenTideConstants::ExtremeList
+        type tide_request = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type time_inputs = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type transport_options = domain_transport_options
+        type trusted_cache = json_value | nil
+        type trusted_cached_pointer = TrustedCachedPointer | nil
+        type typed_model = ::OpenTideConstants | ::OpenTideConstants::Release | ::OpenTideConstants::ReleaseInfo | ::OpenTideConstants::FileInfo | ::OpenTideConstants::Station | ::OpenTideConstants::Tombstone | ::OpenTideConstants::ConstantSet | ::OpenTideConstants::Constituent | ::OpenTideConstants::Convention | ::OpenTideConstants::Licence | ::OpenTideConstants::Provenance | ::OpenTideConstants::ProvenanceBuild | ::OpenTideConstants::TimeBase | ::OpenTideConstants::QcFlag | ::OpenTideConstants::DroppedConstituent | ::OpenTideConstants::Validation | ::OpenTideConstants::SubordinateOffsets | ::OpenTideConstants::Nearby | ::OpenTideConstants::UpdateResult | ::OpenTideConstants::RecordSpan | ::OpenTideConstants::Datum | ::OpenTideConstants::Stats | ::OpenTideConstants::AstroTable | ::OpenTideConstants::HeightPoint | ::OpenTideConstants::Extreme | ::OpenTideConstants::CurrentPoint | ::OpenTideConstants::CurrentEvent | ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList | ::OpenTideConstants::DatumInfo | ::OpenTideConstants::DatumLevel | ::OpenTideConstants::Ranges | ::OpenTideConstants::Fallback | ::OpenTideConstants::SourceRecord | ::OpenTideConstants::HistoricalOffsetVintage | ::OpenTideConstants::HistoricalOffsetProvenance
+        type unrounded_current_events = Array[domain_unrounded_current_event]
+        type unrounded_tide_events = Array[domain_unrounded_tide_event]
+        type update_request = metadata_request
+        type updated_client_state = client_state
+        type usable_cached_release_or_error = ::OpenTideConstants::Release | canonical_error
+        type utc_instant = Float | Integer
+        type utc_result = member_result
+        type valid_station = ::OpenTideConstants::Station
+        type validated_arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type validated_metadata = ValidatedMetadata
+        type validated_release_graph = json_value
+        type verification_result = bool
+        type verified_file_rows = domain_file_rows
+        type window_inputs = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type auxiliary_member_id = "Client.open" | "Client.release" | "Client.loaded_from" | "Client.last_error" | "Client.releases" | "Client.latest" | "Client.check_for_update" | "Client.newer_format_major" | "Client.update" | "Client.download" | "Client.verify" | "Client.cached_releases" | "Client.prune" | "Release.datestamp" | "Release.created" | "Release.format_version" | "Release.zenodo_version_doi" | "Release.concept_doi" | "Release.source_versions" | "Release.build_commit" | "Release.changelog_url" | "Release.files" | "Release.conventions" | "Release.convention" | "Release.licences" | "Release.licence" | "Release.constituent_names" | "Release.stats" | "Release.station_count" | "Release.tombstone_count" | "Release.citation" | "Release.station" | "Release.require_station" | "Release.tombstone" | "Release.station_by_alias" | "Release.stations" | "Release.iter_stations" | "Release.search" | "Release.near" | "Release.nearest" | "Release.reference_station" | "Release.subordinates_of" | "Release.attribution" | "Release.heights" | "Release.heights_at" | "Release.extremes" | "Release.currents" | "Release.current_events" | "Release.datums" | "Release.ranges" | "Release.astro_table" | "Release.historical_offsets_policy" | "ReleaseInfo.datestamp" | "ReleaseInfo.format_version" | "ReleaseInfo.concept_doi" | "ReleaseInfo.zenodo_version_doi" | "ReleaseInfo.content_sha256" | "ReleaseInfo.files" | "FileInfo.name" | "FileInfo.url" | "FileInfo.size" | "FileInfo.sha256" | "Station.station_id" | "Station.name" | "Station.country" | "Station.lat" | "Station.lon" | "Station.type" | "Station.kind" | "Station.timezone" | "Station.aliases" | "Station.status" | "Station.is_reference" | "Station.is_subordinate" | "Station.is_tide" | "Station.is_current" | "Station.recommended_set" | "Station.constant_sets" | "Station.constant_set" | "Station.subordinate_offsets" | "Station.validation" | "Station.raw" | "Station.recommended_is_fallback" | "Station.source_records" | "Tombstone.station_id" | "Tombstone.name" | "Tombstone.status" | "Tombstone.removed_in" | "Tombstone.removed_reason" | "Tombstone.merged_into" | "Tombstone.detail" | "Tombstone.raw" | "ConstantSet.set_id" | "ConstantSet.source" | "ConstantSet.source_type" | "ConstantSet.quantity" | "ConstantSet.source_record_id" | "ConstantSet.source_version" | "ConstantSet.record_span" | "ConstantSet.datum" | "ConstantSet.qc_status" | "ConstantSet.qc_flags" | "ConstantSet.dropped_constituents" | "ConstantSet.time_base" | "ConstantSet.is_recommended" | "ConstantSet.convention" | "ConstantSet.licence" | "ConstantSet.provenance" | "ConstantSet.validation" | "ConstantSet.constituents" | "ConstantSet.constituent" | "ConstantSet.raw" | "ConstantSet.fallback" | "Constituent.name" | "Constituent.source_name" | "Constituent.doodson" | "Constituent.speed_deg_per_hour" | "Constituent.amplitude_m" | "Constituent.phase_deg" | "Constituent.amp_uncertainty_m" | "Constituent.phase_uncertainty_deg" | "Constituent.kept_reason" | "Constituent.raw" | "Convention.convention_id" | "Convention.phase_reference" | "Convention.utc_offset_hours" | "Convention.v0_model" | "Convention.nodal_handling" | "Convention.nodal_formula_ids" | "Convention.constituent_table_version" | "Convention.tables_sha256" | "Convention.canary" | "Convention.raw" | "Licence.licence_id" | "Licence.spdx" | "Licence.provider" | "Licence.citation" | "Licence.attribution" | "Licence.url" | "Licence.commercial_use" | "Licence.restriction" | "Licence.terms_url" | "Licence.raw" | "Provenance.adapter_version" | "Provenance.input_sha256" | "Provenance.selection_reason" | "Provenance.decision" | "Provenance.build" | "Provenance.carried_from_release" | "Provenance.raw" | "ProvenanceBuild.build_commit" | "ProvenanceBuild.built_at" | "ProvenanceBuild.fetched_at" | "ProvenanceBuild.run_id" | "ProvenanceBuild.tool_versions" | "TimeBase.code" | "TimeBase.reason" | "TimeBase.declared" | "TimeBase.published" | "TimeBase.correction" | "TimeBase.months_dropped" | "TimeBase.decided_in" | "TimeBase.decided_build_commit" | "TimeBase.evidence" | "QcFlag.flag" | "QcFlag.reason" | "QcFlag.values" | "DroppedConstituent.name" | "DroppedConstituent.dropped_reason" | "DroppedConstituent.detail" | "Validation.set_id" | "Validation.reference_source" | "Validation.reference_station" | "Validation.reference_distance_km" | "Validation.window" | "Validation.time_mae_min" | "Validation.time_p95_min" | "Validation.time_bias_min" | "Validation.height_mae_m" | "Validation.range_error_m" | "Validation.missed_events" | "Validation.extra_events" | "Validation.previous_release" | "SubordinateOffsets.reference_station_id" | "SubordinateOffsets.time_offset_high_min" | "SubordinateOffsets.time_offset_low_min" | "SubordinateOffsets.height_offset_high" | "SubordinateOffsets.height_offset_low" | "SubordinateOffsets.height_adjusted_type" | "SubordinateOffsets.licence_id" | "SubordinateOffsets.offset_id" | "SubordinateOffsets.source" | "SubordinateOffsets.source_type" | "SubordinateOffsets.source_version" | "SubordinateOffsets.source_record_id" | "SubordinateOffsets.qc_status" | "SubordinateOffsets.qc_flags" | "SubordinateOffsets.fallback" | "SubordinateOffsets.vintage" | "SubordinateOffsets.provenance" | "Nearby.station" | "Nearby.distance_km" | "UpdateResult.updated" | "UpdateResult.from" | "UpdateResult.to" | "RecordSpan.start" | "RecordSpan.end" | "RecordSpan.good_samples" | "Datum.msl_offset_m" | "Datum.named" | "Stats.type" | "Stats.kind" | "Stats.country" | "Stats.source" | "Stats.qc_status" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "AstroTable.valid_range" | "HeightPoint.time" | "HeightPoint.height_m" | "HeightPoint.local_time" | "HeightPoint.utc_offset_s" | "HeightPoint.local_datetime" | "HeightPoint.local_time_object" | "Extreme.time" | "Extreme.type" | "Extreme.height_m" | "Extreme.local_time" | "Extreme.utc_offset_s" | "Extreme.local_datetime" | "Extreme.local_time_object" | "CurrentPoint.time" | "CurrentPoint.velocity_major_ms" | "CurrentPoint.velocity_minor_ms" | "CurrentPoint.speed_ms" | "CurrentPoint.direction_deg" | "CurrentPoint.local_time" | "CurrentPoint.utc_offset_s" | "CurrentPoint.local_datetime" | "CurrentPoint.local_time_object" | "CurrentEvent.time" | "CurrentEvent.type" | "CurrentEvent.velocity_ms" | "CurrentEvent.direction_deg" | "CurrentEvent.local_time" | "CurrentEvent.utc_offset_s" | "CurrentEvent.local_datetime" | "CurrentEvent.local_time_object" | "HeightSeries.items" | "HeightSeries.station_id" | "HeightSeries.timezone" | "HeightSeries.method" | "HeightSeries.set_id" | "HeightSeries.convention_id" | "HeightSeries.astro_table_id" | "HeightSeries.reference_station_id" | "HeightSeries.reference_bin" | "HeightSeries.datum" | "HeightSeries.datum_name" | "HeightSeries.datum_kind" | "HeightSeries.datum_uncertainty_m" | "HeightSeries.tz" | "HeightSeries.tz_version" | "HeightSeries.release" | "HeightSeries.algorithm" | "HeightSeries.to_local" | "HeightSeries.offset_id" | "HeightSeries.offset_source" | "HeightSeries.offset_source_version" | "HeightSeries.historical_offsets" | "HeightSeries.current_validity" | "HeightSeries.current_accuracy" | "HeightSeries.reference_set_id" | "HeightSeries.reference_source_version" | "HeightSeries.reference_2020_equivalence" | "HeightSeries.source_note" | "ExtremeList.items" | "ExtremeList.station_id" | "ExtremeList.timezone" | "ExtremeList.method" | "ExtremeList.set_id" | "ExtremeList.convention_id" | "ExtremeList.astro_table_id" | "ExtremeList.reference_station_id" | "ExtremeList.reference_bin" | "ExtremeList.datum" | "ExtremeList.datum_name" | "ExtremeList.datum_kind" | "ExtremeList.datum_uncertainty_m" | "ExtremeList.tz" | "ExtremeList.tz_version" | "ExtremeList.release" | "ExtremeList.algorithm" | "ExtremeList.to_local" | "ExtremeList.offset_id" | "ExtremeList.offset_source" | "ExtremeList.offset_source_version" | "ExtremeList.historical_offsets" | "ExtremeList.current_validity" | "ExtremeList.current_accuracy" | "ExtremeList.reference_set_id" | "ExtremeList.reference_source_version" | "ExtremeList.reference_2020_equivalence" | "ExtremeList.source_note" | "CurrentSeries.items" | "CurrentSeries.station_id" | "CurrentSeries.timezone" | "CurrentSeries.method" | "CurrentSeries.set_id" | "CurrentSeries.convention_id" | "CurrentSeries.astro_table_id" | "CurrentSeries.reference_station_id" | "CurrentSeries.reference_bin" | "CurrentSeries.datum" | "CurrentSeries.datum_name" | "CurrentSeries.datum_kind" | "CurrentSeries.datum_uncertainty_m" | "CurrentSeries.bin_number" | "CurrentSeries.tz" | "CurrentSeries.tz_version" | "CurrentSeries.release" | "CurrentSeries.algorithm" | "CurrentSeries.to_local" | "CurrentEventList.items" | "CurrentEventList.station_id" | "CurrentEventList.timezone" | "CurrentEventList.method" | "CurrentEventList.set_id" | "CurrentEventList.convention_id" | "CurrentEventList.astro_table_id" | "CurrentEventList.reference_station_id" | "CurrentEventList.reference_bin" | "CurrentEventList.datum" | "CurrentEventList.datum_name" | "CurrentEventList.datum_kind" | "CurrentEventList.datum_uncertainty_m" | "CurrentEventList.bin_number" | "CurrentEventList.omitted_event_types" | "CurrentEventList.tz" | "CurrentEventList.tz_version" | "CurrentEventList.release" | "CurrentEventList.algorithm" | "CurrentEventList.to_local" | "DatumInfo.set_id" | "DatumInfo.zero" | "DatumInfo.zero_name" | "DatumInfo.chart_datum" | "DatumInfo.msl_offset_m" | "DatumInfo.levels" | "DatumLevel.key" | "DatumLevel.value_m" | "DatumLevel.above_chart_m" | "DatumLevel.kind" | "DatumLevel.method" | "DatumLevel.source_name" | "DatumLevel.epoch" | "DatumLevel.data_span" | "DatumLevel.control_station_id" | "DatumLevel.control_set_id" | "DatumLevel.control_source_id" | "DatumLevel.uncertainty_m" | "DatumLevel.uncertainty_basis" | "DatumLevel.flags" | "Ranges.mn" | "Ranges.gt" | "Ranges.dhq" | "Ranges.dlq" | "Fallback.reason" | "Fallback.basis" | "Fallback.otc_finding" | "Fallback.preferred_set_id" | "Fallback.raw" | "SourceRecord.source" | "SourceRecord.source_version" | "SourceRecord.source_record_id" | "SourceRecord.role" | "SourceRecord.disposition" | "SourceRecord.detail" | "SourceRecord.licence_id" | "SourceRecord.upstream_licence_id" | "SourceRecord.published_set_ids" | "SourceRecord.provenance" | "SourceRecord.original_metadata" | "SourceRecord.original_harmonics" | "SourceRecord.licence" | "SourceRecord.upstream_licence" | "SourceRecord.raw" | "HistoricalOffsetVintage.publication_year" | "HistoricalOffsetVintage.source_lifecycle" | "HistoricalOffsetVintage.removal_events" | "HistoricalOffsetVintage.current_validity" | "HistoricalOffsetVintage.current_accuracy" | "HistoricalOffsetVintage.reference_2020_equivalence" | "HistoricalOffsetVintage.reference_2020_equivalence_sha256" | "HistoricalOffsetProvenance.source_manifest_sha256" | "HistoricalOffsetProvenance.input_sha256" | "HistoricalOffsetProvenance.book" | "HistoricalOffsetProvenance.annual_table_row" | "HistoricalOffsetProvenance.printed_page" | "HistoricalOffsetProvenance.pdf_page" | "HistoricalOffsetProvenance.raw_row_text" | "HistoricalOffsetProvenance.raw_values_json" | "HistoricalOffsetProvenance.id_crosswalk" | "HistoricalOffsetProvenance.reference_binding" | "HistoricalOffsetProvenance.acceptance_report_sha256"
+        type model_type = "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance"
+        type current_operation = "currents" | "current_events"
+        type member_result = SelectedResult0 | SelectedResult1 | SelectedResult2 | SelectedResult3 | SelectedResult4 | SelectedResult5 | SelectedResult6 | SelectedResult7 | SelectedResult8 | SelectedResult9 | SelectedResult10 | SelectedResult11 | SelectedResult12 | SelectedResult13 | SelectedResult14 | SelectedResult15 | SelectedResult16 | SelectedResult17 | SelectedResult18 | SelectedResult19 | SelectedResult20 | SelectedResult21 | SelectedResult22 | SelectedResult23 | SelectedResult24 | SelectedResult25 | SelectedResult26 | SelectedResult27 | SelectedResult28 | SelectedResult29 | SelectedResult30 | SelectedResult31 | SelectedResult32 | SelectedResult33 | SelectedResult34 | SelectedResult35 | SelectedResult36 | SelectedResult37 | SelectedResult38 | SelectedResult39 | SelectedResult40 | SelectedResult41 | SelectedResult42 | SelectedResult43 | SelectedResult44 | SelectedResult45 | SelectedResult46 | SelectedResult47 | SelectedResult48 | SelectedResult49 | SelectedResult50 | SelectedResult51 | SelectedResult52 | SelectedResult53 | SelectedResult54 | SelectedResult55 | SelectedResult56 | SelectedResult57 | SelectedResult58 | SelectedResult59 | SelectedResult60 | SelectedResult61 | SelectedResult62 | SelectedResult63 | SelectedResult64 | SelectedResult65 | SelectedResult66 | SelectedResult67 | SelectedResult68 | SelectedResult69 | SelectedResult70 | SelectedResult71 | SelectedResult72 | SelectedResult73 | SelectedResult74 | SelectedResult75 | SelectedResult76 | SelectedResult77 | SelectedResult78 | SelectedResult79 | SelectedResult80 | SelectedResult81 | SelectedResult82 | SelectedResult83 | SelectedResult84 | SelectedResult85 | SelectedResult86 | SelectedResult87 | SelectedResult88 | SelectedResult89 | SelectedResult90 | SelectedResult91 | SelectedResult92 | SelectedResult93 | SelectedResult94 | SelectedResult95 | SelectedResult96 | SelectedResult97 | SelectedResult98 | SelectedResult99 | SelectedResult100 | SelectedResult101
+    end
+    class Canonical
+        class Unimplemented < StandardError
+            attr_reader behavior_id: String
+        end
+        def self.new: () -> Canonical
+        private
+        def validate_operation_arguments: (operation: CanonicalTypes::operation, arguments: CanonicalTypes::arguments, member_contract: CanonicalTypes::member_contract) -> CanonicalTypes::validated_arguments
+        def resolve_effective_options: (explicit_options: CanonicalTypes::explicit_options, environment: CanonicalTypes::environment, platform_defaults: CanonicalTypes::platform_defaults) -> CanonicalTypes::effective_options
+        def select_canonical_error: (operation: CanonicalTypes::operation, ordered_failures: CanonicalTypes::ordered_failures, cause: CanonicalTypes::cause) -> CanonicalTypes::canonical_error
+        def translate_native_binding: (?canonical_result: CanonicalTypes::canonical_result, ?canonical_error: CanonicalTypes::canonical_error, native_profile: CanonicalTypes::native_profile) -> CanonicalTypes::native_result
+        def decode_release_document: (source_bytes: CanonicalTypes::source_bytes, reader_version: CanonicalTypes::reader_version, document_kind: CanonicalTypes::document_kind) -> CanonicalTypes::parsed_document
+        def validate_release_links: (parsed_document: CanonicalTypes::parsed_document, required_links: CanonicalTypes::required_links) -> CanonicalTypes::validated_release_graph
+        def materialize_typed_model: (raw_fields: CanonicalTypes::raw_fields, field_contract: CanonicalTypes::field_contract, origin: CanonicalTypes::origin, model_type: CanonicalTypes::model_type) -> CanonicalTypes::typed_model
+        def access_raw_record: (access_kind: CanonicalTypes::access_kind, source_record: CanonicalTypes::source_record, station: CanonicalTypes::station, release_origin: CanonicalTypes::release_origin, native_profile: CanonicalTypes::native_profile) -> CanonicalTypes::raw_record_or_valid_station
+        def open_client_release: (arguments: CanonicalTypes::arguments, environment: CanonicalTypes::environment, platform_defaults: CanonicalTypes::platform_defaults, cache_state: CanonicalTypes::cache_state, clock: CanonicalTypes::clock, native_profile: CanonicalTypes::native_profile, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::client_and_release
+        def resolve_release_request: (release_request: CanonicalTypes::release_request, effective_options: CanonicalTypes::effective_options, cache_state: CanonicalTypes::cache_state, clock: CanonicalTypes::clock, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::loaded_release
+        def exchange_release_metadata: (metadata_request: CanonicalTypes::metadata_request, trusted_cache: CanonicalTypes::trusted_cache, transport_options: CanonicalTypes::transport_options, cache_state: CanonicalTypes::cache_state, clock: CanonicalTypes::clock, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::validated_metadata
+        def update_client_release: (client_state: CanonicalTypes::client_state, update_request: CanonicalTypes::update_request, clock: CanonicalTypes::clock, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::updated_client_state
+        def refresh_client_if_due: (client_state: CanonicalTypes::client_state, query_kind: CanonicalTypes::query_kind, clock: CanonicalTypes::clock, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::query_client_state
+        def forward_held_release: (held_release: CanonicalTypes::held_release, query_arguments: CanonicalTypes::query_arguments) -> CanonicalTypes::held_release_result
+        def enforce_resource_lifetime: (resource_state: CanonicalTypes::resource_state, lifetime_action: CanonicalTypes::lifetime_action) -> CanonicalTypes::resource_state_or_error
+        def bind_checksum_manifest: (checksum_bytes: CanonicalTypes::checksum_bytes, pointer_digests: CanonicalTypes::pointer_digests, required_files: CanonicalTypes::required_files) -> CanonicalTypes::bound_checksums
+        def acquire_release_files: (acquisition_descriptor: CanonicalTypes::acquisition_descriptor, effective_options: CanonicalTypes::effective_options, load_mode: CanonicalTypes::load_mode, cache_state: CanonicalTypes::cache_state, clock: CanonicalTypes::clock, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::loaded_release
+        def merge_cache_receipt: (locked_cache_state: CanonicalTypes::locked_cache_state, verified_file_rows: CanonicalTypes::verified_file_rows, release_metadata: CanonicalTypes::release_metadata) -> CanonicalTypes::merged_receipt
+        def select_cached_release: (release_candidates: CanonicalTypes::release_candidates, effective_options: CanonicalTypes::effective_options, cache_state: CanonicalTypes::cache_state, clock: CanonicalTypes::clock) -> CanonicalTypes::usable_cached_release_or_error
+        def verify_release_files: (release_files: CanonicalTypes::release_files, trusted_cached_pointer: CanonicalTypes::trusted_cached_pointer) -> CanonicalTypes::verification_result
+        def publish_download: (destination: CanonicalTypes::destination, format_selection: CanonicalTypes::format_selection, overwrite_policy: CanonicalTypes::overwrite_policy, release_files: CanonicalTypes::release_files, checksum_bytes: CanonicalTypes::checksum_bytes, pointer_digests: CanonicalTypes::pointer_digests) -> CanonicalTypes::download_result
+        def manage_cache_inventory: (inventory_action: CanonicalTypes::inventory_action, cache_state: CanonicalTypes::cache_state, keep: CanonicalTypes::keep, current_cache_directory: CanonicalTypes::current_cache_directory, clock: CanonicalTypes::clock) -> CanonicalTypes::cache_inventory_result
+        def perform_guarded_io: (io_kind: CanonicalTypes::io_kind, io_request: CanonicalTypes::io_request, io_options: CanonicalTypes::io_options, clock: CanonicalTypes::clock) -> CanonicalTypes::io_result
+        def project_station_index: (station_source_row: CanonicalTypes::station_source_row, source_byte_span: CanonicalTypes::source_byte_span, projection_contract: CanonicalTypes::projection_contract) -> CanonicalTypes::station_index_entry
+        def authenticate_station_index: (source_files: CanonicalTypes::source_files, supplied_index: CanonicalTypes::supplied_index, index_presence: CanonicalTypes::index_presence, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::authenticated_index
+        def compare_station_source: (index_entry: CanonicalTypes::index_entry, station_source_row: CanonicalTypes::station_source_row, index_presence: CanonicalTypes::index_presence) -> CanonicalTypes::compared_station_row
+        def read_station_lazily: (stream_reader: CanonicalTypes::stream_reader, station_id: CanonicalTypes::station_id, release_origin: CanonicalTypes::release_origin, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::station_source_row
+        def lookup_station_identity: (release_view: CanonicalTypes::release_view, identity_query: CanonicalTypes::identity_query, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::station_or_tombstone_or_null
+        def select_effective_recommendation: (station_sets: CanonicalTypes::station_sets, original_recommendation: CanonicalTypes::original_recommendation, commercial_only: CanonicalTypes::commercial_only) -> CanonicalTypes::effective_recommendation
+        def admit_quality_path: (candidate_path: CanonicalTypes::candidate_path, include_flagged: CanonicalTypes::include_flagged, include_fallback: CanonicalTypes::include_fallback) -> CanonicalTypes::quality_admission
+        def admit_commercial_path: (candidate_path: CanonicalTypes::candidate_path, commercial_only: CanonicalTypes::commercial_only, commercial_basis: CanonicalTypes::commercial_basis) -> CanonicalTypes::commercial_admission
+        def resolve_reference_path: (station_source_row: CanonicalTypes::station_source_row, path_request: CanonicalTypes::path_request, release_view: CanonicalTypes::release_view) -> CanonicalTypes::selected_reference_path
+        def execute_discovery_query: (release_view: CanonicalTypes::release_view, query_kind: CanonicalTypes::query_kind, query_options: CanonicalTypes::query_options, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::ordered_station_results
+        def summarize_station_sets: (summary_kind: CanonicalTypes::summary_kind, release_view: CanonicalTypes::release_view, station_sets: CanonicalTypes::station_sets, summary_options: CanonicalTypes::summary_options) -> CanonicalTypes::station_summary
+        def admit_historical_offset: (own_offset: CanonicalTypes::own_offset, reference_path: CanonicalTypes::reference_path, historical_policy: CanonicalTypes::historical_policy, selection_kind: CanonicalTypes::selection_kind, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::historical_admission
+        def format_attribution: (station: CanonicalTypes::station, release_view: CanonicalTypes::release_view, commercial_only: CanonicalTypes::commercial_only) -> CanonicalTypes::attribution_text
+        def format_citation: (published_metadata: CanonicalTypes::published_metadata, citation_style: CanonicalTypes::citation_style) -> CanonicalTypes::citation_text
+        def parse_prediction_window: (time_inputs: CanonicalTypes::time_inputs, window_inputs: CanonicalTypes::window_inputs, step: CanonicalTypes::step, local_time_profile: CanonicalTypes::local_time_profile) -> CanonicalTypes::prediction_window
+        def select_prediction_model: (station_request: CanonicalTypes::station_request, release_view: CanonicalTypes::release_view, selection_options: CanonicalTypes::selection_options, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::selected_prediction_model
+        def evaluate_astronomy: (selected_prediction_model: CanonicalTypes::selected_prediction_model, utc_instant: CanonicalTypes::utc_instant) -> CanonicalTypes::astronomical_terms
+        def evaluate_harmonic_height: (selected_prediction_model: CanonicalTypes::selected_prediction_model, prediction_instants: CanonicalTypes::prediction_instants, requested_datum: CanonicalTypes::requested_datum) -> CanonicalTypes::height_values
+        def find_tide_events: (selected_prediction_model: CanonicalTypes::selected_prediction_model, prediction_window: CanonicalTypes::prediction_window) -> CanonicalTypes::tide_events
+        def evaluate_direct_current: (selected_prediction_model: CanonicalTypes::selected_prediction_model, prediction_window: CanonicalTypes::prediction_window, current_request: CanonicalTypes::current_request, current_operation: CanonicalTypes::current_operation) -> CanonicalTypes::direct_current_result
+        def evaluate_tide_offset: (own_offset: CanonicalTypes::own_offset, reference_path: CanonicalTypes::reference_path, prediction_window: CanonicalTypes::prediction_window, tide_request: CanonicalTypes::tide_request, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::offset_tide_result
+        def fold_equal_tide_offset: (own_offset: CanonicalTypes::own_offset, reference_model: CanonicalTypes::reference_model, prediction_instants: CanonicalTypes::prediction_instants, requested_datum: CanonicalTypes::requested_datum) -> CanonicalTypes::folded_height_values
+        def evaluate_current_offset: (own_current_offsets: CanonicalTypes::own_current_offsets, reference_path: CanonicalTypes::reference_path, prediction_window: CanonicalTypes::prediction_window, current_request: CanonicalTypes::current_request, reader_version: CanonicalTypes::reader_version) -> CanonicalTypes::offset_current_result
+        def dispatch_auxiliary_result: (auxiliary_kind: CanonicalTypes::auxiliary_kind, auxiliary_operation: CanonicalTypes::auxiliary_operation, source_values: CanonicalTypes::source_values, result_context: CanonicalTypes::result_context, local_time_profile: CanonicalTypes::local_time_profile, result_values: CanonicalTypes::result_values, utc_result: CanonicalTypes::utc_result, selection_options: CanonicalTypes::selection_options, reader_version: CanonicalTypes::reader_version, auxiliary_member_id: CanonicalTypes::auxiliary_member_id) -> CanonicalTypes::auxiliary_result
+        def retain_raw_source_record: (source_record: CanonicalTypes::source_record, native_profile: CanonicalTypes::native_profile) -> CanonicalTypes::raw_record
+        def check_station_origin: (station: CanonicalTypes::station, release_origin: CanonicalTypes::release_origin) -> CanonicalTypes::valid_station
+        def manage_cache_lock: (lock_request: CanonicalTypes::lock_request, lock_state: CanonicalTypes::lock_state, clock: CanonicalTypes::clock) -> CanonicalTypes::lock_outcome
+        def request_http_resource: (http_request: CanonicalTypes::http_request, transport_options: CanonicalTypes::transport_options) -> CanonicalTypes::http_response
+        def count_release_statistics: (release_view: CanonicalTypes::release_view) -> CanonicalTypes::release_statistics
+        def order_constant_sets: (station_sets: CanonicalTypes::station_sets, original_recommendation: CanonicalTypes::original_recommendation, commercial_only: CanonicalTypes::commercial_only, include_no_constants: CanonicalTypes::include_no_constants) -> CanonicalTypes::ordered_constant_sets
+        def read_auxiliary_model_value: (auxiliary_operation: CanonicalTypes::auxiliary_operation, source_values: CanonicalTypes::source_values, selection_options: CanonicalTypes::selection_options, reader_version: CanonicalTypes::reader_version, auxiliary_member_id: CanonicalTypes::auxiliary_member_id) -> CanonicalTypes::auxiliary_model_value
+        def construct_prediction_result: (result_values: CanonicalTypes::result_values, result_context: CanonicalTypes::result_context) -> CanonicalTypes::prediction_result
+        def convert_result_to_local_time: (utc_result: CanonicalTypes::utc_result, local_time_profile: CanonicalTypes::local_time_profile) -> CanonicalTypes::local_time_result
+        def find_unrounded_tide_events: (selected_prediction_model: CanonicalTypes::selected_prediction_model, prediction_window: CanonicalTypes::prediction_window) -> CanonicalTypes::unrounded_tide_events
+        def find_unrounded_current_events: (selected_prediction_model: CanonicalTypes::selected_prediction_model, prediction_window: CanonicalTypes::prediction_window, current_request: CanonicalTypes::current_request) -> CanonicalTypes::unrounded_current_events
+        def acquire_checksum_sidecar: (acquisition_descriptor: CanonicalTypes::acquisition_descriptor, effective_options: CanonicalTypes::effective_options) -> CanonicalTypes::checksum_bytes
+    end
+    class Cache
+        def self.encode_cache_json: (CanonicalTypes::cache_document) -> String
+    end
+end
