@@ -111,7 +111,12 @@ class CoreIndexNativeTest < Minitest::Test
         bad = Marshal.load(Marshal.dump(raw))
         bad["subordinate_offsets"]["vintage"]["current_accuracy"] = "fabricated"
         refute_equal OpenTideConstants::Reader.line_view(entry), OpenTideConstants::Reader.line_view(OpenTideConstants::Reader.index_entry(bad, 0, 1))
-        refute OpenTideConstants::Reader.index_entry_ok?(entry.reject { |k, _| k == "subordinate_offsets" })
+        legacy = entry.reject { |k, _| k == "subordinate_offsets" }
+        profile = OpenTideConstants::Reader.index_profile([legacy])
+        assert profile.fetch("base_offsets")
+        assert OpenTideConstants::Reader.index_entry_ok?(legacy, profile: profile)
+        assert_nil OpenTideConstants::Reader.index_profile([entry, legacy])
+        refute OpenTideConstants::Reader.index_entry_ok?(entry.merge("subordinate_offsets" => false))
     end
     def test_malformed_own_fields_and_lifetime
         raw = historical
