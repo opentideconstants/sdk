@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -10,6 +12,7 @@ import { loadCached, verifyCached } from '../dist/core.js';
 import { headerFromMeta, indexJsonl } from '../dist/loader.js';
 import * as nodeRuntime from '../dist/node.js';
 import { storedIndex, usableIndex } from '../dist/release.js';
+import { encodeCacheJson } from '../dist/cache-json.js';
 
 const cache = process.env.OTC_CACHED_STREAM_CACHE;
 const historical = process.env.OTC_CACHED_HISTORY_DIR ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/proofs/T1/historical-targets';
@@ -87,6 +90,184 @@ function retainIndexSpecimen(f, name) {
         fs.copyFileSync(path.join(f.dir, file), path.join(dir, file));
     }
 }
+
+async function acquisition(body, { missing = null, sourceName = 'good', date = '20991231.2' } = {}) {
+    const source = new URL(`../../conformance/fixtures/${sourceName}/`, import.meta.url).pathname;
+    const stem = `OTC_${date}`;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'otc-native-receipt-'));
+    const dir = path.join(root, 'v1', 'releases', date);
+    const originals = Object.fromEntries(['json', 'json.gz', 'jsonl', 'meta.json', 'sha256'].map(suffix => {
+        const name = `${stem}.${suffix}`;
+        return [name, fs.readFileSync(path.join(source, name))];
+    }));
+    if (missing) originals[`${stem}.sha256`] = Buffer.from(originals[`${stem}.sha256`].toString().split('\n').filter(line => !line.endsWith(`  ${stem}.${missing}`)).join('\n'));
+    const requests = [], publications = [], lockReads = [];
+    const server = createServer((request, response) => {
+        requests.push(request.url);
+        const bytes = originals[request.url.slice(1)];
+        response.writeHead(bytes ? 200 : 404);
+        response.end(bytes ?? 'not found');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}/`;
+    const rename = fs.renameSync, read = fs.readFileSync;
+    fs.renameSync = (from, to) => { rename(from, to); publications.push(String(to)); };
+    fs.readFileSync = (file, ...args) => {
+        if (String(file) === path.join(dir, '.verified')) lockReads.push(fs.existsSync(path.join(dir, '.lock', 'owner.json')));
+        return read(file, ...args);
+    };
+    syncBuiltinESMExports();
+    try {
+        return await body({ root, dir, date, stem, originals, requests, publications, lockReads,
+            open: mode => sdk.OpenTideConstants.open({ release: date, cacheDir: root, baseUrl, mode, onNetworkError: 'raise' }) });
+    } finally {
+        fs.renameSync = rename; fs.readFileSync = read; syncBuiltinESMExports();
+        await new Promise(resolve => server.close(resolve));
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+}
+
+function receiptWitness(f, label) {
+    const bytes = fs.readFileSync(path.join(f.dir, '.verified'));
+    const receipt = JSON.parse(bytes);
+    const sourceHashes = {};
+    for (const name of [...Object.keys(receipt.files), `${f.stem}.sha256`]) {
+        const cached = fs.readFileSync(path.join(f.dir, name));
+        sourceHashes[name] = hash(cached);
+        assert.deepEqual(cached, f.originals[name], name);
+    }
+    console.log(JSON.stringify({ surface: 'native public acquisition', label, receipt_hex: bytes.toString('hex'), sourceHashes,
+        requests: f.requests, publications: f.publications.map(file => path.relative(f.dir, file)), lockedReceiptReads: f.lockReads }));
+    if (process.env.OTC_RECEIPT_PROOF) {
+        const destination = path.join(process.env.OTC_RECEIPT_PROOF, label);
+        fs.mkdirSync(destination, { recursive: true });
+        for (const name of ['.verified', ...Object.keys(sourceHashes)]) fs.copyFileSync(path.join(f.dir, name), path.join(destination, name));
+    }
+    assert.deepEqual(Object.keys(receipt).sort(), ['by', 'datestamp', 'files', 'format_version', 'min_reader_version', 'verified_at', 'zenodo_version_doi']);
+    assert.deepEqual(bytes, Buffer.from(encodeCacheJson(receipt)));
+    assert.ok(!(`${f.stem}.sha256` in receipt.files));
+    for (const [name, row] of Object.entries(receipt.files)) {
+        assert.deepEqual(Object.keys(row).sort(), ['sha256', 'size', 'url']);
+        assert.equal(row.sha256, sourceHashes[name]);
+        assert.equal(row.size, f.originals[name].length);
+        assert.ok(row.url === null || typeof row.url === 'string');
+    }
+    const dataPublications = f.publications.filter(file => path.dirname(file) === f.dir);
+    assert.equal(path.basename(dataPublications.at(-1)), '.verified', 'receipt publishes after checked data and sidecar');
+    assert.ok(f.lockReads.includes(true), 'receipt reread actually reached the acquired native lock');
+    return receipt;
+}
+
+test('RECEIPT-TS native two-mode exact receipt and public warm reload retain source', async () => {
+    await acquisition(async f => {
+        const eager = await f.open('eager'); eager.close();
+        const first = receiptWitness(f, 'eager');
+        assert.deepEqual(Object.keys(first.files), [`${f.stem}.json`]);
+        first.zenodo_version_doi = '10.5281/zenodo.known';
+        first.files[`${f.stem}.json`].url = null;
+        fs.writeFileSync(path.join(f.dir, '.verified'), encodeCacheJson(first));
+        const stream = await f.open('stream');
+        try {
+            const rows = f.originals[`${f.stem}.jsonl`].toString().trimEnd().split('\n').map(line => JSON.parse(line));
+            for (const row of rows.filter(row => row.status !== 'removed')) assert.deepEqual(stream.requireStation(row.station_id).raw, row);
+        } finally { stream.close(); }
+        // The stream index is a later dependency publication, outside the acquisition's receipt ordering.
+        f.publications.splice(f.publications.findLastIndex(file => file.endsWith('/.verified')) + 1);
+        const merged = receiptWitness(f, 'eager-to-stream');
+        assert.equal(merged.zenodo_version_doi, first.zenodo_version_doi);
+        assert.equal(merged.files[`${f.stem}.json`].url, null);
+        assert.equal(Object.keys(merged.files).length, 3);
+        const bytes = fs.readFileSync(path.join(f.dir, '.verified'));
+        const warm = await f.open('eager');
+        try { assert.equal(warm.loadedFrom, 'cache'); assert.equal(await warm.verify(), true); }
+        finally { warm.close(); }
+        assert.deepEqual(fs.readFileSync(path.join(f.dir, '.verified')), bytes);
+    });
+    await acquisition(async f => {
+        const stream = await f.open('stream'); stream.close();
+        f.publications.splice(f.publications.findLastIndex(file => file.endsWith('/.verified')) + 1);
+        receiptWitness(f, 'stream');
+        const requestCount = f.requests.length;
+        const eager = await f.open('eager');
+        try { assert.equal(eager.loadedFrom, 'cache'); assert.equal(await eager.verify(), true); }
+        finally { eager.close(); }
+        assert.equal(f.requests.length, requestCount, 'stream-to-eager reuses verified stream files');
+    });
+});
+
+test('RECEIPT-TS native readable higher minor source format is retained in receipt', async () => {
+    for (const mode of ['eager', 'stream']) {
+        await acquisition(async f => {
+            const client = await f.open(mode);
+            try { assert.equal(client.release.format_version, '1.1'); }
+            finally { client.close(); }
+            f.publications.splice(f.publications.findLastIndex(file => file.endsWith('/.verified')) + 1);
+            const receipt = receiptWitness(f, `higher-minor-${mode}`);
+            assert.equal(receipt.format_version, '1.1');
+            assert.equal(receipt.min_reader_version, '1.0');
+        }, { sourceName: 'bad/format-minor', date: '20991231' });
+    }
+});
+
+for (const state of ['malformed', 'absent']) {
+    test(`RECEIPT-TS native ${state} locked reread discards untrusted old rows and DOI`, async () => {
+        await acquisition(async f => {
+            const eager = await f.open('eager'); eager.close();
+            const before = JSON.parse(fs.readFileSync(path.join(f.dir, '.verified')));
+            before.zenodo_version_doi = '10.5281/zenodo.old';
+            fs.writeFileSync(path.join(f.dir, '.verified'), encodeCacheJson(before));
+            const mkdir = fsp.mkdir;
+            let replaced = false;
+            fsp.mkdir = async (...args) => {
+                const result = await mkdir(...args);
+                if (String(args[0]) === path.join(f.dir, '.lock')) {
+                    if (state === 'malformed') fs.writeFileSync(path.join(f.dir, '.verified'), '{broken');
+                    else fs.rmSync(path.join(f.dir, '.verified'));
+                    replaced = true;
+                }
+                return result;
+            };
+            syncBuiltinESMExports();
+            try { const stream = await f.open('stream'); stream.close(); }
+            finally { fsp.mkdir = mkdir; syncBuiltinESMExports(); }
+            assert.equal(replaced, true, 'fault injected only after real release lock mkdir succeeds');
+            f.publications.splice(f.publications.findLastIndex(file => file.endsWith('/.verified')) + 1);
+            const receipt = receiptWitness(f, `locked-${state}`);
+            assert.equal(receipt.zenodo_version_doi, null);
+            assert.deepEqual(Object.keys(receipt.files).sort(), [`${f.stem}.jsonl`, `${f.stem}.meta.json`]);
+        });
+    });
+}
+
+for (const missing of ['jsonl', 'meta.json']) {
+    test(`RECEIPT-TS native missing ${missing} checksum row refuses before data acquisition`, async () => {
+        await acquisition(async f => {
+            await assert.rejects(f.open('stream'), error => error.code === 'checksum_mismatch' && error.file === `${f.stem}.${missing}`);
+            console.log(JSON.stringify({ surface: 'public stream missing checksum row', missing, requests: f.requests, publications: f.publications }));
+            assert.deepEqual(f.requests, [`/${f.stem}.sha256`], 'all required rows bind before any data request');
+            assert.equal(fs.existsSync(path.join(f.dir, '.verified')), false);
+        }, { missing });
+    });
+}
+
+test('RECEIPT-TS native stale index is deleted before actual rebuild publication', () => {
+    const good = new URL('../../conformance/fixtures/good/', import.meta.url);
+    const f = fixture(fs.readFileSync(new URL('OTC_20991231.2.jsonl', good)), '20991231.2', good.pathname);
+    try {
+        const indexPath = path.join(f.dir, 'index-v1.json');
+        fs.writeFileSync(indexPath, '{broken');
+        const events = [], native = diskDir(f);
+        const rel = loadCached(diskDir(f, {
+            removeIndex: () => { events.push('remove'); native.removeIndex(); },
+            writeIndex: bytes => { events.push({ action: 'write', staleIndexStillPresent: fs.existsSync(indexPath) }); native.writeIndex(bytes); },
+        }), f.verified, f.date, 'stream');
+        rel._close();
+        console.log(JSON.stringify({ surface: 'core stale index rebuild', events, contract: 'delete stale index before rebuild' }));
+        assert.deepEqual(events, ['remove', { action: 'write', staleIndexStillPresent: false }]);
+        assert.deepEqual(fs.readFileSync(path.join(f.dir, `OTC_${f.date}.jsonl`)), f.jsonl);
+        assert.deepEqual(fs.readFileSync(path.join(f.dir, `OTC_${f.date}.meta.json`)), f.meta);
+    } finally { f.cleanup(); }
+});
 
 test('INDEX-TS actual current writer projects four offset keys', async () => {
     const predict = new URL('../../conformance/fixtures/predict/', import.meta.url);

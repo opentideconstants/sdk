@@ -547,6 +547,11 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         }
         const n = names(d);
         const { bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry);
+        const needed = ctx.mode === "stream" ? [n.jsonl, n.meta]
+            : rows.has(n.gz) ? [n.gz, n.json] : rows.has(n.json) ? [n.json] : [n.jsonl, n.meta];
+        for (const name of needed) {
+            if (!rows.has(name)) throw new ChecksumError(`${name} is not listed in ${n.sha}`, { file: name, expected: null, actual: null });
+        }
         const writes: [string, Uint8Array][] = [];
         if (ctx.mode === "stream") {
             for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
@@ -722,6 +727,7 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
             warn(`cannot delete index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
+    if (ib && !index) dropIndex();
     const lr = dir.lineReader(n.jsonl);
     try {
         let jsonl: Uint8Array | null = null;
