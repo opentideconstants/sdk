@@ -1,0 +1,1229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:otc:canonical:native-shape:1",
+  "$ref": "#/$defs/report",
+  "$defs": {
+    "source": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_hashes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "source_hashes"
+      ],
+      "additionalProperties": false
+    },
+    "channel": {
+      "type": "object",
+      "properties": {
+        "presence": {
+          "enum": [
+            "absent",
+            "present_value",
+            "successful_no_value",
+            "present_error"
+          ]
+        },
+        "value": {},
+        "member_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qualified_branch": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "presence",
+        "member_id"
+      ],
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "native_profile": {
+          "enum": [
+            "python",
+            "ruby",
+            "typescript_node",
+            "typescript_browser",
+            "c",
+            "swift"
+          ]
+        },
+        "classification": {
+          "enum": [
+            "reused_callable",
+            "private_unimplemented_refusal",
+            "approved_profile_unsupported",
+            "construction_failure"
+          ]
+        },
+        "fixture": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "build": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "source_hashes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "path",
+            "sha256",
+            "source_hashes"
+          ],
+          "additionalProperties": false
+        },
+        "declared_signature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "canonical_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "concept_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "native_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expression": {
+                "type": "string",
+                "minLength": 1
+              },
+              "observed_value": {},
+              "ownership": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "canonical_name",
+              "concept_ref",
+              "native_type",
+              "expression",
+              "observed_value",
+              "ownership"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "expected_result_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry_observed": {
+          "const": true
+        },
+        "native_entry": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cleanup": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cleanup_observed": {
+          "const": true
+        },
+        "canonical_result": {
+          "type": "object",
+          "properties": {
+            "presence": {
+              "enum": [
+                "absent",
+                "present_value",
+                "successful_no_value",
+                "present_error"
+              ]
+            },
+            "value": {},
+            "member_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "qualified_branch": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "presence",
+            "member_id"
+          ],
+          "additionalProperties": false
+        },
+        "canonical_error": {
+          "type": "object",
+          "properties": {
+            "presence": {
+              "enum": [
+                "absent",
+                "present_value",
+                "successful_no_value",
+                "present_error"
+              ]
+            },
+            "value": {},
+            "member_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "qualified_branch": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "presence",
+            "member_id"
+          ],
+          "additionalProperties": false
+        },
+        "behavior_accepted": {
+          "const": false
+        },
+        "runtime_environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "imported_module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invocation_evidence": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "native_refusal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capability_selection": {
+          "type": "object",
+          "properties": {
+            "member_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "type": "string",
+              "minLength": 1
+            },
+            "error_code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_text": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "member_id",
+            "selector",
+            "error_code",
+            "contract_text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "native_profile",
+        "classification",
+        "fixture",
+        "variant_id",
+        "source",
+        "build",
+        "declared_signature",
+        "arguments",
+        "expected_result_type",
+        "entry_observed",
+        "native_entry",
+        "observation",
+        "cleanup",
+        "cleanup_observed",
+        "canonical_result",
+        "canonical_error",
+        "behavior_accepted",
+        "runtime_environment",
+        "invocation_evidence",
+        "owner"
+      ],
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "protocol_version": {
+          "const": 1
+        },
+        "native_profile": {
+          "enum": [
+            "python",
+            "ruby",
+            "typescript_node",
+            "typescript_browser",
+            "c",
+            "swift"
+          ]
+        },
+        "status": {
+          "enum": [
+            "STRUCTURAL_CONTROL_VALID",
+            "NATIVE_SHAPE_VALID",
+            "REJECTED",
+            "INCOMPLETE"
+          ]
+        },
+        "protocol_valid": {
+          "type": "boolean"
+        },
+        "shape_accepted": {
+          "type": "boolean"
+        },
+        "behavior_accepted": {
+          "const": false
+        },
+        "construction_incomplete": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "integer"
+            },
+            "call_actions": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "runtime",
+            "call_actions"
+          ],
+          "additionalProperties": false
+        },
+        "input_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      },
+      "required": [
+        "protocol_version",
+        "native_profile",
+        "status",
+        "protocol_valid",
+        "shape_accepted",
+        "behavior_accepted",
+        "construction_incomplete",
+        "errors",
+        "counts",
+        "input_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "observations": {
+      "type": "object",
+      "properties": {
+        "protocol_version": {
+          "const": 1
+        },
+        "kind": {
+          "enum": [
+            "actual_native_invocation",
+            "structural_control"
+          ]
+        },
+        "native_profile": {
+          "enum": [
+            "python",
+            "ruby",
+            "typescript_node",
+            "typescript_browser",
+            "c",
+            "swift"
+          ]
+        },
+        "foundation_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "native_projection_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "build_gate": {
+          "type": "object",
+          "properties": {
+            "passed": {
+              "const": true
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toolchain": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "passed",
+            "command",
+            "toolchain",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "native_profile": {
+                "enum": [
+                  "python",
+                  "ruby",
+                  "typescript_node",
+                  "typescript_browser",
+                  "c",
+                  "swift"
+                ]
+              },
+              "classification": {
+                "enum": [
+                  "reused_callable",
+                  "private_unimplemented_refusal",
+                  "approved_profile_unsupported",
+                  "construction_failure"
+                ]
+              },
+              "fixture": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "variant_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "source_hashes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "sha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "source_hashes"
+                ],
+                "additionalProperties": false
+              },
+              "declared_signature": {
+                "type": "string",
+                "minLength": 1
+              },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "canonical_name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "concept_ref": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "native_type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "expression": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "observed_value": {},
+                    "ownership": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "canonical_name",
+                    "concept_ref",
+                    "native_type",
+                    "expression",
+                    "observed_value",
+                    "ownership"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "expected_result_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "entry_observed": {
+                "const": true
+              },
+              "native_entry": {
+                "type": "string",
+                "minLength": 1
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cleanup": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cleanup_observed": {
+                "const": true
+              },
+              "canonical_result": {
+                "type": "object",
+                "properties": {
+                  "presence": {
+                    "enum": [
+                      "absent",
+                      "present_value",
+                      "successful_no_value",
+                      "present_error"
+                    ]
+                  },
+                  "value": {},
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qualified_branch": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "presence",
+                  "member_id"
+                ],
+                "additionalProperties": false
+              },
+              "canonical_error": {
+                "type": "object",
+                "properties": {
+                  "presence": {
+                    "enum": [
+                      "absent",
+                      "present_value",
+                      "successful_no_value",
+                      "present_error"
+                    ]
+                  },
+                  "value": {},
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qualified_branch": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "presence",
+                  "member_id"
+                ],
+                "additionalProperties": false
+              },
+              "behavior_accepted": {
+                "const": false
+              },
+              "runtime_environment": {
+                "type": "string",
+                "minLength": 1
+              },
+              "imported_module": {
+                "type": "string",
+                "minLength": 1
+              },
+              "invocation_evidence": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              },
+              "native_refusal": {
+                "type": "string",
+                "minLength": 1
+              },
+              "capability_selection": {
+                "type": "object",
+                "properties": {
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "error_code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "contract_text": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "member_id",
+                  "selector",
+                  "error_code",
+                  "contract_text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "native_profile",
+              "classification",
+              "fixture",
+              "variant_id",
+              "source",
+              "build",
+              "declared_signature",
+              "arguments",
+              "expected_result_type",
+              "entry_observed",
+              "native_entry",
+              "observation",
+              "cleanup",
+              "cleanup_observed",
+              "canonical_result",
+              "canonical_error",
+              "behavior_accepted",
+              "runtime_environment",
+              "invocation_evidence",
+              "owner"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "call_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "native_profile": {
+                "enum": [
+                  "python",
+                  "ruby",
+                  "typescript_node",
+                  "typescript_browser",
+                  "c",
+                  "swift"
+                ]
+              },
+              "classification": {
+                "enum": [
+                  "reused_callable",
+                  "private_unimplemented_refusal",
+                  "approved_profile_unsupported",
+                  "construction_failure"
+                ]
+              },
+              "fixture": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "variant_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "source_hashes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "sha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256",
+                  "source_hashes"
+                ],
+                "additionalProperties": false
+              },
+              "declared_signature": {
+                "type": "string",
+                "minLength": 1
+              },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "canonical_name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "concept_ref": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "native_type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "expression": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "observed_value": {},
+                    "ownership": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "canonical_name",
+                    "concept_ref",
+                    "native_type",
+                    "expression",
+                    "observed_value",
+                    "ownership"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "expected_result_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "entry_observed": {
+                "const": true
+              },
+              "native_entry": {
+                "type": "string",
+                "minLength": 1
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cleanup": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cleanup_observed": {
+                "const": true
+              },
+              "canonical_result": {
+                "type": "object",
+                "properties": {
+                  "presence": {
+                    "enum": [
+                      "absent",
+                      "present_value",
+                      "successful_no_value",
+                      "present_error"
+                    ]
+                  },
+                  "value": {},
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qualified_branch": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "presence",
+                  "member_id"
+                ],
+                "additionalProperties": false
+              },
+              "canonical_error": {
+                "type": "object",
+                "properties": {
+                  "presence": {
+                    "enum": [
+                      "absent",
+                      "present_value",
+                      "successful_no_value",
+                      "present_error"
+                    ]
+                  },
+                  "value": {},
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qualified_branch": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "presence",
+                  "member_id"
+                ],
+                "additionalProperties": false
+              },
+              "behavior_accepted": {
+                "const": false
+              },
+              "runtime_environment": {
+                "type": "string",
+                "minLength": 1
+              },
+              "imported_module": {
+                "type": "string",
+                "minLength": 1
+              },
+              "invocation_evidence": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              },
+              "native_refusal": {
+                "type": "string",
+                "minLength": 1
+              },
+              "capability_selection": {
+                "type": "object",
+                "properties": {
+                  "member_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "error_code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "contract_text": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "member_id",
+                  "selector",
+                  "error_code",
+                  "contract_text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "native_profile",
+              "classification",
+              "fixture",
+              "variant_id",
+              "source",
+              "build",
+              "declared_signature",
+              "arguments",
+              "expected_result_type",
+              "entry_observed",
+              "native_entry",
+              "observation",
+              "cleanup",
+              "cleanup_observed",
+              "canonical_result",
+              "canonical_error",
+              "behavior_accepted",
+              "runtime_environment",
+              "invocation_evidence",
+              "owner"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "protocol_version",
+        "kind",
+        "native_profile",
+        "foundation_sha256",
+        "native_projection_sha256",
+        "runtime",
+        "call_actions"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
