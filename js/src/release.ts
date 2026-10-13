@@ -69,6 +69,7 @@ const CURRENT_ADJUSTMENTS = ["time_adj_max_flood_min", "time_adj_max_ebb_min", "
 export interface IndexPresence {
     own: "full" | "sparse" | "base";
     offsets: "full" | "projected" | "sparse";
+    offsetFields: readonly (readonly string[])[];
     privateSets: boolean;
     bins: boolean;
     baseFallback: boolean;
@@ -396,7 +397,7 @@ export function indexDoc(doc: unknown, header: ReleaseHeader, offset: number, le
 
 /**
  * @internal The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
- * status, the references and the sets. The other keys are used as the index gives them (spec 6.2).
+ * represented station fields, the references and the sets (spec 6.2).
  */
 export function lineView(s: StoredEntry, legacyOffsets = false, presence?: IndexPresence, doc?: JsonObject): string {
     const sets = Array.isArray(s.sets) ? s.sets : [];
@@ -407,17 +408,20 @@ export function lineView(s: StoredEntry, legacyOffsets = false, presence?: Index
             return [...SET_KEYS.map(k => cs[k]), cs.constituents,
                 ...(presence.baseFallback ? [] : [presence.fallback[i] ? cs.fallback : cs.fallback === null ? null : "missing-fallback-mismatch"]),
                 ...(presence.bins ? [cs.current_bins] : []),
-                ...(presence.privateSets ? PRIVATE_SET_KEYS.map(k => canonicalJson(raw?.[k] ?? null)) : [])];
+                ...(presence.privateSets ? PRIVATE_SET_KEYS.map(k => canonicalJson(raw?.[k] ?? null) ?? "null") : [])];
         });
         const offsetKeys = presence.offsets === "projected" ? CURRENT_BASE_KEYS : [...CURRENT_BASE_KEYS, ...CURRENT_ADJUSTMENTS];
-        const offsets = s.current_offsets.map(row => offsetKeys.map(k => row[k]));
-        return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
+        const offsets = s.current_offsets.map((row, i) => (presence.offsetFields[i] ?? offsetKeys).map(k =>
+            offsetKeys.some(known => known === k) ? row[k] ?? null : [Object.hasOwn(row, k), row[k] ?? null]));
+        return canonicalJson([s.station_id, s.status, s.name, s.name_folded, s.country, s.type, s.lat, s.lon, s.aliases,
+            s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
             projectedSets, ...(presence.own === "base" ? [] : [presence.own === "sparse" && s.subordinate_offsets !== null
-                ? "missing-own-offset-mismatch" : s.subordinate_offsets]), offsets]);
+                ? "missing-own-offset-mismatch" : s.subordinate_offsets]), offsets]) ?? "null";
     }
-    return JSON.stringify([s.station_id, s.status, s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
+    return canonicalJson([s.station_id, s.status, s.name, s.name_folded, s.country, s.type, s.lat, s.lon, s.aliases,
+        s.recommended_set_id, s.reference_station_id, s.offsets_licence_id,
         sets.map((cs) => [...SET_KEYS.map((k) => cs[k]), cs.constituents, cs.fallback, cs.current_bins]),
-        ...(legacyOffsets ? [] : [s.subordinate_offsets]), s.current_offsets]);
+        ...(legacyOffsets ? [] : [s.subordinate_offsets]), s.current_offsets]) ?? "null";
 }
 
 /** @internal The in-memory entry of a stored index entry (spec 6.2). */
@@ -447,7 +451,9 @@ export function entryFromStored(s: StoredEntry): IndexEntry {
 export function storedIndex(entries: IndexEntry[], datestamp: string, jsonlSha256: string, jsonlSize: number, by: string): JsonObject {
     return {
         discovery_index_version: 1, index_version: 1, datestamp, jsonl: `OTC_${datestamp}.jsonl`, jsonl_sha256: jsonlSha256, jsonl_size: jsonlSize, by,
-        stations: entries.map((e) => ({ ...e.stored, kind: e.kind })) as unknown as Json[],
+        stations: entries.map((e) => ({ ...e.stored, kind: e.kind,
+            current_offsets: e.stored.current_offsets.map(row => Object.fromEntries(CURRENT_BASE_KEYS.map(k => [k, row[k] ?? null]))),
+        })) as unknown as Json[],
     };
 }
 
@@ -547,6 +553,7 @@ export function usableIndex(v: unknown, datestamp: string, jsonlSha256: string |
         if (legacyOffsets) indexed.legacyOffsets = true;
         indexed.indexPresence = Object.freeze({ own: legacyOffsets ? "base" : isObject(entry) && Object.hasOwn(entry, "subordinate_offsets") ? "full" : "sparse",
             offsets: isObject(entry) && Object.hasOwn(entry, "current_offsets") ? currentProfile ?? "full" : "sparse",
+            offsetFields: Object.freeze(e["current_offsets"].map(row => Object.freeze(Object.keys(row).sort()))),
             privateSets, bins, baseFallback, fallback: Object.freeze(sets.map(cs => Object.hasOwn(cs, "fallback"))) });
         out.push(indexed);
     }

@@ -135,7 +135,7 @@ export function indexJsonl(header: ReleaseHeader, bytes: Uint8Array, keep: boole
         if (end === -1) end = bytes.length;
         lineNo++;
         // the length leaves out the line end: \n, or \r\n (spec 6.2)
-        const body = end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
+        const body = end < bytes.length && end > start && bytes[end - 1] === 0x0d ? end - 1 : end;
         const line = bytes.subarray(start, body);
         if (!isBlank(line)) {
             const text = decodeUtf8(line, `line ${lineNo} of the .jsonl file`);
@@ -170,7 +170,7 @@ export function scanJsonlReader(header: ReleaseHeader | null, read: LineReader, 
     let fragments: Uint8Array[] = [];
     let pendingLength = 0;
     let error: unknown | null = null;
-    const line = (last: Uint8Array): void => {
+    const line = (last: Uint8Array, terminated: boolean): void => {
         lineNo++;
         let bytes: Uint8Array;
         if (fragments.length === 0) bytes = last;
@@ -182,7 +182,7 @@ export function scanJsonlReader(header: ReleaseHeader | null, read: LineReader, 
         }
         fragments = [];
         pendingLength = 0;
-        const length = bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
+        const length = terminated && bytes.length > 0 && bytes[bytes.length - 1] === 0x0d ? bytes.length - 1 : bytes.length;
         const body = bytes.subarray(0, length);
         if (!isBlank(body) && header) {
             const doc = parseJson(body, `line ${lineNo} of the .jsonl file`) as Json;
@@ -201,7 +201,7 @@ export function scanJsonlReader(header: ReleaseHeader | null, read: LineReader, 
             for (;;) {
                 const end = chunk.indexOf(0x0a, start);
                 if (end < 0) break;
-                line(chunk.subarray(start, end));
+                line(chunk.subarray(start, end), true);
                 start = end + 1;
                 lineStart = offset + start;
             }
@@ -218,7 +218,7 @@ export function scanJsonlReader(header: ReleaseHeader | null, read: LineReader, 
     }
     if (error === null && header !== null) {
         try {
-            if (pendingLength > 0) line(new Uint8Array());
+            if (pendingLength > 0) line(new Uint8Array(), false);
             checkLinks(entries);
             resolveKinds(entries);
         } catch (e) { error = e; }
