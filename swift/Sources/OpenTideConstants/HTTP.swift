@@ -3,6 +3,41 @@ import Security
 
 internal enum HTTP {
     struct Response { let bytes:Data;let status:Int;let etag:String? }
+    private static func redact(_ value:String)->String {
+        value.replacingOccurrences(of:#"([A-Za-z][A-Za-z0-9+.\-]*://)[^/?#\s'"<>]*@"#,with:"$1***@",options:.regularExpression)
+    }
+    private static func proxyURL(_ url:URL,option:String?)->URL? {
+        if let option { return URL(string:option) }
+        let env=ProcessInfo.processInfo.environment
+        let value=url.scheme=="https" ? env["https_proxy"] ?? env["HTTPS_PROXY"]:env["http_proxy"] ?? (env["REQUEST_METHOD"]==nil ? env["HTTP_PROXY"]:nil)
+        guard let value,!value.isEmpty else { return nil }
+        let host=(url.host ?? "").lowercased(),port=url.port ?? (url.scheme=="https" ? 443:80)
+        for raw in (env["no_proxy"] ?? env["NO_PROXY"] ?? "").split(separator:",") {
+            var token=raw.trimmingCharacters(in:.whitespaces).lowercased()
+            if token=="*" { return nil }
+            if let colon=token.lastIndex(of:":"),let excludedPort=Int(token[token.index(after:colon)...]) {
+                if excludedPort != port { continue }
+                token=String(token[..<colon])
+            }
+            if token.hasPrefix(".") { token.removeFirst() }
+            if !token.isEmpty && (host==token || host.hasSuffix("."+token)) { return nil }
+        }
+        return URL(string:value.contains("://") ? value:"http://"+value)
+    }
+    private static func retryDelay(_ header:String?,attempt:Int)->UInt64 {
+        var seconds=Double(attempt+1)
+        if let header {
+            let value=header.trimmingCharacters(in:.whitespaces)
+            if let integer=Int(value),integer>=0 { seconds=max(seconds,Double(min(integer,60))) }
+            else {
+                let formatter=DateFormatter()
+                formatter.locale=Locale(identifier:"en_US_POSIX");formatter.timeZone=TimeZone(secondsFromGMT:0)
+                formatter.dateFormat="EEE, dd MMM yyyy HH:mm:ss 'GMT'";formatter.isLenient=false
+                if let date=formatter.date(from:value),formatter.string(from:date)==value { seconds=max(seconds,min(max(0,ceil(date.timeIntervalSinceNow)),60)) }
+            }
+        }
+        return UInt64(seconds*1_000_000_000)
+    }
     final class Delegate:NSObject,URLSessionTaskDelegate,@unchecked Sendable {
         let anchors:[SecCertificate]
         private let lock=NSLock()
@@ -22,8 +57,8 @@ internal enum HTTP {
         }
         func urlSession(_ session:URLSession,task:URLSessionTask,willPerformHTTPRedirection response:HTTPURLResponse,newRequest request:URLRequest,completionHandler:@escaping(URLRequest?)->Void) {
             lock.lock();redirects+=1
-            let invalid=redirects>5 || (response.url?.scheme=="https" && request.url?.scheme != "https")
-            if invalid { failure = .network("redirect refused",["url":.string(response.url?.absoluteString ?? "")]) }
+            let invalid=redirects>5 || !["http","https"].contains(request.url?.scheme ?? "") || request.url?.host==nil || (response.url?.scheme=="https" && request.url?.scheme != "https")
+            if invalid { failure = .network("redirect refused",["url":.string(HTTP.redact(response.url?.absoluteString ?? ""))]) }
             lock.unlock()
             guard !invalid else { completionHandler(nil);return }
             var redirected=request
@@ -51,7 +86,7 @@ internal enum HTTP {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest=timeout
         configuration.timeoutIntervalForResource=timeout
-        if let proxy,let p=URL(string:proxy),let host=p.host {
+        if let p=proxyURL(url,option:proxy),let host=p.host {
             let port=p.port ?? 80
             configuration.connectionProxyDictionary=["HTTPEnable":1,"HTTPProxy":host,"HTTPPort":port,"HTTPSEnable":1,"HTTPSProxy":host,"HTTPSPort":port]
         }
@@ -62,29 +97,29 @@ internal enum HTTP {
             var request=URLRequest(url:url)
             request.timeoutInterval=timeout
             request.setValue("opentideconstants-swift/0.1.0 (+https://opentideconstants.org)"+(userAgent.map { " "+$0 } ?? ""),forHTTPHeaderField:"User-Agent")
-            request.setValue("identity",forHTTPHeaderField:"Accept-Encoding")
+            request.setValue(url.path.hasSuffix(".jsonl") || url.path.hasSuffix(".json") ? "gzip":"identity",forHTTPHeaderField:"Accept-Encoding")
             if let etag { request.setValue(etag,forHTTPHeaderField:"If-None-Match") }
             do {
                 let (bytes,response)=try await session.data(for:request)
                 if let error=delegate.redirectError() { throw error }
-                guard let response=response as? HTTPURLResponse else { throw OpenTideConstantsError.network("not HTTP response",["url":.string(url.absoluteString)]) }
-                if [408,429,500,502,503,504].contains(response.statusCode),attempt<2 { try await Task.sleep(nanoseconds:UInt64(100_000_000*(attempt+1)));continue }
-                if response.statusCode != 304,let length=response.value(forHTTPHeaderField:"Content-Length"),let expected=Int(length),response.value(forHTTPHeaderField:"Content-Encoding")==nil,expected != bytes.count { throw OpenTideConstantsError.network("short body",["url":.string(url.absoluteString)]) }
+                guard let response=response as? HTTPURLResponse else { throw OpenTideConstantsError.network("not HTTP response",["url":.string(redact(url.absoluteString))]) }
+                if [408,429,500,502,503,504].contains(response.statusCode),attempt<2 { try await Task.sleep(nanoseconds:retryDelay(response.value(forHTTPHeaderField:"Retry-After"),attempt:attempt));continue }
+                if response.statusCode != 304,let length=response.value(forHTTPHeaderField:"Content-Length"),let expected=Int(length),response.value(forHTTPHeaderField:"Content-Encoding")==nil,expected != bytes.count { throw OpenTideConstantsError.network("short body",["url":.string(redact(url.absoluteString))]) }
                 return Response(bytes:bytes,status:response.statusCode,etag:response.value(forHTTPHeaderField:"ETag"))
             } catch let error as OpenTideConstantsError { throw error }
             catch {
                 if let error=delegate.redirectError() { throw error }
-                if attempt<2 { try await Task.sleep(nanoseconds:UInt64(100_000_000*(attempt+1)));continue }
-                throw OpenTideConstantsError.network("\(error)",["url":.string(url.absoluteString)])
+                if attempt<2 { try await Task.sleep(nanoseconds:retryDelay(nil,attempt:attempt));continue }
+                throw OpenTideConstantsError.network(redact("\(error)"),["url":.string(redact(url.absoluteString))])
             }
         }
-        throw OpenTideConstantsError.network("request failed",["url":.string(url.absoluteString)])
+        throw OpenTideConstantsError.network("request failed",["url":.string(redact(url.absoluteString))])
     }
     static func get(_ url:URL,timeout:Double,userAgent:String?,proxy:String?=nil,caFile:String?=nil,listed:Bool=false)async throws->Data {
         let response=try await response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile)
         guard response.status==200 else {
-            if response.status==404 && !listed { throw OpenTideConstantsError.releaseNotFound("HTTP404",["url":.string(url.absoluteString)]) }
-            throw OpenTideConstantsError.network("HTTP\(response.status)"+(response.status==404 && listed ? ": listed file missing on the server":""),["url":.string(url.absoluteString),"status":.integer(Int64(response.status))])
+            if response.status==404 && !listed { throw OpenTideConstantsError.releaseNotFound("HTTP404",["url":.string(redact(url.absoluteString))]) }
+            throw OpenTideConstantsError.network("HTTP\(response.status)"+(response.status==404 && listed ? ": listed file missing on the server":""),["url":.string(redact(url.absoluteString)),"status":.integer(Int64(response.status))])
         }
         return response.bytes
     }
@@ -92,30 +127,31 @@ internal enum HTTP {
         let configuration=URLSessionConfiguration.ephemeral
         configuration.urlCache=nil;configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest=timeout;configuration.timeoutIntervalForResource=timeout
-        if let proxy,let p=URL(string:proxy),let host=p.host { let port=p.port ?? 80;configuration.connectionProxyDictionary=["HTTPEnable":1,"HTTPProxy":host,"HTTPPort":port,"HTTPSEnable":1,"HTTPSProxy":host,"HTTPSPort":port] }
+        if let p=proxyURL(url,option:proxy),let host=p.host { let port=p.port ?? 80;configuration.connectionProxyDictionary=["HTTPEnable":1,"HTTPProxy":host,"HTTPPort":port,"HTTPSEnable":1,"HTTPSProxy":host,"HTTPSPort":port] }
         for attempt in 0..<3 {
             let delegate=try Delegate(caFile:caFile),session=URLSession(configuration:configuration,delegate:delegate,delegateQueue:nil)
             defer { session.invalidateAndCancel() }
             var request=URLRequest(url:url);request.timeoutInterval=timeout
             request.setValue("opentideconstants-swift/0.1.0 (+https://opentideconstants.org)"+(userAgent.map { " "+$0 } ?? ""),forHTTPHeaderField:"User-Agent")
-            request.setValue("identity",forHTTPHeaderField:"Accept-Encoding")
+            request.setValue(url.path.hasSuffix(".jsonl") || url.path.hasSuffix(".json") ? "gzip":"identity",forHTTPHeaderField:"Accept-Encoding")
             let temporary:URL,response:URLResponse
             do { (temporary,response)=try await session.download(for:request) }
             catch {
-                if attempt<2 { try await Task.sleep(nanoseconds:UInt64(100_000_000*(attempt+1)));continue }
-                throw OpenTideConstantsError.network("\(error)",["url":.string(url.absoluteString)])
+                if let error=delegate.redirectError() { throw error }
+                if attempt<2 { try await Task.sleep(nanoseconds:retryDelay(nil,attempt:attempt));continue }
+                throw OpenTideConstantsError.network(redact("\(error)"),["url":.string(redact(url.absoluteString))])
             }
             defer { try? FileManager.default.removeItem(at:temporary) }
             if let error=delegate.redirectError() { throw error }
             guard let response=response as? HTTPURLResponse else { throw OpenTideConstantsError.network("not HTTP response") }
-            if [408,429,500,502,503,504].contains(response.statusCode),attempt<2 { try await Task.sleep(nanoseconds:UInt64(100_000_000*(attempt+1)));continue }
+            if [408,429,500,502,503,504].contains(response.statusCode),attempt<2 { try await Task.sleep(nanoseconds:retryDelay(response.value(forHTTPHeaderField:"Retry-After"),attempt:attempt));continue }
             guard response.statusCode==200 else {
-                if response.statusCode==404 && !listed { throw OpenTideConstantsError.releaseNotFound("HTTP404",["url":.string(url.absoluteString)]) }
-                throw OpenTideConstantsError.network("HTTP\(response.statusCode)"+(response.statusCode==404 && listed ? ": listed file missing on the server":""),["url":.string(url.absoluteString),"status":.integer(Int64(response.statusCode))])
+                if response.statusCode==404 && !listed { throw OpenTideConstantsError.releaseNotFound("HTTP404",["url":.string(redact(url.absoluteString))]) }
+                throw OpenTideConstantsError.network("HTTP\(response.statusCode)"+(response.statusCode==404 && listed ? ": listed file missing on the server":""),["url":.string(redact(url.absoluteString)),"status":.integer(Int64(response.statusCode))])
             }
             do {
                 let size=(try FileManager.default.attributesOfItem(atPath:temporary.path)[.size] as? NSNumber)?.int64Value
-                if let length=response.value(forHTTPHeaderField:"Content-Length"),let expected=Int64(length),response.value(forHTTPHeaderField:"Content-Encoding")==nil,expected != size { throw OpenTideConstantsError.network("short body",["url":.string(url.absoluteString)]) }
+                if let length=response.value(forHTTPHeaderField:"Content-Length"),let expected=Int64(length),response.value(forHTTPHeaderField:"Content-Encoding")==nil,expected != size { throw OpenTideConstantsError.network("short body",["url":.string(redact(url.absoluteString))]) }
                 try FileManager.default.moveItem(at:temporary,to:path)
                 return
             } catch let error as OpenTideConstantsError { throw error }
