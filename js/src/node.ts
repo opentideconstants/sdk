@@ -300,14 +300,17 @@ class NodeCache implements CacheStore {
             if (made) {
                 // the token proves ownership at release (spec 5.4, CR D3)
                 const token = randomBytes(16).toString("hex");
-                const owner = JSON.stringify({ pid: process.pid, host: os.hostname(), sdk: SDK_ID, started_at: new Date().toISOString(), token });
+                const owner = JSON.stringify({ pid: process.pid, host: os.hostname(), sdk: SDK_ID,
+                    started_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), token });
                 try {
                     writeAtomicSync(ownerFile, new TextEncoder().encode(owner));
                 } catch (e) {
                     await fsp.rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
                     throw new CacheError(`cannot write ${ownerFile}`, { path: ownerFile, cause: e });
                 }
+                let lost = false;
                 const owns = async (): Promise<boolean> => {
+                    if (lost) return false;
                     let current: unknown = null;
                     try {
                         current = JSON.parse(await fsp.readFile(ownerFile, "utf8"));
@@ -316,7 +319,51 @@ class NodeCache implements CacheStore {
                     }
                     return typeof current === "object" && current !== null && (current as { token?: unknown }).token === token;
                 };
+                let stopped = false;
+                let refreshing: Promise<void> | undefined;
+                const warn = (message: string): void => {
+                    try { options.warn?.(message); } catch { /* a logger must not break the SDK */ }
+                };
+                const refresh = async (): Promise<void> => {
+                    let current: unknown;
+                    try {
+                        current = JSON.parse(await fsp.readFile(ownerFile, "utf8"));
+                    } catch (e) {
+                        if (!isErrno(e, "ENOENT") && !isErrno(e, "ENOTDIR")) {
+                            warn(`cannot refresh the lock ${lockDir}: ${e instanceof Error ? e.message : String(e)}`);
+                            return;
+                        }
+                    }
+                    if (stopped) return;
+                    if (typeof current !== "object" || current === null || (current as { token?: unknown }).token !== token) {
+                        lost = true;
+                        stopped = true;
+                        clearInterval(heartbeat);
+                        warn(`the lock ${lockDir} is now held by another process; leaving it`);
+                        return;
+                    }
+                    const now = new Date();
+                    try {
+                        writeAtomicSync(ownerFile, new TextEncoder().encode(JSON.stringify({ ...current,
+                            started_at: now.toISOString().replace(/\.\d{3}Z$/, "Z") })));
+                    } catch (e) {
+                        warn(`cannot refresh ${ownerFile}: ${e instanceof Error ? e.message : String(e)}`);
+                    }
+                    // A failed owner rewrite still touches the directory; the next tick retries the rewrite.
+                    try {
+                        await fsp.utimes(lockDir, now, now);
+                    } catch (e) {
+                        warn(`cannot touch the lock ${lockDir}: ${e instanceof Error ? e.message : String(e)}`);
+                    }
+                };
+                const heartbeat = setInterval(() => {
+                    if (!stopped && !refreshing) refreshing = refresh().finally(() => { refreshing = undefined; });
+                }, 30_000);
+                heartbeat.unref();
                 const unlock: Unlock = async () => {
+                    stopped = true;
+                    clearInterval(heartbeat);
+                    await refreshing;
                     if (!await owns()) return;
                     try {
                         await fsp.rm(ownerFile, { force: true });
