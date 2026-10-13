@@ -407,8 +407,11 @@ private struct ClientIO:@unchecked Sendable {
         let names=mode == .stream ? [jsonl,meta]:[json]
         for name in names { guard rows[name] != nil else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) } }
         try Cache.atomic(shaBytes,directory.appendingPathComponent("OTC_\(stamp).sha256"))
-        var verified:[String:JSONValue]=((try cache.verified(stamp))?["files"].object ?? [:]).filter { name,_ in
+        let previous=try cache.verified(stamp)
+        var verified:[String:JSONValue]=(previous?["files"].object ?? [:]).filter { name,_ in
             name != "OTC_\(stamp).sha256" && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
+        }.mapValues { row in
+            .object(["sha256":.string(row["sha256"].string!.lowercased()),"size":row["size"],"url":row["url"]])
         }
         for name in names {
             let temporary=directory.appendingPathComponent(".tmp-\(UUID().uuidString)")
@@ -425,12 +428,9 @@ private struct ClientIO:@unchecked Sendable {
             try Cache.install(temporary,directory.appendingPathComponent(name))
             verified[name] = .object(["sha256":.string(rows[name]!),"size":.integer(size),"url":.string(url(name,entry:entry).absoluteString)])
         }
-        var marker:[String:JSONValue]=["files":.object(verified),"datestamp":.string(stamp),"by":.string("opentideconstants-swift/0.1.0"),"verified_at":.string(ISO8601DateFormatter().string(from:Date()))]
-        if let entry { for key in ["format_version","min_reader_version","zenodo_version_doi"] where !entry[key].isNull { marker[key]=entry[key] } }
-        else {
-            let doc=try JSONValue.parse(Reader.read(directory.appendingPathComponent(mode == .stream ? meta:json)))
-            marker["format_version"]=doc["format_version"];marker["min_reader_version"]=doc["release"]["min_reader_version"]
-        }
+        let doc=try JSONValue.parse(Reader.read(directory.appendingPathComponent(mode == .stream ? meta:json)))
+        let doi=entry?["zenodo_version_doi"].string ?? previous?["zenodo_version_doi"].string
+        let marker:[String:JSONValue]=["files":.object(verified),"datestamp":.string(stamp),"by":.string("opentideconstants-swift/0.1.0"),"verified_at":.string(ISO8601DateFormatter().string(from:Date())),"format_version":doc["format_version"],"min_reader_version":doc["release"]["min_reader_version"].string.map(JSONValue.string) ?? .string("1.0"),"zenodo_version_doi":doi.map(JSONValue.string) ?? .null]
         try Cache.atomic(JSONValue.object(marker).data(),directory.appendingPathComponent(".verified"))
         guard let loaded=try cached(stamp,files:entry.map { $0["files"].array.map(FileInfo.init) }) else { throw OpenTideConstantsError.cache("download left cache") }
         return Loaded(release:loaded.release,from:.download,paths:loaded.paths)
