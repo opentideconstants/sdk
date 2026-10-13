@@ -20,6 +20,7 @@ from typing import List, Optional, Sequence, Tuple
 from urllib.parse import urljoin
 
 from ._cache import DATESTAMP_RE, Cache, atomic_write, datestamp_key, default_root, ensure_dir, lock_dir, tmp_name
+from ._cache_json import encode_cache_json
 from ._enums import LoadedFrom
 from ._errors import (CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError,
                       InvalidReleaseError, NetworkError, OfflineError, OpenTideConstantsError, PinnedReleaseError,
@@ -461,7 +462,7 @@ class OpenTideConstants:
                 if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
                     return
                 v["zenodo_version_doi"] = info.zenodo_version_doi
-                atomic_write(d / ".verified", json.dumps(v, indent=1, sort_keys=True).encode("utf-8"))
+                atomic_write(d / ".verified", encode_cache_json(v))
         except (OSError, CacheError) as e:
             self._log.warning("cannot update %s/.verified: %s", info.datestamp, e)
 
@@ -794,7 +795,8 @@ class OpenTideConstants:
             # verified in the release directory, with its real size and lowercase SHA-256, and never one for the
             # .sha256 file. The rows of an earlier open in the other mode stay while their files are there.
             old = self._cache.read_verified(datestamp) or {"files": {}}
-            files = {n: dict(f, sha256=f["sha256"].lower()) for n, f in (old.get("files") or {}).items()
+            files = {n: {"sha256": f["sha256"].lower(), "size": f["size"], "url": f.get("url")}
+                     for n, f in (old.get("files") or {}).items()
                      if n != f"{base}.sha256" and f.get("sha256") is not None and (d / n).is_file()}
             for n, size in written.items():
                 files[n] = {"sha256": rows[n], "size": size,
@@ -818,7 +820,7 @@ class OpenTideConstants:
                         "by": SDK, "datestamp": datestamp, "format_version": rel.format_version,
                         "min_reader_version": rel._release.get("min_reader_version"), "zenodo_version_doi": zdoi}
             try:
-                atomic_write(d / ".verified", json.dumps(verified, indent=1, sort_keys=True).encode("utf-8"))
+                atomic_write(d / ".verified", encode_cache_json(verified))
             except OSError as e:
                 rel._close()  # the caller never gets it: give its file handle back now (R2-089)
                 raise CacheError(f"cannot write {d / '.verified'}: {e}") from e
