@@ -5,7 +5,7 @@
  *    merged with another such licence. */
 #include "otc_test.h"
 
-#define META "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"concept_doi\":\"10.1/x\"}," \
+#define META "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"concept_doi\":\"10.1/x\",\"min_reader_version\":\"1.0\"}," \
     "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[" \
     "{\"licence_id\":\"a\",\"commercial_use\":true,\"provider\":\"P\",\"attribution\":\"A1\"}," \
     "{\"licence_id\":\"b\",\"commercial_use\":true,\"attribution\":\"Anonymous B\"}," \

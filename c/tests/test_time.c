@@ -26,7 +26,7 @@ static otc_status open_with(const char *dir, const char *created, const char *se
     char meta[512], line[1024], *path;
     otc_status st;
     snprintf(meta, sizeof meta,
-             "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"%s\"},"
+             "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"%s\",\"min_reader_version\":\"1.0\"},"
              "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true,\"attribution\":\"A\"}]}", created);
     snprintf(line, sizeof line,
              "{\"station_id\":\"OTC-X-1\",\"status\":\"active\",\"name\":\"One\",\"lat\":1.0,\"lon\":2.0,"
@@ -126,7 +126,7 @@ int main(void)
     CHECK(otc__http_date("Sunday, 06-Nov-94 08:49:37 GMT") == -1);
     /* through the API */
     test_write(dir, "OTC_20990101.meta.json",
-               "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"2099-12-31T02:00:00.5+02:00\"},"
+               "{\"format_version\":\"1.0\",\"release\":{\"datestamp\":\"20990101\",\"created\":\"2099-12-31T02:00:00.5+02:00\",\"min_reader_version\":\"1.0\"},"
                "\"conventions\":[{\"convention_id\":\"c1\"}],\"licences\":[{\"licence_id\":\"l1\",\"commercial_use\":true,\"attribution\":\"A\"}]}");
     test_write(dir, "OTC_20990101.jsonl", TEST_STATION("OTC-X-1", "One") "\n");
     path = test_join(dir, "OTC_20990101.jsonl");
