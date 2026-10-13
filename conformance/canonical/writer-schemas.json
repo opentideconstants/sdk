@@ -5344,7 +5344,11 @@
         "type": "string",
         "pattern": "^[a-z][a-z0-9_]{0,30}$(?![\\s\\S])",
         "not": {
-          "type": "string"
+          "enum": [
+            "mean_level",
+            "zero",
+            "chart"
+          ]
         }
       },
       "datum_date": {
