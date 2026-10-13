@@ -1,0 +1,24 @@
+{
+  "protocol_version": 1,
+  "construction_gate": "ACCEPTED_ALL_FIVE_COMBINED_NATIVE_CONSTRUCTION",
+  "candidate": "b1c4e330595b3a1006b19c6455c42b47cdeb4c52",
+  "accepted_native_cells": 5,
+  "native_profiles": [
+    "python",
+    "ruby",
+    "typescript_node",
+    "typescript_browser",
+    "c",
+    "swift"
+  ],
+  "receipt": {
+    "path": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/SHAPE-ALL/receipt.json",
+    "sha256": "664f6f1ebe6052b6f6b54290c02dab7c40cde90949a9ce372402c1a83bbae70f",
+    "bytes": 74691
+  },
+  "behavior_accepted": false,
+  "whole_sdk_complete": false,
+  "private_body_status": "All 60 canonical behaviors remain INCOMPLETE per profile; Ruby B28 alone reuses the unchanged genuine encoder and is not newly migrated or globally behavior-accepted.",
+  "corpus_unlocked": true,
+  "body_migration_unlocked": false
+}
