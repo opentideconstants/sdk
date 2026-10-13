@@ -78,8 +78,9 @@ public final class Release {
     internal func effective(_ e:IndexEntry)->String? {
         guard let rid=e.summary["recommended_set_id"].string,let rec=e.sets.first(where: { $0["set_id"].string==rid }) else { return nil }
         if !commercialOnly || licById[rec["licence_id"].string ?? ""]?.commercialUse==true { return rid }
-        let q=rec["quantity"].string
-        for status in ["ok","flagged"] { if let cs=e.sets.first(where: { $0["qc_status"].string==status && $0["quantity"].string==q && licById[$0["licence_id"].string ?? ""]?.commercialUse==true }) { return cs["set_id"].string } }
+        guard !rec["quantity"].isNull else { return nil }
+        let q=Quantity(value:rec["quantity"])
+        for status in ["ok","flagged"] { if let cs=e.sets.first(where: { $0["qc_status"].string==status && !$0["quantity"].isNull && Quantity(value:$0["quantity"])==q && licById[$0["licence_id"].string ?? ""]?.commercialUse==true }) { return cs["set_id"].string } }
         return nil
     }
     internal func rawStation(_ e:IndexEntry)throws->JSONValue {
