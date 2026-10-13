@@ -5,6 +5,7 @@ import {
     UnsupportedFormatError,
 } from "./errors.js";
 import { daysInMonth, isObject } from "./json.js";
+import { encodeCacheJson } from "./cache-json.js";
 import {
     checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl, scanJsonlReader,
     type LineReader, type StreamIndex,
@@ -593,7 +594,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
             // a null DOI never erases a known one (CR2 DR11)
             zenodo_version_doi: entry?.zenodo_version_doi ?? verified?.zenodo_version_doi ?? null,
         };
-        await store.write(`${dir}/.verified`, enc.encode(JSON.stringify(v)));
+        await store.write(`${dir}/.verified`, encodeCacheJson(v));
         return "download";
     } finally {
         await releaseLock(ctx, unlock);
@@ -652,7 +653,7 @@ export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEnt
         const raw = await store.read(`${relDir(d)}/.verified`);
         const doc: unknown = raw ? JSON.parse(dec.decode(raw)) : null;
         if (!isObject(doc)) return;
-        await store.write(`${relDir(d)}/.verified`, enc.encode(JSON.stringify({ ...doc, zenodo_version_doi: entry.zenodo_version_doi })));
+        await store.write(`${relDir(d)}/.verified`, encodeCacheJson({ ...doc, zenodo_version_doi: entry.zenodo_version_doi }));
     } catch (e) {
         log(ctx, "warn", `cannot update the .verified of ${d}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -747,7 +748,7 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
             if (jsonlSha !== null) {
                 // the index only saves work: a failure to write it is logged, not raised (spec 6.2)
                 try {
-                    dir.writeIndex(enc.encode(JSON.stringify(storedIndex(entries, d, jsonlSha, bytesRead, SDK_ID))));
+                    dir.writeIndex(encodeCacheJson(storedIndex(entries, d, jsonlSha, bytesRead, SDK_ID)));
                 } catch (e) {
                     warn(`cannot write index-v1.json of ${d}: ${e instanceof Error ? e.message : String(e)}`);
                 }

@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createServer } from 'node:http';
 import { syncBuiltinESMExports } from 'node:module';
 import * as sdk from '../dist/index.js';
 import * as streamLoader from '../dist/loader.js';
 import * as nodeRuntime from '../dist/node.js';
-import { checkBytes } from '../dist/core.js';
+import { checkBytes, syncZenodo } from '../dist/core.js';
+import { encodeCacheJson } from '../dist/cache-json.js';
 
 const file = process.env.OTC_CORE_NATIVE_JSON;
 const jsonl = process.env.OTC_CORE_NATIVE_JSONL;
@@ -20,6 +22,109 @@ before(async () => {
     client = await activeSdk.OpenTideConstants.open({ file });
 });
 after(() => client?.close());
+
+// Exercise the actual read-modify-write receipt producer and native atomic disk writer.
+// These finite expectations come from the independently accepted B28 foundation.
+const cacheGoldens = JSON.parse(fs.readFileSync(new URL('../../conformance/canonical/cache-golden.json', import.meta.url)));
+function cacheGoldenInput(vector) {
+    return vector.binary64_hex ? Buffer.from(vector.binary64_hex, 'hex').readDoubleBE()
+        : vector.raw_json_hex ? JSON.parse(Buffer.from(vector.raw_json_hex, 'hex').toString('utf8')) : vector.input;
+}
+async function nativeReceiptEncoding(vector, body) {
+    const root = fs.mkdtempSync(path.join(process.env.OTC_CACHE_ENCODING_PROOF_ROOT ?? os.tmpdir(), 'otc-cache-encoding-'));
+    const platform = nodeRuntime.nodePlatform();
+    const store = await platform.cache(root);
+    const verified = { extension: cacheGoldenInput(vector), files: {}, verified_at: '2026-10-11T00:00:00Z',
+        by: 'native-encoding', datestamp: '20261011', format_version: '1.0', zenodo_version_doi: null };
+    const receipt = 'releases/20261011/.verified';
+    await store.mkdirs('releases/20261011');
+    const original = Buffer.from(JSON.stringify(verified));
+    await store.write(receipt, original);
+    const warnings = [];
+    try {
+        await syncZenodo({ platform, store, logger: { warn: message => warnings.push(message) } }, verified,
+            { datestamp: '20261011', zenodo_version_doi: '10.5281/zenodo.1' });
+        return await body({ bytes: Buffer.from(await store.read(receipt)), original, warnings });
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+for (const vector of cacheGoldens.cases) {
+    test(`native cache encoding receipt ${vector.id}`, async () => {
+        await nativeReceiptEncoding(vector, ({ bytes, warnings }) => {
+            const expected = Buffer.from('{"by":"native-encoding","datestamp":"20261011","extension":' + vector.expected
+                + ',"files":{},"format_version":"1.0","verified_at":"2026-10-11T00:00:00Z","zenodo_version_doi":"10.5281/zenodo.1"}');
+            console.log(JSON.stringify({ cell: vector.id, producer: 'syncZenodo', actual_hex: bytes.toString('hex'),
+                expected_hex: expected.toString('hex'), size: bytes.length, warnings }));
+            assert.deepEqual(bytes, expected);
+            assert.deepEqual(warnings, []);
+        });
+    });
+}
+for (const vector of cacheGoldens.refusals.filter(vector => vector.raw_json_hex)) {
+    test(`native cache encoding receipt refuses ${vector.id}`, async () => {
+        await nativeReceiptEncoding(vector, ({ bytes, original, warnings }) => {
+            assert.deepEqual(bytes, original, 'refused generated JSON must preserve the previous receipt');
+            assert.equal(warnings.length, 1);
+            assert.match(warnings[0], /unpaired surrogate/);
+        });
+    });
+}
+
+test('native cache encoding callable uses FMT exact finite bytes and refuses invalid scalar values', () => {
+    for (const vector of cacheGoldens.cases) {
+        const input = cacheGoldenInput(vector);
+        const bytes = encodeCacheJson(input);
+        assert.ok(bytes instanceof Uint8Array);
+        assert.deepEqual(Buffer.from(bytes), Buffer.from(vector.expected), vector.id);
+    }
+    for (const vector of cacheGoldens.refusals) {
+        assert.throws(() => encodeCacheJson(cacheGoldenInput(vector)), TypeError, vector.id);
+    }
+    assert.throws(() => encodeCacheJson({ '\ud800': null }), /unpaired surrogate/);
+});
+
+test('native cache encoding actual acquired receipt and stream index conserve source bytes', async () => {
+    const source = process.env.OTC_CACHE_ENCODING_SOURCE_DIR ?? new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+    const date = process.env.OTC_CACHE_ENCODING_SOURCE_DIR ? '20261011' : '20991231.2';
+    const stem = `OTC_${date}`;
+    const originals = Object.fromEntries(['jsonl', 'meta.json', 'sha256'].map(suffix =>
+        [`${stem}.${suffix}`, fs.readFileSync(path.join(source, `${stem}.${suffix}`))]));
+    const root = fs.mkdtempSync(path.join(process.env.OTC_CACHE_ENCODING_PROOF_ROOT ?? os.tmpdir(), 'otc-cache-acquired-'));
+    const requests = [];
+    const server = createServer((request, response) => {
+        requests.push(request.url);
+        const body = originals[request.url.slice(1)];
+        response.writeHead(body ? 200 : 404);
+        response.end(body ?? 'not found');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let opened;
+    try {
+        const address = server.address();
+        opened = await sdk.OpenTideConstants.open({ release: date, baseUrl: `http://127.0.0.1:${address.port}/`,
+            cacheDir: root, mode: 'stream' });
+        const dir = path.join(root, 'v1', 'releases', date);
+        for (const [name, bytes] of Object.entries(originals)) assert.deepEqual(fs.readFileSync(path.join(dir, name)), bytes, name);
+        const emitted = {};
+        for (const name of ['.verified', 'index-v1.json']) {
+            const bytes = fs.readFileSync(path.join(dir, name));
+            emitted[name] = bytes.toString('utf8');
+            if (process.env.OTC_CACHE_ENCODING_PROOF_ROOT && process.env.OTC_CACHE_ENCODING_PHASE) {
+                fs.writeFileSync(path.join(process.env.OTC_CACHE_ENCODING_PROOF_ROOT,
+                    `${process.env.OTC_CACHE_ENCODING_PHASE}-generated-${name === '.verified' ? 'verified' : 'index'}.json`), bytes);
+            }
+            console.log(JSON.stringify({ producer: name === '.verified' ? 'ensureRelease' : 'loadCached',
+                bytes_hex: bytes.toString('hex'), size: bytes.length, requests,
+                by: JSON.parse(bytes).by, verified_at: JSON.parse(bytes).verified_at ?? null }));
+        }
+        const originalRows = originals[`${stem}.jsonl`].toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line));
+        for (const original of originalRows) assert.deepEqual(opened.requireStation(original.station_id).raw, original);
+        assert.ok(Object.values(emitted).every(bytes => bytes.startsWith('{"by":')), 'both native generated documents use canonical key order');
+    } finally {
+        opened?.close();
+        await new Promise(resolve => server.close(resolve));
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
 
 test('actual strict commercial recommendations retain permitted published sets independently from discovery', async () => {
     const strictFile = process.env.OTC_CORE_NATIVE_STRICT_JSON ?? file;
