@@ -1,0 +1,171 @@
+{
+  "authority_pins": {
+    "design.md": "ab2d04addf93ea001895d8877cb8233d535625281c7874d5543194dedcf19d8b",
+    "behavior-catalog.json": "418b1c8ce8b7b97c8246adb13bd9d35b0d97fbc2bc01048fe20c1b26cc0add14",
+    "source-references.json": "b974c08606342cdb94698b28335274d013b49a83534f2b5058071d6644e6e58c"
+  },
+  "projected_keys": {
+    "top": [
+      "index_version",
+      "discovery_index_version",
+      "datestamp",
+      "jsonl",
+      "jsonl_sha256",
+      "jsonl_size",
+      "by",
+      "stations"
+    ],
+    "entry": [
+      "station_id",
+      "status",
+      "name",
+      "name_folded",
+      "country",
+      "type",
+      "kind",
+      "reference_station_id",
+      "offsets_licence_id",
+      "recommended_set_id",
+      "lat",
+      "lon",
+      "offset",
+      "length",
+      "aliases",
+      "sets",
+      "subordinate_offsets",
+      "current_offsets"
+    ],
+    "set": [
+      "set_id",
+      "source",
+      "source_type",
+      "quantity",
+      "qc_status",
+      "convention_id",
+      "licence_id",
+      "constituents",
+      "fallback",
+      "current_bins"
+    ],
+    "current_offset": [
+      "bin",
+      "reference_bin",
+      "reference_station_id",
+      "licence_id"
+    ]
+  },
+  "scenario_families": [
+    {
+      "id": "SC03",
+      "title": "ETag races, invalid headers, unconditional 304 and DOI null",
+      "behavior_ids": [
+        "B11",
+        "B18"
+      ],
+      "input_authority": "Existing DR11/DR66/DR74 and DOI cases",
+      "required_observations": [
+        "exact input and source hashes",
+        "actual public API call",
+        "selected branch and ordered phases",
+        "typed and raw values",
+        "error code and required fields",
+        "state changes and resource cleanup"
+      ],
+      "status": "acceptance obligation; reuse accepted unchanged subproof only"
+    },
+    {
+      "id": "SC06",
+      "title": "mode-add receipt merge, cache corruption, missing-mode vs malformed",
+      "behavior_ids": [
+        "B18",
+        "B19"
+      ],
+      "input_authority": "Existing .verified multi-mode and cached fallback cases",
+      "required_observations": [
+        "exact input and source hashes",
+        "actual public API call",
+        "selected branch and ordered phases",
+        "typed and raw values",
+        "error code and required fields",
+        "state changes and resource cleanup"
+      ],
+      "status": "acceptance obligation; reuse accepted unchanged subproof only"
+    },
+    {
+      "id": "SC11",
+      "title": "one writer golden document/byte encoding and every ordered reader pair",
+      "behavior_ids": [
+        "B24",
+        "B25",
+        "B28"
+      ],
+      "input_authority": "Original cross/cache-offline-stream and shared index cases plus proposed one-format golden",
+      "required_observations": [
+        "exact input and source hashes",
+        "actual public API call",
+        "selected branch and ordered phases",
+        "typed and raw values",
+        "error code and required fields",
+        "state changes and resource cleanup",
+        "Both current historical profiles satisfy amended cache structure without deleting any source field."
+      ],
+      "status": "acceptance obligation; reuse accepted unchanged subproof only"
+    },
+    {
+      "id": "SC12",
+      "title": "fresh index reuse, stale/mixed/sparse/legacy, gap and line tamper",
+      "behavior_ids": [
+        "B25",
+        "B26"
+      ],
+      "input_authority": "Accepted cross-final presence predicate and native writer specimens",
+      "required_observations": [
+        "exact input and source hashes",
+        "actual public API call",
+        "selected branch and ordered phases",
+        "typed and raw values",
+        "error code and required fields",
+        "state changes and resource cleanup"
+      ],
+      "status": "acceptance obligation; reuse accepted unchanged subproof only"
+    },
+    {
+      "id": "SC13",
+      "title": "ASCII blank boundaries, UTF8 offsets, lazy reads, LRU rematerialization",
+      "behavior_ids": [
+        "B26",
+        "B27"
+      ],
+      "input_authority": "Existing blank-line controls and memory/value receipts",
+      "required_observations": [
+        "exact input and source hashes",
+        "actual public API call",
+        "selected branch and ordered phases",
+        "typed and raw values",
+        "error code and required fields",
+        "state changes and resource cleanup"
+      ],
+      "status": "acceptance obligation; reuse accepted unchanged subproof only"
+    }
+  ],
+  "witness_protocol": {
+    "required": [
+      "kind",
+      "cache_path",
+      "source_pins",
+      "bindings"
+    ],
+    "stream_index": [
+      "source_jsonl",
+      "source_meta",
+      "name_fold"
+    ],
+    "verified": [
+      "source_meta",
+      "verified_files"
+    ],
+    "bindings": "by is exact observed producer identity; verified_at is exact observed parseable ISO8601 timestamp. No substitution of bytes or invented producer output.",
+    "source_pins": "Every source path (JSONL/META/name_fold/verified data file) must have its actual SHA256, and every span must resolve to the retained source bytes.",
+    "result": "VALIDATOR GREEN or native file validation only; provenance of witness and genuine writer RED/GREEN remains executor responsibility. Missing/bypassed/wrong witness is INCOMPLETE or failure."
+  }
+}

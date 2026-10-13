@@ -1,0 +1,337 @@
+{
+  "authority": "Approved design.md §7 B28; explicit finite expectations, no SDK output used as oracle",
+  "encoding": "UTF-8, Unicode scalar key ordering, lowercase four-digit control escapes, no BOM/LF, no slash escaping/normalization",
+  "cases": [
+    {
+      "id": "control-0000",
+      "input": "\u0000",
+      "expected": "\"\\u0000\""
+    },
+    {
+      "id": "control-0001",
+      "input": "\u0001",
+      "expected": "\"\\u0001\""
+    },
+    {
+      "id": "control-0002",
+      "input": "\u0002",
+      "expected": "\"\\u0002\""
+    },
+    {
+      "id": "control-0003",
+      "input": "\u0003",
+      "expected": "\"\\u0003\""
+    },
+    {
+      "id": "control-0004",
+      "input": "\u0004",
+      "expected": "\"\\u0004\""
+    },
+    {
+      "id": "control-0005",
+      "input": "\u0005",
+      "expected": "\"\\u0005\""
+    },
+    {
+      "id": "control-0006",
+      "input": "\u0006",
+      "expected": "\"\\u0006\""
+    },
+    {
+      "id": "control-0007",
+      "input": "\u0007",
+      "expected": "\"\\u0007\""
+    },
+    {
+      "id": "control-0008",
+      "input": "\b",
+      "expected": "\"\\u0008\""
+    },
+    {
+      "id": "control-0009",
+      "input": "\t",
+      "expected": "\"\\u0009\""
+    },
+    {
+      "id": "control-000a",
+      "input": "\n",
+      "expected": "\"\\u000a\""
+    },
+    {
+      "id": "control-000b",
+      "input": "\u000b",
+      "expected": "\"\\u000b\""
+    },
+    {
+      "id": "control-000c",
+      "input": "\f",
+      "expected": "\"\\u000c\""
+    },
+    {
+      "id": "control-000d",
+      "input": "\r",
+      "expected": "\"\\u000d\""
+    },
+    {
+      "id": "control-000e",
+      "input": "\u000e",
+      "expected": "\"\\u000e\""
+    },
+    {
+      "id": "control-000f",
+      "input": "\u000f",
+      "expected": "\"\\u000f\""
+    },
+    {
+      "id": "control-0010",
+      "input": "\u0010",
+      "expected": "\"\\u0010\""
+    },
+    {
+      "id": "control-0011",
+      "input": "\u0011",
+      "expected": "\"\\u0011\""
+    },
+    {
+      "id": "control-0012",
+      "input": "\u0012",
+      "expected": "\"\\u0012\""
+    },
+    {
+      "id": "control-0013",
+      "input": "\u0013",
+      "expected": "\"\\u0013\""
+    },
+    {
+      "id": "control-0014",
+      "input": "\u0014",
+      "expected": "\"\\u0014\""
+    },
+    {
+      "id": "control-0015",
+      "input": "\u0015",
+      "expected": "\"\\u0015\""
+    },
+    {
+      "id": "control-0016",
+      "input": "\u0016",
+      "expected": "\"\\u0016\""
+    },
+    {
+      "id": "control-0017",
+      "input": "\u0017",
+      "expected": "\"\\u0017\""
+    },
+    {
+      "id": "control-0018",
+      "input": "\u0018",
+      "expected": "\"\\u0018\""
+    },
+    {
+      "id": "control-0019",
+      "input": "\u0019",
+      "expected": "\"\\u0019\""
+    },
+    {
+      "id": "control-001a",
+      "input": "\u001a",
+      "expected": "\"\\u001a\""
+    },
+    {
+      "id": "control-001b",
+      "input": "\u001b",
+      "expected": "\"\\u001b\""
+    },
+    {
+      "id": "control-001c",
+      "input": "\u001c",
+      "expected": "\"\\u001c\""
+    },
+    {
+      "id": "control-001d",
+      "input": "\u001d",
+      "expected": "\"\\u001d\""
+    },
+    {
+      "id": "control-001e",
+      "input": "\u001e",
+      "expected": "\"\\u001e\""
+    },
+    {
+      "id": "control-001f",
+      "input": "\u001f",
+      "expected": "\"\\u001f\""
+    },
+    {
+      "id": "quote-backslash-slash",
+      "input": "\"\\/",
+      "expected": "\"\\\"\\\\/\""
+    },
+    {
+      "id": "unicode-no-normalization",
+      "input": [
+        "é",
+        "é",
+        " ",
+        " "
+      ],
+      "expected": "[\"é\",\"é\",\" \",\" \"]"
+    },
+    {
+      "id": "scalar-key-order",
+      "input": {
+        "𐀀": 1,
+        "": 2,
+        "a": 3
+      },
+      "expected": "{\"a\":3,\"\":2,\"𐀀\":1}"
+    },
+    {
+      "id": "null-and-array-order",
+      "input": {
+        "z": null,
+        "a": [
+          3,
+          null,
+          1,
+          false
+        ]
+      },
+      "expected": "{\"a\":[3,null,1,false],\"z\":null}"
+    },
+    {
+      "id": "integer-boundary",
+      "input": 9007199254740991,
+      "expected": "9007199254740991"
+    },
+    {
+      "id": "zero",
+      "binary64_hex": "0000000000000000",
+      "expected": "0"
+    },
+    {
+      "id": "negative-zero",
+      "binary64_hex": "8000000000000000",
+      "expected": "0"
+    },
+    {
+      "id": "one",
+      "binary64_hex": "3ff0000000000000",
+      "expected": "1"
+    },
+    {
+      "id": "half",
+      "binary64_hex": "3fe0000000000000",
+      "expected": "0.5"
+    },
+    {
+      "id": "plain-lower-bound",
+      "binary64_hex": "3eb0c6f7a0b5ed8d",
+      "expected": "0.000001"
+    },
+    {
+      "id": "exponent-below-bound",
+      "binary64_hex": "3e7ad7f29abcaf48",
+      "expected": "1e-7"
+    },
+    {
+      "id": "plain-upper-neighbor",
+      "binary64_hex": "4415af1d78b58c40",
+      "expected": "100000000000000000000"
+    },
+    {
+      "id": "exponent-upper-bound",
+      "binary64_hex": "444b1ae4d6e2ef50",
+      "expected": "1e21"
+    },
+    {
+      "id": "negative-exponent",
+      "binary64_hex": "be7ad7f29abcaf48",
+      "expected": "-1e-7"
+    },
+    {
+      "id": "shortest-roundtrip",
+      "binary64_hex": "41b3de4355555555",
+      "expected": "333333333.3333333"
+    },
+    {
+      "id": "closest-shortest",
+      "binary64_hex": "43abc16d674ec801",
+      "expected": "1000000000000000100"
+    },
+    {
+      "id": "even-tie",
+      "binary64_hex": "43143ff3c1cb0959",
+      "expected": "1424953923781206.2"
+    },
+    {
+      "id": "smallest-subnormal",
+      "binary64_hex": "0000000000000001",
+      "expected": "5e-324"
+    },
+    {
+      "id": "largest-finite",
+      "binary64_hex": "7fefffffffffffff",
+      "expected": "1.7976931348623157e308"
+    }
+  ],
+  "refusals": [
+    {
+      "id": "unpaired-high-surrogate",
+      "raw_json_hex": "225c756438303022"
+    },
+    {
+      "id": "unpaired-low-surrogate",
+      "raw_json_hex": "225c756466666622"
+    },
+    {
+      "id": "nan",
+      "binary64_hex": "7ff8000000000000"
+    },
+    {
+      "id": "positive-infinity",
+      "binary64_hex": "7ff0000000000000"
+    },
+    {
+      "id": "negative-infinity",
+      "binary64_hex": "fff0000000000000"
+    }
+  ],
+  "negative_bytes": [
+    {
+      "id": "bom",
+      "case": "one",
+      "raw_hex": "efbbbf31"
+    },
+    {
+      "id": "trailing-lf",
+      "case": "one",
+      "raw_hex": "310a"
+    },
+    {
+      "id": "short-control-escape",
+      "case": "control-000a",
+      "raw_hex": "225c6e22"
+    },
+    {
+      "id": "escaped-slash",
+      "case": "quote-backslash-slash",
+      "raw_hex": "225c225c5c5c2f22"
+    },
+    {
+      "id": "negative-zero-byte",
+      "case": "negative-zero",
+      "raw_hex": "2d30"
+    },
+    {
+      "id": "plus-exponent",
+      "case": "exponent-upper-bound",
+      "raw_hex": "31652b3231"
+    },
+    {
+      "id": "leading-exponent-zero",
+      "case": "exponent-below-bound",
+      "raw_hex": "31652d3037"
+    }
+  ]
+}
