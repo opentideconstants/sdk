@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createServer } from 'node:http';
+import http, { createServer } from 'node:http';
 import { syncBuiltinESMExports } from 'node:module';
 import * as sdk from '../dist/index.js';
 import * as streamLoader from '../dist/loader.js';
@@ -75,19 +75,32 @@ test('COMMON-TS SC15 own and foreign identical raw station guards', async () => 
 });
 
 for (const [label, tag, expectedHeader] of [
-    ['unquoted', 'not-an-entity-tag', null], ['control', '"bad\u0000tag"', null],
+    ['unquoted', 'not-an-entity-tag', 'not-an-entity-tag'], ['control', '"bad\u0000tag"', null],
+    ['empty', '', null],
+    ['trailing-crlf', '"native-strong"\r\n', null],
+    ['non-ascii', '"native-\u00ff"', null],
+    ['oversize', `"${'a'.repeat(255)}"`, null],
+    ['delete-byte', '"native-\u007f"', null],
     ['valid-strong', '"native-strong"', '"native-strong"'], ['valid-weak', 'W/"native-weak"', 'W/"native-weak"'],
-    ['valid-opaque', 'W/"native\\opaque-\u00ff"', 'W/"native\\opaque-\u00ff"'],
+    ['valid-opaque', 'W/"native\\opaque-!#$%"', 'W/"native\\opaque-!#$%"'],
+    ['valid-interior-space', '"native opaque"', '"native opaque"'],
+    ['valid-edge-spaces', ' native opaque ', ' native opaque '],
+    ['valid-256-bytes', `"${'a'.repeat(254)}"`, `"${'a'.repeat(254)}"`],
 ]) {
     test(`COMMON-TS SC03 public cached ETag ${label}`, async () => {
         const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
         const root = fs.mkdtempSync(path.join(process.env.OTC_COMMON_PROOF ?? os.tmpdir(), `common-etag-${label}-`));
         const requests = [];
+        const nativeHeaders = [];
+        const originalGet = http.get;
         const server = createServer((request, response) => {
             requests.push({ path: request.url, if_none_match: request.headers['if-none-match'] ?? null });
             const filename = path.join(source, request.url.slice(1));
             if (!fs.existsSync(filename)) { response.writeHead(404); response.end(); return; }
             if (request.url === '/OTC_latest-f1.json') response.setHeader('ETag', '"valid-original"');
+            if (request.url === '/OTC_latest-f1.json' && expectedHeader !== null && request.headers['if-none-match'] === expectedHeader.trim()) {
+                response.writeHead(304); response.end(); return;
+            }
             response.end(fs.readFileSync(filename));
         });
         await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -98,18 +111,29 @@ for (const [label, tag, expectedHeader] of [
             opened.close(); opened = undefined;
             const etag = path.join(root, 'v1/pointer/OTC_latest-f1.json.etag');
             fs.writeFileSync(etag, tag);
+            const beforePointer = fs.readFileSync(path.join(root, 'v1/pointer/OTC_latest-f1.json'));
             requests.length = 0;
+            http.get = function (...args) {
+                const request = originalGet.apply(this, args);
+                nativeHeaders.push({ path: request.path, if_none_match: request.getHeader('If-None-Match') ?? null });
+                return request;
+            };
+            syncBuiltinESMExports();
             let error;
             try { opened = await sdk.OpenTideConstants.open({ ...options, onNetworkError: 'raise' }); }
             catch (failure) { error = failure; }
-            console.log(JSON.stringify({ scenario: 'SC03', control: label, cached_tag: tag, requests,
+            console.log(JSON.stringify({ scenario: 'SC03', control: label, cached_tag: tag, requests, nativeHeaders,
                 code: error?.code ?? null, message: error?.message ?? null,
                 actual_datestamp: opened?.release.datestamp ?? null, expected_datestamp: '20991231.2',
                 pointer_sha256: nodeRuntime.sha256Sync(fs.readFileSync(path.join(root, 'v1/pointer/OTC_latest-f1.json'))) }));
             assert.equal(error, undefined, 'invalid cached ETag must be ignored before native header construction');
             assert.equal(opened.release.datestamp, '20991231.2');
-            assert.equal(requests.find(request => request.path === '/OTC_latest-f1.json').if_none_match, expectedHeader);
+            assert.equal(nativeHeaders.find(request => request.path === '/OTC_latest-f1.json').if_none_match, expectedHeader);
+            assert.equal(requests.find(request => request.path === '/OTC_latest-f1.json').if_none_match, expectedHeader?.trim() ?? null);
+            assert.deepEqual(fs.readFileSync(path.join(root, 'v1/pointer/OTC_latest-f1.json')), beforePointer);
+            if (expectedHeader !== null) assert.equal(fs.readFileSync(etag, 'utf8'), tag);
         } finally {
+            http.get = originalGet; syncBuiltinESMExports();
             opened?.close();
             await new Promise(resolve => server.close(resolve));
             if (!process.env.OTC_COMMON_PROOF) fs.rmSync(root, { recursive: true, force: true });

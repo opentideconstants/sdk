@@ -203,9 +203,9 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
     const store = ctx.store;
     const readEtag = async () => {
         const b = store ? await store.read(`${rel}.etag`) : null;
-        const tag = b ? dec.decode(b).trim() : null;
-        // A conditional request requires an entity-tag, not merely a sendable header value.
-        return tag !== null && /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(tag) ? tag : null;
+        // Shared cache tags are nonempty printable ASCII bytes, preserved without trimming (spec 5.2).
+        if (!b || b.length === 0 || b.length > 256 || b.some((byte) => byte < 0x20 || byte >= 0x7f)) return null;
+        return dec.decode(b);
     };
     let etag = await readEtag();
     let cached = store ? await store.read(rel) : null;

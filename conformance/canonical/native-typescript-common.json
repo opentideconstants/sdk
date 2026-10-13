@@ -4536,7 +4536,7 @@
       "canonical_name": "exchange_release_metadata",
       "native": {
         "file": "js/src/core.ts",
-        "source_sha256": "11ce300c66db22ce797aa86c1febc1645d48708a03a49323202c8c29d4455747",
+        "source_sha256": "2eb214c528dc4811e42aefc1f3bc60767fc2af773f27c2b5437ee3093ded6561",
         "marker": "async function getConditional(",
         "line": 200,
         "exact_declaration_and_context": "async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Array; url: string; doc: unknown } | null> {\n    const url = new URL(name, ctx.baseUrl).href;\n    const rel = `pointer/${name}`;\n    const store = ctx.store;\n    const readEtag = async () => {\n        const b = store ? await store.read(`${rel}.etag`) : null;\n",
@@ -4721,7 +4721,7 @@
         }
       ],
       "ordered_native_guard_or_action_bindings": [
-        "ETag read",
+        "Read raw ETag bytes; absent if empty, over 256 bytes, or any byte outside 0x20..0x7E; decode unchanged without trimming",
         "body read/shape",
         "ETag reread",
         "httpGet",
@@ -5201,7 +5201,7 @@
           "canonical_result_binding": "http_response",
           "existing_native_callee": {
             "file": "js/src/core.ts",
-            "source_sha256": "11ce300c66db22ce797aa86c1febc1645d48708a03a49323202c8c29d4455747",
+            "source_sha256": "2eb214c528dc4811e42aefc1f3bc60767fc2af773f27c2b5437ee3093ded6561",
             "marker": "export async function httpGet(",
             "line": 109,
             "exact_declaration_and_context": "export async function httpGet(ctx: Ctx, url: string, etag: string | null = null): Promise<HttpResponse> {\n    const headers: Record<string, string> = { \"User-Agent\": ctx.userAgent };\n    // a .gz file is fetched as it is: no transfer encoding on top (spec 5.7)\n    headers[\"Accept-Encoding\"] = new URL(url).pathname.endsWith(\".gz\") ? \"identity\" : \"gzip\";\n    if (etag) headers[\"If-None-Match\"] = etag;\n    const backoff = [1, 2];\n",
@@ -5291,7 +5291,7 @@
           "canonical_result_binding": "lock_outcome",
           "existing_native_callee": {
             "file": "js/src/core.ts",
-            "source_sha256": "11ce300c66db22ce797aa86c1febc1645d48708a03a49323202c8c29d4455747",
+            "source_sha256": "2eb214c528dc4811e42aefc1f3bc60767fc2af773f27c2b5437ee3093ded6561",
             "marker": "async function releaseLock(",
             "line": 612,
             "exact_declaration_and_context": "async function releaseLock(ctx: Ctx, unlock: Unlock | null): Promise<void> {\n    try {\n        await unlock?.();\n    } catch (e) {\n        log(ctx, \"warn\", e instanceof Error ? e.message : String(e));\n    }\n",
@@ -5361,7 +5361,20 @@
           },
           "scope": "Existing alias/in-body decision as bound above; source order plus bounded native witnesses, not a new wrapper or a private debugger trace."
         }
-      ]
+      ],
+      "cached_tag_byte_contract_followup": {
+        "authority": "/Users/jpr5/.local/share/copilotkit/plans/2026-10-08-opentideconstants-sdk-spec.md:740",
+        "authority_sha256": "856fcd95645dba6faf3b672d26b129fdd66c667171da3a42e4eb3b6e8abd58b4",
+        "red": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-TS/etag-followup/red-qualified/receipt.json",
+        "green": "/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/implementation-execution/COMMON-TS/etag-followup/green/receipt.json",
+        "red_stdout_sha256": "d0d275265c1eaaec15f6bcd2bf40a5027d36d4c3602a5a81dba01a2738e92d48",
+        "green_stdout_sha256": "fcfac8a3639040b8762605a59f03ac8c2248d472e19092acf600503414955e9b",
+        "claim": "One B11 behavior; six native witness failures become GREEN. Three invalid tags become absent and three valid ASCII tags are preserved. No six-cell claim.",
+        "scope": "Cached readEtag only. Writer, HTTP adapter, pointer body publication and all other behaviors unchanged.",
+        "correction": "Supersedes the earlier B11 RFC grammar claim and non-ASCII positive control. Unquoted printable ASCII is valid under the approved byte rule.",
+        "controls": "Empty/NUL/DEL absent; strong/weak/ASCII opaque/256-byte tags and exact edge-space ClientRequest values preserved; conditional 304 and ETag/body/ETag race pass.",
+        "remaining_limit": "Response ETag writer validation is outside this surgical followup; whole SDK B11 acceptance requires root-owned disposition."
+      }
     },
     {
       "canonical_id": "B12",
