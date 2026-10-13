@@ -835,13 +835,13 @@ class OpenTideConstants
         end
 
         def effective_set(rec, sets)
-            return rec if rec.nil? || commercial_set?(rec)
+            return rec if rec.nil? || @licence_by_id[rec["licence_id"]]&.commercial_use == true
             q = Util.enum(rec["quantity"], ENUMS[:quantity])
             return nil if q.nil?
             %i[ok flagged].each do |status|
                 found = sets.find do |cs|
                     Util.enum(cs["qc_status"], ENUMS[:qc_status]) == status && Util.enum(cs["quantity"], ENUMS[:quantity]) == q &&
-                        commercial_set?(cs)
+                        @licence_by_id[cs["licence_id"]]&.commercial_use == true
                 end
                 return found if found
             end

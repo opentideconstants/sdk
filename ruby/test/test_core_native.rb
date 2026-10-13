@@ -7,6 +7,26 @@ class CoreNativeTest < Minitest::Test
     def self.client
         @client ||= OpenTideConstants.new(file: H4, mode: :stream)
     end
+    def test_strict_commercial_retains_actual_licence_reading_recommendations
+        file = ENV.fetch("OTC_CORE_NATIVE_STRICT_JSON", H4)
+        expected = {
+            "OTC-013bda9c" => "OTC-013bda9c/ticon-4/crms6304-crms6304-usa-crms/as-published",
+            "OTC-11b36fe8" => "OTC-11b36fe8/ticon-4/crms0194-crms0194-usa-crms/as-published",
+            "OTC-1279f3e7" => "OTC-1279f3e7/ticon-4/crms0595-crms0595-usa-crms/as-published"
+        }
+        client = OpenTideConstants.new(file: file, mode: file.end_with?(".jsonl") ? :stream : :eager,
+                                      commercial_only: true, commercial_basis: :strict)
+        expected.each do |id, set_id|
+            station = client.require_station(id)
+            assert_equal set_id, station.raw["recommended_set_id"], id
+            original = station.constant_set(set_id)
+            assert_equal true, original.licence.commercial_use, id
+            assert_equal "licence_reading", original.raw.dig("fallback", "reason"), id
+            assert_equal set_id, station.recommended_set&.set_id, id
+        end
+    ensure
+        client&.close
+    end
     def test_historical_native_cells
         ["TEC2869", "TWC0509"].each do |id|
             st = self.class.client.station_by_alias(:xtide, id)
