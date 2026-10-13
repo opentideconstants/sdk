@@ -221,7 +221,9 @@ class OpenTideConstants
             merged = (prev ? prev["files"] : {}).select do |name, row|
                 name != sums && row["sha256"].is_a?(String) && File.file?(File.join(dir, name))
             end
-            merged = merged.transform_values { |row| row.merge("sha256" => row["sha256"].downcase) }
+            merged = merged.transform_values do |row|
+                { "sha256" => row["sha256"].downcase, "size" => row["size"], "url" => row["url"] }
+            end
             files.each do |name, row|
                 old = merged[name] || {}
                 merged[name] = { "sha256" => (row["sha256"] || old["sha256"])&.downcase, "size" => row["size"] || old["size"],
@@ -247,8 +249,7 @@ class OpenTideConstants
             taken = try_lock(dir) do
                 ver = verified(datestamp) # again, now under the lock
                 next if same.call(ver)
-                ver["zenodo_version_doi"] = doi
-                write_atomic(File.join(dir, ".verified"), JSON.pretty_generate(ver) + "\n")
+                write_verified(datestamp, {}, "zenodo_version_doi" => doi)
             end
             log(:debug, "#{dir} is locked by another process; its version DOI is noted later") unless taken
         rescue CacheError, FileError => e

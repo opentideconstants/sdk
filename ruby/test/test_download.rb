@@ -6,6 +6,48 @@ class DownloadTest < Minitest::Test
     OTC = OpenTideConstants
     D = "20991231.2".freeze
 
+    def test_latest_acquisition_keeps_the_loaded_source_versions_in_both_modes
+        src = tmpdir
+        FileUtils.cp_r(Dir.glob(File.join(FIXTURES, "good", "*")), src)
+        %W[OTC_#{D}.json OTC_#{D}.meta.json].each do |name|
+            path = File.join(src, name)
+            doc = JSON.parse(File.binread(path))
+            doc["format_version"] = "1.7"
+            doc["release"]["min_reader_version"] = "0.9"
+            File.binwrite(path, JSON.generate(doc))
+        end
+        Zlib::GzipWriter.open(File.join(src, "OTC_#{D}.json.gz")) do |gz|
+            gz.write(File.binread(File.join(src, "OTC_#{D}.json")))
+        end
+        sha_path = File.join(src, "OTC_#{D}.sha256")
+        sums = File.readlines(sha_path).map do |line|
+            name = line.split.last
+            "#{Digest::SHA256.file(File.join(src, name)).hexdigest}  #{name}\n"
+        end
+        File.binwrite(sha_path, sums.join)
+        pointer_path = File.join(src, "OTC_latest-f1.json")
+        pointer = JSON.parse(File.binread(pointer_path))
+        pointer["files"].each do |row|
+            path = File.join(src, row["name"])
+            row["sha256"] = Digest::SHA256.file(path).hexdigest
+            row["size"] = File.size(path)
+        end
+        File.binwrite(pointer_path, JSON.generate(pointer))
+        srv = serve(src)
+        c = nil
+        %i[eager stream].each do |mode|
+            cache = tmpdir
+            c = OTC.new(base_url: srv.url("/"), cache_dir: cache, mode: mode)
+            ver = JSON.parse(File.binread(File.join(cache, "v1", "releases", D, ".verified")))
+            assert_equal "1.7", c.release.format_version
+            assert_equal "1.7", ver["format_version"]
+            assert_equal "0.9", ver["min_reader_version"]
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
     # R10: offline with a cache that holds only some of the formats: nothing is written.
     def test_offline_partial_cache_writes_nothing
         srv = serve
