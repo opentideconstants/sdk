@@ -399,7 +399,7 @@ class OpenTideConstants:
             if size is not None and actual_size != size:
                 raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
                                     expected=rec.get("sha256"), actual=file_sha256(p))
-            if self._verify_on_open:
+            if self._verify_on_open or mode == "stream":
                 self._check_file(p, rec.get("sha256"))
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
