@@ -6,6 +6,7 @@ import gc
 import json
 import os
 import operator
+import struct
 import subprocess
 import sys
 import tempfile
@@ -18,11 +19,63 @@ if not os.environ.get("OTC_TEST_INSTALLED"):  # set it to test the installed pac
     sys.path.insert(0, str(ROOT / "python" / "src"))
 
 import opentideconstants as otc  # noqa: E402
-from opentideconstants._cache import datestamp_key  # noqa: E402
+from opentideconstants._cache import datestamp_key, lock_dir  # noqa: E402
+from opentideconstants._cache_json import encode_cache_json  # noqa: E402
 from opentideconstants._fold import fold  # noqa: E402
 from opentideconstants._release import freeze, haversine  # noqa: E402
 
 GOOD = ROOT / "conformance" / "fixtures" / "good"
+
+
+class CacheJSONTest(unittest.TestCase):
+    def test_native_lock_owners_use_canonical_bytes(self):
+        # Exercise the real writer, preserving its actual PID, host, time and token.
+        cases = [("ordinary", "opentideconstants-python", '"opentideconstants-python"'),
+                 ("unicode", "opentideconstants-python/é", '"opentideconstants-python/é"'),
+                 ("control", "opentideconstants-python/\n", '"opentideconstants-python/\\u000a"')]
+        for name, sdk, encoded_sdk in cases:
+            with self.subTest(cell=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                with lock_dir(root, sdk) as held:
+                    self.assertTrue(held)
+                    raw = (root / ".lock" / "owner.json").read_bytes()
+                    owner = json.loads(raw)
+                    self.assertEqual(owner["sdk"], sdk)
+                    self.assertIsInstance(owner["pid"], int)
+                    self.assertIsInstance(owner["host"], str)
+                    self.assertRegex(owner["started_at"], r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+                    self.assertRegex(owner["token"], r"\A[0-9a-f]{32}\Z")
+                    expected = ('{"host":' + json.dumps(owner["host"], ensure_ascii=False)
+                                + ',"pid":' + str(owner["pid"]) + ',"sdk":' + encoded_sdk
+                                + ',"started_at":' + json.dumps(owner["started_at"])
+                                + ',"token":' + json.dumps(owner["token"]) + '}').encode("utf-8")
+                    self.assertEqual(raw, expected, f"actual_hex={raw.hex()} expected_hex={expected.hex()}")
+                self.assertFalse((root / ".lock").exists())
+
+    def test_approved_finite_cache_goldens(self):
+        golden = json.loads((ROOT / "conformance" / "canonical" / "cache-golden.json").read_bytes())
+        for case in golden["cases"]:
+            value = (struct.unpack(">d", bytes.fromhex(case["binary64_hex"]))[0]
+                     if "binary64_hex" in case else case["input"])
+            with self.subTest(cell=case["id"]):
+                self.assertEqual(encode_cache_json(value), case["expected"].encode("utf-8"))
+
+    def test_approved_cache_refusals(self):
+        golden = json.loads((ROOT / "conformance" / "canonical" / "cache-golden.json").read_bytes())
+        for case in golden["refusals"]:
+            value = (struct.unpack(">d", bytes.fromhex(case["binary64_hex"]))[0]
+                     if "binary64_hex" in case else json.loads(bytes.fromhex(case["raw_json_hex"])))
+            with self.subTest(cell=case["id"]), self.assertRaises(ValueError):
+                encode_cache_json(value)
+
+    def test_cache_encoding_preserves_unknown_fields_and_values(self):
+        doc = {"unknown": [None, {"future": "é/é", "lat": -37.125}], "z": None}
+        before = copy.deepcopy(doc)
+        self.assertEqual(json.loads(encode_cache_json(doc)), doc)
+        self.assertEqual(doc, before)
+        for value in ({1: "nonstring key"}, b"not JSON"):
+            with self.subTest(value=value), self.assertRaises(TypeError):
+                encode_cache_json(value)
 
 
 class HistoricalOffsetModelTest(unittest.TestCase):
