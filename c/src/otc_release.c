@@ -1552,9 +1552,9 @@ static otc_status load_meta(otc_release *r, const char *meta_path, const char *t
         }
     }
     {   /* spec 7.4: a release that needs a newer reader is refused, naming both versions; a
-         * min_reader_version that is present but not MAJOR.MINOR is invalid_release (CR D9) */
+         * the required min_reader_version must be MAJOR.MINOR (CR D9) */
         const char *mrv = otc__jstr(r->release_obj, "min_reader_version");
-        if (otc__jget(r->release_obj, "min_reader_version") && !otc__version_valid(mrv)) {
+        if (!otc__version_valid(mrv)) {
             otc__err_set(err, OTC_E_INVALID_RELEASE, meta_path, "release.min_reader_version is not MAJOR.MINOR");
             return OTC_E_INVALID_RELEASE;
         }
