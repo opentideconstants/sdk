@@ -123,8 +123,14 @@ public final class Release {
         if e.summary.object.keys.contains("current_offsets") {
             let offsets=e.summary["current_offsets"].array,source=d["current_offsets"].array
             try require(offsets.count==source.count)
-            let keys=["bin","reference_bin","reference_station_id","licence_id"] + (e.presence?.fullCurrentOffsets==true ? ["time_adj_max_flood_min","time_adj_max_ebb_min","time_adj_slack_before_flood_min","time_adj_slack_before_ebb_min","flood_amp_ratio","ebb_amp_ratio"]:[])
-            for (index,row) in offsets.enumerated() { try require(keys.allSatisfy { indexValueMatches(row[$0],source[index][$0]) }) }
+            let keys=["bin","reference_bin","reference_station_id","licence_id"]
+            for (index,row) in offsets.enumerated() {
+                if e.presence?.fullCurrentOffsets==true {
+                    var full=source[index].object
+                    for key in keys { full[key]=source[index][key] }
+                    try require(indexValueMatches(row,.object(full)))
+                } else { try require(keys.allSatisfy { indexValueMatches(row[$0],source[index][$0]) }) }
+            }
         } else { try require(d["current_offsets"].array.isEmpty) }
     }
     internal func hydratePolicy(stationId:String?=nil)throws {

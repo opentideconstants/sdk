@@ -166,6 +166,53 @@ final class ReaderTests: XCTestCase {
         XCTAssertNil(release.lru[ids[1]], "least recently used actual station must be evicted")
         print("INDEX_LRU bounded=\(release.lru.count) recent_retained=\(release.lru[ids[0]] != nil) oldest_evicted=\(release.lru[ids[1]] == nil) fd=\(indexDescriptors(source))")
     }
+    func testIndexActualFullLegacyCurrentOffsetFields() async throws {
+        let source = URL(fileURLWithPath: try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_INDEX_FULL_LEGACY_JSONL"]))
+        for label in ["matching", "changed-known-unprojected", "changed-unknown", "deleted-unknown"] {
+            let local = try indexFixture("full-legacy-\(label)", source: source)
+            var rows: [JSONValue] = []
+            try eachLine(local) { data, _ in rows.append(try JSONValue.parse(data)) }
+            let target = try XCTUnwrap(rows.first { !$0["current_offsets"].array.isEmpty })
+            let id = try XCTUnwrap(target["station_id"].string)
+            let cold = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            cold.close()
+            let index = local.deletingLastPathComponent().appendingPathComponent("index-v1.json")
+            var doc = try JSONValue.parse(Data(contentsOf: index)).object
+            doc.removeValue(forKey: "discovery_index_version")
+            var entries = doc["stations"]!.array
+            for position in entries.indices {
+                var entry = entries[position].object
+                let original = try XCTUnwrap(rows.first { $0["station_id"] == entry["station_id"] })
+                entry["current_offsets"] = .array(original["current_offsets"].array)
+                entries[position] = .object(entry)
+            }
+            let position = try XCTUnwrap(entries.firstIndex { $0["station_id"].string == id })
+            var entry = entries[position].object, offsets = entry["current_offsets"]!.array, offset = offsets[0].object
+            if label == "changed-known-unprojected" { offset["depth_m"] = .integer(99) }
+            if label == "changed-unknown" { var unknown = offset["index_value_unknown"]!.object; unknown["enum"] = .string("tampered"); offset["index_value_unknown"] = .object(unknown) }
+            if label == "deleted-unknown" { offset.removeValue(forKey: "index_value_unknown") }
+            offsets[0] = .object(offset); entry["current_offsets"] = .array(offsets); entries[position] = .object(entry); doc["stations"] = .array(entries)
+            let modified = try encode_cache_json(.object(doc))
+            try modified.write(to: index)
+            let warm = try await OpenTideConstants.open(file: local.path, mode: .stream)
+            defer { warm.close() }
+            XCTAssertEqual(try Data(contentsOf: index), modified, "\(label): valid full legacy shape is admitted without rewriting")
+            XCTAssertEqual(warm.release.lru.count, 0)
+            XCTAssertEqual(indexDescriptors(local), 1)
+            if label == "matching" {
+                XCTAssertEqual(try warm.requireStation(stationId: id).raw, target)
+                XCTAssertEqual(try Data(contentsOf: index), modified)
+            } else {
+                XCTAssertThrowsError(try warm.requireStation(stationId: id), label) { error in
+                    XCTAssertEqual((error as? OpenTideConstantsError)?.code, "invalid_release")
+                }
+                XCTAssertFalse(FileManager.default.fileExists(atPath: index.path), label)
+            }
+            print("INDEX_FULL_LEGACY label=\(label) id=\(id) source_sha=\(try SHA256.file(local)) cache_deleted=\(!FileManager.default.fileExists(atPath: index.path)) fd=\(indexDescriptors(local))")
+            warm.close()
+            XCTAssertEqual(indexDescriptors(local), 0)
+        }
+    }
     func testCreatedTypeActualFormats() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
