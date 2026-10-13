@@ -358,7 +358,7 @@ class _Server:
     """A local HTTP server for unit tests: serves conformance/fixtures/<sub> (always 200, no ETag); `script` maps a
     path to (status, headers, body) for special answers."""
 
-    def __init__(self, sub="good", script=None):
+    def __init__(self, sub="good", script=None, before_body=None):
         import functools
         import http.server
         import threading
@@ -370,6 +370,11 @@ class _Server:
         class H(http.server.SimpleHTTPRequestHandler):
             def log_message(self, *a):
                 pass
+
+            def copyfile(self, source, outputfile):
+                if before_body is not None:
+                    before_body(self.path)
+                super().copyfile(source, outputfile)
 
             def do_GET(self):
                 outer.requests.append((self.path, dict(self.headers)))
@@ -392,6 +397,95 @@ class _Server:
     def close(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+
+
+class LockHeartbeatTest(unittest.TestCase):
+    def heartbeat_worker(self):
+        return next((t for t in threading.enumerate() if t.name == "opentideconstants-lock-heartbeat"), None)
+
+    def test_actual_download_refreshes_lock_during_real_network_wait(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            lock = cache / "v1" / "releases" / "20991231.2" / ".lock"
+            samples = []
+            workers = []
+
+            def pause_body(path):
+                if not path.endswith(".jsonl"):
+                    return
+                worker = self.heartbeat_worker()
+                if worker is not None:
+                    workers.append(worker)
+                samples.append((json.loads((lock / "owner.json").read_bytes()), lock.stat().st_mtime_ns))
+                time.sleep(32)  # The actual 30-second interval; no fake clock or timer scale.
+                samples.append((json.loads((lock / "owner.json").read_bytes()), lock.stat().st_mtime_ns))
+
+            server = _Server(before_body=pause_body)
+            try:
+                with otc.OpenTideConstants(release="20991231.2", mode="stream", cache_dir=str(cache),
+                                          base_url=server.url, timeout=60, on_network_error="raise") as client:
+                    self.assertEqual(client.station("OTC-T-0001").name, "San Francisco")
+            finally:
+                server.close()
+            self.assertEqual(len(samples), 2)
+            before, after = samples
+            self.assertEqual(before[0]["token"], after[0]["token"])
+            self.assertNotEqual(before[0]["started_at"], after[0]["started_at"])
+            self.assertGreater(after[1], before[1])
+            self.assertFalse(lock.exists())
+            self.assertEqual(len(workers), 1)
+            self.assertFalse(workers[0].is_alive())
+            for suffix in ("jsonl", "meta.json", "sha256"):
+                name = f"OTC_20991231.2.{suffix}"
+                self.assertEqual((lock.parent / name).read_bytes(), (GOOD / name).read_bytes())
+
+    def test_real_heartbeat_preserves_foreign_owner_and_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lock = root / ".lock"
+            with lock_dir(root, "heartbeat-ownership") as held:
+                self.assertTrue(held)
+                worker = self.heartbeat_worker()
+                if worker is None:
+                    self.fail("the lock holder did not start a heartbeat worker")
+                owner = json.loads((lock / "owner.json").read_bytes())
+                owner["token"] = "another-process"
+                foreign = encode_cache_json(owner)
+                (lock / "owner.json").write_bytes(foreign)
+                mtime = lock.stat().st_mtime_ns
+                time.sleep(31)
+                self.assertEqual((lock / "owner.json").read_bytes(), foreign)
+                self.assertEqual(lock.stat().st_mtime_ns, mtime)
+                self.assertFalse(worker.is_alive())
+            self.assertTrue(lock.is_dir())
+            self.assertEqual((lock / "owner.json").read_bytes(), foreign)
+
+    def test_real_refresh_error_is_logged_then_retried_and_cleanup_stops_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lock = root / ".lock"
+            with lock_dir(root, "heartbeat-error") as held:
+                self.assertTrue(held)
+                worker = self.heartbeat_worker()
+                if worker is None:
+                    self.fail("the lock holder did not start a heartbeat worker")
+                before = (lock / "owner.json").read_bytes()
+                with self.assertLogs("opentideconstants", level="WARNING") as logs:
+                    lock.chmod(0o555)
+                    try:
+                        time.sleep(31)
+                        self.assertEqual((lock / "owner.json").read_bytes(), before)
+                        self.assertEqual(tuple(lock.glob(".tmp-*")), ())
+                        self.assertTrue(worker.is_alive())
+                    finally:
+                        lock.chmod(0o755)
+                    time.sleep(31)
+                after = json.loads((lock / "owner.json").read_bytes())
+                self.assertEqual(after["token"], json.loads(before)["token"])
+                self.assertNotEqual(after["started_at"], json.loads(before)["started_at"])
+                self.assertTrue(any("cannot refresh" in message for message in logs.output))
+            self.assertFalse(worker.is_alive())
+            self.assertFalse(lock.exists())
 
 
 class ReceiptAcquisitionTest(unittest.TestCase):
