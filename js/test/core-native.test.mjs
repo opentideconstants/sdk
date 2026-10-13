@@ -21,6 +21,46 @@ before(async () => {
 });
 after(() => client?.close());
 
+test('actual strict commercial recommendations retain permitted published sets independently from discovery', async () => {
+    const strictFile = process.env.OTC_CORE_NATIVE_STRICT_JSON ?? file;
+    assert.ok(strictFile, 'actual pinned strict recommendation fixture required');
+    const document = JSON.parse(fs.readFileSync(strictFile, 'utf8'));
+    const ids = ['OTC-013bda9c', 'OTC-11b36fe8', 'OTC-1279f3e7'];
+    for (const commercialBasis of ['strict', 'as_published_upstream']) {
+        const strictClient = await sdk.OpenTideConstants.open({ file: strictFile, commercialOnly: true, commercialBasis });
+        try {
+            assert.deepEqual(strictClient.stations({ source: 'ticon-4' }).filter(s => ids.includes(s.station_id)), []);
+            assert.deepEqual(strictClient.stations({ source: 'ticon-4', includeFallback: true })
+                .filter(s => ids.includes(s.station_id)).map(s => s.station_id), commercialBasis === 'strict' ? [] : ids);
+            for (const id of ids) {
+                const input = document.stations.find(s => s.station_id === id);
+                assert.ok(input, `actual station ${id} required`);
+                const station = strictClient.requireStation(id);
+                const original = input.constant_sets.find(s => s.set_id === input.recommended_set_id);
+                assert.equal(station.recommendedSet?.set_id, input.recommended_set_id, `${commercialBasis}/${id}`);
+                assert.equal(station.constantSets()[0].set_id, input.recommended_set_id);
+                assert.deepEqual(station.raw, input);
+                assert.deepEqual(station.source_records.map(s => s.raw), input.source_records);
+                assert.deepEqual(station.recommendedSet.raw, original);
+                const licence = document.licences.find(l => l.licence_id === original.licence_id);
+                assert.equal(licence.commercial_use, true);
+                assert.ok(strictClient.attribution([station]).includes(licence.attribution));
+                const times = [new Date('2026-10-11T00:00:00Z')];
+                const explicit = await strictClient.heightsAt(station, times, { setId: input.recommended_set_id });
+                const implicit = await strictClient.heightsAt(station, times);
+                assert.deepEqual(implicit, explicit);
+                const refused = input.constant_sets.find(s => document.licences
+                    .find(l => l.licence_id === s.licence_id)?.commercial_use === false);
+                assert.ok(refused, 'actual noncommercial explicit selection required');
+                await assert.rejects(strictClient.heightsAt(station, times, { setId: refused.set_id }),
+                    e => e.code === 'invalid_argument' && e.message.includes('commercial_only refuses set_id'));
+                console.log(JSON.stringify({ control: 'strict recommendation', commercialBasis, station_id: id,
+                    set_id: station.recommendedSet.set_id, height_m: implicit.items[0].height_m }));
+            }
+        } finally { strictClient.close(); }
+    }
+});
+
 for (const id of ['OTC-28c56e20', 'OTC-541f1a73']) {
     test(`actual H4 ${id} historical typed labels and original source`, () => {
         const original = raw.stations.find(s => s.station_id === id);

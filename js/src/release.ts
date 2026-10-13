@@ -1198,11 +1198,11 @@ get historicalOffsetsPolicy()
         const sets = e.stored.sets;
         const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
         if (!rec) return null;
-        if (this.#commercial(rec.licence_id) && !(this.#commercialBasis === "strict" && rec.fallback?.["reason"] === "licence_reading")) return rec;
+        if (this.#commercial(rec.licence_id)) return rec;
         const q = en(rec.quantity, QUANTITIES);
         if (q === null) return null;
         for (const status of ["ok", "flagged"]) {
-            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id) && !(this.#commercialBasis === "strict" && cs.fallback?.["reason"] === "licence_reading"));
+            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id));
             if (hit) return hit;
         }
         return null;
