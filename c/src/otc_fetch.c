@@ -2187,18 +2187,12 @@ static void write_stream_index(fctx *c, const char *ds, const otc_release *rel)
     d = rel_dir(c, ds);
     p = d ? path2(d, "index-v1.json") : NULL;
     doc = p ? otc__index_doc(rel, sha, SDK_ID) : NULL;
-    if (doc) {
-        size_t needed = 0;
-        if (otc__copy_json(doc, NULL, 0, &needed) == OTC_OK && needed) {
-            txt = (char *)cJSON_malloc(needed);
-            if (txt && otc__copy_json(doc, txt, needed, &needed) != OTC_OK) { cJSON_free(txt); txt = NULL; }
-        }
-    }
+    if (doc) (void)otc__encode_cache_json(doc, &txt);
     if (!txt || write_atomic(c, d, p, txt, strlen(txt)) != OTC_OK) {
         logf_(c, 2, "cannot write the stream index %s", p ? p : ds);
         if (c->err) otc_error_init(c->err);
     }
-    cJSON_free(txt);
+    free(txt);
     cJSON_Delete(doc);
     free(p);
     free(d);

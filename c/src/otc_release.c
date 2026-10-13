@@ -922,7 +922,7 @@ static otc_status scan_lines(otc__file *f, size_t *line_no, line_fn fn, void *ct
             if (buf[i] == '\n') {
                 size_t len = n;
                 (*line_no)++;
-                while (len > 0 && line[len - 1] == '\r') len--;
+                if (len > 0 && line[len - 1] == '\r') len--;
                 line[len] = '\0';
                 if (!blank(line, len)) st = fn(ctx, line, len, line_start);
                 n = 0;
@@ -941,7 +941,6 @@ static otc_status scan_lines(otc__file *f, size_t *line_no, line_fn fn, void *ct
     }
     if (st == OTC_OK && n > 0) {
         (*line_no)++;
-        while (n > 0 && line[n - 1] == '\r') n--;
         line[n] = '\0';
         if (!blank(line, n)) st = fn(ctx, line, n, line_start);
     }
@@ -1156,7 +1155,12 @@ static uint64_t json_view(const cJSON *value)
     uint64_t h = 1469598103934665603ull;
     char number[32];
     if (!value || cJSON_IsNull(value)) return h;
-    if (cJSON_IsString(value)) return view_str(h ^ 1u, value->valuestring);
+    if (cJSON_IsString(value)) {
+        size_t i, n = otc__jstr_len(value);
+        h ^= 1u;
+        for (i = 0; i < n; i++) h = (h ^ (unsigned char)value->valuestring[i]) * 1099511628211ull;
+        return (h ^ 0xffu) * 1099511628211ull;
+    }
     if (cJSON_IsNumber(value)) { snprintf(number, sizeof number, "%.17g", value->valuedouble); return view_str(h ^ 2u, number); }
     if (cJSON_IsBool(value)) return h ^ (cJSON_IsTrue(value) ? 3u : 4u);
     if (cJSON_IsObject(value)) {
@@ -1184,6 +1188,20 @@ static uint64_t view_of(const cJSON *root, int from_line, unsigned fields)
     h = view_str(h, otc__jstr(root, "recommended_set_id"));
     h = view_str(h, otc__jstr(off, "reference_station_id"));
     h = view_str(h, otc__jstr(off, from_line ? "licence_id" : "offsets_licence_id"));
+    {
+        static const char *const keys[] = {"name", "country", "type", "lat", "lon", NULL};
+        const cJSON *alias, *id;
+        uint64_t aliases = 0;
+        for (k = 0; keys[k]; k++) h = (h ^ json_view(otc__jget(root, keys[k]))) * 1099511628211ull;
+        cJSON_ArrayForEach(alias, otc__jget(root, "aliases")) {
+            uint64_t row = 1469598103934665603ull;
+            /* The writer normalizes a single alias into a one-element array. */
+            if (cJSON_IsString(alias)) row = (row ^ json_view(alias)) * 1099511628211ull;
+            else cJSON_ArrayForEach(id, alias) row = (row ^ json_view(id)) * 1099511628211ull;
+            aliases ^= view_str(row, alias->string);
+        }
+        h = (h ^ aliases) * 1099511628211ull;
+    }
     cJSON_ArrayForEach(cs, otc__jget(root, from_line ? "constant_sets" : "sets")) {
         h = (h ^ 0x5eu) * 1099511628211ull;   /* one set */
         for (k = 0; SET_KEYS[k]; k++) h = view_str(h, otc__jstr(cs, SET_KEYS[k]));
@@ -1357,9 +1375,9 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         cJSON *s = cJSON_CreateObject(), *cons = cJSON_CreateArray();
         const cJSON *c;
         size_t k;
-for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]), &ok);
-{ static const char *const more[] = {"fallback", NULL};
-  for (k = 0; more[k]; k++) dup_if_set(s, cs, more[k], more[k], &ok); }
+        for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]), &ok);
+        v = otc__jget(cs, "fallback");
+        put(s, "fallback", v ? otc__json_dup(v) : cJSON_CreateNull(), &ok);
         put(s, "current_bins", bin_numbers(otc__jget(cs, "current_bins")), &ok);
 
         cJSON_ArrayForEach(c, otc__jget(cs, "constituents"))
@@ -1387,8 +1405,8 @@ for (k = 0; SET_KEYS[k]; k++) put(s, SET_KEYS[k], jstr_or_null(cs, SET_KEYS[k]),
     put(o, "reference_station_id", jstr_or_null(offs, "reference_station_id"), &ok);
     put(o, "offsets_licence_id", jstr_or_null(offs, "licence_id"), &ok);
     put(o, "recommended_set_id", jstr_or_null(d, "recommended_set_id"), &ok);
-dup_if_set(o, d, "subordinate_offsets", "subordinate_offsets", &ok);
-dup_if_set(o, d, "current_offsets", "current_offsets", &ok);
+    put(o, "subordinate_offsets", offs ? otc__json_dup(offs) : cJSON_CreateNull(), &ok);
+    put(o, "current_offsets", current_summaries(otc__jget(d, "current_offsets")), &ok);
     put(o, "sets", sets, &ok);
     cJSON_Delete(d);
     if (!ok) {
