@@ -167,7 +167,7 @@ class OpenTideConstants
         end
 
         # index: the entries of a fresh index-v1.json (spec §6.2); the stations
-        # then come from it, and only the tombstone lines are read. Otherwise
+        # then come from it, and only the nonactive status lines are read. Otherwise
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
         def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
@@ -193,8 +193,8 @@ class OpenTideConstants
                 else
                     pos = 0
                     io.each_line do |line|
-                        body = line.chomp
-                        unless blank?(line)
+                        body = line.end_with?("\n") ? line.delete_suffix("\n").delete_suffix("\r") : line
+                        unless blank?(body)
                             raw = parse_json(body.force_encoding(Encoding::UTF_8))
                             index_rows << index_entry(raw, pos, body.bytesize) if index_rows && raw.is_a?(Hash)
                             y << [raw, pos, body.bytesize]
@@ -204,6 +204,7 @@ class OpenTideConstants
                 end
             end
             begin
+                check_index_spans!(io, index) if index
                 rel = Release.new(meta: meta, stations: lines, mode: mode, files: files, checks: checks,
                                   io: mode == :stream ? io : nil, zenodo_version_doi: zenodo_version_doi,
                                   on_bad_index: index && on_bad_index, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
@@ -213,6 +214,36 @@ class OpenTideConstants
             rel
         rescue SystemCallError, IOError => e
             raise FileError.new("cannot read #{path}: #{e.message}", path: path)
+        end
+
+        # Check only gaps and boundaries; active source rows remain lazy.
+        def check_index_spans!(io, entries)
+            start = 0
+            entries.each do |entry|
+                offset = entry["offset"]
+                io.seek(offset - 1) if offset.positive?
+                if offset.positive? && io.read(1) != "\n"
+                    raise InvalidReleaseError, "index-v1.json: an offset is not at a source line boundary"
+                end
+                io.seek(start)
+                left = offset - start
+                while left.positive?
+                    bytes = io.read([left, 1 << 16].min)
+                    raise InvalidReleaseError, "index-v1.json: a source row is missing from the index" unless bytes && blank?(bytes)
+                    left -= bytes.bytesize
+                end
+                start = offset + entry["length"]
+                io.seek(start)
+                ending = io.read(2).to_s
+                unless ending.empty? || ending.start_with?("\n", "\r\n")
+                    raise InvalidReleaseError, "index-v1.json: a length is not at a source line boundary"
+                end
+            end
+            io.seek(start)
+            while (bytes = io.read(1 << 16))
+                raise InvalidReleaseError, "index-v1.json: a source row is missing from the index" unless blank?(bytes)
+            end
+            io.rewind
         end
 
         SET_KEYS = %w[set_id source source_type quantity qc_status convention_id licence_id].freeze
@@ -252,9 +283,8 @@ class OpenTideConstants
               "subordinate_offsets" => raw["subordinate_offsets"], "current_offsets" => raw.fetch("current_offsets", []) }
         end
 
-        # The keys of an index entry that a line read through the index must
-        # give as they are (PK-R2-07): the status, the references and the
-        # sets. The other keys are used as the index gives them (spec §6.2).
+        # Every represented source field must match at the lazy read. Legacy
+        # optional fields retain their document-wide presence rules.
         def line_view(e, profile: nil, presence: nil)
             sets = e["sets"].is_a?(Array) ? e["sets"] : []
             presence ||= {
@@ -264,9 +294,11 @@ class OpenTideConstants
                 "base_offsets" => profile && profile["base_offsets"],
                 "base_current" => profile && profile["base_current"],
                 "base_fallback" => profile && profile["base_fallback"],
-                "current_profile" => profile && profile["current_profile"]
+                "current_profile" => profile && profile["current_profile"],
+                "current_keys" => Array(e["current_offsets"]).map(&:keys)
             }
-            values = [e["station_id"], e["status"], e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
+            values = [e["station_id"], e["status"], e["name"], e["name_folded"], e["country"], e["type"], e["lat"], e["lon"], e["aliases"],
+                      e["recommended_set_id"], e["reference_station_id"], e["offsets_licence_id"],
                       sets.each_with_index.map do |cs, i|
                           fields = SET_KEYS.map { |k| cs[k] } + [cs["constituents"]]
                           fields += Array(presence["sets"][i]).map { |k| cs[k] }
@@ -277,9 +309,12 @@ class OpenTideConstants
             if presence["current_offsets"] || !presence["base_current"]
                 rows = e.fetch("current_offsets", []) || []
                 keys = CURRENT_BASE + (presence["current_profile"] == "full" ? CURRENT_ADJUSTMENTS : [])
-                values << rows.map { |row| keys.map { |k| row[k] } }
+                values << rows.each_with_index.map do |row, i|
+                    represented = presence["current_keys"] && presence["current_keys"][i] || keys
+                    CURRENT_BASE.to_h { |key| [key, row[key]] }.merge(row.slice(*(represented - CURRENT_BASE)))
+                end
             end
-            Util.deep_freeze({ "presence" => presence, "values" => values })
+            Util.deep_freeze({ "presence" => presence, "kind" => e["kind"], "values" => values })
         end
 
         CURRENT_BASE = %w[bin reference_bin reference_station_id licence_id].freeze
@@ -321,6 +356,7 @@ class OpenTideConstants
             return false unless e.is_a?(Hash) && e["offset"].is_a?(Integer) && e["length"].is_a?(Integer)
             return false unless e["station_id"].is_a?(String) && e["status"].is_a?(String)
             return false unless ENTRY_STR.all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(String)) }
+            return false unless e["name_folded"] == (e["name"] && Fold.fold(e["name"]))
             return false unless %w[lat lon].all? { |k| e.key?(k) && (e[k].nil? || e[k].is_a?(Numeric)) }
             return false unless e["aliases"].is_a?(Hash) && e["aliases"].values.all? { |v| v.is_a?(Array) && v.all?(String) }
             return false if e.key?("subordinate_offsets") && !(e["subordinate_offsets"].nil? || e["subordinate_offsets"].is_a?(Hash))
@@ -348,10 +384,10 @@ class OpenTideConstants
             false
         end
 
-        # The station document a load needs, from an index entry. A tombstone's
-        # own line is read (the index does not hold removed_in and removed_reason).
+        # The station document a load needs, from an index entry. Nonactive
+        # rows are read to validate their status and tombstone metadata.
         def raw_from_index(e, io, profile: nil)
-            if e["status"] == "removed"
+            if e["status"] != "active"
                 io.seek(e["offset"])
                 raw = parse_json(io.read(e["length"]).to_s.force_encoding(Encoding::UTF_8))
                 unless raw.is_a?(Hash) && raw["station_id"] == e["station_id"]

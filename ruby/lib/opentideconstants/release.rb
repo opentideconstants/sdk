@@ -59,6 +59,8 @@ class OpenTideConstants
             @io = io
             @on_bad_index = on_bad_index
             @io_lock = Mutex.new
+            @station_cache = {}
+            @station_cache_lock = Mutex.new
             @state = { closed: false } # not frozen with the Release: close sets it
             @files = files.sort_by(&:name).freeze
             @checks = checks.freeze
@@ -443,6 +445,7 @@ class OpenTideConstants
                 @state[:closed] = true
                 @io.close if @io && !@io.closed?
             end
+            @station_cache_lock.synchronize { @station_cache.clear }
             nil
         end
 
@@ -557,7 +560,14 @@ class OpenTideConstants
         end
 
         def materialize(e)
+            check_open!
             return e.station if e.station
+            cached = @station_cache_lock.synchronize do
+                station = @station_cache.delete(e.station_id)
+                @station_cache[e.station_id] = station if station
+                station
+            end
+            return cached if cached
             line = @io_lock.synchronize do
                 raise FileError.new("the release is closed", path: @io&.path) if @io.nil? || @io.closed?
                 @io.seek(e.pos)
@@ -573,7 +583,15 @@ class OpenTideConstants
                 sets = raw["constant_sets"] || []
                 effective = effective_set(sets.find { |cs| cs["set_id"] == raw["recommended_set_id"] }, sets)&.fetch("set_id")
             end
-            build_station(raw, e.kind, effective)
+            station = build_station(raw, e.kind, effective)
+            @io_lock.synchronize do
+                check_open!
+                @station_cache_lock.synchronize do
+                    @station_cache[e.station_id] = station
+                    @station_cache.shift while @station_cache.size > 256
+                end
+            end
+            station
         rescue SystemCallError, IOError => err
             raise FileError.new("cannot read station #{e.station_id}: #{err.message}", path: @io&.path)
         end
@@ -589,7 +607,7 @@ class OpenTideConstants
         end
 
         # A line read through the stream index gets the checks of the full
-        # pass, and it must give the status, references and sets of its entry
+        # pass, and every represented source field must match the entry
         # (spec §6.2, CR D4, PK-R2-07); otherwise bad_line!.
         def check_line!(raw, e)
             begin
@@ -601,8 +619,12 @@ class OpenTideConstants
             rescue InvalidReleaseError => err
                 bad_line!(e, "fails a check: #{err.message}")
             end
-            return if Reader.line_view(Reader.index_entry(raw, e.pos, e.len), presence: e.view["presence"]) == e.view
-            bad_line!(e, "does not give the status, references and sets of its entry")
+            summary = Reader.index_entry(raw, e.pos, e.len)
+            if summary["kind"].nil? && e.kind && raw["type"] == "subordinate" && e.reference_id
+                summary["kind"] = materialize(@by_id.fetch(e.reference_id)).kind&.to_s
+            end
+            return if Reader.line_view(summary, presence: e.view["presence"]) == e.view
+            bad_line!(e, "does not give the represented source fields of its entry")
         end
 
         # [the parsed line, nil], or [nil, why it does not parse] (R3-226: the
@@ -678,7 +700,12 @@ class OpenTideConstants
                                            "names no active station"
             end
             @set_ids = nil
-            entries.each { |e| e.kind = kind_of(e, []) }
+            kinds = entries.to_h { |e| [e.station_id, kind_of(e, [])] }
+            entries.each { |e| e.kind = kinds.fetch(e.station_id) }
+            entries.each do |e|
+                next unless e.view && e.view["kind"] != e.kind&.to_s
+                raise InvalidReleaseError, "index-v1.json: station #{e.station_id} has the wrong derived kind"
+            end
             if @mode == :eager
                 entries.each { |e| e.station = build_station(raws[e.station_id], e.kind, e.eff_id) }
             end
@@ -1105,6 +1132,7 @@ class OpenTideConstants
         # reference station if it is subordinate with offsets only.
         def kind_of(e, seen)
             return e.kind if e.kind
+            return nil if seen.size >= MAX_LINKS
             return nil unless e.type == :subordinate && e.reference_id
             ref = @by_id[e.reference_id]
             return nil if ref.nil? || seen.include?(ref.station_id)

@@ -812,7 +812,7 @@ class OpenTideConstants
             FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
-        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open,
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open || @mode == :stream,
                  logger: @logger, commercial_only: @commercial_only, commercial_basis: @commercial_basis, historical_offsets_policy: @historical_offsets_policy }
         return Reader.load(paths.first, **opts) unless @mode == :stream
         index = fresh_stream_index(d, ver, paths.first)
@@ -823,6 +823,7 @@ class OpenTideConstants
                 log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
             end
         end
+        drop_stream_index(d, "the stream index is stale") if File.file?(File.join(dir, "index-v1.json"))
         rows = []
         rel = Reader.load(paths.first, index_rows: rows, **opts)
         write_stream_index(d, rel, rows, ver, paths.first)
@@ -887,10 +888,14 @@ class OpenTideConstants
         sha = ver["files"].dig(jsonl, "sha256")
         return unless sha.is_a?(String)
         kinds = rel.send(:index_kinds)
-        rows.each { |r| r["kind"] = kinds[r["station_id"]] if r["status"] == "active" && kinds.key?(r["station_id"]) }
-        doc = { "index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
+        rows.each do |r|
+            r["kind"] = kinds[r["station_id"]] if r["status"] == "active" && kinds.key?(r["station_id"])
+            r["sets"] = r["sets"].map { |cs| cs.reject { |k, _| %w[source_record_id source_version datum].include?(k) } }
+            r["current_offsets"] = r["current_offsets"].map { |off| Reader::CURRENT_BASE.to_h { |key| [key, off[key]] } }
+        end
+        doc = { "index_version" => 1, "discovery_index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
                 "jsonl_size" => File.size(jsonl_path), "by" => "opentideconstants-ruby/#{VERSION}", "stations" => rows }
-        cache.write_atomic(File.join(cache.release_dir(d), "index-v1.json"), JSON.generate(doc) + "\n")
+        cache.write_atomic(File.join(cache.release_dir(d), "index-v1.json"), Cache.encode_cache_json(doc))
     rescue CacheError, SystemCallError, IOError => e
         log(:warn, "cannot write the stream index for #{d}: #{e.message}")
     end
