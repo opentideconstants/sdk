@@ -311,12 +311,15 @@ private struct ClientIO:@unchecked Sendable {
     }
     func pointer(_ name:String)async throws->JSONValue? {
         let path=cache.pointer(name),url=baseUrl.appendingPathComponent(name)
+        func readTag()->Data? {
+            guard let bytes=try? Data(contentsOf:path.appendingPathExtension("etag")),(1...256).contains(bytes.count),bytes.allSatisfy({ (32...126).contains($0) }) else { return nil }
+            return bytes
+        }
+        let firstTag=readTag()
         let candidate=(try? JSONValue.parse(Data(contentsOf:path)))
         let stored=candidate.flatMap { pointerShape(name,$0) ? $0:nil }
-        let cachedTag=stored==nil ? nil:try? Data(contentsOf:path.appendingPathExtension("etag"))
-        let etag=cachedTag.flatMap { bytes in
-            (1...256).contains(bytes.count) && bytes.allSatisfy { (32...126).contains($0) } ? String(data:bytes,encoding:.ascii):nil
-        }
+        let secondTag=readTag()
+        let etag=stored != nil && firstTag != nil && firstTag==secondTag ? String(data:firstTag!,encoding:.ascii):nil
         if offline { guard let stored else { throw OpenTideConstantsError.offlineUnavailable("\(name) not cached") };return stored }
         var response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile,etag:etag)
         if response.status==304,stored==nil { response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile) }
