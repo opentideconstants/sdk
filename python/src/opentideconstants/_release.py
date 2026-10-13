@@ -21,7 +21,7 @@ from ._errors import (ChecksumError, FileError, InvalidArgumentError, InvalidRel
                       StationNotFoundError, StationRemovedError, UnsupportedFormatError)
 from ._fold import fold
 from ._models import (Convention, FileInfo, Licence, Nearby, Station, Stats, Tombstone, _is_finite, build_station,
-                      freeze, parse_time, _check_historical_offsets)
+                      freeze, parse_time, _check_historical_offsets, check_station_types)
 
 SUPPORTED_FORMAT_MAJORS = (1,)
 SUPPORTED_FORMAT_VERSION = "1.0"
@@ -276,9 +276,74 @@ def integral(v):
     return None
 
 
-def _line_view(e):
+_INDEX_PRIVATE_SET_KEYS = ("source_record_id", "source_version", "datum")
+_INDEX_CURRENT_ADJUSTMENTS = ("time_adj_max_flood_min", "time_adj_max_ebb_min",
+                              "time_adj_slack_before_flood_min", "time_adj_slack_before_ebb_min",
+                              "flood_amp_ratio", "ebb_amp_ratio")
+
+
+def _index_presence(entries):
+    """The admitted document's extension profile, independent of its informational writer label."""
+    if any(not isinstance(e, dict) or not isinstance(e.get("sets"), list) for e in entries):
+        return None
+    sets = [cs for e in entries for cs in e["sets"]]
+    if any(not isinstance(cs, dict) for cs in sets):
+        return None
+    private = {tuple(k in cs for k in _INDEX_PRIVATE_SET_KEYS) for cs in sets}
+    if private not in (set(), {(False, False, False)}, {(True, True, True)}):
+        return None
+    bins_base = not any("current_bins" in cs for cs in sets)
+    if not bins_base and any("current_bins" not in cs for cs in sets):
+        return None
+    own_base = not any("subordinate_offsets" in e for e in entries)
+    fallback_base = not any("fallback" in cs for cs in sets)
+    current_base = not any("current_offsets" in e for e in entries)
+    profiles = set()
+    for e in entries:
+        if "current_offsets" in e and not isinstance(e["current_offsets"], list):
+            return None
+        for row in e.get("current_offsets", ()):
+            if not isinstance(row, dict):
+                return None
+            count = sum(k in row for k in _INDEX_CURRENT_ADJUSTMENTS)
+            if count not in (0, len(_INDEX_CURRENT_ADJUSTMENTS)):
+                return None
+            profiles.add(count)
+    if len(profiles) > 1:
+        return None
+    return MappingProxyType({"own_base": own_base, "fallback_base": fallback_base, "bins_base": bins_base,
+                             "all_base": own_base and fallback_base and bins_base and current_base,
+                             "private": bool(sets) and next(iter(private)) == (True, True, True),
+                             "full_current": len(_INDEX_CURRENT_ADJUSTMENTS) in profiles})
+
+
+def _line_view(e, presence=None, raw=None):
     """The keys of an index entry that a line read through the index must give as they are (PK-R2-07): the
     status, the references and the sets. The other keys are used as the index gives them (spec §6.2)."""
+    if presence is not None:
+        profile, entry_keys, set_keys = presence
+        values = []
+        for i, cs in enumerate(e.get("sets") or ()):
+            original = (raw.get("constant_sets") or ())[i] if raw is not None else cs
+            extra = []
+            if "fallback" in set_keys[i] or not profile["fallback_base"]:
+                extra.append(freeze(original.get("fallback")))
+            if "current_bins" in set_keys[i]:
+                extra.append(tuple(cs.get("current_bins") or ()))
+            if profile["private"]:
+                extra.extend(freeze(original.get(k)) for k in _INDEX_PRIVATE_SET_KEYS)
+            values.append(tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()), *extra))
+        own = () if profile["own_base"] and "subordinate_offsets" not in entry_keys else (
+            freeze(raw.get("subordinate_offsets") if raw is not None else e.get("subordinate_offsets")),)
+        current = ()
+        if "current_offsets" in entry_keys or not profile["all_base"]:
+            rows = raw.get("current_offsets") or () if raw is not None else e.get("current_offsets") or ()
+            fields = ("bin", "reference_bin", "reference_station_id", "licence_id")
+            if profile["full_current"]:
+                fields += _INDEX_CURRENT_ADJUSTMENTS
+            current = (tuple(tuple(freeze(row.get(k)) for k in fields) for row in rows),)
+        return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"),
+                e.get("reference_station_id"), e.get("offsets_licence_id"), values, own, current)
     return (e.get("station_id"), e.get("status"), e.get("recommended_set_id"), e.get("reference_station_id"),
             e.get("offsets_licence_id"),
             [tuple(cs.get(k) for k in _SET_KEYS) + (tuple(cs.get("constituents") or ()), freeze(cs.get("fallback")),
@@ -296,10 +361,13 @@ def _usable_index(idx, name, sha256, size, conv, lic):
         return v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
 
     if not isinstance(idx, dict) or integral(idx.get("index_version")) != INDEX_VERSION \
-            or integral(idx.get("discovery_index_version")) != 1:
+            or ("discovery_index_version" in idx and integral(idx["discovery_index_version"]) != 1):
         return None
     if idx.get("jsonl") != name or name != f"OTC_{idx.get('datestamp')}.jsonl" or idx.get("jsonl_sha256") != sha256 \
             or not is_int(idx.get("jsonl_size")) or integral(idx["jsonl_size"]) != size or not isinstance(idx.get("stations"), list):
+        return None
+    profile = _index_presence(idx["stations"])
+    if profile is None:
         return None
     out = []
     start = 0  # the least offset the next entry may have
@@ -309,17 +377,20 @@ def _usable_index(idx, name, sha256, size, conv, lic):
                 or not all(k in e and (e[k] is None or isinstance(e[k], str)) for k in _ENTRY_STR) \
                 or not is_num(e.get("lat", 0)) or not is_num(e.get("lon", 0)) or "lat" not in e or "lon" not in e \
                 or not isinstance(e.get("aliases"), dict) or not isinstance(e.get("sets"), list) \
-                or not isinstance(e.get("current_offsets"), list) or "subordinate_offsets" not in e:
+                or ("current_offsets" in e and not isinstance(e["current_offsets"], list)):
             return None
-        off = e['subordinate_offsets']
+        off = e.get('subordinate_offsets')
         if not (off is None or isinstance(off, dict)):
             return None
         try:
             _check_historical_offsets(off)
         except InvalidReleaseError:
             return None
-        if e.get('reference_station_id') != (None if off is None else _s(off, 'reference_station_id')) \
-                or e.get('offsets_licence_id') != (None if off is None else _s(off, 'licence_id')):
+        if "subordinate_offsets" in e and (e.get('reference_station_id') != (None if off is None else _s(off, 'reference_station_id'))
+                or e.get('offsets_licence_id') != (None if off is None else _s(off, 'licence_id'))):
+            return None
+        if "subordinate_offsets" not in e and not profile["own_base"] \
+                and (e["reference_station_id"] is not None or e["offsets_licence_id"] is not None):
             return None
         e = {**e, "offset": integral(e["offset"]), "length": integral(e["length"])}
         if not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in e["aliases"].values()):
@@ -335,21 +406,37 @@ def _usable_index(idx, name, sha256, size, conv, lic):
         for cs in e["sets"]:
             if not isinstance(cs, dict) or not all(k in cs and (cs[k] is None or isinstance(cs[k], str)) for k in _SET_KEYS) \
                     or not isinstance(cs.get("constituents"), list) or not all(isinstance(x, str) for x in cs["constituents"]) \
-                    or "fallback" not in cs or not (cs["fallback"] is None or isinstance(cs["fallback"], dict)) \
-                    or not isinstance(cs.get("current_bins"), list) or not all(integral(n) is not None for n in cs["current_bins"]):
+                    or ("fallback" in cs and not (cs["fallback"] is None or isinstance(cs["fallback"], dict))) \
+                    or ("current_bins" in cs and (not isinstance(cs["current_bins"], list)
+                        or not all((value := integral(n)) is not None and 1 <= value <= 2**53 - 1
+                                   for n in cs["current_bins"]))):
                 return None
+            if profile["private"] or cs.get("fallback") is not None:
+                try:
+                    fields = {k: cs[k] for k in _INDEX_PRIVATE_SET_KEYS} if profile["private"] else {}
+                    if "fallback" in cs:
+                        fields["fallback"] = cs["fallback"]
+                    check_station_types({"constant_sets": [fields]})
+                except (InvalidReleaseError, TypeError, AttributeError):
+                    return None
             if e["status"] == "active" and (cs["convention_id"] not in conv or cs["licence_id"] not in lic):
                 return None  # a reference that does not resolve: rebuild, and the pass raises invalid_release
-        for co in e["current_offsets"]:
+        for co in e.get("current_offsets", ()):
             if not isinstance(co, dict) or not all(k in co for k in ("bin", "reference_bin", "reference_station_id", "licence_id")) \
                     or not all(co[k] is None or integral(co[k]) is not None for k in ("bin", "reference_bin")) \
                     or not all(co[k] is None or isinstance(co[k], str) for k in ("reference_station_id", "licence_id")):
+                return None
+            if profile["full_current"] and not all(co[k] is None or _is_finite(co[k])
+                                                   for k in _INDEX_CURRENT_ADJUSTMENTS):
                 return None
         if e["status"] == "active":
             if e["offsets_licence_id"] is not None and e["offsets_licence_id"] not in lic:
                 return None
             if e["recommended_set_id"] is not None and e["recommended_set_id"] not in {cs["set_id"] for cs in e["sets"]}:
                 return None
+        presence = (profile, frozenset(k for k in ("subordinate_offsets", "current_offsets") if k in e),
+                    tuple(frozenset(k for k in ("fallback", "current_bins") if k in cs) for cs in e["sets"]))
+        e["_index_presence"] = presence
         out.append(e)
     return out
 
@@ -650,9 +737,32 @@ class Release:
             got = _entry(d, e["offset"], e["length"])
         except (KeyError, TypeError, AttributeError) as ex:
             raise InvalidReleaseError(f"the line of {e['station_id']}: {ex!r}") from ex
-        if _line_view(got) != _line_view(e):
+        presence = e.get("_index_presence")
+        if len(got.get("sets") or ()) != len(e.get("sets") or ()) \
+                or _line_view(got, presence, d) != _line_view(e, presence):
             raise InvalidReleaseError(f"the line of {e['station_id']} does not give the status, references and "
                                       f"sets of its entry")
+
+    def _index_policy_entry(self, e):
+        """Uncached policy fields come from the validated actual record, never absence defaults."""
+        presence = e.get("_index_presence")
+        if presence is None or e.get("_index_policy_hydrated"):
+            return e
+        _, entry_keys, set_keys = presence
+        if len(entry_keys) == 2 and all(len(keys) == 2 for keys in set_keys):
+            return e
+        with self._lock:
+            raw = self._read_line(e)
+            actual = _entry(raw, e["offset"], e["length"])
+            for key in ("subordinate_offsets", "current_offsets"):
+                if key not in entry_keys:
+                    e[key] = actual[key]
+            for stored, got, keys in zip(e["sets"], actual["sets"], set_keys):
+                for key in ("fallback", "current_bins"):
+                    if key not in keys:
+                        stored[key] = got[key]
+            e["_index_policy_hydrated"] = True
+        return e
 
     def station(self, station_id: str) -> Optional[Station]:
         self._check_open()
@@ -740,10 +850,13 @@ class Release:
         return True
 
     def _eligible_paths(self, e, include_flagged, include_fallback, *, historical=True):
+        e = self._index_policy_entry(e)
         for cs in e.get("sets") or ():
             if self._set_eligible(cs, include_flagged, include_fallback):
                 yield cs
         ref = self._by_id.get(e.get("reference_station_id"))
+        if ref is not None:
+            ref = self._index_policy_entry(ref)
         own = e.get('subordinate_offsets') or {}
         if own.get('offset_id') is not None:
             if historical and self._historical_discovery(e):
@@ -756,6 +869,8 @@ class Release:
                 yield cs
         for co in e.get("current_offsets") or ():
             ref = self._by_id.get(co.get("reference_station_id"))
+            if ref is not None:
+                ref = self._index_policy_entry(ref)
             n = co.get("reference_bin")
             own_bin = co.get("bin")
             if ref is None or n is None or not 1 <= n <= 2**53 - 1 \
@@ -1196,6 +1311,8 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
                 # accepting a derived cache; a matching file hash alone cannot validate its summaries.
                 with path.open('rb') as handle:
                     for entry in entries:
+                        if "subordinate_offsets" not in entry:
+                            continue  # a base/sparse omission is checked before its metadata is used
                         if entry.get('type') != 'subordinate' and entry.get('subordinate_offsets') is None:
                             continue
                         handle.seek(entry['offset'])

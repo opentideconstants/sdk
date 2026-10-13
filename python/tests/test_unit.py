@@ -5,6 +5,7 @@ import dataclasses
 import json
 import os
 import operator
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -540,6 +541,164 @@ class StreamIndexTest(unittest.TestCase):
 
     def reopen(self):
         return otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
+
+    def ruby_index(self):
+        self.index.unlink()
+        writer = """client = OpenTideConstants.new(release: '20991231.2', cache_dir: ARGV.fetch(0),
+                                    offline: true, mode: 'stream')
+client.close
+"""
+        result = subprocess.run([os.environ.get("OTC_NATIVE_RUBY", "ruby"), "-I", str(ROOT / "ruby" / "lib"),
+                                 "-ropentideconstants", "-e", writer, str(self.cache)],
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        index = json.loads(self.index.read_bytes())
+        self.assertNotIn("discovery_index_version", index)
+        self.assertTrue(all(all(k in cs for k in ("source_record_id", "source_version", "datum"))
+                            for entry in index["stations"] for cs in entry["sets"]))
+        return index
+
+    def marked_index(self, index):
+        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
+        entry["country"] = "ZZ"  # the same discovery-only witness as cross/index-shared
+        self.index.write_text(json.dumps(index), encoding="utf-8")
+        return self.index.read_bytes(), entry
+
+    def test_real_ruby_index_keeps_three_public_queries_and_raw(self):
+        saved, entry = self.marked_index(self.ruby_index())
+        path = self.index.parent / "OTC_20991231.2.jsonl"
+        with path.open("rb") as handle:
+            handle.seek(entry["offset"])
+            original = json.loads(handle.read(entry["length"]))
+        with self.reopen() as client:
+            queries = {
+                "stations": client.stations(country="ZZ"),
+                "search": client.search(name=entry["name"], country="ZZ"),
+                "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
+                                                             radius_km=1, country="ZZ")),
+            }
+            for name, stations in queries.items():
+                with self.subTest(query=name):
+                    self.assertEqual(tuple(s.station_id for s in stations), ("OTC-T-0011",))
+            self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
+        self.assertEqual(self.index.read_bytes(), saved)
+
+    def test_sparse_null_extensions_preserve_native_index_bytes(self):
+        index = json.loads(self.index.read_bytes())
+        for entry in index["stations"]:
+            if entry["subordinate_offsets"] is None:
+                del entry["subordinate_offsets"]
+            if not entry["current_offsets"]:
+                del entry["current_offsets"]
+            for cs in entry["sets"]:
+                if cs["fallback"] is None:
+                    del cs["fallback"]
+        saved, _ = self.marked_index(index)
+        with self.reopen() as client:
+            self.assertEqual(tuple(s.station_id for s in client.stations(country="ZZ")), ("OTC-T-0011",))
+        self.assertEqual(self.index.read_bytes(), saved)
+
+    def test_private_fields_must_be_complete_across_every_set(self):
+        original = self.ruby_index()
+        for key in ("source_record_id", "source_version", "datum", "all-three", "bad-value"):
+            with self.subTest(key=key):
+                index = copy.deepcopy(original)
+                cs = next(s for e in index["stations"] for s in e["sets"])
+                if key == "all-three":
+                    for field in ("source_record_id", "source_version", "datum"):
+                        del cs[field]
+                elif key == "bad-value":
+                    cs["source_version"] = []
+                else:
+                    del cs[key]
+                self.marked_index(index)
+                with self.reopen() as client:
+                    self.assertEqual(client.stations(country="ZZ"), ())
+
+    def test_wholly_absent_private_fields_are_a_valid_foreign_profile(self):
+        index = self.ruby_index()
+        for entry in index["stations"]:
+            for cs in entry["sets"]:
+                for field in ("source_record_id", "source_version", "datum"):
+                    del cs[field]
+        saved, _ = self.marked_index(index)
+        with self.reopen() as client:
+            self.assertEqual(tuple(s.station_id for s in client.stations(country="ZZ")), ("OTC-T-0011",))
+        self.assertEqual(self.index.read_bytes(), saved)
+
+    def test_present_invalid_marker_is_not_an_absent_marker(self):
+        original = json.loads(self.index.read_bytes())
+        for value in (None, True, "1", 0, 1.5, 2):
+            with self.subTest(marker=value):
+                index = copy.deepcopy(original)
+                index["discovery_index_version"] = value
+                self.marked_index(index)
+                with self.reopen() as client:
+                    self.assertEqual(client.stations(country="ZZ"), ())
+
+    def test_ruby_private_source_or_datum_tampering_is_rejected_at_query(self):
+        original = self.ruby_index()
+        for field, value in (("source_record_id", "wrong-source"),
+                             ("source_version", "wrong-version"), ("datum", {"msl_offset_m": 1234.0})):
+            with self.subTest(field=field):
+                index = copy.deepcopy(original)
+                entry = next(e for e in index["stations"] if e["sets"])
+                entry["sets"][0][field] = value
+                self.index.write_text(json.dumps(index), encoding="utf-8")
+                with self.reopen() as client:
+                    with self.assertRaises(otc.InvalidReleaseError):
+                        client.station(entry["station_id"])
+                self.assertFalse(self.index.exists())
+
+    def test_foreign_set_count_mismatch_is_invalid_release_and_drops_index(self):
+        index = self.ruby_index()
+        entry = next(e for e in index["stations"] if e["sets"] and e["type"] != "subordinate")
+        entry["sets"] = []
+        entry["recommended_set_id"] = None
+        self.index.write_text(json.dumps(index), encoding="utf-8")
+        with self.reopen() as client:
+            with self.assertRaises(otc.InvalidReleaseError):
+                client.station(entry["station_id"])
+        self.assertFalse(self.index.exists())
+
+    def test_base_and_full_current_offset_profiles_keep_native_policy_values(self):
+        cache = self.root / "current-cache"
+        server = _Server("knc-predict")
+        try:
+            with otc.OpenTideConstants(base_url=server.url, cache_dir=str(cache), mode="stream") as client:
+                expected = tuple(s.station_id for s in client.stations())
+                self.assertTrue({"OTC-T-0191", "OTC-T-0192"}.issubset(expected))
+        finally:
+            server.close()
+        index_path = cache / "v1" / "releases" / "20991231.2" / "index-v1.json"
+        original = json.loads(index_path.read_bytes())
+        self.assertGreater(sum(len(e["current_offsets"]) for e in original["stations"]), 0)
+        adjustment_keys = ("time_adj_max_flood_min", "time_adj_max_ebb_min", "time_adj_slack_before_flood_min",
+                           "time_adj_slack_before_ebb_min", "flood_amp_ratio", "ebb_amp_ratio")
+        for profile in ("base", "full", "partial"):
+            with self.subTest(profile=profile):
+                index = copy.deepcopy(original)
+                for entry in index["stations"]:
+                    if profile == "base":
+                        del entry["subordinate_offsets"], entry["current_offsets"]
+                        for cs in entry["sets"]:
+                            del cs["fallback"], cs["current_bins"]
+                    elif entry["current_offsets"]:
+                        with (index_path.parent / index["jsonl"]).open("rb") as handle:
+                            handle.seek(entry["offset"])
+                            raw = json.loads(handle.read(entry["length"]))
+                        for summary, row in zip(entry["current_offsets"], raw["current_offsets"]):
+                            summary.update({key: row.get(key) for key in adjustment_keys})
+                            if profile == "partial":
+                                del summary[adjustment_keys[0]]
+                index_path.write_text(json.dumps(index), encoding="utf-8")
+                saved = index_path.read_bytes()
+                with otc.OpenTideConstants(cache_dir=str(cache), offline=True, mode="stream") as client:
+                    self.assertEqual(tuple(s.station_id for s in client.stations()), expected)
+                if profile == "partial":
+                    self.assertNotEqual(index_path.read_bytes(), saved)
+                else:
+                    self.assertEqual(index_path.read_bytes(), saved)
 
     def test_index_entry_with_a_null_lat_is_stale(self):
         idx = json.loads(self.index.read_text(encoding="utf-8"))
@@ -2113,11 +2272,13 @@ class DiscoveryPolicyTest(unittest.TestCase):
                 old_index = json.loads(path.read_bytes())
                 old_index.pop("discovery_index_version")
                 path.write_text(json.dumps(old_index), encoding="utf-8")
+                markerless_bytes = path.read_bytes()
             with otc.OpenTideConstants(cache_dir=cache, offline=True, mode=mode,
                                       commercial_only=True, commercial_basis="as_published_upstream") as cached:
                 self.assertEqual(cached.release._commercial_basis, "as_published_upstream")
             if mode == "stream":
-                self.assertEqual(json.loads(path.read_bytes())["discovery_index_version"], 1)
+                self.assertNotIn("discovery_index_version", json.loads(path.read_bytes()))
+                self.assertEqual(path.read_bytes(), markerless_bytes)
 
     def test_all_methods_validate_opt_ins_when_called(self):
         client = self.open_doc()
