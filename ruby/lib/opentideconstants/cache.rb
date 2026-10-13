@@ -402,9 +402,59 @@ class OpenTideConstants
                 release_lock(lock, owner_path, nil)
                 raise CacheError, "cannot write #{owner_path}: #{e.message}"
             end
+            mutex = Mutex.new
+            wake = ConditionVariable.new
+            stopped = false
+            heartbeat = nil
+            identity = nil
+            owned = lambda do
+                current = JSON.parse(File.read(owner_path))
+                stat = File.stat(lock)
+                current if current.is_a?(Hash) && current["token"] == token && stat.dev == identity.dev && stat.ino == identity.ino
+            end
             begin
+                identity = File.stat(lock)
+                heartbeat = Thread.new do
+                    loop do
+                        break if mutex.synchronize { wake.wait(mutex, 30) unless stopped; stopped }
+                        tmp = nil
+                        begin
+                            current = owned.call
+                            unless current
+                                log(:warn, "the lock #{lock} is no longer ours; stopping its heartbeat")
+                                break
+                            end
+                            tmp = Cache.tmp_path(lock)
+                            File.open(tmp, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+                                file.write(JSON.generate(current.merge("started_at" => Time.now.utc.iso8601)))
+                                file.flush
+                                file.fsync
+                            end
+                            unless owned.call
+                                log(:warn, "the lock #{lock} is no longer ours; stopping its heartbeat")
+                                break
+                            end
+                            File.rename(tmp, owner_path)
+                            unless owned.call
+                                log(:warn, "the lock #{lock} is no longer ours; stopping its heartbeat")
+                                break
+                            end
+                            now = Time.now
+                            File.utime(now, now, lock)
+                        rescue Errno::ENOENT, Errno::ENOTDIR
+                            log(:warn, "the lock #{lock} is gone; stopping its heartbeat")
+                            break
+                        rescue JSON::ParserError, SystemCallError, IOError => e
+                            log(:warn, "cannot refresh the lock #{lock}: #{e.message}")
+                        ensure
+                            FileUtils.rm_f(tmp) if tmp
+                        end
+                    end
+                end
                 yield
             ensure
+                mutex.synchronize { stopped = true; wake.signal }
+                heartbeat&.join
                 release_lock(lock, owner_path, token)
             end
         end

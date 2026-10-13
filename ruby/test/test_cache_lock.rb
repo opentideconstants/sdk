@@ -255,6 +255,87 @@ class CacheLockTest < Minitest::Test
         JSON.parse(File.read(File.join(lock, "owner.json")))["token"]
     end
 
+    def test_real_public_stream_wait_refreshes_its_lock
+        cache = tmpdir
+        lock = File.join(cache, "v1", "releases", "20991231.2", ".lock")
+        snapshots = []
+        heartbeat_threads = []
+        threads = Thread.list
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        body = File.binread(fixture("good", "OTC_20991231.2.jsonl"))
+        srv = serve(File.join(FIXTURES, "good"), "OTC_20991231.2.jsonl" => lambda do |_path|
+            heartbeat_threads = (Thread.list - threads).select { |thread| Array(thread.backtrace).any? { |line| line.include?("/opentideconstants/cache.rb:") } }
+            snapshots << [JSON.parse(File.read(File.join(lock, "owner.json"))), File.mtime(lock)]
+            sleep(32)
+            snapshots << [JSON.parse(File.read(File.join(lock, "owner.json"))), File.mtime(lock)]
+            [200, {}, body]
+        end)
+        threads = Thread.list
+        c = OTC.new(release: "20991231.2", base_url: srv.url("/"), cache_dir: cache, mode: :stream, on_network_error: :raise)
+        assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 32
+        assert_equal snapshots[0][0]["token"], snapshots[1][0]["token"]
+        refute_equal snapshots[0][0]["started_at"], snapshots[1][0]["started_at"]
+        assert_operator snapshots[1][1], :>, snapshots[0][1]
+        assert_equal "OTC-T-0001", c.station("OTC-T-0001").station_id
+        assert_equal body, File.binread(File.join(File.dirname(lock), "OTC_20991231.2.jsonl"))
+        refute File.exist?(lock)
+        assert_equal 1, heartbeat_threads.size
+        refute heartbeat_threads.any?(&:alive?), "the cache heartbeat survived lock release"
+    ensure
+        c&.close
+    end
+
+    def test_heartbeat_stops_before_exception_release
+        cache = quick_cache
+        dir = cache.ensure_dir(cache.release_dir("20991231"))
+        before = Thread.list
+        error = assert_raises(RuntimeError) { cache.with_lock(dir) { raise "held operation failed" } }
+        assert_equal "held operation failed", error.message
+        refute File.exist?(File.join(dir, ".lock"))
+        assert_empty Thread.list - before
+    end
+
+    def test_real_heartbeat_failure_is_warned_and_timer_stops
+        posix_only
+        log = Log.new
+        cache = quick_cache(log)
+        dir = cache.ensure_dir(cache.release_dir("20991231"))
+        lock = File.join(dir, ".lock")
+        before = Thread.list
+        cache.with_lock(dir) do
+            begin
+                FileUtils.chmod(0o555, lock)
+                sleep(32)
+                assert(log.lines.any? { |level, message| level == :warn && message.include?("cannot refresh the lock #{lock}") }, log.lines.inspect)
+            ensure
+                FileUtils.chmod(0o755, lock)
+            end
+        end
+        refute File.exist?(lock)
+        assert_empty Thread.list - before
+    end
+
+    def test_real_heartbeat_leaves_a_foreign_owner_unchanged
+        log = Log.new
+        cache = quick_cache(log)
+        dir = cache.ensure_dir(cache.release_dir("20991231"))
+        lock = File.join(dir, ".lock")
+        path = File.join(lock, "owner.json")
+        before = Thread.list
+        foreign = nil
+        cache.with_lock(dir) do
+            foreign = JSON.generate(JSON.parse(File.read(path)).merge("token" => "someone-else"))
+            File.write(path, foreign)
+            mtime = File.mtime(lock)
+            sleep(32)
+            assert_equal foreign, File.read(path)
+            assert_equal mtime, File.mtime(lock)
+        end
+        assert_equal foreign, File.read(path)
+        assert File.directory?(lock)
+        assert_empty Thread.list - before
+    end
+
     def test_a_waiter_does_not_remove_a_young_lock
         cache = quick_cache
         dir, lock = held_lock(cache, "20991231", started_at: Time.now.utc.iso8601)
