@@ -104,6 +104,10 @@ def _table(release, constants):
     table = astro_table(release, ident)
     if table is None:
         raise X.NoAstroTableError(f'release {release.datestamp} has no astro table "{ident}" for convention "{convention.convention_id}". Format 1.0 requires astro_tables when a convention uses f_u_at_prediction (since the schema revision of site PR #45); this file was written before that revision or is invalid.')
+    if (table._raw.get('v0_model') != convention.v0_model
+            or (convention.raw.get('tables_sha256') is not None
+                and convention.raw['tables_sha256'] != table._raw.get('tables_sha256'))):
+        raise X.UnsupportedConventionError(f'astro table "{ident}" does not match convention "{convention.convention_id}"')
     return table
 
 
