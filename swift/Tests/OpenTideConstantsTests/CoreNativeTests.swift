@@ -63,6 +63,53 @@ final class CoreNativeTests:XCTestCase {
             print("INTEGRITY_MISSING suffix=\(suffix) no_source_row=true requested_file_missing=true verify=io")
         }
     }
+    func testActualHTTPCredentialRedaction() async throws {
+        let cache=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:cache) }
+        do {
+            let client=try await OpenTideConstants.open(cacheDir:cache.path,baseUrl:"http://otcpk12user:Pk12S3cretPW@127.0.0.1:1/good/",onNetworkError:.raise)
+            client.close();XCTFail("the existing refused-connection fixture must fail")
+        } catch let error as OpenTideConstantsError {
+            XCTAssertEqual(error.code,"network")
+            for value in [error.message,error.fields["url"]?.string ?? ""] {
+                XCTAssertFalse(value.contains("otcpk12user"));XCTAssertFalse(value.contains("Pk12S3cretPW"))
+            }
+            XCTAssertTrue(error.fields["url"]?.string?.contains("://***@127.0.0.1:1/good/") == true)
+        }
+    }
+    func testActualHTTPRetryAfter() async throws {
+        let root=try path("OTC_HTTP_NATIVE_REPO_ROOT"),proof=try path("OTC_HTTP_NATIVE_PROOF_ROOT")
+        let directory=URL(fileURLWithPath:proof).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let rules=directory.appendingPathComponent("rules.json")
+        // Private status control on the unchanged, real conformance server and release fixture.
+        try Data("[{\"match\":\"/good/OTC_latest-f1\\\\.json$\",\"action\":\"status\",\"status\":429,\"headers\":{\"Retry-After\":\"2\"},\"times\":1}]".utf8).write(to:rules)
+        let server=Process(),log=directory.appendingPathComponent("server.stdout"),errors=directory.appendingPathComponent("server.stderr")
+        FileManager.default.createFile(atPath:log.path,contents:Data());FileManager.default.createFile(atPath:errors.path,contents:Data())
+        let output=try FileHandle(forWritingTo:log),error=try FileHandle(forWritingTo:errors)
+        defer { try? output.close();try? error.close() }
+        server.executableURL=URL(fileURLWithPath:try path("OTC_HTTP_NATIVE_PYTHON"))
+        server.arguments=["-u",root+"/conformance/server.py","--port","0","--proxy-port","0","--rules",rules.path]
+        server.environment=ProcessInfo.processInfo.environment.merging(["PYTHONDONTWRITEBYTECODE":"1"]) { _,value in value }
+        server.standardOutput=output;server.standardError=error
+        try server.run()
+        defer { if server.isRunning { server.interrupt() };server.waitUntilExit() }
+        let deadline=Date().addingTimeInterval(10)
+        var base:String?
+        while server.isRunning,Date()<deadline {
+            let text=(try? String(contentsOf:log,encoding:.utf8)) ?? ""
+            if let line=text.components(separatedBy:"\n").first(where: { $0.hasPrefix("fixture server http://") }) {
+                base=line.components(separatedBy:" ")[2]+"good/";break
+            }
+            try await Task.sleep(nanoseconds:10_000_000)
+        }
+        let url=try XCTUnwrap(base,"existing native fixture did not start")
+        let start=ProcessInfo.processInfo.systemUptime
+        let client=try await OpenTideConstants.open(cacheDir:directory.appendingPathComponent("cache").path,baseUrl:url,onNetworkError:.raise)
+        defer { client.close() }
+        XCTAssertEqual(client.loadedFrom,.download);XCTAssertEqual(client.release.datestamp,"20991231.2")
+        XCTAssertGreaterThanOrEqual(ProcessInfo.processInfo.systemUptime-start,1.9,"real Retry-After2 must delay the native request")
+    }
     func testHistoricalDiscoveryUsesSelectedReferenceTable() async throws {
         // Private invalid table controls retain the genuine historical station rows.
         let fixtures=try path("OTC_HISTORY_SW_PROOF_ROOT")
