@@ -828,9 +828,13 @@ class OpenTideConstants
             return false unless conv && conv.v0_model == "schureman_tcd" && conv.nodal_handling == :f_u_at_prediction
             datum = cs["datum"] || {}
             return false unless datum["chart_datum"] == "mllw" && datum["msl_offset_m"] && datum.dig("named", "mllw") == 0.0 && datum.dig("basis", "mllw", "kind") == "published"
-            tables = @meta["astro_tables"]
-            table = Array(tables).find { |a| a["astro_table_id"] == conv.raw["astro_table_id"] && (conv.tables_sha256.nil? || a["tables_sha256"] == conv.tables_sha256) && a["v0_model"] == conv.v0_model }
-            return false unless table
+            constants = materialize(ref).constant_set(cs["set_id"])
+            begin
+                table = Predict.table_for(self, constants)
+                Array(constants.raw["constituents"]).each { |row| table.send(:row_for, row["name"]) }
+            rescue NoAstroTableError, UnsupportedConventionError, UnsupportedConstituentError, InvalidArgumentError
+                return false
+            end
             true
         end
 

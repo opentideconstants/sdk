@@ -9,6 +9,35 @@ class NoaaHistoricalNativeTest < Minitest::Test
     ORACLE = JSON.parse(File.read(ENV.fetch("OTC_NOAA_NATIVE_ORACLE")))
     START = Time.utc(2026, 10, 11)
     STOP = START + 86400
+    def test_private_missing_reference_rows_reject_discovery
+        %w[M2 S2 N2].each do |name|
+            # Private omissions exercise row admission; the authentic source is valid.
+            raw = JSON.parse(File.read(File.join(INPUT, "OTC_20261011.json")))
+            raw.fetch("astro_tables").first.fetch("constituents").delete(name)
+            Dir.mktmpdir("otc-private-missing-row") do |dir|
+                File.write(File.join(dir, "OTC_20261011.json"), JSON.generate(raw))
+                File.write(File.join(dir, "OTC_20261011.meta.json"), JSON.generate(raw.reject { |key, _| key == "stations" }))
+                File.write(File.join(dir, "OTC_20261011.jsonl"), raw.fetch("stations").map { |row| JSON.generate(row) + "\n" }.join)
+                [:eager, :stream].each do |mode|
+                    path = File.join(dir, "OTC_20261011.#{mode == :eager ? 'json' : 'jsonl'}")
+                    client = OpenTideConstants.new(file: path, mode: mode)
+                    begin
+                        [client, client.release].each do |caller|
+                            found = caller.stations(include_flagged: true, include_fallback: true).map(&:station_id)
+                            %w[OTC-28c56e20 OTC-541f1a73].each do |id|
+                                refute_includes found, id, "private missing #{name} in #{mode}"
+                                refute_nil caller.station(id)
+                                error = assert_raises(OpenTideConstants::UnsupportedConstituentError) { caller.extremes(id, start: START, stop: START, datum: "chart") }
+                                assert_equal name, error.constituent
+                            end
+                        end
+                    ensure
+                        client.close
+                    end
+                end
+            end
+        end
+    end
     def test_private_table_model_mismatch_rejects_native_prediction
         with_private_table_control do |raw|
             raw.fetch("astro_tables").first["v0_model"] = "private_incompatible_model"
