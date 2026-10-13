@@ -117,11 +117,19 @@ class ChecksumTest < Minitest::Test
         cache = tmpdir
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
         cached = File.join(cache, "v1", "releases", D, "OTC_#{D}.jsonl")
-        bytes = File.binread(cached)
+        original = File.binread(cached)
+        bytes = original.dup
         bytes[100] = bytes[100] == "x" ? "y" : "x"
         File.binwrite(cached, bytes)
+        assert_equal original.bytesize, File.size(cached)
+        refute_equal original, File.binread(cached)
+        before_open = srv.requests.size
         c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
-        assert_equal bytes, File.binread(cached), "the open left the corrupt cached copy (the precondition)"
+        assert_equal original, File.binread(cached), "online open authenticates the source and heals the corrupt cached copy"
+        assert_includes srv.requests[before_open..], "/OTC_#{D}.jsonl"
+        # Corrupt it again after open to exercise download's own recovery.
+        File.binwrite(cached, bytes)
+        assert_equal bytes, File.binread(cached), "download starts with a corrupt cached copy"
         before = srv.requests.size
         to = tmpdir
         paths = c.download(D, to: to)

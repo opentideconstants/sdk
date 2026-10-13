@@ -45,7 +45,7 @@ class StreamIndexTest < Minitest::Test
         File.write(index_path(cache), JSON.generate(idx))
     end
 
-    def test_dense_foreign_and_sparse_nullable_profiles_preserve_index_bytes
+    def test_dense_foreign_and_sparse_nullable_profiles_stay_lazy_then_refuse_country_tamper
         c = nil
         srv = serve
         cache = tmpdir
@@ -66,9 +66,10 @@ class StreamIndexTest < Minitest::Test
             File.write(index_path(cache), JSON.generate(idx))
             sha = Digest::SHA256.file(index_path(cache)).hexdigest
             c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
-            assert_equal %w[OTC-T-0011], c.stations(country: "ZZ").map(&:station_id)
-            assert_equal "OTC-T-0001", c.station("OTC-T-0001").station_id
             assert_equal sha, Digest::SHA256.file(index_path(cache)).hexdigest
+            assert_equal "OTC-T-0001", c.station("OTC-T-0001").station_id
+            assert_raises(OTC::InvalidReleaseError) { c.stations(country: "ZZ") }
+            refute File.exist?(index_path(cache))
             c.close
         end
     ensure
@@ -82,8 +83,8 @@ class StreamIndexTest < Minitest::Test
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
         built = JSON.parse(File.read(index_path(cache)))
         mutations = [nil, true, "1", 0, 1.5, 2].map { |value| ->(idx) { idx["discovery_index_version"] = value } }
-        mutations << ->(idx) { idx["stations"].first["sets"].first.delete("source_record_id") }
-        mutations << ->(idx) { %w[source_record_id source_version datum].each { |k| idx["stations"].first["sets"].first.delete(k) } }
+        mutations << ->(idx) { idx["stations"].first["sets"].first["source_record_id"] = nil }
+        mutations << ->(idx) { %w[source_record_id source_version datum].each { |k| idx["stations"].first["sets"].first[k] = nil } }
         mutations << ->(idx) { idx["stations"].first["sets"].first["fallback"] = false }
         mutations << ->(idx) { idx["stations"].first["sets"].first["current_bins"] = nil }
         mutations.each do |mutate|
@@ -122,7 +123,7 @@ class StreamIndexTest < Minitest::Test
         c&.close
     end
 
-    def test_integral_float_index_and_nul_alias_keep_original_bytes
+    def test_integral_float_index_and_nul_alias_are_admitted_then_source_checked
         srv = serve
         cache = tmpdir
         OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
@@ -137,8 +138,9 @@ class StreamIndexTest < Minitest::Test
         File.write(index_path(cache), JSON.generate(idx))
         sha = Digest::SHA256.file(index_path(cache)).hexdigest
         c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
-        assert_equal "OTC-T-0001", c.station_by_alias("test", "a\0b").station_id
         assert_equal sha, Digest::SHA256.file(index_path(cache)).hexdigest
+        assert_raises(OTC::InvalidReleaseError) { c.station_by_alias("test", "a\0b") }
+        refute File.exist?(index_path(cache))
     ensure
         c&.close
     end
@@ -283,5 +285,106 @@ class StreamIndexTest < Minitest::Test
         ensure
             c&.close
         end
+    end
+
+    def test_missing_source_rows_and_wrong_derived_kinds_rebuild_once
+        c = nil
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        built = File.binread(index_path(cache))
+        repaired = []
+        [->(rows) { rows.reject! { |row| row["station_id"] == "OTC-T-0011" } }, ->(rows) { rows.first["kind"] = "current" }].each do |mutate|
+            idx = JSON.parse(built)
+            mutate.call(idx["stations"])
+            File.write(index_path(cache), JSON.generate(idx))
+            c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)
+            repaired << [File.binread(index_path(cache)) == built, c.release.station_count]
+            c.close
+        end
+        assert_equal [[true, 20], [true, 20]], repaired
+    ensure
+        c&.close
+    end
+
+    def test_stream_authentication_checks_actual_source_hash_before_index_trust
+        srv = serve
+        cache = tmpdir
+        OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream).close
+        file = File.join(cache, "v1", "releases", D, "OTC_#{D}.jsonl")
+        original = File.binread(file)
+        File.binwrite(file, original.sub('"country":"USA"', '"country":"ZZZ"'))
+        assert_equal original.bytesize, File.size(file)
+        assert_raises(OTC::ChecksumError) { OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true) }
+    end
+
+    def test_actual_unterminated_cr_and_crlf_body_spans
+        c = nil
+        ["\r", "\r\n"].each do |ending|
+            dir = release_dir_with { |bytes| bytes.delete_suffix("\n") + ending }
+            srv = serve(dir)
+            cache = tmpdir
+            c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+            row = JSON.parse(File.read(index_path(cache)))["stations"].last
+            bytes = File.binread(File.join(dir, "OTC_#{D}.jsonl"))
+            assert_equal bytes.bytesize - (ending == "\r\n" ? 2 : 0), row["offset"] + row["length"]
+            c.close
+        end
+    ensure
+        c&.close
+    end
+
+    def test_real_stream_lru_evicts_without_changing_raw_or_ownership
+        file = release_file("jsonl") do |doc|
+            original = doc["stations"].first
+            doc["stations"] = 257.times.map do |i|
+                row = Marshal.load(Marshal.dump(original))
+                row["station_id"] = "LRU-#{i}"
+                row["aliases"] = {}
+                row["constant_sets"].each { |cs| cs["set_id"] = "LRU-#{i}/#{cs['source']}" }
+                row["recommended_set_id"] = row["constant_sets"].first["set_id"]
+                row
+            end
+        end
+        c = OTC.new(file: file, mode: :stream)
+        io = c.release.instance_variable_get(:@io)
+        first = c.station("LRU-0")
+        assert_same first, c.station("LRU-0")
+        (1..256).each { |i| c.station("LRU-#{i}") }
+        cache = c.release.instance_variable_get(:@station_cache)
+        assert_equal 256, cache.size
+        refute cache.key?("LRU-0")
+        again = c.station("LRU-0")
+        refute_same first, again
+        assert_equal first.raw, again.raw
+        assert_same io, c.release.instance_variable_get(:@io)
+        c.close
+        assert io.closed?
+        assert_empty cache
+        assert_raises(OTC::FileError) { c.station("LRU-0") }
+        assert_equal first.raw, again.raw
+    ensure
+        c&.close
+    end
+
+    def test_derived_kind_stops_after_sixteen_source_links
+        file = release_file("jsonl") do |doc|
+            parent = doc["stations"].first
+            parent["station_id"] = "chain-root"
+            parent["aliases"] = {}
+            doc["stations"] = [parent]
+            17.times do |i|
+                doc["stations"] << {
+                    "station_id" => "chain-#{i + 1}", "name" => "Chain #{i + 1}", "type" => "subordinate",
+                    "lat" => 0, "lon" => 0, "constant_sets" => [], "recommended_set_id" => nil,
+                    "subordinate_offsets" => { "reference_station_id" => i.zero? ? "chain-root" : "chain-#{i}", "licence_id" => "noaa" }
+                }
+            end
+        end
+        c = OTC.new(file: file, mode: :stream)
+        assert_equal :tide, c.station("chain-16").kind
+        assert_nil c.station("chain-17").kind
+    ensure
+        c&.close
     end
 end
