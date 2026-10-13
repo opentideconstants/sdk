@@ -22,6 +22,8 @@ export interface LockOptions {
     done?: () => Promise<boolean>;
     /** False: do not wait for a held lock (resolve null). Default true. */
     wait?: boolean;
+    /** A failed heartbeat is reported and retried without breaking the guarded call. */
+    warn?: (message: string) => void;
 }
 
 /** A cache directory tree (spec 5.4), with paths relative to `<root>/v1`. */

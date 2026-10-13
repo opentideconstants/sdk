@@ -239,7 +239,7 @@ async function getConditional(ctx: Ctx, name: string): Promise<{ body: Uint8Arra
     }
     if (store) {
         try {
-            const unlock = await store.lock("pointer");
+            const unlock = await store.lock("pointer", { warn: (message) => log(ctx, "warn", message) });
             try {
                 await store.remove(`${rel}.etag`);
                 await store.write(rel, res.body);
@@ -541,6 +541,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
         // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
         const unlock = await store.lock(dir, {
             done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
+            warn: (message) => log(ctx, "warn", message),
         });
         try {
             const now = new Set(await store.list(dir));
@@ -656,7 +657,7 @@ export async function syncZenodo(ctx: Ctx, verified: Verified, entry: PointerEnt
     let unlock: Unlock | null = null;
     try {
         if (!held) {
-            unlock = await store.lock(relDir(d), { wait: false });
+            unlock = await store.lock(relDir(d), { wait: false, warn: (message) => log(ctx, "warn", message) });
             if (!unlock) {
                 log(ctx, "debug", `the .verified of ${d} is locked; its version DOI is updated next time`);
                 return;

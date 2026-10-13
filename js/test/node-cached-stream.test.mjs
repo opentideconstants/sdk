@@ -19,6 +19,164 @@ const historical = process.env.OTC_CACHED_HISTORY_DIR ?? '/Users/jpr5/.local/sha
 const date = '20261011', stem = `OTC_${date}`;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+test('COMMON-TS-HEARTBEAT actual public slow acquisition refreshes its live owner', async () => {
+    const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+    const originals = Object.fromEntries(['jsonl', 'meta.json', 'sha256'].map(suffix => {
+        const name = `OTC_20991231.2.${suffix}`;
+        return [name, fs.readFileSync(path.join(source, name))];
+    }));
+    const root = fs.mkdtempSync(path.join(process.env.OTC_HEARTBEAT_PROOF ?? os.tmpdir(), 'native-heartbeat-'));
+    const dir = path.join(root, 'v1/releases/20991231.2');
+    const ownerPath = path.join(dir, '.lock/owner.json');
+    const requests = [], warnings = [];
+    let before, after, opened;
+    const server = createServer((request, response) => {
+        requests.push(request.url);
+        const name = request.url.slice(1), body = originals[name];
+        response.writeHead(body ? 200 : 404, { 'Content-Length': body?.length ?? 0 });
+        response.flushHeaders();
+        if (name.endsWith('.jsonl')) {
+            before = { at: performance.now(), owner: JSON.parse(fs.readFileSync(ownerPath)),
+                mtime: fs.statSync(path.dirname(ownerPath)).mtimeMs };
+            setTimeout(() => {
+                after = { at: performance.now(), owner: JSON.parse(fs.readFileSync(ownerPath)),
+                    mtime: fs.statSync(path.dirname(ownerPath)).mtimeMs,
+                    verified_exists: fs.existsSync(path.join(dir, '.verified')) };
+                response.end(body);
+            }, 32_000);
+        } else response.end(body);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        opened = await sdk.OpenTideConstants.open({ release: '20991231.2', mode: 'stream', cacheDir: root,
+            baseUrl: `http://127.0.0.1:${server.address().port}/`, onNetworkError: 'raise',
+            logger: { warn: message => warnings.push(message) } });
+        console.log(JSON.stringify({ surface: 'actual public native heartbeat', root, before, after,
+            elapsed_seconds: (after.at - before.at) / 1000, requests, warnings,
+            loaded_from: opened.loadedFrom, lock_absent: !fs.existsSync(path.dirname(ownerPath)),
+            source_hashes: Object.fromEntries(Object.entries(originals).map(([name, body]) => [name, hash(body)])) }));
+        assert.ok(after.at - before.at >= 31_000);
+        assert.equal(after.owner.token, before.owner.token);
+        assert.notEqual(after.owner.started_at, before.owner.started_at, 'real held native owner must refresh after the required interval');
+        assert.ok(after.mtime > before.mtime, 'real held native lock directory must be touched');
+        assert.match(after.owner.started_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+        assert.equal(after.verified_exists, false);
+        assert.equal(fs.existsSync(path.dirname(ownerPath)), false);
+        assert.equal(opened.loadedFrom, 'download');
+        for (const [name, body] of Object.entries(originals)) assert.deepEqual(fs.readFileSync(path.join(dir, name)), body);
+        assert.deepEqual(opened.requireStation('OTC-T-0001').raw,
+            originals['OTC_20991231.2.jsonl'].toString().split('\n').map(line => line ? JSON.parse(line) : null)
+                .find(station => station?.station_id === 'OTC-T-0001'));
+        assert.deepEqual(warnings, []);
+    } finally {
+        opened?.close(); await new Promise(resolve => server.close(resolve));
+        if (!process.env.OTC_HEARTBEAT_PROOF) fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('HEARTBEAT-CONTROLS native foreign owner, failed rewrite retry and pending refresh release', async () => {
+    const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+    const originals = Object.fromEntries(['jsonl', 'meta.json', 'sha256'].map(suffix => {
+        const name = `OTC_20991231.2.${suffix}`;
+        return [name, fs.readFileSync(path.join(source, name))];
+    }));
+    const states = ['foreign', 'retry', 'pending'].map(role => {
+        const root = fs.mkdtempSync(path.join(process.env.OTC_HEARTBEAT_PROOF ?? os.tmpdir(), `heartbeat-${role}-`));
+        const dir = path.join(root, 'v1/releases/20991231.2');
+        return { role, root, dir, ownerPath: path.join(dir, '.lock/owner.json'), events: [], warnings: [], paused: false,
+            settled: false, injected: false, gate: null, resolveGate: null };
+    });
+    const rename = fs.renameSync, times = fsp.utimes;
+    fs.renameSync = function (from, to) {
+        const state = states.find(state => state.ownerPath === String(to) && state.paused);
+        if (state?.role === 'retry' && !state.injected) {
+            state.injected = true;
+            state.events.push({ event: 'native-owner-rename-fault', code: 'EPERM', at: performance.now() });
+            const error = new Error('native heartbeat owner rename control'); error.code = 'EPERM'; throw error;
+        }
+        const result = rename.call(this, from, to);
+        if (state) state.events.push({ event: 'native-owner-renamed', at: performance.now(), owner: JSON.parse(fs.readFileSync(to)) });
+        return result;
+    };
+    fsp.utimes = async function (target, ...args) {
+        const result = await times.call(this, target, ...args);
+        const state = states.find(state => path.dirname(state.ownerPath) === String(target) && state.paused);
+        if (state) state.events.push({ event: 'native-lock-touched', at: performance.now() });
+        if (state?.role === 'pending') {
+            state.events.push({ event: 'real-refresh-acknowledgement-held', at: performance.now() });
+            await state.gate;
+        }
+        return result;
+    };
+    syncBuiltinESMExports();
+    try {
+        await Promise.all(states.map(async state => {
+            state.gate = new Promise(resolve => { state.resolveGate = resolve; });
+            let before, after, opened;
+            const server = createServer((request, response) => {
+                const name = request.url.slice(1), body = originals[name];
+                response.writeHead(body ? 200 : 404, { 'Content-Length': body?.length ?? 0 }); response.flushHeaders();
+                if (name.endsWith('.jsonl') && !state.paused) {
+                    state.paused = true;
+                    if (state.role === 'foreign') {
+                        const owner = JSON.parse(fs.readFileSync(state.ownerPath));
+                        fs.writeFileSync(state.ownerPath, JSON.stringify({ ...owner, token: 'f'.repeat(32) }));
+                    }
+                    before = { at: performance.now(), owner: JSON.parse(fs.readFileSync(state.ownerPath)),
+                        mtime: fs.statSync(path.dirname(state.ownerPath)).mtimeMs };
+                    const delay = state.role === 'retry' ? 63_000 : state.role === 'pending' ? 31_000 : 32_000;
+                    setTimeout(() => {
+                        after = { at: performance.now(), owner: JSON.parse(fs.readFileSync(state.ownerPath)),
+                            mtime: fs.statSync(path.dirname(state.ownerPath)).mtimeMs };
+                        if (state.role === 'foreign') fs.rmSync(path.dirname(state.ownerPath), { recursive: true });
+                        response.end(body);
+                    }, delay);
+                    if (state.role === 'pending') setTimeout(() => {
+                        state.events.push({ event: 'before-refresh-acknowledgement-release', at: performance.now(),
+                            sdk_settled: state.settled, lock_exists: fs.existsSync(path.dirname(state.ownerPath)) });
+                        state.resolveGate();
+                    }, 32_000);
+                } else response.end(body);
+            });
+            await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+            try {
+                const opening = sdk.OpenTideConstants.open({ release: '20991231.2', mode: 'stream', cacheDir: state.root,
+                    baseUrl: `http://127.0.0.1:${server.address().port}/`, timeout: 90, onNetworkError: 'raise',
+                    logger: { warn: message => state.warnings.push(message) } });
+                opening.then(() => { state.settled = true; }, () => { state.settled = true; });
+                opened = await opening;
+                console.log(JSON.stringify({ surface: 'real heartbeat lifecycle controls', role: state.role,
+                    before, after, elapsed_s: (after.at - before.at) / 1000, events: state.events, warnings: state.warnings,
+                    loaded_from: opened.loadedFrom, lock_absent: !fs.existsSync(path.dirname(state.ownerPath)) }));
+                assert.equal(opened.loadedFrom, 'download');
+                assert.equal(fs.existsSync(path.dirname(state.ownerPath)), false);
+                if (state.role === 'foreign') {
+                    assert.deepEqual(after.owner, before.owner, 'heartbeat must not rewrite a foreign native owner');
+                    assert.equal(after.mtime, before.mtime);
+                    assert.ok(state.warnings.some(message => message.includes('another process')));
+                } else {
+                    assert.equal(after.owner.token, before.owner.token);
+                    assert.notEqual(after.owner.started_at, before.owner.started_at);
+                    assert.ok(after.mtime > before.mtime);
+                    if (state.role === 'retry') {
+                        assert.equal(state.injected, true);
+                        assert.ok(state.events.filter(event => event.event === 'native-lock-touched').length >= 2);
+                        assert.ok(state.warnings.some(message => message.includes('cannot refresh') && message.includes('owner.json')));
+                    } else {
+                        const held = state.events.find(event => event.event === 'before-refresh-acknowledgement-release');
+                        assert.equal(held.sdk_settled, false); assert.equal(held.lock_exists, true);
+                        assert.ok(state.events.some(event => event.event === 'real-refresh-acknowledgement-held'));
+                    }
+                }
+                for (const [name, body] of Object.entries(originals)) assert.deepEqual(fs.readFileSync(path.join(state.dir, name)), body);
+            } finally { state.resolveGate(); opened?.close(); await new Promise(resolve => server.close(resolve)); }
+        }));
+    } finally {
+        fs.renameSync = rename; fsp.utimes = times; syncBuiltinESMExports();
+        for (const state of states) if (!process.env.OTC_HEARTBEAT_PROOF) fs.rmSync(state.root, { recursive: true, force: true });
+    }
+});
+
 for (const losses of [0, 1, 3]) {
     test(`COMMON-TS-LOCK native public publication with ${losses} ownership losses`, async () => {
         const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
