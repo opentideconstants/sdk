@@ -19,6 +19,95 @@ const historical = process.env.OTC_CACHED_HISTORY_DIR ?? '/Users/jpr5/.local/sha
 const date = '20261011', stem = `OTC_${date}`;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+for (const losses of [0, 1, 3]) {
+    test(`COMMON-TS-LOCK native public publication with ${losses} ownership losses`, async () => {
+        const source = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+        const originals = Object.fromEntries(['jsonl', 'meta.json', 'sha256'].map(suffix => {
+            const name = `OTC_20991231.2.${suffix}`;
+            return [name, fs.readFileSync(path.join(source, name))];
+        }));
+        const root = fs.mkdtempSync(path.join(process.env.OTC_LOCK_PROOF ?? os.tmpdir(), `native-lost-${losses}-`));
+        const dir = path.join(root, 'v1/releases/20991231.2');
+        const ownerPath = path.join(dir, '.lock/owner.json');
+        const verifiedPath = path.join(dir, '.verified');
+        const events = [], releases = [], warnings = [];
+        let attempts = 0, foreignToken = null, prematurePublication = false;
+        const server = createServer((request, response) => {
+            const name = request.url.slice(1), bytes = originals[name];
+            events.push({ event: 'HTTP', name, sha256: bytes ? hash(bytes) : null });
+            if (name.endsWith('.sha256')) {
+                attempts++;
+                const owner = JSON.parse(fs.readFileSync(ownerPath));
+                events.push({ event: 'native-owner', attempt: attempts, token: owner.token });
+                if (attempts <= losses) {
+                    foreignToken = `${'a'.repeat(31)}${attempts}`;
+                    fs.writeFileSync(ownerPath, JSON.stringify({ ...owner, token: foreignToken }));
+                    events.push({ event: 'external-token-replaced', attempt: attempts, token: foreignToken });
+                    const expectedToken = foreignToken;
+                    releases.push(new Promise(resolve => setTimeout(() => {
+                        const held = fs.existsSync(ownerPath) ? JSON.parse(fs.readFileSync(ownerPath)) : null;
+                        events.push({ event: 'foreign-window', attempt: attempts, token: held?.token ?? null,
+                            verified_exists: fs.existsSync(verifiedPath) });
+                        if (held?.token === expectedToken) fs.rmSync(path.dirname(ownerPath), { recursive: true });
+                        events.push({ event: 'external-owner-released', token: expectedToken });
+                        resolve();
+                    }, 100)));
+                }
+            }
+            response.writeHead(bytes ? 200 : 404); response.end(bytes ?? 'not found');
+        });
+        await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+        const rename = fs.renameSync;
+        fs.renameSync = function (from, to) {
+            if (String(to) === verifiedPath) {
+                const held = fs.existsSync(ownerPath) ? JSON.parse(fs.readFileSync(ownerPath)) : null;
+                events.push({ event: 'verified-publication', token: held?.token ?? null });
+                if (held?.token === foreignToken) prematurePublication = true;
+            }
+            return rename.call(this, from, to);
+        };
+        syncBuiltinESMExports();
+        let opened, failure;
+        try {
+            try {
+                opened = await sdk.OpenTideConstants.open({ release: '20991231.2', mode: 'stream', cacheDir: root,
+                    baseUrl: `http://127.0.0.1:${server.address().port}/`, onNetworkError: 'raise',
+                    logger: { warn: message => warnings.push(message) } });
+            } catch (error) { failure = error; }
+            await Promise.all(releases);
+            const receipt = fs.existsSync(verifiedPath) ? JSON.parse(fs.readFileSync(verifiedPath)) : null;
+            console.log(JSON.stringify({ surface: 'actual public pinned stream ownership', losses, attempts, events, warnings,
+                prematurePublication, error_code: failure?.code ?? null, loaded_from: opened?.loadedFrom ?? null, receipt,
+                source_hashes: Object.fromEntries(Object.entries(originals).map(([name, bytes]) => [name, hash(bytes)])) }));
+            assert.equal(prematurePublication, false, 'a foreign owner must never authorize this receipt publication');
+            for (const event of events.filter(event => event.event === 'foreign-window')) {
+                assert.ok(event.token, 'unlock must not delete the external owner token');
+                assert.equal(event.verified_exists, false, 'receipt stays absent while foreign ownership is held');
+            }
+            if (losses === 3) {
+                assert.equal(failure?.code, 'cache'); assert.equal(attempts, 3); assert.equal(receipt, null);
+            } else {
+                assert.equal(failure, undefined); assert.equal(opened.loadedFrom, 'download');
+                assert.equal(attempts, losses + 1);
+                assert.ok(receipt);
+                assert.deepEqual(Object.keys(receipt.files).sort(), ['OTC_20991231.2.jsonl', 'OTC_20991231.2.meta.json']);
+                for (const [name, row] of Object.entries(receipt.files)) {
+                    assert.equal(row.sha256, hash(originals[name])); assert.equal(row.size, originals[name].length);
+                    assert.deepEqual(fs.readFileSync(path.join(dir, name)), originals[name]);
+                }
+                assert.deepEqual(opened.requireStation('OTC-T-0001').raw,
+                    originals['OTC_20991231.2.jsonl'].toString().split('\n').map(line => line ? JSON.parse(line) : null)
+                        .find(station => station?.station_id === 'OTC-T-0001'));
+            }
+            assert.equal(warnings.length, losses);
+        } finally {
+            fs.renameSync = rename; syncBuiltinESMExports(); opened?.close();
+            await Promise.all(releases); await new Promise(resolve => server.close(resolve));
+            if (!process.env.OTC_LOCK_PROOF) fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+}
+
 function fixture(jsonl = fs.readFileSync(path.join(historical, `${stem}.jsonl`)), releaseDate = date, releaseDir = historical) {
     const date = releaseDate, stem = `OTC_${date}`;
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'otc-native-cached-'));

@@ -14,8 +14,8 @@ export interface HttpOptions {
     caFile: string | null;
 }
 
-/** Releases a lock. */
-export type Unlock = () => Promise<void>;
+/** Releases a lock, with an ownership check when the backend has token-based locks. */
+export type Unlock = (() => Promise<void>) & { owns?: () => Promise<boolean> };
 
 export interface LockOptions {
     /** True when the work the lock guards is done (spec 5.4: stop waiting when `.verified` appears). */
