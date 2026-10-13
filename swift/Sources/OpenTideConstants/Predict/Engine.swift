@@ -52,6 +52,16 @@ internal enum Predict {
         }
         return table
     }
+    static func historicalReferenceTable(_ release: Release, constants: ConstantSet) throws -> AstroTable {
+        let selected = try table(release, constants: constants)
+        guard selected.raw["v0_model"].string == constants.convention.v0Model else {
+            throw OpenTideConstantsError.unsupportedConvention("unsupported convention \(constants.convention.conventionId)")
+        }
+        for constituent in constants.raw["constituents"].array {
+            _ = try selected.row(constituent["name"].string ?? "")
+        }
+        return selected
+    }
     static func unavailable(_ missing: String?) -> OpenTideConstantsError {
         .datumUnavailable("datum is missing \(missing ?? "None")", ["missing": missing.map(JSONValue.string) ?? .null])
     }
@@ -145,9 +155,11 @@ internal enum Predict {
                 }
                 let (reference, constants) = try reference(release, offsets: tideOffsets, quantity: quantity)
                 if historical { try requireHistoricalOffset(tideOffsets, release: release, reference: constants, betterPath: blockedBetter, explicit: offsetId != nil) }
-                let table = try table(release, constants: constants)
+                let table = try historical
+                    ? historicalReferenceTable(release, constants: constants)
+                    : table(release, constants: constants)
                 var context = PredictionContext(station: station, constants: constants, table: table, reference: reference, offsets: tideOffsets)
-                _ = try HarmonicSum(table, constants.raw["constituents"].array)
+                if !historical { _ = try HarmonicSum(table, constants.raw["constituents"].array) }
                 var referenceContext = PredictionContext(station: reference, constants: constants, table: table)
                 let referenceTerm = try self.datum(constants.raw["datum"], requested: "chart", context: &referenceContext, published: true)
                 let subordinateTerm = try subordinateDatum(tideOffsets, requested: datum, context: &context)
