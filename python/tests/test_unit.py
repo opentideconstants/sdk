@@ -597,8 +597,8 @@ class StreamIndexTest(unittest.TestCase):
     def reopen(self):
         return otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
 
-    def ruby_index(self):
-        self.index.unlink()
+    def ruby_index(self, profile="current"):
+        self.index.unlink(missing_ok=True)
         writer = """client = OpenTideConstants.new(release: '20991231.2', cache_dir: ARGV.fetch(0),
                                     offline: true, mode: 'stream')
 client.close
@@ -608,9 +608,23 @@ client.close
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         index = json.loads(self.index.read_bytes())
-        self.assertNotIn("discovery_index_version", index)
-        self.assertTrue(all(all(k in cs for k in ("source_record_id", "source_version", "datum"))
+        self.assertEqual(index["discovery_index_version"], 1)
+        self.assertTrue(all(all(k not in cs for k in ("source_record_id", "source_version", "datum"))
                             for entry in index["stations"] for cs in entry["sets"]))
+        if profile == "legacy-full":
+            # A labelled legacy compatibility fixture, with private values from the actual source rows.
+            del index["discovery_index_version"]
+            with (self.index.parent / index["jsonl"]).open("rb") as handle:
+                for entry in index["stations"]:
+                    handle.seek(entry["offset"])
+                    original = json.loads(handle.read(entry["length"]))
+                    for cs in entry["sets"]:
+                        source = next(s for s in original["constant_sets"] if s["set_id"] == cs["set_id"])
+                        for key in ("source_record_id", "source_version", "datum"):
+                            cs[key] = source.get(key)
+            self.index.write_text(json.dumps(index), encoding="utf-8")
+        else:
+            self.assertEqual(profile, "current")
         return index
 
     def marked_index(self, index):
@@ -638,28 +652,30 @@ client.close
                 self.assertFalse(self.index.exists())
 
     def test_real_ruby_index_keeps_three_public_queries_and_raw(self):
-        index = self.ruby_index()
-        saved = self.index.read_bytes()
-        entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
-        path = self.index.parent / "OTC_20991231.2.jsonl"
-        with path.open("rb") as handle:
-            handle.seek(entry["offset"])
-            original = json.loads(handle.read(entry["length"]))
-        with self.reopen() as client:
-            self.assertEqual(self.index.read_bytes(), saved)
-            queries = {
-                "stations": client.stations(country=entry["country"]),
-                "search": client.search(name=entry["name"], country=entry["country"]),
-                "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
-                                                             radius_km=1, country=entry["country"])),
-            }
-            for name, stations in queries.items():
-                with self.subTest(query=name):
-                    expected = ("OTC-T-0006", "OTC-T-0011") if name == "stations" else ("OTC-T-0011",)
-                    self.assertEqual(tuple(s.station_id for s in stations), expected)
-            self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
-        self.assertEqual(self.index.read_bytes(), saved)
-        self.assert_country_tampering_is_rejected(index)
+        for profile in ("current", "legacy-full"):
+            with self.subTest(profile=profile):
+                index = self.ruby_index(profile=profile)
+                saved = self.index.read_bytes()
+                entry = next(e for e in index["stations"] if e["station_id"] == "OTC-T-0011")
+                path = self.index.parent / "OTC_20991231.2.jsonl"
+                with path.open("rb") as handle:
+                    handle.seek(entry["offset"])
+                    original = json.loads(handle.read(entry["length"]))
+                with self.reopen() as client:
+                    self.assertEqual(self.index.read_bytes(), saved)
+                    queries = {
+                        "stations": client.stations(country=entry["country"]),
+                        "search": client.search(name=entry["name"], country=entry["country"]),
+                        "near": tuple(n.station for n in client.near(lat=entry["lat"], lon=entry["lon"],
+                                                                     radius_km=1, country=entry["country"])),
+                    }
+                    for name, stations in queries.items():
+                        with self.subTest(query=name):
+                            expected = ("OTC-T-0006", "OTC-T-0011") if name == "stations" else ("OTC-T-0011",)
+                            self.assertEqual(tuple(s.station_id for s in stations), expected)
+                    self.assertEqual(client.station("OTC-T-0011").raw, freeze(original))
+                self.assertEqual(self.index.read_bytes(), saved)
+                self.assert_country_tampering_is_rejected(index)
 
     def test_sparse_null_extensions_preserve_native_index_bytes(self):
         index = json.loads(self.index.read_bytes())
@@ -682,7 +698,7 @@ client.close
         self.assert_country_tampering_is_rejected(index)
 
     def test_private_fields_must_be_complete_across_every_set(self):
-        original = self.ruby_index()
+        original = self.ruby_index(profile="legacy-full")
         for key in ("source_record_id", "source_version", "datum", "all-three", "bad-value"):
             with self.subTest(key=key):
                 index = copy.deepcopy(original)
@@ -699,7 +715,7 @@ client.close
                     self.assertEqual(client.stations(country="ZZ"), ())
 
     def test_wholly_absent_private_fields_are_a_valid_foreign_profile(self):
-        index = self.ruby_index()
+        index = self.ruby_index(profile="legacy-full")
         for entry in index["stations"]:
             for cs in entry["sets"]:
                 for field in ("source_record_id", "source_version", "datum"):
@@ -725,7 +741,7 @@ client.close
                     self.assertEqual(client.stations(country="ZZ"), ())
 
     def test_ruby_private_source_or_datum_tampering_is_rejected_at_query(self):
-        original = self.ruby_index()
+        original = self.ruby_index(profile="legacy-full")
         for field, value in (("source_record_id", "wrong-source"),
                              ("source_version", "wrong-version"), ("datum", {"msl_offset_m": 1234.0})):
             with self.subTest(field=field):
