@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as otc from "../dist/index.js";
 import { Session } from "node:inspector";
+import { createHash } from "node:crypto";
 import { releaseFromJsonl } from "../dist/loader.js";
 
 test("datestamps order by date, then counter", async () => {
@@ -467,6 +468,48 @@ test("T81: cached releases require the receipt datestamp to match its directory"
     } finally {
         client?.close();
         fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("T81: a null or missing digest excludes a cached file without removing its release", async () => {
+    for (const [mode, suffixes, missingHash, alternative] of [
+        ["eager", ["json"], false, false], ["eager", ["json"], true, false],
+        ["stream", ["jsonl", "meta.json"], false, false], ["stream", ["jsonl", "meta.json"], true, false],
+        ["eager", ["json", "jsonl", "meta.json"], false, true], ["eager", ["json", "jsonl", "meta.json"], true, true],
+    ]) {
+        const root = tmpdir();
+        const directory = path.join(root, "v1", "releases", "20991231.2");
+        let client;
+        try {
+            fs.mkdirSync(directory, { recursive: true });
+            const files = Object.fromEntries(suffixes.map(suffix => {
+                const name = `OTC_20991231.2.${suffix}`;
+                const body = alternative && suffix === "json" ? Buffer.from("{") : fs.readFileSync(path.join(GOOD, name));
+                fs.writeFileSync(path.join(directory, name), body);
+                const row = { size: body.length, sha256: createHash("sha256").update(body).digest("hex"), url: null };
+                if (suffix === (mode === "eager" ? "json" : "jsonl")) {
+                    if (missingHash) delete row.sha256;
+                    else row.sha256 = null;
+                }
+                return [name, row];
+            }));
+            const marker = JSON.stringify({ files, datestamp: "20991231.2", format_version: "1.0", min_reader_version: "0.1" });
+            fs.writeFileSync(path.join(directory, ".verified"), marker);
+            if (alternative) {
+                client = await otc.OpenTideConstants.open({ release: "20991231.2", cacheDir: root, mode, offline: true });
+                assert.deepEqual(client.requireStation("OTC-T-0001").raw,
+                    JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.json"))).stations[0]);
+            } else {
+                for (const options of [{ release: "20991231.2" }, {}]) {
+                    await assert.rejects(otc.OpenTideConstants.open({ ...options, cacheDir: root, mode, offline: true }), isCode("offline_unavailable"));
+                }
+            }
+            assert.equal(fs.readFileSync(path.join(directory, ".verified"), "utf8"), marker);
+            for (const name of Object.keys(files)) assert.ok(fs.existsSync(path.join(directory, name)));
+        } finally {
+            client?.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        }
     }
 });
 

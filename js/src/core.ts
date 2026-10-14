@@ -426,11 +426,17 @@ const names = (d: string) => ({
     json: `OTC_${d}.json`, gz: `OTC_${d}.json.gz`, jsonl: `OTC_${d}.jsonl`, meta: `OTC_${d}.meta.json`, sha: `OTC_${d}.sha256`,
 });
 
+function cachedFile(name: string, present: boolean, verified?: Verified | null): boolean {
+    return present && (verified === undefined ||
+        (verified?.files[name]?.sha256 != null && verified.files[name]?.size != null));
+}
+
 /** True if the cached files can be opened in this mode. */
-export function usable(mode: Mode, d: string, present: Set<string>): boolean {
+export function usable(mode: Mode, d: string, present: Set<string>, verified?: Verified | null): boolean {
     const n = names(d);
-    const stream = present.has(n.jsonl) && present.has(n.meta);
-    return mode === "stream" ? stream : present.has(n.json) || stream;
+    const cached = (name: string) => cachedFile(name, present.has(name), verified);
+    const stream = cached(n.jsonl) && cached(n.meta);
+    return mode === "stream" ? stream : cached(n.json) || stream;
 }
 
 /**
@@ -469,7 +475,7 @@ export async function cachedDatestamps(ctx: Ctx): Promise<string[]> {
 export async function newestCached(ctx: Ctx): Promise<string | null> {
     if (!ctx.store) return null;
     for (const d of await cachedDatestamps(ctx)) {
-        if (usable(ctx.mode, d, new Set(await ctx.store.list(relDir(d))))) return d;
+        if (usable(ctx.mode, d, new Set(await ctx.store.list(relDir(d))), await readVerified(ctx.store, d))) return d;
     }
     return null;
 }
@@ -569,7 +575,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     const dir = relDir(d);
     const present = new Set(await store.list(dir));
     let verified = await readVerified(store, d);
-    if (verified && usable(ctx.mode, d, present)) {
+    if (verified && usable(ctx.mode, d, present, verified)) {
         await syncZenodo(ctx, verified, entry);
         return "cache";
     }
@@ -579,13 +585,16 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
     for (;;) {
         // wait for the lock, or until another process has made the release usable in this mode (spec 5.4)
         const unlock = await store.lock(dir, {
-            done: async () => (await readVerified(store, d)) !== null && usable(ctx.mode, d, new Set(await store.list(dir))),
+            done: async () => {
+                const ready = await readVerified(store, d);
+                return ready !== null && usable(ctx.mode, d, new Set(await store.list(dir)), ready);
+            },
             warn: (message) => log(ctx, "warn", message),
         });
         try {
             const now = new Set(await store.list(dir));
             verified = await readVerified(store, d);
-            if (verified && usable(ctx.mode, d, now)) {
+            if (verified && usable(ctx.mode, d, now, verified)) {
                 await syncZenodo(ctx, verified, entry, true);
                 return "cache";
             }
@@ -750,7 +759,7 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     const files = cachedFileInfos(verified, pointerFiles);
     const sized = (name: string) => sizedCacheFile(dir, verified, name);
     if (mode === "eager") {
-        if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
+        if (cachedFile(n.json, dir.size(n.json) !== null, verified)) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
         return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
     }
     const prepared = authenticateCachedStreamIndex(dir, verified, d,
@@ -878,13 +887,13 @@ export function prepareCachedStreamIndex(dir: SyncDir, verified: Verified, d: st
 }
 
 /** Read the selected cached format into a SyncDir (the browser, where storage is async). */
-export async function prefetchDir(store: CacheStore, d: string, mode: Mode, warn: (message: string) => void = () => undefined): Promise<SyncDir> {
+export async function prefetchDir(store: CacheStore, d: string, mode: Mode, warn: (message: string) => void = () => undefined, verified?: Verified): Promise<SyncDir> {
     const dir = relDir(d);
     const n = names(d);
     const present = new Set(await store.list(dir));
     // Provenance comes from the pointer or .verified, so unused cached originals need no body read.
     const selected = mode === "stream" ? [n.meta, n.jsonl, "index-v1.json"]
-        : present.has(n.json) ? [n.json] : [n.meta, n.jsonl];
+        : cachedFile(n.json, present.has(n.json), verified) ? [n.json] : [n.meta, n.jsonl];
     const files = new Map<string, Uint8Array>();
     for (const name of selected) {
         if (!present.has(name)) continue;

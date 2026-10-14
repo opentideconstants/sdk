@@ -523,7 +523,7 @@ export class OpenTideConstants {
         const store = ctx.store;
         if (!store) return null;
         for (const d of await cachedDatestamps(ctx)) {
-            if (!usable(ctx.mode, d, new Set(await store.list(relDir(d))))) continue;
+            if (!usable(ctx.mode, d, new Set(await store.list(relDir(d))), await readVerified(store, d))) continue;
             try {
                 return { d, rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify) };
             } catch (e) {
@@ -545,7 +545,7 @@ export class OpenTideConstants {
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
-        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn, v);
         // Metadata just read remains authoritative for this session even when the receipt lock is held elsewhere.
         const sessionReceipt = versionDoi === null ? v : { ...v, zenodo_version_doi: versionDoi };
         return loadCached(dir, sessionReceipt, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
