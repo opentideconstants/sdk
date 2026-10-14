@@ -562,7 +562,8 @@ class SubordinateOffsets:
                    d.get('source_version'), d.get('source_record_id'), E.enum_or_raw(E.QcStatus, d.get('qc_status')),
                    tuple(QcFlag._parse(flag) for flag in d.get('qc_flags') or ()), Fallback._parse(d.get('fallback')),
                    None if d.get('vintage') is None else HistoricalOffsetVintage._parse(d['vintage']),
-                   None if d.get('provenance') is None else HistoricalOffsetProvenance._parse(d['provenance']))
+                   None if 'offset_id' not in d or d.get('provenance') is None
+                   else HistoricalOffsetProvenance._parse(d['provenance']))
 
 
 @dataclass(frozen=True, slots=True)
