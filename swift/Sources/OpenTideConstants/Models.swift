@@ -88,7 +88,7 @@ public struct Provenance: Sendable, Equatable {
 public struct ProvenanceBuild: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
-    public var buildCommit: String { raw["build_commit"].string ?? "" }
+    public var buildCommit: String? { raw["build_commit"].string }
     public var builtAt: Date? { try? parseTime(raw["built_at"].string) }
     public var fetchedAt: Date? { try? parseTime(raw["fetched_at"].string) }
     public var runId: String? { raw["run_id"].string }
@@ -125,27 +125,27 @@ public struct TimeBase: Sendable, Equatable {
 public struct QcFlag: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
-    public var flag: QcFlagName { QcFlagName(value: raw["flag"]) }
-    public var reason: String { raw["reason"].string ?? "" }
+    public var flag: QcFlagName? { raw["flag"].isNull ? nil : QcFlagName(value: raw["flag"]) }
+    public var reason: String? { raw["reason"].string }
     public var values: JSONValue? { raw["values"].isNull ? nil : raw["values"] }
 }
 
 public struct DroppedConstituent: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
-    public var name: String { raw["name"].string ?? "" }
-    public var droppedReason: DroppedReason { DroppedReason(value: raw["dropped_reason"]) }
+    public var name: String? { raw["name"].string }
+    public var droppedReason: DroppedReason? { raw["dropped_reason"].isNull ? nil : DroppedReason(value: raw["dropped_reason"]) }
     public var detail: String? { raw["detail"].string }
 }
 
 public struct Validation: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
-    public var setId: String { raw["set_id"].string ?? "" }
-    public var referenceSource: String { raw["reference_source"].string ?? "" }
+    public var setId: String? { raw["set_id"].string }
+    public var referenceSource: String? { raw["reference_source"].string }
     public var referenceStation: String? { raw["reference_station"].string }
     public var referenceDistanceKm: Double? { raw["reference_distance_km"].number }
-    public var window: String { raw["window"].string ?? "" }
+    public var window: String? { raw["window"].string }
     public var timeMaeMin: Double { raw["time_mae_min"].number ?? .nan }
     public var timeP95Min: Double? { raw["time_p95_min"].number }
     public var timeBiasMin: Double? { raw["time_bias_min"].number }

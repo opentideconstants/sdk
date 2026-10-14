@@ -126,6 +126,7 @@ internal extension Reader {
             try check(cs,_set_types,"constant set")
             guard let id=cs["set_id"].string,let conv=conventions[cs["convention_id"].string ?? ""],let lic=licences[cs["licence_id"].string ?? ""] else { throw OpenTideConstantsError.invalidRelease("set identity/reference unresolved") }
             for (k,table) in [("record_span",_span_types),("datum",_datum_types),("time_base",_time_base_types),("provenance",_provenance_types),("fallback",_fallback_types)] where !cs[k].isNull { try check(cs[k],table,k) }
+            if !cs["provenance"]["build"].isNull { try check(cs["provenance"]["build"],["build_commit":"T"],"provenance build") }
             if !cs["time_base"]["correction"].isNull { try check(cs["time_base"]["correction"],_correction_types,"time_base correction") }
             for row in cs["time_base"]["evidence"].array { try check(row,_evidence_types,"time_base evidence") }
             for (k,table) in [("constituents",_constituent_types),("qc_flags",_qc_flag_types),("dropped_constituents",_dropped_types)] { for row in cs[k].array { try check(row,table,k) } }
@@ -135,7 +136,7 @@ internal extension Reader {
             for q in cs["qc_flags"].array { if q["values"].object.values.contains(where: { !$0.isNull && $0.number == nil }) { throw OpenTideConstantsError.invalidRelease("qc value nonnumeric") } }
             _ = try parseTime(cs["record_span"]["start"].string); _ = try parseTime(cs["record_span"]["end"].string)
             if cs["fallback"]["reason"].string == "historical_offsets" || cs["qc_flags"].array.contains(where: { $0["flag"].string == "fallback:historical_offsets" }) { throw OpenTideConstantsError.invalidRelease("historical label belongs to offsets") }
-            sets.append(ConstantSet(raw:cs,convention:conv,licence:lic,isRecommended:id==recommended,validation:validation.filter { $0.setId==id }.sorted { $0.window < $1.window }))
+            sets.append(ConstantSet(raw:cs,convention:conv,licence:lic,isRecommended:id==recommended,validation:validation.enumerated().filter { $0.element.setId==id }.sorted { left,right in let a=left.element.window ?? "",b=right.element.window ?? "";return a==b ? left.offset < right.offset : a < b }.map(\.element)))
         }
         if let rid=d["recommended_set_id"].string, !sets.contains(where: { $0.setId==rid }) { throw OpenTideConstantsError.invalidRelease("recommended set unresolved") }
         for alias in d["aliases"].object.values { if alias.string == nil && !( { if case .array(let values) = alias { return values.allSatisfy { $0.string != nil } }; return false }() ) { throw OpenTideConstantsError.invalidRelease("malformed aliases") } }
@@ -150,6 +151,9 @@ internal extension Reader {
     static func historical(_ d: JSONValue) throws {
         try check(d,_offset_types,"offsets")
         let marked=d.object.keys.contains("offset_id") || d["fallback"]["reason"].string == "historical_offsets" || d["qc_flags"].array.contains { $0["flag"].string == "fallback:historical_offsets" }
+        if !marked {
+            for row in d["qc_flags"].array { try check(row,["flag":"T","reason":"T"],"offset qc flag") }
+        }
         guard marked else { return }
         func require(_ ok: Bool, _ field: String) throws { if !ok { throw OpenTideConstantsError.invalidRelease("invalid historical \(field)") } }
         let atlantic=d["offset_id"].string == "noaa-2020-atlantic-table2-2513"
