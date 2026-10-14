@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import calendar
 import datetime
+import errno
 import json
 import logging
 import math
@@ -203,6 +204,7 @@ class Cache:
                 modified = path.stat().st_mtime
                 if time.time() - modified <= LOCK_STALE_AGE_S:
                     continue
+                cleaned = False
                 with lock_dir(path, "opentideconstants-python", wait=False) as held:
                     if not held:
                         self._log.info("prune: %s is locked by another process; it is kept", path.name)
@@ -211,8 +213,21 @@ class Cache:
                         self._log.info("prune: %s became verified; it is kept", path.name)
                         continue
                     if time.time() - modified > LOCK_STALE_AGE_S:
-                        shutil.rmtree(path)
-                        self._log.info("prune: removed partial release %s", path.name)
+                        for child in path.iterdir():
+                            if child.name == ".lock":
+                                continue
+                            if child.is_dir() and not child.is_symlink():
+                                shutil.rmtree(child)
+                            else:
+                                child.unlink()
+                        cleaned = True
+                if cleaned:
+                    try:
+                        path.rmdir()
+                    except OSError as e:
+                        if e.errno not in (errno.ENOENT, errno.ENOTEMPTY, errno.EEXIST):
+                            raise
+                    self._log.info("prune: removed partial release %s", path.name)
             except (CacheError, OSError) as e:
                 self._log.warning("prune: cannot remove partial release %s: %s", path.name, e)
 
