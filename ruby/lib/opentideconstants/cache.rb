@@ -217,7 +217,7 @@ class OpenTideConstants
             return false unless ver
             row = ver["files"][name]
             path = File.join(release_dir(datestamp), name)
-            return false unless row.is_a?(Hash) && File.file?(path)
+            return false unless row.is_a?(Hash) && row["sha256"].is_a?(String) && File.file?(path)
             row["size"].nil? || File.size(path) == row["size"]
         end
 

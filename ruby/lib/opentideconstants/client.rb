@@ -868,7 +868,7 @@ class OpenTideConstants
     def present_cached?(d)
         ver = cache.verified(d)
         return false unless ver
-        wanted_files(d).any? { |names| names.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(cache.release_dir(d), n)) } }
+        wanted_files(d).any? { |names| names.all? { |n| ver["files"][n].is_a?(Hash) && ver["files"][n]["sha256"].is_a?(String) && File.file?(File.join(cache.release_dir(d), n)) } }
     end
 
     # Loads cached release d, or nil when it is no longer usable (another
@@ -877,7 +877,7 @@ class OpenTideConstants
     def load_cached(d, doi: nil, files: nil)
         ver = cache.verified(d)
         dir = cache.release_dir(d)
-        names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && File.file?(File.join(dir, n)) } }
+        names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && ver["files"][n]["sha256"].is_a?(String) && File.file?(File.join(dir, n)) } }
         return nil unless names
         paths = names.map { |n| File.join(dir, n) }
         # spec §5.3: the size is compared with .verified on every open
