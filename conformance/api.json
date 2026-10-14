@@ -3610,46 +3610,46 @@
      "name": "code",
      "kind": "field",
      "type": "enum",
-     "nullable": false,
+     "nullable": true,
      "enum": "time_base_code",
      "swift": "code",
-     "swift_returns": "TimeBaseCode",
+     "swift_returns": "TimeBaseCode?",
      "swift_declarations": [
-      "var code: TimeBaseCode { get }"
+      "var code: TimeBaseCode? { get }"
      ]
     },
     {
      "name": "reason",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "reason",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var reason: String { get }"
+      "var reason: String? { get }"
      ]
     },
     {
      "name": "declared",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "note": "a time-base label, e.g. utc_instant",
      "swift": "declared",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var declared: String { get }"
+      "var declared: String? { get }"
      ]
     },
     {
      "name": "published",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "published",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var published: String { get }"
+      "var published: String? { get }"
      ]
     },
     {
@@ -3680,11 +3680,11 @@
      "name": "decided_in",
      "kind": "field",
      "type": "datestamp",
-     "nullable": false,
+     "nullable": true,
      "swift": "decidedIn",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var decidedIn: String { get }"
+      "var decidedIn: String? { get }"
      ]
     },
     {

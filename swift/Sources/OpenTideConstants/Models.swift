@@ -98,16 +98,16 @@ public struct ProvenanceBuild: Sendable, Equatable {
 public struct TimeBase: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
-    public var code: TimeBaseCode { TimeBaseCode(value: raw["code"]) }
-    public var reason: String { raw["reason"].string ?? "" }
-    public var declared: String { raw["declared"].string ?? "" }
-    public var published: String { raw["published"].string ?? "" }
+    public var code: TimeBaseCode? { raw["code"].isNull ? nil : TimeBaseCode(value: raw["code"]) }
+    public var reason: String? { raw["reason"].string }
+    public var declared: String? { raw["declared"].string }
+    public var published: String? { raw["published"].string }
     public var correction: JSONValue? {
         guard case .object(let correction) = raw["correction"] else { return nil }
         return .object(["from": correction["from"] ?? .null, "to": correction["to"] ?? .null])
     }
     public var monthsDropped: [String] { raw["months_dropped"].array.compactMap(\.string) }
-    public var decidedIn: String { raw["decided_in"].string ?? "" }
+    public var decidedIn: String? { raw["decided_in"].string }
     public var decidedBuildCommit: String? { raw["decided_build_commit"].string }
     public var evidence: JSONValue {
         .array(raw["evidence"].array.map { item in
