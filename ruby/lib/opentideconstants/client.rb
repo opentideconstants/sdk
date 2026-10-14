@@ -876,9 +876,9 @@ class OpenTideConstants
             next if cache.file_ok?(d, n, ver)
             raise ChecksumError.new("#{n}: the size does not match .verified", file: p, expected: ver["files"][n]["sha256"], actual: nil)
         end
-        checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]] }
+        checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]&.downcase] }
         files ||= ver["files"].map do |name, row|
-            FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"])
+            FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"]&.downcase)
         end
         # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
         opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open || @mode == :stream,
