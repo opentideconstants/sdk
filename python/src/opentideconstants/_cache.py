@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import sys
 import threading
 import time
@@ -199,15 +200,21 @@ class Cache:
             if not DATESTAMP_RE.match(path.name) or path.name in protected:
                 continue
             try:
-                if not path.is_dir() or self.read_verified(path.name) is not None:
+                original = path.lstat()
+                if not stat.S_ISDIR(original.st_mode) or self.read_verified(path.name) is not None:
                     continue
-                modified = path.stat().st_mtime
+                modified = original.st_mtime
                 if time.time() - modified <= LOCK_STALE_AGE_S:
                     continue
                 cleaned = False
                 with lock_dir(path, "opentideconstants-python", wait=False) as held:
                     if not held:
                         self._log.info("prune: %s is locked by another process; it is kept", path.name)
+                        continue
+                    current = path.lstat()
+                    if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != \
+                            (original.st_dev, original.st_ino):
+                        self._log.info("prune: %s changed while taking its lock; it is kept", path.name)
                         continue
                     if self.read_verified(path.name) is not None:
                         self._log.info("prune: %s became verified; it is kept", path.name)
