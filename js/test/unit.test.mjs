@@ -452,6 +452,24 @@ test("T81: .verified is checked key by key, not cast", async () => {
     assert.equal(parseVerified(b({ files: {}, format_version: "1" }), "20991231"), null);
 });
 
+test("T81: cached releases require the receipt datestamp to match its directory", async () => {
+    const root = tmpdir();
+    let client;
+    try {
+        // Both receipts have valid field types and files. Only one directory disagrees with its datestamp.
+        for (const directoryStamp of ["20991231", "20991230"]) {
+            const directory = path.join(root, "v1", "releases", directoryStamp);
+            fs.mkdirSync(directory, { recursive: true });
+            fs.writeFileSync(path.join(directory, ".verified"), JSON.stringify({ files: {}, datestamp: "20991230" }));
+        }
+        client = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.json"), cacheDir: root });
+        assert.deepEqual(client.cachedReleases(), ["20991230"]);
+    } finally {
+        client?.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
     const { listDir } = await import("../dist/node.js");
     const d = tmpdir();
