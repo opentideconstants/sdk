@@ -26,6 +26,531 @@ const protocol = JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonic
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const pin = relative => ({ path: relative, sha256: sha256(fs.readFileSync(path.join(root, relative))) });
 
+async function observeM2({ moduleRoot, source, meta, jsonl, checksum, pointer, baseUrl, cacheDir, corpus = [], retryFailure, warningSource }) {
+    const [canonical, loader, releases, core, clients, errors] = await Promise.all([
+        import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`), import(`${moduleRoot}/release.js`),
+        import(`${moduleRoot}/core.js`), import(`${moduleRoot}/client.js`), import(`${moduleRoot}/errors.js`),
+    ]);
+    const bytes = value => new TextEncoder().encode(value);
+    const readerVersion = { major: 1, minor: 0, native_document_context: { url: baseUrl, what: 'OTC_index.json' } };
+    const release = loader.releaseFromJson(bytes(source), []);
+    const other = loader.releaseFromJson(bytes(source), []);
+    const station = release.requireStation('OTC-T-0001');
+    const header = releases.parseHeader(JSON.parse(meta));
+    const indexed = loader.indexJsonl(header, bytes(jsonl), false).entries;
+    const index = releases.storedIndex(indexed, release.datestamp, pointer.files.find(row => row.name.endsWith('.jsonl')).sha256, bytes(jsonl).length, 'native-m2');
+    const admitted = releases.usableIndex(index, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+        new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+    if (!admitted) throw new Error('Real native generated index was not admitted');
+    const events = [];
+    const rawBytes = bytes(jsonl);
+    const stream = loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries: admitted },
+        reader: (offset, length) => { events.push({ action: 'read', offset, length }); return rawBytes.subarray(offset, offset + length); },
+        close: () => events.push({ action: 'close' }), dropIndex: () => events.push({ action: 'delete_index' }) });
+    const node = typeof process === 'object' ? (await import(`${moduleRoot}/node.js`)).nodeApi : null;
+    const platform = node ? node.nodePlatform() : (await import(`${moduleRoot}/browser.js`)).browserPlatform();
+    const client = await clients.OpenTideConstants.open({ baseUrl, cacheDir, mode: 'stream', autoUpdate: false });
+    const store = await platform.cache(typeof process === 'object' ? cacheDir : `opentideconstants-v1:${cacheDir}`);
+    const context = { platform, store, baseUrl, offline: true, timeout: 60, proxy: null, caFile: null, userAgent: 'M2 native proof', onNetworkError: 'raise', logger: null, mode: 'stream', commercialOnly: false };
+    const verified = await core.readVerified(store, release.datestamp);
+    if (!verified) throw new Error('Native downloaded receipt missing');
+    const directoryEvents = [];
+    const nativePath = name => node.nodePath.join(store.describe(`releases/${release.datestamp}`), name);
+    const backend = node ? {
+        read: name => node.readIfExists(nativePath(name)), size: name => node.statSize(nativePath(name)),
+        lineReader: name => {
+            const reader = node.openLineReader(nativePath(name)); directoryEvents.push({ action: 'open_reader', name });
+            return { read: (offset, length) => { const value = reader.read(offset, length); directoryEvents.push({ action: 'positional_read', name, offset, length, actual_length: value.length }); return value; },
+                close: () => { directoryEvents.push({ action: 'close_reader', name }); reader.close(); } };
+        },
+        writeIndex: value => node.writeAtomicSync(nativePath('index-v1.json'), value), removeIndex: () => node.removeFileSync(nativePath('index-v1.json')),
+    } : await core.prefetchDir(store, release.datestamp, 'stream');
+    const trackDirectory = source => ({ ...source,
+        read: name => { directoryEvents.push({ action: 'read_file', name }); return source.read(name); },
+        writeIndex: value => { directoryEvents.push({ action: 'write_index', length: value.length }); source.writeIndex(value); },
+        removeIndex: () => { directoryEvents.push({ action: 'delete_index' }); source.removeIndex(); },
+    });
+    const dir = trackDirectory(backend);
+    const records = [];
+    const observe = async (id, call, check) => {
+        try { const value = await call(); records.push({ id, passed: check(value), value_json: JSON.stringify(value) ?? 'null' }); if (id === 'B25') value.close(); }
+        catch (error) { records.push({ id, passed: false, error_name: error.name, error_code: error.code ?? null, error_message: error.message }); }
+    };
+    try {
+        await observe('B05', () => canonical.decode_release_document(bytes(source), readerVersion, 'release'), value => value.variant === 'release' && JSON.stringify(value.value) === JSON.stringify(JSON.parse(source)));
+        await observe('B06', () => canonical.validate_release_links({ variant: 'release', value: JSON.parse(source) }, []), value => JSON.stringify(value) === JSON.stringify(JSON.parse(source)));
+        await observe('B08', () => canonical.access_raw_record('raw_record', station.raw, station, release, typeof process === 'object' ? 'typescript_node' : 'typescript_browser'), value => value === station.raw);
+        await observe('B08.station_object', () => canonical.access_raw_record('station_object', station.raw, station, release, typeof process === 'object' ? 'typescript_node' : 'typescript_browser'), value => value === station);
+        await observe('B08.origin', () => canonical.check_station_origin(station, release), value => value === station);
+        await observe('B15', () => canonical.enforce_resource_lifetime(release, 'station_read'), value => value === release);
+        await observe('B16', () => canonical.bind_checksum_manifest(bytes(checksum), { native_context: context, datestamp: release.datestamp, entry: core.parseIndex(bytes(JSON.stringify({ releases: [pointer] })), baseUrl)[0] }, pointer.files.filter(row => row.name.endsWith('.meta.json') || row.name.endsWith('.jsonl'))), value => value['OTC_20991231.2.jsonl'] === index.jsonl_sha256);
+        await observe('B20', () => canonical.verify_release_files({ native_owner: client, files: client.release.files }, null), value => value === true);
+        await observe('B25', () => canonical.authenticate_station_index({ jsonl: 'OTC_20991231.2.jsonl', meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length, meta_sha256: pointer.files.find(row => row.name.endsWith('.meta.json')).sha256, meta_size: bytes(meta).length, native_context: { context, dir, verified, datestamp: release.datestamp } }, index, {}, readerVersion), value => value.entries.length === indexed.length);
+        const entry = admitted.find(row => row.station_id === station.station_id);
+        if (!entry) throw new Error('Actual admitted station index entry missing');
+        await observe('B26', () => canonical.compare_station_source({ native_entry: entry, native_header: header, native_drop_index: () => events.push({ action: 'delete_index' }) }, station.raw, entry.indexPresence), value => value === station.raw);
+        await observe('B27', () => canonical.read_station_lazily({ release_view: stream, native_owner: stream }, station.station_id, stream, readerVersion), value => JSON.stringify(value) === JSON.stringify(station.raw));
+        const indexEffectProbe = async supplied => {
+            const actualEvents = [], nativeEvents = [];
+            const observedDir = (events, suppliedBytes) => ({ ...dir,
+                read: name => { events.push({ action: 'read_file', name }); return suppliedBytes !== undefined && name === 'index-v1.json' ? suppliedBytes : dir.read(name); },
+                writeIndex: value => { events.push({ action: 'write_index', length: value.length }); dir.writeIndex(value); },
+                removeIndex: () => { events.push({ action: 'delete_index' }); dir.removeIndex(); },
+            });
+            const descriptor = observedDir(actualEvents);
+            const nativeSource = { jsonl: 'OTC_20991231.2.jsonl', meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length, meta_sha256: pointer.files.find(row => row.name.endsWith('.meta.json')).sha256, meta_size: bytes(meta).length, native_context: { context, dir: descriptor, verified, datestamp: release.datestamp } };
+            const actual = await canonical.authenticate_station_index(nativeSource, supplied, {}, readerVersion);
+            const original = core.prepareCachedStreamIndex(observedDir(nativeEvents, supplied === null ? null : bytes(JSON.stringify(supplied))), verified, release.datestamp);
+            try {
+                const actualDeleted = actualEvents.some(row => row.action === 'delete_index'), nativeDeleted = nativeEvents.some(row => row.action === 'delete_index');
+                records.push({ id: supplied === null ? 'B25.absent_index' : 'B25.stale_supplied_index', passed: actualDeleted === nativeDeleted && JSON.stringify(actual.entries) === JSON.stringify(original.entries), actual_deleted: actualDeleted, native_deleted: nativeDeleted, actual_events: actualEvents, native_events: nativeEvents });
+            } finally { actual.close(); original.close(); }
+        };
+        await indexEffectProbe({ ...index, index_version: 0 });
+        await indexEffectProbe(null);
+        const failure = async call => {
+            try { return { value: await call() }; }
+            catch (error) { return { error: { name: error.name, code: error.code, message: error.message, file: error.file ?? null, path: error.path ?? null, expected: error.expected ?? null, actual: error.actual ?? null } }; }
+        };
+        const paired = async (id, actualCall, originalCall) => {
+            const actual = await failure(actualCall), expected = await failure(originalCall);
+            records.push({ id, passed: JSON.stringify(actual) === JSON.stringify(expected), actual, expected });
+        };
+        for (const profile of ['full', 'legacy_offsets', 'absent_fallback', 'absent_bins', 'mismatching_latitude']) {
+            const variant = structuredClone(index);
+            for (const row of variant.stations) {
+                if (profile === 'legacy_offsets') delete row.subordinate_offsets;
+                if (profile === 'absent_fallback') for (const set of row.sets) delete set.fallback;
+                if (profile === 'absent_bins') for (const set of row.sets) delete set.current_bins;
+                if (profile === 'mismatching_latitude' && row.station_id === station.station_id) row.lat += 0.01;
+            }
+            const entries = releases.usableIndex(variant, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+                new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+            if (!entries) throw new Error(`Native presence profile is not admitted: ${profile}`);
+            const entry = entries.find(row => row.station_id === station.station_id);
+            if (!entry) throw new Error('Admitted presence target missing');
+            const actualEvents = [], nativeEvents = [];
+            const original = loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries }, reader: (offset, length) => rawBytes.subarray(offset, offset + length), dropIndex: () => nativeEvents.push('delete_index') });
+            try {
+                const actual = await failure(() => canonical.compare_station_source({ native_entry: entry, native_header: header, native_drop_index: () => actualEvents.push('delete_index') }, station.raw, entry.indexPresence));
+                const expected = await failure(() => original.requireStation(station.station_id).raw);
+                records.push({ id: `B26.${profile}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && JSON.stringify(actualEvents) === JSON.stringify(nativeEvents), actual, expected, actual_effects: actualEvents, native_effects: nativeEvents, native_presence: entry.indexPresence });
+            } finally { original._close(); }
+        }
+        {
+            const variant = structuredClone(index);
+            variant.stations.find(row => row.station_id === station.station_id).lat += 0.01;
+            const entries = releases.usableIndex(variant, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+                new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+            const deletionError = new errors.FileError('controlled native index deletion failure', { path: 'index-v1.json' });
+            const effects = [[], []];
+            const owners = effects.map(log => loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries },
+                reader: (offset, length) => { log.push('read_source_row'); return rawBytes.subarray(offset, offset + length); },
+                dropIndex: () => { log.push('delete_index'); throw deletionError; }, close: () => log.push('close_reader') }));
+            const identities = [];
+            try {
+                for (let which = 0; which < owners.length; which++) {
+                    try {
+                        if (which === 0) canonical.read_station_lazily({ release_view: owners[which], native_owner: owners[which] }, station.station_id, owners[which], readerVersion);
+                        else owners[which].requireStation(station.station_id);
+                    } catch (error) { identities.push(error === deletionError); }
+                }
+                records.push({ id: 'B27.deferred_deletion_callback_raises', passed: identities.length === 2 && identities.every(Boolean) && JSON.stringify(effects[0]) === JSON.stringify(['read_source_row', 'delete_index']) && JSON.stringify(effects[0]) === JSON.stringify(effects[1]),
+                    native_error_identity_preserved: identities, actual_effects: effects[0].slice(), native_effects: effects[1].slice(),
+                    qualification: 'Genuine native Release brands and deferred source comparator; controlled private delete callback failure; no initial-load retry after return' });
+            } finally { for (const owner of owners) owner._close(); }
+        }
+        for (const row of corpus) {
+            if (row.kind === 'checksum') continue;
+            const input = new Uint8Array(row.bytes);
+            if (row.kind === 'pointer' || row.kind === 'catalogue') {
+                await paired(`B05.${row.kind}.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, row.kind)).value, () => {
+                    const parsed = loader.parseJson(input, 'the release file');
+                    core.parseIndex(row.kind === 'pointer' ? bytes(JSON.stringify({ releases: [parsed] })) : input, baseUrl);
+                    return parsed;
+                });
+            } else if (row.kind === 'cache') await paired(`B05.cache.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, 'cache')).value, () => loader.parseJson(input, 'the release file'));
+            else if (row.kind === 'links') await paired(`B06.${row.name}`, () => canonical.validate_release_links({ variant: 'release', value: loader.parseJson(input, 'the release file') }, []), () => {
+                const parsed = loader.parseJson(input, 'the release file');
+                const header = releases.parseHeader(parsed);
+                releases.indexStations(header, parsed.stations);
+                return parsed;
+            });
+            else await paired(`B05.release.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, 'release')).value, () => {
+                const parsed = loader.parseJson(input, 'the release file'); loader.checkFormat(parsed);
+                const header = releases.parseHeader(parsed);
+                for (const station of parsed.stations ?? []) releases.checkShape(station, String(station.station_id));
+                return header.raw;
+            });
+        }
+        await paired('B08.foreign_owner', () => canonical.check_station_origin(station, other), () => releases.releaseSourceReceiver(other).own(station));
+        const metadataBinding = { native_context: context, datestamp: release.datestamp, entry: core.parseIndex(bytes(JSON.stringify({ releases: [pointer] })), baseUrl)[0] };
+        const requiredFiles = pointer.files.filter(row => row.name.endsWith('.meta.json') || row.name.endsWith('.jsonl'));
+        for (const row of corpus.filter(row => row.kind === 'checksum')) {
+            const input = new Uint8Array(row.bytes);
+            const binding = { ...metadataBinding, entry: row.pointer_bound ? metadataBinding.entry : null };
+            await paired(`B16.${row.name}`, () => canonical.bind_checksum_manifest(input, binding, requiredFiles), async () => {
+                const rows = await core.checkSha256(context, release.datestamp, binding.entry, input);
+                core.requireManifestRows(release.datestamp, context.mode, rows, requiredFiles.map(file => file.name));
+                return Object.fromEntries(rows);
+            });
+        }
+        const fileName = 'OTC_20991231.2.jsonl', checksumName = 'OTC_20991231.2.sha256';
+        const relative = name => `releases/${release.datestamp}/${name}`;
+        for (const mode of ['missing_sidecar', 'tampered_sidecar', 'missing_data', 'tampered_data']) {
+            const name = mode.endsWith('sidecar') ? checksumName : fileName;
+            const original = await store.read(relative(name)); if (!original) throw new Error('Real verification fixture file missing');
+            const mutate = async () => {
+                if (mode.startsWith('missing')) await store.remove(relative(name));
+                else { const changed = new Uint8Array(original.length + 1); changed.set(original); changed[original.length] = 10; await store.write(relative(name), changed); }
+            };
+            await mutate();
+            const actual = await failure(() => canonical.verify_release_files({ native_owner: client, files: client.release.files }, null));
+            const actualPresent = await store.read(relative(name)) !== null;
+            await store.write(relative(name), original);
+            await mutate();
+            const expected = await failure(() => client.verify());
+            const expectedPresent = await store.read(relative(name)) !== null;
+            await store.write(relative(name), original);
+            records.push({ id: `B20.${mode}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && actualPresent === expectedPresent, actual, expected, actual_present_after: actualPresent, native_present_after: expectedPresent });
+        }
+        if (node) {
+            const local = await clients.OpenTideConstants.open({ file: nativePath(fileName), cacheDir, mode: 'stream', autoUpdate: false });
+            try {
+                await paired('B20.local_valid', () => canonical.verify_release_files({ native_owner: local, files: local.release.files }, null), () => local.verify());
+                for (const mode of ['missing_sidecar', 'missing_data', 'tampered_data']) {
+                    const name = mode.endsWith('sidecar') ? checksumName : fileName;
+                    const original = await store.read(relative(name));
+                    if (!original) throw new Error('Actual local native file is required');
+                    if (mode.startsWith('missing')) await store.remove(relative(name));
+                    else { const changed = new Uint8Array(original.length + 1); changed.set(original); changed[original.length] = 10; await store.write(relative(name), changed); }
+                    try {
+                        const actual = await failure(() => canonical.verify_release_files({ native_owner: local, files: local.release.files }, null));
+                        const expected = await failure(() => local.verify());
+                        const retained = await store.read(relative(name));
+                        records.push({ id: `B20.local_${mode}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && (mode.startsWith('missing') ? retained === null : retained?.length === original.length + 1), actual, expected,
+                            file_preserved_by_verification: mode.startsWith('missing') ? retained === null : retained?.length === original.length + 1,
+                            qualification: 'Actual native Node local-file Client source; original verification preserves local files' });
+                    } finally { await store.write(relative(name), original); }
+                }
+            } finally { local.close(); }
+        } else records.push({ id: 'B20.local_file_not_applicable', passed: true, qualification: 'Native Chromium platform does not support local file paths; genuine cached verify branch is executed above' });
+        {
+            const originalIndex = await store.read(relative('index-v1.json'));
+            for (const field of ['lat', 'country', 'aliases']) {
+                const variant = structuredClone(index);
+                for (const entry of variant.stations) delete entry.subordinate_offsets;
+                const target = variant.stations.find(entry => entry.station_id === station.station_id);
+                if (field === 'lat') target.lat += 0.01;
+                if (field === 'country') target.country = target.country === 'USA' ? 'GBR' : 'USA';
+                if (field === 'aliases') target.aliases = { ...target.aliases, canonical_stale_index: [target.station_id] };
+                await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                const actualDirectory = node ? dir : trackDirectory(await core.prefetchDir(store, release.datestamp, 'stream'));
+                const beforeEvents = directoryEvents.length;
+                const beforeBytes = await store.read(relative(fileName));
+                const beforeHash = await platform.sha256(beforeBytes);
+                const outcome = await failure(() => {
+                    const loaded = core.loadCached(actualDirectory, verified, release.datestamp, 'stream', undefined, true);
+                    try { return loaded.requireStation(station.station_id).raw; } finally { loaded._close(); }
+                });
+                const recoveryEvents = directoryEvents.slice(beforeEvents);
+                const afterHash = await platform.sha256(await store.read(relative(fileName)));
+                const scanReads = recoveryEvents.filter(row => row.action === 'positional_read' && row.length === 65536);
+                const fullPasses = node ? scanReads.filter(row => row.offset === 0).length : recoveryEvents.filter(row => row.action === 'read_file' && row.name === fileName).length - 1;
+                const fullBytes = node ? scanReads.reduce((sum, row) => sum + row.actual_length, 0) : rawBytes.length;
+                records.push({ id: `B25.initial_load_retry.${field}`, passed: !!outcome.value && JSON.stringify(outcome.value) === JSON.stringify(station.raw) && fullPasses === 1 && fullBytes === rawBytes.length && beforeHash === afterHash, actual: outcome,
+                    index_present_after: await store.read(relative('index-v1.json')) !== null, recovery_events: recoveryEvents, source_sha256_before: beforeHash, source_sha256_after: afterHash,
+                    full_source_passes: fullPasses, full_pass_bytes: fullBytes,
+                    qualification: 'Actual native initial constructor policy hydration; commercialOnly; admitted legacy index with represented mismatch; original source files unchanged' });
+                await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                const canonicalDirectory = node ? dir : trackDirectory(await core.prefetchDir(store, release.datestamp, 'stream'));
+                await observe(`B25.initial_load_retry.${field}.canonical`, async () => {
+                    const prepared = await canonical.authenticate_station_index({ jsonl: fileName, meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length,
+                        meta_sha256: verified.files['OTC_20991231.2.meta.json'].sha256, meta_size: bytes(meta).length,
+                        native_context: { context: { ...context, commercialOnly: true }, dir: canonicalDirectory, verified, datestamp: release.datestamp } }, variant, {}, readerVersion);
+                    const materialized = releases.releaseFromPrepared(prepared.native_prepared_release);
+                    try { return materialized.requireStation(station.station_id).raw; } finally { materialized._close(); }
+                }, value => JSON.stringify(value) === JSON.stringify(station.raw));
+                if (field === 'lat') {
+                    await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                    const messages = [];
+                    const logger = Object.fromEntries(['debug', 'info', 'warn'].map(level => [level, message => messages.push({ level, message })]));
+                    const loaded = await clients.OpenTideConstants.open({ baseUrl, cacheDir, release: release.datestamp, offline: true, mode: 'stream', commercialOnly: true, autoUpdate: false, logger });
+                    try {
+                        const sourceHash = await platform.sha256(await store.read(relative(fileName)));
+                        const receiptPresent = await store.read(relative('.verified')) !== null;
+                        records.push({ id: 'B25.initial_retry_owning_client_no_heal', passed: JSON.stringify(loaded.requireStation(station.station_id).raw) === JSON.stringify(station.raw) && receiptPresent && sourceHash === beforeHash && !messages.some(row => /is corrupt|downloading release/.test(row.message)),
+                            logger_messages: messages, verified_receipt_present: receiptPresent, source_sha256_before: beforeHash, source_sha256_after: sourceHash,
+                            qualification: 'Genuine public pinned offline Client.open on unchanged actual cache; successful constructor recovery precedes owning heal and leaves receipt/source intact; no network permitted by original offline policy' });
+                    } finally { loaded.close(); }
+                }
+                if (originalIndex) await store.write(relative('index-v1.json'), originalIndex);
+                else await store.remove(relative('index-v1.json'));
+            }
+            const date = '20991231', stem = `OTC_${date}`;
+            const badMeta = new Uint8Array(retryFailure.meta), badJsonl = new Uint8Array(retryFailure.jsonl);
+            const badHeader = loader.headerFromMeta(badMeta);
+            const originalGood = loader.indexJsonl(loader.headerFromMeta(new Uint8Array(retryFailure.good_meta)), new Uint8Array(retryFailure.good_jsonl), false).entries;
+            const badDigest = await platform.sha256(badJsonl);
+            const staleIndex = releases.storedIndex(originalGood, date, badDigest, badJsonl.length, 'native second-failure control');
+            for (const entry of staleIndex.stations) delete entry.subordinate_offsets;
+            const badVerified = { datestamp: date, format_version: '1.0', verified_at: '2026-10-14T00:00:00Z', by: 'native-source-control', files: {} };
+            for (const [name, input] of [[`${stem}.meta.json`, badMeta], [`${stem}.jsonl`, badJsonl]]) {
+                await store.write(`releases/${date}/${name}`, input);
+                badVerified.files[name] = { sha256: await platform.sha256(input), size: input.length, url: null };
+            }
+            await store.write(`releases/${date}/${stem}.sha256`, new Uint8Array(retryFailure.checksum));
+            await store.write(`releases/${date}/.verified`, bytes(JSON.stringify(badVerified)));
+            const admitted = releases.usableIndex(staleIndex, date, badDigest, badJsonl.length,
+                new Set(badHeader.conventions.map(row => row.convention_id)), new Set(badHeader.licences.map(row => row.licence_id)));
+            if (!admitted) throw new Error('Authentic second-failure supplied native index was not admitted');
+            const nativeError = await failure(() => loader.indexJsonl(badHeader, badJsonl, false));
+            for (const route of ['public', 'canonical']) {
+                await store.write(`releases/${date}/index-v1.json`, bytes(JSON.stringify(staleIndex)));
+                const file = name => node.nodePath.join(store.describe(`releases/${date}`), name);
+                const directory = trackDirectory(node ? {
+                    read: name => node.readIfExists(file(name)), size: name => node.statSize(file(name)),
+                    lineReader: name => { const reader = node.openLineReader(file(name)); directoryEvents.push({ action: 'open_reader', name }); return {
+                        read: (offset, length) => { const value = reader.read(offset, length); directoryEvents.push({ action: 'positional_read', name, offset, length, actual_length: value.length }); return value; },
+                        close: () => { directoryEvents.push({ action: 'close_reader', name }); reader.close(); },
+                    }; },
+                    writeIndex: value => node.writeAtomicSync(file('index-v1.json'), value), removeIndex: () => node.removeFileSync(file('index-v1.json')),
+                } : await core.prefetchDir(store, date, 'stream'));
+                const initialEvents = directoryEvents.length;
+                const badContext = { ...context, commercialOnly: true };
+                const outcome = await failure(() => route === 'public' ? core.loadCached(directory, badVerified, date, 'stream', undefined, true)
+                    : canonical.authenticate_station_index({ jsonl: `${stem}.jsonl`, meta: `${stem}.meta.json`, jsonl_sha256: badDigest, jsonl_size: badJsonl.length,
+                        meta_sha256: badVerified.files[`${stem}.meta.json`].sha256, meta_size: badMeta.length,
+                        native_context: { context: badContext, dir: directory, verified: badVerified, datestamp: date } }, staleIndex, {}, readerVersion));
+                const effects = directoryEvents.slice(initialEvents);
+                const passes = node ? effects.filter(row => row.action === 'positional_read' && row.offset === 0 && row.length === 65536).length : effects.filter(row => row.action === 'read_file' && row.name === `${stem}.jsonl`).length - 1;
+                const indexPresent = await store.read(`releases/${date}/index-v1.json`) !== null;
+                const sourceHash = await platform.sha256(await store.read(`releases/${date}/${stem}.jsonl`));
+                records.push({ id: `B25.second_failure.${route}`, passed: JSON.stringify(outcome) === JSON.stringify(nativeError) && passes === 1 && !indexPresent && sourceHash === badDigest && effects.filter(row => row.action === 'delete_index').length === 1, actual: outcome, expected_full_pass_failure: nativeError,
+                    recovery_events: effects, full_source_passes: passes,
+                    index_present_after: indexPresent, source_sha256_after: sourceHash, source_sha256_before: badDigest,
+                    qualification: 'Authentic approved bad/lat-string JSONL/META/sidecar; initial admitted stale index fault, exactly one full pass propagates original source error' });
+            }
+            const warningMeta = new Uint8Array(warningSource.meta), warningJsonl = new Uint8Array(warningSource.jsonl);
+            const warningEntries = loader.indexJsonl(loader.headerFromMeta(warningMeta), warningJsonl, false).entries;
+            const warningDigest = await platform.sha256(warningJsonl);
+            const warningIndex = releases.storedIndex(warningEntries, date, warningDigest, warningJsonl.length, 'unknown-status fixture control');
+            const warningVerified = { ...badVerified, files: {} };
+            for (const [name, input] of [[`${stem}.meta.json`, warningMeta], [`${stem}.jsonl`, warningJsonl]]) {
+                await store.write(`releases/${date}/${name}`, input);
+                warningVerified.files[name] = { sha256: await platform.sha256(input), size: input.length, url: null };
+            }
+            const warnings = [];
+            for (const retry of [false, true]) {
+                const supplied = structuredClone(warningIndex);
+                if (retry) {
+                    for (const entry of supplied.stations) delete entry.subordinate_offsets;
+                    supplied.stations.find(entry => entry.status === 'active').lat += 0.01;
+                }
+                await store.write(`releases/${date}/index-v1.json`, bytes(JSON.stringify(supplied)));
+                const file = name => node.nodePath.join(store.describe(`releases/${date}`), name);
+                const directory = node ? { read: name => node.readIfExists(file(name)), size: name => node.statSize(file(name)),
+                    lineReader: name => node.openLineReader(file(name)), writeIndex: value => node.writeAtomicSync(file('index-v1.json'), value), removeIndex: () => node.removeFileSync(file('index-v1.json')),
+                } : await core.prefetchDir(store, date, 'stream');
+                const messages = [];
+                const loaded = core.loadCached(directory, warningVerified, date, 'stream', message => messages.push(message), true);
+                loaded._close(); warnings.push(messages);
+            }
+            records.push({ id: 'B25.initial_retry_warning_once', passed: warnings[0].length === 1 && JSON.stringify(warnings[0]) === JSON.stringify(warnings[1]), native_without_retry: warnings[0], actual_retry: warnings[1],
+                qualification: 'Approved synthetic bad/unknown-status fixture control on actual native cache load; not an authentic production dataset' });
+            await store.removeDir(`releases/${date}`);
+        }
+        const retainedClientRelease = client.release;
+        const stationIdBeforeClose = retainedClientRelease.requireStation(station.station_id).station_id;
+        const retainedIterator = retainedClientRelease.iterStations()[Symbol.iterator]();
+        const firstIteratorValue = retainedIterator.next();
+        if (firstIteratorValue.done) throw new Error('Actual retained native iterator is required');
+        canonical.enforce_resource_lifetime(client, 'close'); canonical.enforce_resource_lifetime(client, 'close');
+        await paired('B15.client_closed_read', () => canonical.enforce_resource_lifetime(client, 'query'), () => { clients.clientArgumentReceiver(client); return client; });
+        await observe('B15.client_retained_metadata', () => canonical.enforce_resource_lifetime(client, 'retained_metadata'), value => value === client && value.release === retainedClientRelease && value.release.datestamp === release.datestamp);
+        await paired('B15.retained_release_closed_read', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'station_read'), () => { void retainedClientRelease._header; return retainedClientRelease; });
+        await paired('B15.retained_iterator_step', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'iterator_step'), () => retainedIterator.next());
+        await observe('B15.retained_release_metadata', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'retained_metadata'), value => value === retainedClientRelease && value.datestamp === release.datestamp);
+        const closeEvents = [];
+        const firstClose = new errors.FileError('controlled native first source close', { path: 'private native close control' });
+        const secondClose = new errors.FileError('controlled native second source close', { path: 'private native close control' });
+        const sourceA = loader.releaseFromJsonl(bytes(meta), rawBytes, { eager: false, files: [], close: () => { closeEvents.push('first'); throw firstClose; } });
+        const sourceB = loader.releaseFromJsonl(bytes(meta), rawBytes, { eager: false, files: [], close: () => { closeEvents.push('second'); throw secondClose; } });
+        const fields = await clients.prepareClientFields({ baseUrl, cacheDir, mode: 'stream', autoUpdate: false });
+        const controlledClient = clients.clientFromPrepared({ ...fields, all: [new WeakRef(sourceA), new WeakRef(sourceB)] });
+        try {
+            let failureIdentity;
+            try { canonical.enforce_resource_lifetime(controlledClient, 'close'); }
+            catch (error) { failureIdentity = error; }
+            canonical.enforce_resource_lifetime(controlledClient, 'close');
+            records.push({ id: 'B15.controlled_source_close_aggregation', passed: failureIdentity === firstClose && JSON.stringify(closeEvents) === JSON.stringify(['first', 'second']),
+                first_error_identity_preserved: failureIdentity === firstClose, actual_close_order: closeEvents,
+                qualification: 'Controlled private source-close callbacks on genuine native Release/Client brands; ordinary native Node close suppresses errors, ordinary browser close is no-op; not a genuine ordinary close-exception witness' });
+        } finally { fields.release._close(); sourceA._close(); sourceB._close(); }
+        return { records, events, directory_events: directoryEvents, control: { same_release: station._from(release), foreign_release: station._from(other), datestamp_equal: release.datestamp === other.datestamp, raw: station.raw, station_id: stationIdBeforeClose } };
+    } finally { client.close(); stream._close(); release._close(); other._close(); }
+}
+
+function m2Inputs(baseUrl, cacheDir) {
+    const fixture = path.join(root, 'conformance/fixtures/good');
+    const chosen = { release: ['bad/format-major', 'bad/min-reader', 'bad/min-reader-malformed', 'bad/format-version-malformed', 'bad/lat-string', 'bad/source-versions-not-object', 'bad/licence-commercial-use-missing', 'bad/invalid-utf8', 'bad/lone-surrogate', 'bad/format-minor'], links: ['bad/unresolved-convention', 'bad/unresolved-licence', 'bad/unresolved-recommended', 'bad/duplicate-alias', 'bad/duplicate-station-id', 'bad/duplicate-set-id', 'bad/duplicate-convention-id', 'bad/duplicate-licence-id', 'bad/active-and-removed-same-id', 'bad/unresolved-reference-station', 'bad/unresolved-offsets-licence'], pointer: ['bad/min-reader-malformed', 'bad/pointer-file-no-sha256'], catalogue: ['bad/min-reader-malformed', 'bad/pointer-file-no-sha256'] };
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'conformance/fixtures/fixtures.json'))).fixtures;
+    chosen.checksum = ['bad/sha256-dup-name', 'bad/sha256-invalid-utf8', 'bad/sha256-no-json-row', 'bad/pointer-mismatch', 'bad/sha256-file-differs'];
+    const corpus = Object.entries(chosen).flatMap(([kind, names]) => names.map(name => {
+        const row = manifest.find(row => row.root === name); if (!row) throw new Error(`Approved corpus row missing: ${name}`);
+        const filename = kind === 'pointer' ? 'OTC_latest.json' : kind === 'catalogue' ? 'OTC_index.json' : kind === 'checksum' ? `OTC_${row.latest}.sha256` : `OTC_${row.latest}.json`;
+        const input = fs.readFileSync(path.join(root, 'conformance/fixtures', name, filename));
+        return { kind, name, bytes: [...input], sha256: sha256(input), pointer_bound: name.includes('mismatch') || name.includes('file-differs') };
+    }));
+    for (const row of JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonical/cache-golden.json'))).cases) {
+        const input = Buffer.from(row.expected);
+        corpus.push({ kind: 'cache', name: row.id, bytes: [...input], sha256: sha256(input) });
+    }
+    const retryFailure = { meta: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.meta.json'))], jsonl: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.jsonl'))], checksum: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.sha256'))], good_meta: [...fs.readFileSync(path.join(fixture, 'OTC_20991231.meta.json'))], good_jsonl: [...fs.readFileSync(path.join(fixture, 'OTC_20991231.jsonl'))] };
+    const warningSource = { meta: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/unknown-status/OTC_20991231.meta.json'))], jsonl: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/unknown-status/OTC_20991231.jsonl'))] };
+    return { source: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.json'), 'utf8'), meta: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.meta.json'), 'utf8'), jsonl: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.jsonl'), 'utf8'), checksum: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.sha256'), 'utf8'), pointer: JSON.parse(fs.readFileSync(path.join(fixture, 'OTC_latest.json'), 'utf8')), baseUrl, cacheDir, corpus, retryFailure, warningSource };
+}
+
+async function m2StationRetention({ moduleRoot, source }) {
+    const { releaseFromJson } = await import(`${moduleRoot}/loader.js`);
+    let inspector;
+    const collect = typeof globalThis.gc === 'function' ? () => globalThis.gc() : async () => {
+        if (!inspector) { const { Session } = await import('node:inspector'); inspector = new Session(); inspector.connect(); }
+        await new Promise((resolve, reject) => inspector.post('HeapProfiler.collectGarbage', error => error ? reject(error) : resolve()));
+    };
+    let release = releaseFromJson(new TextEncoder().encode(source), []);
+    const station = release.requireStation('OTC-T-0001');
+    const owner = new WeakRef(release);
+    release = null;
+    for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await collect();
+    }
+    const value = { collected: owner.deref() === undefined, retained_station: station.station_id, raw_station: station.raw.station_id, retained_set: station.constantSets()[0].set_id };
+    inspector?.disconnect(); return value;
+}
+
+async function observeM2Lru({ moduleRoot, meta, index, sourcePath, slices }) {
+    const [canonical, loader, releases] = await Promise.all([import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`), import(`${moduleRoot}/release.js`)]);
+    const header = loader.headerFromMeta(new TextEncoder().encode(meta));
+    const stored = JSON.parse(index);
+    const entries = releases.usableIndex(stored, stored.datestamp, stored.jsonl_sha256, stored.jsonl_size,
+        new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+    if (!entries) throw new Error('Accepted unchanged historical index admission failed');
+    const chosen = slices.map(row => row.station_id);
+    const events = [];
+    const nativeReader = typeof process === 'object' ? (await import(`${moduleRoot}/node.js`)).nodeApi.openLineReader(sourcePath) : null;
+    const byOffset = new Map(slices.map(row => [row.offset, new TextEncoder().encode(row.source)]));
+    const release = loader.releaseFromJsonl(new TextEncoder().encode(meta), null, { eager: false, files: [], index: { entries },
+        reader: (offset, length) => {
+            const bytes = nativeReader ? nativeReader.read(offset, length) : byOffset.get(offset);
+            if (!bytes || bytes.length !== length) throw new Error('Exact historical source span missing');
+            events.push({ action: 'read', offset, length }); return bytes;
+        }, close: () => { events.push({ action: 'close' }); nativeReader?.close(); }, dropIndex: () => events.push({ action: 'delete_index' }) });
+    const reader = { release_view: release, native_owner: release };
+    const version = { major: 1, minor: 0 };
+    try {
+        const before = events.length;
+        const first = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const retained = release.requireStation(chosen[0]);
+        const firstReads = events.length - before;
+        const hit = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const cacheHitReads = events.length - before - firstReads;
+        for (const id of chosen.slice(1)) canonical.read_station_lazily(reader, id, release, version);
+        const refillBefore = events.length;
+        const refill = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const rematerialized = release.requireStation(chosen[0]);
+        const returned = { first_reads: firstReads, cache_hit_reads: cacheHitReads, refill_reads: events.length - refillBefore,
+            selected_stations: chosen.length, cache_hit_identity: hit === first, evicted_station_rematerialized: retained !== rematerialized,
+            values_unchanged: JSON.stringify(first) === JSON.stringify(refill), retained_origin_accepted: canonical.check_station_origin(retained, release) === retained,
+            fresh_origin_accepted: canonical.check_station_origin(rematerialized, release) === rematerialized,
+            original_byte_spans: slices.map(row => ({ station_id: row.station_id, offset: row.offset, length: row.length, sha256: row.sha256 })), events };
+        canonical.enforce_resource_lifetime(reader, 'close'); canonical.enforce_resource_lifetime(reader, 'close');
+        try { canonical.read_station_lazily(reader, chosen[0], release, version); returned.closed_error = null; }
+        catch (error) { returned.closed_error = { code: error.code, name: error.name, message: error.message }; }
+        returned.close_calls = events.filter(row => row.action === 'close').length;
+        returned.metadata_after_close = release.datestamp;
+        return returned;
+    } finally { release._close(); }
+}
+
+function m2HistoricalInputs() {
+    const locatorsPath = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-PY/fixture-locators/locators.json';
+    const locators = JSON.parse(fs.readFileSync(locatorsPath));
+    const nativeIndexPath = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/mobile-memory/node-cached-stream/implementation/cache/v1/releases/20261011/index-v1.json';
+    const metadata = fs.readFileSync(locators.metadata_path), index = fs.readFileSync(nativeIndexPath);
+    assert.equal(sha256(metadata), locators.metadata_sha256); assert.equal(sha256(index), '87539048ab6233961d0b0d280f0c1c12a93152d3c093bc6e64f07035d38a220a');
+    const sourcePath = locators.locators[0].source_path;
+    const fd = fs.openSync(sourcePath, 'r');
+    try {
+        const slices = JSON.parse(index).stations.filter(row => row.status === 'active').slice(0, 258).map(row => {
+            const bytes = Buffer.alloc(row.length); assert.equal(fs.readSync(fd, bytes, 0, bytes.length, row.offset), bytes.length);
+            assert.equal(JSON.parse(bytes).station_id, row.station_id);
+            return { station_id: row.station_id, offset: row.offset, length: row.length, source: bytes.toString(), sha256: sha256(bytes) };
+        });
+        return { meta: metadata.toString(), index: index.toString(), sourcePath, slices };
+    } finally { fs.closeSync(fd); }
+}
+
+for (const profile of ['node', 'chromium']) test(`M2 ${profile} authentic historical lazy LRU and retained owner`, async () => {
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        const inputs = { ...m2HistoricalInputs(), moduleRoot: profile === 'node' ? path.join(packageRoot, 'dist') : '/dist' };
+        let value;
+        if (profile === 'node') value = await observeM2Lru(inputs);
+        else {
+            browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}/`);
+            value = await page.evaluate(`(${observeM2Lru.toString()})(${JSON.stringify(inputs)})`);
+        }
+        if (process.env.OTC_M2_PROOF) fs.writeFileSync(path.join(process.env.OTC_M2_PROOF, `${process.env.OTC_M2_PHASE ?? 'candidate'}-lru-${profile}.json`), JSON.stringify(value, null, 2));
+        console.log(JSON.stringify({ profile, selected_stations: value.selected_stations, first_reads: value.first_reads, cache_hit_reads: value.cache_hit_reads, refill_reads: value.refill_reads, close_calls: value.close_calls, evicted_station_rematerialized: value.evicted_station_rematerialized }));
+        assert.equal(value.selected_stations, 258); assert.ok(value.first_reads > 0); assert.equal(value.cache_hit_reads, 0); assert.ok(value.refill_reads > 0);
+        assert.equal(value.evicted_station_rematerialized, true); assert.equal(value.values_unchanged, true); assert.equal(value.retained_origin_accepted, true); assert.equal(value.fresh_origin_accepted, true);
+        assert.equal(value.close_calls, 1); assert.equal(value.closed_error.code, 'io');
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+for (const profile of ['node', 'chromium']) test(`M2 ${profile} retained Station releases its producing owner`, async () => {
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        const inputs = { source: documentBytes.toString(), moduleRoot: profile === 'node' ? path.join(packageRoot, 'dist') : '/dist' };
+        let value;
+        if (profile === 'node') value = await m2StationRetention(inputs);
+        else {
+            browser = await chromium.launch({ headless: true, args: ['--js-flags=--expose-gc'] });
+            const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}/`);
+            value = await page.evaluate(`(${m2StationRetention.toString()})(${JSON.stringify(inputs)})`);
+        }
+        if (process.env.OTC_M2_PROOF) fs.writeFileSync(path.join(process.env.OTC_M2_PROOF, `${process.env.OTC_M2_PHASE ?? 'candidate'}-retention-${profile}.json`), JSON.stringify(value, null, 2));
+        console.log(JSON.stringify({ profile, qualification: 'Actual native model retained; controlled exposed runtime GC', ...value }));
+        assert.equal(value.collected, true); assert.equal(value.raw_station, value.retained_station);
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+for (const profile of ['node', 'chromium']) test(`M2 actual ${profile} authenticated source and ownership`, async () => {
+    const server = m1Server();
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const inputs = m2Inputs(`${origin}/fixture-good/`, profile === 'node' ? fs.mkdtempSync(path.join('/tmp', 'otc-m2-native-')) : 'otc-m2-native-browser');
+    let browser;
+    try {
+        let result;
+        if (profile === 'node') result = await observeM2({ ...inputs, moduleRoot: path.join(packageRoot, 'dist') });
+        else {
+            browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage(); await page.goto(origin);
+            result = await page.evaluate(`(${observeM2.toString()})(${JSON.stringify({ ...inputs, moduleRoot: '/dist' })})`);
+        }
+        const output = process.env.OTC_M2_PROOF;
+        if (output) { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, `${process.env.OTC_M2_PHASE ?? 'candidate'}-${profile}.json`), JSON.stringify(result, null, 2)); }
+        console.log(JSON.stringify({ profile, records: result.records, events: result.events, control: { same_release: result.control.same_release, foreign_release: result.control.foreign_release, datestamp_equal: result.control.datestamp_equal, station_id: result.control.station_id } }));
+        assert.equal(result.control.same_release, true); assert.equal(result.control.foreign_release, false); assert.equal(result.control.datestamp_equal, true);
+        assert.deepEqual(result.records.filter(row => !row.passed), []);
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); if (profile === 'node') fs.rmSync(inputs.cacheDir, { recursive: true, force: true }); }
+});
+
 function m1Server() {
     let failMetadata = false;
     return createServer((request, response) => {
@@ -47,7 +572,7 @@ function m1Server() {
 function verifyInvocations(observations) {
     assert.deepEqual(observations.runtime.map(row => row.id), protocol.runtime.map(row => row.id));
     assert.deepEqual(observations.call_actions.map(row => row.id), protocol.call_actions.map(row => row.action.action_id));
-    const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B07', 'B08.raw', 'B24', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
+    const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B08.origin', 'B08.raw', 'B15', 'B16', 'B20', 'B24', 'B25', 'B26', 'B27', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
     assert.ok(observations.runtime.every(row => migrated.has(row.id) ? row.refusal === undefined && typeof row.value_json === 'string' : row.refusal === `Private canonical seam ${row.id} is unimplemented`));
     assert.equal(observations.b04_presence_controls.length, 16);
     assert.ok(observations.b04_presence_controls.every(row => row.refusal === undefined && (typeof row.value_json === 'string' || typeof row.error_json === 'string')));
@@ -72,41 +597,36 @@ function writeEvidence(profile, observations, runtimeEnvironment) {
 
 test('private canonical TypeScript Node entries load and invoke on the actual candidate', async () => {
     assert.equal(nodeFixture.loadError, undefined, `Required private native seam is absent: ${nodeFixture.loadError}`);
-    const observations = await nodeFixture.exerciseShape(documentBytes.toString(), 'typescript_node', predictionSource);
-    verifyInvocations(observations);
-    writeEvidence('typescript_node', observations, 'node');
-    console.log(JSON.stringify({ native_profile: 'typescript_node', runtime: 60, ordered_call_actions: 78, construction_only: true }));
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const cacheRoot = fs.mkdtempSync(path.join('/tmp', 'otc-m2-shape-'));
+    try {
+        const inputs = m2Inputs(`http://127.0.0.1:${server.address().port}/fixture-good/`, cacheRoot);
+        const contexts = { base_url: inputs.baseUrl, cache_root: cacheRoot, metadata: inputs.meta, jsonl: inputs.jsonl, checksum: inputs.checksum, pointer: JSON.stringify(inputs.pointer) };
+        const observations = await nodeFixture.exerciseShape(documentBytes.toString(), 'typescript_node', predictionSource, contexts);
+        verifyInvocations(observations);
+        writeEvidence('typescript_node', observations, 'node');
+        console.log(JSON.stringify({ native_profile: 'typescript_node', runtime: 60, ordered_call_actions: 78, construction_only: true }));
+    } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(cacheRoot, { recursive: true, force: true }); }
 });
 
 test('private canonical TypeScript browser entries load and invoke in Chromium', async () => {
-    const server = createServer((request, response) => {
-        const requested = new URL(request.url, 'http://localhost').pathname;
-        if (requested === '/') {
-            response.writeHead(200, { 'content-type': 'text/html' });
-            response.end('<!doctype html><title>Private native shape</title>');
-            return;
-        }
-        const filename = path.resolve(packageRoot, `.${requested}`);
-        if (!filename.startsWith(path.join(packageRoot, 'dist') + path.sep) || !fs.existsSync(filename)) {
-            response.writeHead(404); response.end(); return;
-        }
-        response.writeHead(200, { 'content-type': 'text/javascript' });
-        response.end(fs.readFileSync(filename));
-    });
+    const server = m1Server();
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let browser;
     try {
         browser = await chromium.launch({ headless: true });
         const page = await browser.newPage();
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
-        const result = await page.evaluate(async ({ source, predictionSource }) => {
+        const inputs = m2Inputs(`http://127.0.0.1:${server.address().port}/fixture-good/`, 'otc-m2-shape-browser');
+        const contexts = { base_url: inputs.baseUrl, cache_root: inputs.cacheDir, metadata: inputs.meta, jsonl: inputs.jsonl, checksum: inputs.checksum, pointer: JSON.stringify(inputs.pointer) };
+        const result = await page.evaluate(async ({ source, predictionSource, contexts }) => {
             try {
                 const fixture = await import('/dist/canonical-shape/test/canonical-shape.js');
-                return { runtime_environment: 'browser', user_agent: navigator.userAgent, observations: await fixture.exerciseShape(source, 'typescript_browser', predictionSource) };
+                return { runtime_environment: 'browser', user_agent: navigator.userAgent, observations: await fixture.exerciseShape(source, 'typescript_browser', predictionSource, contexts) };
             } catch (error) {
                 return { runtime_environment: 'browser', load_error: error.message };
             }
-        }, { source: documentBytes.toString(), predictionSource });
+        }, { source: documentBytes.toString(), predictionSource, contexts });
         assert.equal(result.load_error, undefined, `Required private browser seam is absent: ${result.load_error}`);
         assert.equal(result.runtime_environment, 'browser');
         assert.match(result.user_agent, /Chrome/);

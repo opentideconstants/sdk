@@ -47,8 +47,8 @@ function hasLoneSurrogate(v: unknown): boolean {
  * surrogate, which is not valid Unicode (spec 7.3, CR D17). UTF-8 text cannot hold a surrogate, so only a text with
  * such an escape is walked.
  */
-export function parseJsonText(text: string, what: string): unknown {
-    let v: unknown;
+export function parseJsonText(text: string, what: string): Json {
+    let v: Json;
     try {
         v = JSON.parse(text);
     } catch (e) {
@@ -59,7 +59,7 @@ export function parseJsonText(text: string, what: string): unknown {
 }
 
 /** @internal */
-export function parseJson(bytes: Uint8Array, what: string): unknown {
+export function parseJson(bytes: Uint8Array, what: string): Json {
     return parseJsonText(decodeUtf8(bytes, what), what);
 }
 
@@ -244,6 +244,20 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     return releaseFromPrepared(prepareReleaseFromJsonl(meta, jsonl, opts));
 }
 
+/** @internal The exact index-derived row comparison and original failure constructor. */
+export function compareIndexedSource(v: JsonObject, e: IndexEntry, header: ReleaseHeader, conventions: Set<string>, licences: Set<string>,
+    bad: (why: string, cause?: unknown) => InvalidReleaseError): JsonObject {
+    let got: IndexEntry;
+    try {
+        got = indexDoc(v, header, e.offset, e.length, conventions, licences);
+    } catch (x) {
+        if (x instanceof InvalidReleaseError) throw bad(`the line of ${e.station_id} fails a check: ${x.message}`, x);
+        throw x;
+    }
+    if (lineView(got.stored, e.legacyOffsets, e.indexPresence, v) !== lineView(e.stored, e.legacyOffsets, e.indexPresence)) throw bad(`the line of ${e.station_id} does not give the status, references and sets of its entry`);
+    return deepFreeze(v);
+}
+
 /** @internal Existing authentic JSONL preparation and independently owned native fields. */
 export function prepareReleaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: {
     eager: boolean;
@@ -302,14 +316,7 @@ export function prepareReleaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | nu
                 if (v["station_id"] !== e.station_id) throw bad(`the line at offset ${e.offset} is ${JSON.stringify(v["station_id"])}, not ${e.station_id}`);
                 if (fromIndex) {
                     // the checks of the full pass, and the line gives its entry's status, references and sets (PK-R2-07)
-                    let got: IndexEntry;
-                    try {
-                        got = indexDoc(v, header, e.offset, e.length, convs, lics);
-                    } catch (x) {
-                        if (x instanceof InvalidReleaseError) throw bad(`the line of ${e.station_id} fails a check: ${x.message}`, x);
-                        throw x;
-                    }
-                    if (lineView(got.stored, e.legacyOffsets, e.indexPresence, v) !== lineView(e.stored, e.legacyOffsets, e.indexPresence)) throw bad(`the line of ${e.station_id} does not give the status, references and sets of its entry`);
+                    return compareIndexedSource(v, e, header, convs, lics, bad);
                 }
                 return deepFreeze(v);
             },

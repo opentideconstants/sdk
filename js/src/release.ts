@@ -267,7 +267,8 @@ function checkedTime(v: Json | undefined, what: string): Date | null {
  * Tolerant is not lax (spec 7.3): a known field with the wrong JSON type is invalid_release at load, in every path,
  * instead of a field that is silently dropped or a raw TypeError at query time.
  */
-function checkShape(doc: JsonObject, id: string): void {
+/** @internal The original known-field validation, independent of reference resolution. */
+export function checkShape(doc: JsonObject, id: string): void {
     const check = (o: JsonObject, table: FieldTypes, what: string) => {
         for (const [k, t] of Object.entries(table)) {
             if (!typeOk(o[k], t)) throw new InvalidReleaseError(`station ${id}: ${what}${k} has the wrong type`);
@@ -777,6 +778,14 @@ export class ConstantSet {
     }
 }
 
+const releaseOrigins = new WeakMap<Release, symbol>();
+
+function originOf(release: Release): symbol {
+    let token = releaseOrigins.get(release);
+    if (!token) { token = Symbol('producing Release'); releaseOrigins.set(release, token); }
+    return token;
+}
+
 /** An active station. */
 export class Station {
     readonly source_records: readonly SourceRecord[];
@@ -797,12 +806,12 @@ export class Station {
     readonly #recommended: ConstantSet | null;
     readonly #validation: readonly Validation[];
     readonly #offsets: SubordinateOffsets | null;
-    readonly #release: Release;
+    readonly #origin: symbol;
 
     /** @internal */
     constructor(raw: JsonObject, entry: IndexEntry, release: Release) {
         this.raw = raw;
-        this.#release = release;
+        this.#origin = originOf(release);
         this.recommended_is_fallback = typeof raw["recommended_is_fallback"] === "boolean" ? raw["recommended_is_fallback"] : null;
         this.source_records = Object.freeze(objects(raw, "source_records").map((r) => sourceRecordOf(r, release)));
         this.station_id = entry.station_id;
@@ -837,7 +846,7 @@ export class Station {
 
     /** @internal True if this station was read from release `r`. */
     _from(r: Release): boolean {
-        return this.#release === r;
+        return this.#origin === originOf(r);
     }
 
     get isReference(): boolean {
@@ -1142,6 +1151,20 @@ function releaseEffectiveSet(context: ReleasePolicyContext, e: IndexEntry): Stor
     return null;
 }
 
+interface SourceReceiver {
+    open(): void;
+    own(station: Station): Station;
+    row(stationId: string): JsonObject;
+}
+const sourceReceivers = new WeakMap<Release, SourceReceiver>();
+
+/** @internal Borrow the genuine native owner without materializing a public query. */
+export function releaseSourceReceiver(owner: Release): SourceReceiver {
+    const receiver = sourceReceivers.get(owner);
+    if (!receiver) throw new InvalidArgumentError('a native Release owner is required');
+    return receiver;
+}
+
 /** One loaded release. It is immutable and has every query method. */
 export class Release {
     /** @internal Module-private exact ownership preparation bridge; never called inside B01. */
@@ -1231,6 +1254,16 @@ export class Release {
         this.#licences = fields.licences;
         this.#effective = fields.effective;
         this.#cache = fields.cache;
+        sourceReceivers.set(this, {
+            open: () => this.#open(),
+            own: station => { this.#ownEntry(station, 'check_station_origin'); return station; },
+            row: stationId => {
+                this.#open();
+                const entry = this.#byId.get(stationId);
+                if (!entry) throw new StationNotFoundError(stationId);
+                return this.#station(entry).raw;
+            },
+        });
         Object.freeze(this);
     }
 

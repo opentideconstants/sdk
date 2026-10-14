@@ -1,17 +1,18 @@
 import type * as C from './canonical-types.js';
 import { deepFreeze, isObject, arr, str, num, type JsonObject } from './json.js';
 import { encodeCacheJson } from './cache-json.js';
-import { Station, ConstantSet, indexDoc, constituentOf, timeBaseOf, buildOf, validationOf, fallbackOf, qcFlagOf, sourceRecordOf, checkFilters, validateSearchOptions, validateNearOptions, validateNearestOptions, validateConstantSetsOptions,
+import { Release, Station, ConstantSet, indexDoc, parseHeader, indexStations, checkShape, releaseSourceReceiver, constituentOf, timeBaseOf, buildOf, validationOf, fallbackOf, qcFlagOf, sourceRecordOf, checkFilters, validateSearchOptions, validateNearOptions, validateNearestOptions, validateConstantSetsOptions,
     recordSpanOf, datumOf, droppedConstituentOf, provenanceOf, conventionOf, licenceOf, tombstoneOf, subordinateOffsetsOf, historicalVintageOf, historicalProvenanceOf, nearbyOf, statsOf, releaseFromPrepared, predictionOptions, validateAllSets, validateAttributionList } from './release.js';
 import * as X from './errors.js';
 import { AstroTable, instant, utc, validateUtcYear } from './predict/astro.js';
 import { validateLocalTimeType } from './predict/local.js';
 import { Sum, unroundedEvents } from './predict/harmonic.js';
 import { window as nativeWindow, contextFor, datumTerm, unroundedCurrentEventsFor, bin, currentContext, predictionSeconds, validateOffsetArguments } from './predict/engine.js';
-import { validateOpenOptions, resolveOpenNativeOptions, validateDownloadOptions, validatePruneOptions, toInfo, updateResultOf, clientArgumentReceiver, clientFromPrepared } from './client.js';
-import { fileInfoOf } from './core.js';
+import { OpenTideConstants, validateOpenOptions, resolveOpenNativeOptions, validateDownloadOptions, validatePruneOptions, toInfo, updateResultOf, clientArgumentReceiver, clientFromPrepared } from './client.js';
+import { fileInfoOf, checkSha256, requireManifestRows, verifyCached, authenticateCachedStreamIndex, cachedFileInfos, log, parseEntry, indexEntries } from './core.js';
 import type { OpenOptions } from './types.js';
 import * as R from './predict/results.js';
+import { parseJson, checkFormat, compareIndexedSource } from './loader.js';
 
 /** A private seam has been constructed, but its wider algorithm remains on the primary body. */
 export class CanonicalUnimplementedError extends Error {
@@ -237,11 +238,36 @@ function nativeErrorString(fields: JsonObject | null, key: 'constituent' | 'miss
 }
 
 export function decode_release_document(source_bytes: C.source_bytes, reader_version: C.reader_version, document_kind: C.document_kind): C.parsed_document {
-    throw new CanonicalUnimplementedError("B05");
+    const value = parseJson(source_bytes, document_kind === 'station_row' ? 'the station row' : 'the release file');
+    if (document_kind === 'release') {
+        checkFormat(value);
+        const header = parseHeader(value);
+        const stations = header.raw['stations'];
+        if (stations !== undefined) {
+            if (!Array.isArray(stations)) throw new X.InvalidReleaseError('stations is missing');
+            for (const row of stations) {
+                if (!isObject(row)) throw new X.InvalidReleaseError('a station is not a JSON object');
+                checkShape(row, String(row['station_id']));
+            }
+        }
+        return { variant: 'release', value: header.raw };
+    }
+    if (document_kind === 'station_row') {
+        if (!isObject(value)) throw new X.InvalidReleaseError('a station is not a JSON object');
+        checkShape(value, String(value['station_id'])); return { variant: 'station_row', value };
+    }
+    if (document_kind === 'pointer') parseEntry(value, reader_version.native_document_context?.url ?? '', reader_version.native_document_context?.what ?? 'the pointer');
+    if (document_kind === 'catalogue') indexEntries(value, reader_version.native_document_context?.url ?? '');
+    return { variant: document_kind, value };
 }
 
 export function validate_release_links(parsed_document: C.parsed_document, required_links: C.required_links): C.validated_release_graph {
-    throw new CanonicalUnimplementedError("B06");
+    if (parsed_document.variant !== 'release') throw new CanonicalUnimplementedError('B06 requires its authentic release graph');
+    const header = parseHeader(parsed_document.value);
+    const stations = header.raw['stations'];
+    if (!Array.isArray(stations)) throw new X.InvalidReleaseError('stations is missing');
+    indexStations(header, stations);
+    return parsed_document.value;
 }
 
 export function materialize_typed_model(raw_fields: C.raw_fields, field_contract: C.field_contract, origin: C.origin, model_type: C.model_type): C.typed_model {
@@ -338,7 +364,7 @@ function isCounts(value: unknown): value is Readonly<Record<string, number>> {
 }
 
 export function access_raw_record(access_kind: C.access_kind, source_record: C.source_record, station: C.station, release_origin: C.release_origin, native_profile: C.native_profile): C.raw_record_or_valid_station {
-    throw new CanonicalUnimplementedError("B08");
+    return access_kind === 'raw_record' ? retain_raw_source_record(source_record, native_profile) : check_station_origin(station, release_origin);
 }
 
 export async function open_client_release(operation_arguments: C.arguments, environment: C.environment, platform_defaults: C.platform_defaults, cache_state: C.cache_state, clock: C.clock, native_profile: C.native_profile, reader_version: C.reader_version): Promise<C.client_and_release> {
@@ -366,11 +392,25 @@ export function forward_held_release(held_release: C.held_release, query_argumen
 }
 
 export function enforce_resource_lifetime(resource_state: C.resource_state, lifetime_action: C.lifetime_action): C.resource_state_or_error {
-    throw new CanonicalUnimplementedError("B15");
+    if (resource_state instanceof OpenTideConstants) {
+        if (lifetime_action === 'close') resource_state.close();
+        else if (lifetime_action !== 'retained_metadata') clientArgumentReceiver(resource_state);
+    } else {
+        const owner = resource_state instanceof Release ? resource_state : 'release_view' in resource_state ? resource_state.native_owner : undefined;
+        if (!owner) throw new CanonicalUnimplementedError('B15 requires its native resource owner');
+        if (lifetime_action === 'close') owner._close();
+        else if (lifetime_action !== 'retained_metadata') releaseSourceReceiver(owner).open();
+    }
+    return resource_state;
 }
 
-export function bind_checksum_manifest(checksum_bytes: C.checksum_bytes, pointer_digests: C.pointer_digests, required_files: C.required_files): C.bound_checksums {
-    throw new CanonicalUnimplementedError("B16");
+export async function bind_checksum_manifest(checksum_bytes: C.checksum_bytes, pointer_digests: C.pointer_digests, required_files: C.required_files): Promise<C.bound_checksums> {
+    if (!('native_context' in pointer_digests) || typeof pointer_digests.native_context === 'string') throw new CanonicalUnimplementedError('B16 requires its native manifest context');
+    const { native_context, datestamp, entry } = pointer_digests;
+    if (typeof entry === 'string') throw new CanonicalUnimplementedError('B16 requires its native pointer entry');
+    const rows = await checkSha256(native_context, datestamp, entry, checksum_bytes);
+    requireManifestRows(datestamp, native_context.mode, rows, required_files.map(file => file.name));
+    return Object.fromEntries(rows);
 }
 
 export async function acquire_release_files(acquisition_descriptor: C.acquisition_descriptor, effective_options: C.effective_options, load_mode: C.load_mode, cache_state: C.cache_state, clock: C.clock, reader_version: C.reader_version): Promise<C.loaded_release> {
@@ -386,7 +426,8 @@ export async function select_cached_release(release_candidates: C.release_candid
 }
 
 export async function verify_release_files(release_files: C.release_files, trusted_cached_pointer: C.trusted_cached_pointer): Promise<C.verification_result> {
-    throw new CanonicalUnimplementedError("B20");
+    if (!('native_owner' in release_files)) throw new CanonicalUnimplementedError('B20 requires its native verification owner');
+    return release_files.native_owner.verify();
 }
 
 export async function publish_download(destination: C.destination, format_selection: C.format_selection, overwrite_policy: C.overwrite_policy, release_files: C.release_files, checksum_bytes: C.checksum_bytes, pointer_digests: C.pointer_digests): Promise<C.download_result> {
@@ -409,15 +450,40 @@ export function project_station_index(station_source_row: C.station_source_row, 
 }
 
 export async function authenticate_station_index(source_files: C.source_files, supplied_index: C.supplied_index, index_presence: C.index_presence, reader_version: C.reader_version): Promise<C.authenticated_index> {
-    throw new CanonicalUnimplementedError("B25");
+    const native = source_files.native_context;
+    if (!native) throw new CanonicalUnimplementedError('B25 requires its authenticated native source directory');
+    await verifyCached(native.context, native.datestamp, true);
+    return authenticateCachedStreamIndex(native.dir, native.verified, native.datestamp,
+        { files: cachedFileInfos(native.verified), zenodoVersionDoi: typeof native.verified.zenodo_version_doi === 'string' ? native.verified.zenodo_version_doi : null,
+            commercialOnly: native.context.commercialOnly, commercialBasis: native.context.commercialBasis, historicalOffsetsPolicy: native.context.historicalOffsetsPolicy },
+        message => log(native.context, 'warn', message),
+        supplied_index === null ? null : encodeCacheJson(supplied_index));
 }
 
 export function compare_station_source(index_entry: C.index_entry, station_source_row: C.station_source_row, index_presence: C.index_presence): C.compared_station_row {
-    throw new CanonicalUnimplementedError("B26");
+    if (!('native_entry' in index_entry)) throw new CanonicalUnimplementedError('B26 requires its admitted native index entry');
+    const { native_entry, native_header, native_drop_index } = index_entry;
+    const entry = nativePresence(index_presence) ? { ...native_entry, indexPresence: index_presence } : native_entry;
+    const bad = (why: string, cause?: unknown): X.InvalidReleaseError => {
+        native_drop_index?.();
+        return new X.InvalidReleaseError(`index-v1.json does not match the .jsonl: ${why}`, cause === undefined ? undefined : { cause });
+    };
+    return compareIndexedSource(station_source_row, entry, native_header,
+        new Set(native_header.conventions.map(row => String(row['convention_id']))),
+        new Set(native_header.licences.map(row => String(row['licence_id']))), bad);
+}
+
+function nativePresence(presence: C.index_presence): presence is import('./release.js').IndexPresence {
+    return typeof presence.own === 'string' && typeof presence.offsets === 'string' && Array.isArray(presence.offsetFields)
+        && typeof presence.privateSets === 'boolean' && typeof presence.bins === 'boolean'
+        && typeof presence.baseFallback === 'boolean' && Array.isArray(presence.fallback);
 }
 
 export function read_station_lazily(stream_reader: C.stream_reader, station_id: C.station_id, release_origin: C.release_origin, reader_version: C.reader_version): C.station_source_row {
-    throw new CanonicalUnimplementedError("B27");
+    const owner = stream_reader.native_owner;
+    if (!owner || release_origin !== owner) throw new CanonicalUnimplementedError('B27 requires its producing native reader');
+    enforce_resource_lifetime(stream_reader, 'station_read');
+    return releaseSourceReceiver(owner).row(station_id);
 }
 
 export function encode_cache_json(cache_document: C.cache_document): C.cache_bytes {
@@ -524,7 +590,8 @@ export function retain_raw_source_record(source_record: C.source_record, native_
 }
 
 export function check_station_origin(station: C.station, release_origin: C.release_origin): C.valid_station {
-    throw new CanonicalUnimplementedError("B08.origin");
+    if (!(release_origin instanceof Release)) throw new CanonicalUnimplementedError('B08.origin requires its producing native Release');
+    return releaseSourceReceiver(release_origin).own(station);
 }
 
 export async function manage_cache_lock(lock_request: C.lock_request, lock_state: C.lock_state, clock: C.clock): Promise<C.lock_outcome> {

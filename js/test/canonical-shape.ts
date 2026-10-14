@@ -3,13 +3,19 @@ import type * as C from "../src/canonical-types.js";
 import { releaseFromJson } from '../src/loader.js';
 import { indexDoc, parseHeader, predictionAstroTable } from '../src/release.js';
 import { InvalidArgumentError, OpenTideConstantsError } from '../src/errors.js';
+import { prepareClientFields, clientFromPrepared } from '../src/client.js';
+import { readVerified, prefetchDir, parseEntry } from '../src/core.js';
 
-const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B07', 'B08.raw', 'B24', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
+const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B08.origin', 'B08.raw', 'B15', 'B16', 'B20', 'B24', 'B25', 'B26', 'B27', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
 interface EntryObservation { readonly id: string; readonly refusal?: string; readonly value_json?: string; readonly error_json?: string; readonly argument_json: string; readonly cleanup_observed: boolean }
 async function invoke<Result>(id: string, call: () => Result | Promise<Result>, argumentJson: string): Promise<EntryObservation> {
     try {
         const value = await call();
-        if (migrated.has(id)) return { id, value_json: JSON.stringify(value) ?? 'null', argument_json: argumentJson, cleanup_observed: true };
+        if (migrated.has(id)) {
+            const value_json = JSON.stringify(value) ?? 'null';
+            if (id === 'B25' && typeof value === 'object' && value !== null && 'close' in value && typeof value.close === 'function') value.close();
+            return { id, value_json, argument_json: argumentJson, cleanup_observed: true };
+        }
         throw new Error(`Private seam ${id} fabricated a successful value`);
     } catch (error) {
         if (id === 'B04' && error instanceof Error && !(error instanceof native.CanonicalUnimplementedError)) return { id, error_json: JSON.stringify({ code: error instanceof OpenTideConstantsError ? error.code : 'native_exception', structured_fields: { message: error.message }, cause: error.cause ?? null }), argument_json: argumentJson, cleanup_observed: true };
@@ -17,7 +23,8 @@ async function invoke<Result>(id: string, call: () => Result | Promise<Result>, 
         return { id, refusal: error.message, argument_json: argumentJson, cleanup_observed: true };
     }
 }
-export async function exerciseShape(source: string, profile: 'typescript_node' | 'typescript_browser', predictionSource: string) {
+export async function exerciseShape(source: string, profile: 'typescript_node' | 'typescript_browser', predictionSource: string,
+    authenticatedSources: { readonly base_url: string; readonly cache_root: string; readonly metadata: string; readonly jsonl: string; readonly checksum: string; readonly pointer: string }) {
     const release = releaseFromJson(new TextEncoder().encode(source), []);
     const predictionRelease = releaseFromJson(new TextEncoder().encode(predictionSource), []);
     const station = release.requireStation('OTC-T-0001');
@@ -145,6 +152,34 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
     const header = parseHeader(release._header);
     const nativeIndex = indexDoc(station.raw, header, 0, 0,
         new Set(header.conventions.map(row => String(row['convention_id']))), new Set(header.licences.map(row => String(row['licence_id']))));
+    const prepared = await prepareClientFields({ baseUrl: authenticatedSources.base_url, cacheDir: authenticatedSources.cache_root, mode: 'stream', autoUpdate: false });
+    const client = clientFromPrepared(prepared);
+    const store = prepared.ctx.store;
+    if (!store) throw new Error('Authentic native source cache is required');
+    const verified = await readVerified(store, release.datestamp);
+    if (!verified) throw new Error('Authentic native verified receipt is required');
+    const dir = await prefetchDir(store, release.datestamp, 'stream');
+    const names = prepared.release.files;
+    const jsonlFile = names.find(file => file.name.endsWith('.jsonl'));
+    const metaFile = names.find(file => file.name.endsWith('.meta.json'));
+    if (!jsonlFile?.sha256 || jsonlFile.size === null || !metaFile?.sha256 || metaFile.size === null) throw new Error('Authenticated native source files are required');
+    values.source_bytes = new TextEncoder().encode(source);
+    values.reader_version = { major: 1, minor: 0 };
+    values.parsed_document = { variant: 'release', value: header.raw };
+    values.release_origin = release;
+    values.resource_state = release;
+    values.lifetime_action = 'station_read';
+    values.checksum_bytes = new TextEncoder().encode(authenticatedSources.checksum);
+    values.pointer_digests = { native_context: prepared.ctx, datestamp: release.datestamp, entry: parseEntry(JSON.parse(authenticatedSources.pointer), authenticatedSources.base_url) };
+    values.required_files = names.filter(file => file.name.endsWith('.meta.json') || file.name.endsWith('.jsonl'));
+    values.release_files = { native_owner: client, files: client.release.files };
+    values.source_files = { jsonl: jsonlFile.name, meta: metaFile.name, jsonl_sha256: jsonlFile.sha256, jsonl_size: jsonlFile.size,
+        meta_sha256: metaFile.sha256, meta_size: metaFile.size, native_context: { context: prepared.ctx, dir, verified, datestamp: release.datestamp } };
+    const indexBytes = dir.read('index-v1.json');
+    values.supplied_index = indexBytes ? JSON.parse(new TextDecoder().decode(indexBytes)) : null;
+    values.index_entry = { native_entry: nativeIndex, native_header: header };
+    values.stream_reader = { release_view: release, native_owner: release };
+    values.station_id = station.station_id;
     values.field_contract = { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: { release, entry: nativeIndex } };
     values.model_type = 'Station';
     values.projection_contract = { ...fieldProjection, native_header: header };
@@ -278,7 +313,7 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         call_actions.push({ ...await invoke("B24", () => native.project_station_index(values.station_source_row, values.source_byte_span, values.projection_contract), JSON.stringify({ station_source_row: values.station_source_row, source_byte_span: values.source_byte_span, projection_contract: values.projection_contract })), id: "B25.S4.A4" });
         call_actions.push({ ...await invoke("B28", () => native.encode_cache_json(values.cache_document), JSON.stringify({ cache_document: values.cache_document })), id: "B25.S4.A6" });
         call_actions.push({ ...await invoke("B15", () => native.enforce_resource_lifetime(values.resource_state, values.lifetime_action), JSON.stringify({ resource_state: values.resource_state, lifetime_action: values.lifetime_action })), id: "B27.S1.A1" });
-        call_actions.push({ ...await invoke("B05", () => native.decode_release_document(values.source_bytes, values.reader_version, values.document_kind), JSON.stringify({ source_bytes: values.source_bytes, reader_version: values.reader_version, document_kind: values.document_kind })), id: "B27.S4.A3" });
+        call_actions.push({ ...await invoke("B05", () => native.decode_release_document(new TextEncoder().encode(JSON.stringify(station.raw)), values.reader_version, 'station_row'), JSON.stringify({ source_bytes: new TextEncoder().encode(JSON.stringify(station.raw)), reader_version: values.reader_version, document_kind: 'station_row' })), id: "B27.S4.A3" });
         call_actions.push({ ...await invoke("B26", () => native.compare_station_source(values.index_entry, values.station_source_row, values.index_presence), JSON.stringify({ index_entry: values.index_entry, station_source_row: values.station_source_row, index_presence: values.index_presence })), id: "B27.S4.A7" });
         call_actions.push({ ...await invoke("B27", () => native.read_station_lazily(values.stream_reader, values.station_id, values.release_origin, values.reader_version), JSON.stringify({ stream_reader: values.stream_reader, station_id: values.station_id, release_origin: values.release_origin, reader_version: values.reader_version })), id: "B29.S4.A4" });
         call_actions.push({ ...await invoke("B07", () => native.materialize_typed_model(values.raw_fields, values.field_contract, values.origin, values.model_type), JSON.stringify({ raw_fields: values.raw_fields, field_contract: values.field_contract, origin: values.origin, model_type: values.model_type })), id: "B29.S4.A8" });
@@ -340,6 +375,7 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         const b04_presence_controls = await Promise.all(bindingVariants.map(async (input, index) => ({ ...await invoke('B04', () => native.translate_native_binding(input), JSON.stringify(input)), id: `B04.presence.${index}` })));
         return { runtime, call_actions, b04_presence_controls, control: { station_id: station.station_id, raw_preserved: station.raw.station_id === station.station_id, public_route_unchanged: release.station(station.station_id) === station } };
     } finally {
+        client.close();
         predictionRelease._close();
         release._close();
     }

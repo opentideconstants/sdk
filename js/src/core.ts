@@ -7,11 +7,11 @@ import {
 import { daysInMonth, isObject } from "./json.js";
 import { encodeCacheJson } from "./cache-json.js";
 import {
-    checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl, scanJsonlReader,
+    checkFormat, headerFromMeta, indexJsonl, parseJson, parseSha256, readerTooOld, releaseFromJson, releaseFromJsonl, prepareReleaseFromJsonl, scanJsonlReader,
     type LineReader, type StreamIndex,
 } from "./loader.js";
 import type { CacheStore, HttpResponse, Platform, Unlock } from "./platform.js";
-import { storedIndex, usableIndex, type Release } from "./release.js";
+import { storedIndex, usableIndex, releaseFromPrepared, type Release, type PreparedReleaseFields } from "./release.js";
 import type { FileInfo, Logger, Mode, OnNetworkError } from "./types.js";
 
 export interface Ctx {
@@ -144,7 +144,8 @@ export function fileInfoOf(name: string, url: string, size: number, sha: string)
  * `2026-10-08`, a counter `.01` or longer than 9 digits) is invalid_release: it names a cache directory (spec 5.4).
  * `what` names the file in the message ("the pointer" or "OTC_index.json").
  */
-function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry {
+/** @internal Existing metadata entry validation, preserving source URL and error context. */
+export function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry {
     if (!isObject(v) || typeof v["datestamp"] !== "string" || typeof v["format_version"] !== "string") {
         throw new InvalidReleaseError(`${what} ${url}: an entry has no datestamp or format_version`);
     }
@@ -276,7 +277,8 @@ export function parseIndex(body: Uint8Array, url: string): PointerEntry[] {
     return indexEntries(parseJson(body, "OTC_index.json"), url);
 }
 
-function indexEntries(doc: unknown, url: string): PointerEntry[] {
+/** @internal Existing catalogue entry validation and source error ordering. */
+export function indexEntries(doc: unknown, url: string): PointerEntry[] {
     const rels = isObject(doc) ? doc["releases"] : undefined;
     if (!Array.isArray(rels)) throw new InvalidReleaseError(`OTC_index.json ${url}: releases is missing or not a list`);
     return rels.map((e) => parseEntry(e, url, "OTC_index.json")).sort((a, b) => compareDatestamps(b.datestamp, a.datestamp));
@@ -510,6 +512,17 @@ export async function checkSha256(ctx: Ctx, d: string, entry: PointerEntry | nul
     return rows;
 }
 
+/** @internal The unchanged mode-specific sidecar admission phase before acquisition. */
+export function requireManifestRows(d: string, mode: Mode, rows: ReadonlyMap<string, string>, required?: readonly string[]): void {
+    const n = names(d);
+    const needed = mode === "stream" ? [n.jsonl, n.meta]
+        : rows.has(n.gz) ? [n.gz, n.json] : rows.has(n.json) ? [n.json] : [n.jsonl, n.meta];
+    for (const name of required ?? needed) {
+        if (name === n.sha) continue;
+        if (!rows.has(name)) throw new ChecksumError(`${name} is not listed in ${n.sha}`, { file: name, expected: null, actual: null });
+    }
+}
+
 /** Download one release file, which the release's .sha256 lists, and check its size and SHA-256 (spec 5.2 step 4). */
 export async function fetchChecked(ctx: Ctx, name: string, rows: Map<string, string>, entry: PointerEntry | null): Promise<Uint8Array> {
     const f = entry?.files.find((x) => x.name === name);
@@ -557,11 +570,7 @@ export async function ensureRelease(ctx: Ctx, d: string, entry: PointerEntry | n
             }
             const n = names(d);
             const { bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry);
-            const needed = ctx.mode === "stream" ? [n.jsonl, n.meta]
-                : rows.has(n.gz) ? [n.gz, n.json] : rows.has(n.json) ? [n.json] : [n.jsonl, n.meta];
-            for (const name of needed) {
-                if (!rows.has(name)) throw new ChecksumError(`${name} is not listed in ${n.sha}`, { file: name, expected: null, actual: null });
-            }
+            requireManifestRows(d, ctx.mode, rows);
             const writes: [string, Uint8Array][] = [];
             if (ctx.mode === "stream") {
                 for (const name of [n.jsonl, n.meta]) writes.push([name, await fetchChecked(ctx, name, rows, entry)]);
@@ -693,29 +702,88 @@ export interface SyncDir {
     removeIndex(): void;
 }
 
+function sizedCacheFile(dir: SyncDir, verified: Verified, name: string): Uint8Array {
+    const b = dir.read(name);
+    if (!b) throw new ChecksumError(`${name} is missing from the cache`, { file: name, expected: verified.files[name]?.sha256 ?? null, actual: null });
+    const want = verified.files[name]?.size;
+    if (typeof want === "number" && want !== b.length) {
+        throw new ChecksumError(`${name}: size ${b.length}, expected ${want}`, { file: name, expected: verified.files[name]?.sha256 ?? null, actual: null });
+    }
+    return b;
+}
+
+/** @internal Existing release.files projection from the pointer or authenticated receipt. */
+export function cachedFileInfos(verified: Verified, pointerFiles: readonly FileInfo[] | null = null): FileInfo[] {
+    const byName = (a: FileInfo, b: FileInfo) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return pointerFiles ? pointerFiles.map((f) => ({ ...f })).sort(byName) : Object.entries(verified.files)
+        .map(([name, f]) => ({ name, url: f.url ?? null, size: f.size ?? null, sha256: f.sha256 ?? null }))
+        .sort(byName);
+}
+
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined,
     commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalOffsetsPolicy: "fallback" | "exclude" = "fallback"): Release {
     const n = names(d);
     const zenodo = typeof verified.zenodo_version_doi === "string" ? verified.zenodo_version_doi : null;
-    const byName = (a: FileInfo, b: FileInfo) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     // release.files (spec 4.3.1): the pointer entry after a download of latest, else the .verified rows
-    const files: FileInfo[] = pointerFiles ? pointerFiles.map((f) => ({ ...f })).sort(byName) : Object.entries(verified.files)
-        .map(([name, f]) => ({ name, url: f.url ?? null, size: f.size ?? null, sha256: f.sha256 ?? null }))
-        .sort(byName);
-    const sized = (name: string): Uint8Array => {
-        const b = dir.read(name);
-        if (!b) throw new ChecksumError(`${name} is missing from the cache`, { file: name, expected: verified.files[name]?.sha256 ?? null, actual: null });
-        const want = verified.files[name]?.size;
-        if (typeof want === "number" && want !== b.length) {
-            throw new ChecksumError(`${name}: size ${b.length}, expected ${want}`, { file: name, expected: verified.files[name]?.sha256 ?? null, actual: null });
-        }
-        return b;
-    };
+    const files = cachedFileInfos(verified, pointerFiles);
+    const sized = (name: string) => sizedCacheFile(dir, verified, name);
     if (mode === "eager") {
         if (dir.size(n.json) !== null) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
         return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
     }
+    const prepared = authenticateCachedStreamIndex(dir, verified, d,
+        { files, zenodoVersionDoi: zenodo, commercialOnly, commercialBasis, historicalOffsetsPolicy }, warn);
+    try {
+        return releaseFromPrepared(prepared.native_prepared_release);
+    } catch (error) { prepared.close(); throw error; }
+}
+
+/** @internal The existing admitted index and its single owned positional reader. */
+export interface PreparedStreamIndex extends StreamIndex {
+    readonly meta: Uint8Array;
+    readonly reader: LineReader;
+    readonly close: () => void;
+    readonly dropIndex: () => void;
+    readonly fromSuppliedIndex: boolean;
+}
+
+/** @internal Authenticated source fields prepared before allocating the native Release brand. */
+export interface AuthenticatedStreamIndex extends PreparedStreamIndex {
+    readonly native_prepared_release: PreparedReleaseFields;
+}
+
+/** @internal Retry only an admitted index's initial source-hydration fault, once through the existing full pass. */
+export function authenticateCachedStreamIndex(dir: SyncDir, verified: Verified, d: string,
+    options: Pick<Parameters<typeof prepareReleaseFromJsonl>[2], 'files' | 'zenodoVersionDoi' | 'commercialOnly' | 'commercialBasis' | 'historicalOffsetsPolicy'>,
+    warn: (message: string) => void = () => undefined, suppliedIndexBytes?: Uint8Array | null): AuthenticatedStreamIndex {
+    let source = prepareCachedStreamIndex(dir, verified, d, warn, suppliedIndexBytes);
+    let indexDerivedFault = false;
+    const statusWarnings = new Set<string>();
+    const warnStatus = (message: string) => {
+        if (statusWarnings.has(message)) return;
+        statusWarnings.add(message);
+        warn(message);
+    };
+    const prepare = (current: PreparedStreamIndex): PreparedReleaseFields => prepareReleaseFromJsonl(current.meta, null, {
+        ...options, eager: false, index: { entries: current.entries }, reader: current.reader, close: current.close, warn: warnStatus,
+        dropIndex: () => { indexDerivedFault = true; current.dropIndex(); },
+    });
+    try { return { ...source, native_prepared_release: prepare(source) }; }
+    catch (error) {
+        source.close();
+        if (!(error instanceof InvalidReleaseError) || !source.fromSuppliedIndex || !indexDerivedFault) throw error;
+    }
+    source = prepareCachedStreamIndex(dir, verified, d, warn, null);
+    try { return { ...source, native_prepared_release: prepare(source) }; }
+    catch (error) { source.close(); throw error; }
+}
+
+/** @internal Original cache index admission, deletion, one-pass rebuild and reader ownership. */
+export function prepareCachedStreamIndex(dir: SyncDir, verified: Verified, d: string, warn: (message: string) => void = () => undefined,
+    suppliedIndexBytes?: Uint8Array | null): PreparedStreamIndex {
+    const n = names(d);
+    const sized = (name: string) => sizedCacheFile(dir, verified, name);
     const meta = sized(n.meta);
     const want = verified.files[n.jsonl]?.size;
     const have = dir.size(n.jsonl);
@@ -725,7 +793,7 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     const jsonlSha = verified.files[n.jsonl]?.sha256 ?? null;
     const header = headerFromMeta(meta);
     let index: StreamIndex | null = null;
-    const ib = dir.read("index-v1.json");
+    const ib = suppliedIndexBytes === undefined ? dir.read("index-v1.json") : suppliedIndexBytes;
     if (ib) {
         try {
             const v: unknown = JSON.parse(dec.decode(ib));
@@ -736,6 +804,7 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
             /* a stale or broken index is rebuilt below */
         }
     }
+    const fromSuppliedIndex = index !== null;
     const dropIndex = () => {
         try {
             dir.removeIndex();
@@ -777,10 +846,10 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
             }
         }
         if (lr) {
-            return releaseFromJsonl(meta, null, { eager: false, files, index, reader: lr.read, close: lr.close, zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+            return { entries: index.entries, meta, reader: lr.read, close: lr.close, dropIndex, fromSuppliedIndex };
         }
         const bytes = jsonl ?? sized(n.jsonl);
-        return releaseFromJsonl(meta, null, { eager: false, files, index, reader: (o, l) => bytes.subarray(o, o + l), zenodoVersionDoi: zenodo, dropIndex, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+        return { entries: index.entries, meta, reader: (o, l) => bytes.subarray(o, o + l), close: () => undefined, dropIndex, fromSuppliedIndex };
     } catch (e) {
         lr?.close();
         throw e;
