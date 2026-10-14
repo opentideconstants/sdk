@@ -403,7 +403,7 @@ export class OpenTideConstants {
                 const entry = await getPointer(ctx);
                 from = await ensureRelease(ctx, entry.datestamp, entry);
                 d = entry.datestamp;
-                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen, entry.files));
+                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen, entry.files, entry.zenodo_version_doi));
             } catch (e) {
                 let got: { d: string; rel: Release } | null = null;
                 if (e instanceof NetworkError && onNetworkError === "use_cache") {
@@ -459,8 +459,8 @@ export class OpenTideConstants {
 
     /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
     static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean,
-        pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
-        const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles);
+        pointerFiles: readonly FileInfo[] | null = null, versionDoi: string | null = null): Promise<Release> {
+        const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles, versionDoi);
         if (verify) {
             try {
                 await verifyCached(ctx, d, false, OpenTideConstants.#cachedReadHash(ctx, node));
@@ -500,17 +500,17 @@ export class OpenTideConstants {
      * downloaded again once (spec 4.8, 5.2 step 6, 5.3); offline, or right after a download, the error is raised.
      */
     static async #loadOrHeal(ctx: Ctx, node: NodeMod | null, d: string, from: LoadedFrom, verify: boolean,
-        pointerFiles: readonly FileInfo[] | null = null): Promise<{ rel: Release; from: LoadedFrom }> {
+        pointerFiles: readonly FileInfo[] | null = null, versionDoi: string | null = null): Promise<{ rel: Release; from: LoadedFrom }> {
         try {
             // after a download of latest, release.files is the pointer entry (spec 4.3.1, CR3 DR100)
-            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, from === "download" ? pointerFiles : null), from };
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, from === "download" ? pointerFiles : null, versionDoi), from };
         } catch (e) {
             if (!OpenTideConstants.#corrupt(e)) throw e;
             await OpenTideConstants.#heal(ctx, d, e);
             if (ctx.offline || from !== "cache") throw e;
             log(ctx, "warn", `downloading release ${d} again`);
             const again = await ensureRelease(ctx, d, null);
-            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify), from: again };
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, null, versionDoi), from: again };
         }
     }
 
@@ -538,14 +538,17 @@ export class OpenTideConstants {
         return null;
     }
 
-    static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string, pointerFiles: readonly FileInfo[] | null = null): Promise<Release> {
+    static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string, pointerFiles: readonly FileInfo[] | null = null,
+        versionDoi: string | null = null): Promise<Release> {
         const store = ctx.store;
         if (!store) throw new OfflineError("no cache");
         const v = await readVerified(store, d);
         if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
         const warn = (m: string) => log(ctx, "warn", m);
         const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn);
-        return loadCached(dir, v, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
+        // Metadata just read remains authoritative for this session even when the receipt lock is held elsewhere.
+        const sessionReceipt = versionDoi === null ? v : { ...v, zenodo_version_doi: versionDoi };
+        return loadCached(dir, sessionReceipt, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
     }
 
     /** Open a local file (spec 4.2, 4.3.1). */
@@ -876,7 +879,7 @@ get release(): Release {
         this.#check();
         if (compareDatestamps(entry.datestamp, from) <= 0) return updateResultOf(false, from, from);
         const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false,
-            entry.files);
+            entry.files, entry.zenodo_version_doi);
         if (this.#closed) got.rel._close();
         this.#check();
         this.#swap(got.rel, got.from);
