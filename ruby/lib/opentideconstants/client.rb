@@ -330,7 +330,15 @@ class OpenTideConstants
             end
             cache.partial_releases.each do |d|
                 next if protect.include?(d)
-                log(:info, "prune: removed the incomplete release directory #{d}") if cache.remove_release(d)
+                begin
+                    if cache.remove_release(d, partial: true)
+                        log(:info, "prune: removed the incomplete release directory #{d}")
+                    else
+                        log(:info, "prune: incomplete release directory #{d} was kept")
+                    end
+                rescue CacheError => e
+                    log(:warn, "prune: cannot remove the incomplete release directory #{d}: #{e.message}")
+                end
             end
         rescue CacheError => e
             # Stop at the first failure and report the releases removed

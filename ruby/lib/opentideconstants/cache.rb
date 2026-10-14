@@ -13,7 +13,7 @@ class OpenTideConstants
     #
     # Every write is a temporary file in the same directory, fsynced and then
     # renamed into place. A release directory is trusted only when .verified
-    # exists. The lock directory only stops duplicate work.
+    # is valid. The lock directory stops duplicate work and guards deletion.
     class Cache
         LOCK_POLL_S = 0.5
         LOCK_STALE_S = 120
@@ -172,25 +172,32 @@ class OpenTideConstants
 
         # The parsed .verified of a release, or nil when the directory is not
         # trusted: no .verified, or one that is not a JSON object whose files
-        # rows are objects with a string or null sha256 and url and an integer
+        # rows are objects with a 64-hex or null sha256, a string or null url and an integer
         # size (R2-088); a null or absent size makes it malformed (spec §5.4,
         # CR3 spec review 2 B10 and 3 C4); a size written as 1024.0 is the
         # integer 1024 (CR2 DR10). A .verified that cannot be read is cache.
         def verified(datestamp)
             text = read_file(File.join(release_dir(datestamp), ".verified"))
             return nil unless text
-            doc = JSON.parse(text.force_encoding(Encoding::UTF_8))
+            doc = Reader.parse_json(text.force_encoding(Encoding::UTF_8))
             return nil unless doc.is_a?(Hash) && doc["files"].is_a?(Hash)
+            return nil unless doc["datestamp"].nil? || doc["datestamp"] == datestamp
+            return nil unless %w[format_version min_reader_version].all? do |key|
+                doc[key].nil? || (doc[key].is_a?(String) && doc[key].match?(/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/))
+            end
+            return nil unless %w[zenodo_version_doi verified_at by].all? { |key| doc[key].nil? || doc[key].is_a?(String) }
             doc["files"].each_value { |row| return nil unless verified_row?(row) }
             doc["files"].each_value { |row| row["size"] = Reader.integral(row["size"]) }
             doc
-        rescue JSON::ParserError, EncodingError
+        rescue InvalidReleaseError
             nil
         end
 
         def verified_row?(row)
-            row.is_a?(Hash) && [row["sha256"], row["url"]].all? { |v| v.nil? || v.is_a?(String) } &&
-                Reader.integral(row["size"]).is_a?(Integer)
+            return false unless row.is_a?(Hash)
+            size = Reader.integral(row["size"])
+            (row["sha256"].nil? || (row["sha256"].is_a?(String) && row["sha256"].match?(/\A[0-9a-fA-F]{64}\z/))) &&
+                (row["url"].nil? || row["url"].is_a?(String)) && size.is_a?(Integer) && size.between?(0, 2**53 - 1)
         end
 
         # True when name is in the release directory, listed in .verified and
@@ -261,7 +268,7 @@ class OpenTideConstants
         def cached_releases
             return [] unless File.directory?(releases_dir)
             Dir.children(releases_dir)
-               .select { |d| d.match?(DATESTAMP_RE) && File.file?(File.join(releases_dir, d, ".verified")) }
+               .select { |d| d.match?(DATESTAMP_RE) && verified(d) }
                .sort_by { |d| Cache.datestamp_key(d) }.reverse
         rescue Errno::ENOENT, Errno::ENOTDIR
             []
@@ -270,12 +277,12 @@ class OpenTideConstants
             raise CacheError, "cannot list #{releases_dir}: #{e.message}"
         end
 
-        # Datestamp directories that have no .verified: a download that failed
-        # or is still running.
+        # Datestamp directories with no valid .verified: a download that failed
+        # or is still running. These never count toward prune's keep budget.
         def partial_releases
             return [] unless File.directory?(releases_dir)
             Dir.children(releases_dir)
-               .select { |d| d.match?(DATESTAMP_RE) && !File.exist?(File.join(releases_dir, d, ".verified")) }
+               .select { |d| d.match?(DATESTAMP_RE) && File.directory?(release_dir(d)) && !verified(d) }
         rescue Errno::ENOENT, Errno::ENOTDIR
             []
         rescue SystemCallError => e
@@ -287,17 +294,29 @@ class OpenTideConstants
         # downloading into is left alone: then it returns false. .verified
         # goes first, so a directory that cannot be removed in full is no
         # longer trusted, and any failure is a CacheError. True when removed.
-        def remove_release(datestamp)
+        # Partial releases are judged under the lock after a marker re-read;
+        # their age uses the pre-take mtime, which taking the lock changes.
+        def remove_release(datestamp, partial: false)
             dir = release_dir(datestamp)
             return true unless File.directory?(dir)
+            mtime = File.mtime(dir) if partial
+            removed = false
             taken = try_lock(dir) do
+                if partial
+                    if verified(datestamp)
+                        log(:info, "prune: #{datestamp} became verified; kept")
+                        next
+                    end
+                    next unless Time.now - mtime > 120
+                end
                 remove_file(File.join(dir, ".verified"))
                 Dir.children(dir).each do |name|
                     next if name == ".lock"
                     FileUtils.rm_r(File.join(dir, name))
                 end
+                removed = true
             end
-            return false unless taken
+            return false unless taken && removed
             begin
                 Dir.rmdir(dir)
             rescue Errno::ENOENT, Errno::ENOTEMPTY, Errno::EEXIST

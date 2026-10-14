@@ -158,6 +158,8 @@ class CacheLockTest < Minitest::Test
         # a third release, older than 20991231, that cannot be removed
         old = File.join(cache, "v1", "releases", "20991230")
         FileUtils.cp_r(File.join(cache, "v1", "releases", "20991231"), old)
+        verified_path = File.join(old, ".verified")
+        File.write(verified_path, JSON.generate(JSON.parse(File.read(verified_path)).merge("datestamp" => "20991230")))
         c = OTC.new(release: "20991231.2", base_url: srv.url("/"), cache_dir: cache)
         FileUtils.chmod(0o555, old)
         e = assert_raises(OTC::CacheError) { c.prune(keep: 0) }
@@ -189,6 +191,7 @@ class CacheLockTest < Minitest::Test
         partial = File.join(cache, "v1", "releases", "20991230")
         FileUtils.mkdir_p(partial)
         File.write(File.join(partial, ".tmp-1-abc"), "x" * 100)
+        File.utime(Time.now - 180, Time.now - 180, partial)
         assert_equal [], c.prune(keep: 5)
         refute File.exist?(partial)
         assert_equal %w[20991231.2 20991231], c.cached_releases
@@ -404,6 +407,7 @@ class CacheLockTest < Minitest::Test
         young = File.join(cache, "v1", "releases", "20991229")
         [old, young].each { |d| FileUtils.mkdir_p(File.join(d, ".lock")) }
         File.write(File.join(old, ".lock", "owner.json"), JSON.generate("token" => "x", "started_at" => "2000-01-01T00:00:00Z"))
+        File.utime(Time.now - 180, Time.now - 180, old)
         c.prune(keep: 5)
         refute File.exist?(old), "prune kept a partial directory whose lock a crashed process left"
         assert File.directory?(File.join(young, ".lock")), "prune removed a partial directory that another process holds"
