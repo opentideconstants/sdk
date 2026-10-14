@@ -120,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -635,6 +635,20 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                 ['CurrentPoint', currentSeries.items[0]], ['CurrentSeries', currentSeries], ['CurrentEvent', currentEvents.items[0]], ['CurrentEventList', currentEvents],
                 ['DatumInfo', datumInfo], ['DatumLevel', datumInfo.levels[0]], ['Ranges', ranges]]) {
                 await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(JSON.parse(JSON.stringify(nativeModel)), { model_type, fields: [], native_result_fields: { model_type, fields: nativeModel } }, origin, model_type), value => value.model !== nativeModel && JSON.stringify(value.model) === JSON.stringify(nativeModel));
+                if (requiredModelContexts) {
+                    const results = await import(`${moduleRoot}/predict/results.js`);
+                    const nullableFields = ['local_time', 'utc_offset_s', 'direction_deg', 'timezone', 'method', 'set_id', 'datum', 'datum_name', 'datum_kind', 'datum_uncertainty_m', 'reference_station_id', 'reference_bin', 'epoch', 'data_span', 'control_station_id', 'control_set_id', 'control_source_id', 'uncertainty_m', 'uncertainty_basis', 'zero', 'zero_name', 'chart_datum', 'msl_offset_m', 'mn', 'gt', 'dhq', 'dlq'];
+                    const nullable = Object.fromEntries(Object.entries(nativeModel).map(([key, value]) => [key, nullableFields.includes(key) ? null : value]));
+                    const variants = [['nullable_fields', nullable]];
+                    for (const key of ['items', 'flags', 'levels']) if (key in nativeModel) variants.push([`empty_${key}`, { ...nativeModel, [key]: [] }]);
+                    if ('time' in nativeModel) variants.push(['wrong_time_scalar', { ...nativeModel, time: 1 }]);
+                    for (const [label, fields] of variants) {
+                        const nativeCall = () => new results[model_type](fields);
+                        const expectedError = await nativeFailure(nativeCall);
+                        await observation(`B07.context.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [], native_result_fields: { model_type, fields } }, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model({}, { model_type, fields: [], native_result_fields: { model_type, fields } }, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && value.actual instanceof results[model_type] && Object.isFrozen(value.actual));
+                    }
+                    await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                }
             }
             const goodStation = good.requireStation('OTC-T-0001'), goodConstants = goodStation.recommendedSet;
             if (managedModels) {
@@ -645,6 +659,10 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                 const streamFields = loader.prepareReleaseFromJsonl(new TextEncoder().encode(streamMetadata), new TextEncoder().encode(streamSource), { eager: false, files: [] });
                 let materializedClient, materializedRelease, materializedStream;
                 try {
+                    if (requiredModelContexts) for (const [model_type, raw, prepared] of [['Client', options, { native_prepared_client: clientFields }], ['Release', releaseFields.authenticHeader.raw, { native_prepared_release: releaseFields }]]) {
+                        await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        await observation(`B07.context.${model_type}.foreign_raw_identity`, () => nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [], ...prepared }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                    }
                     await observation('B07.Client', () => {
                         const value = canonical.materialize_typed_model(options, { model_type: 'Client', fields: [], native_prepared_client: clientFields }, origin, 'Client');
                         materializedClient = value.model;
@@ -737,6 +755,20 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                         ['UpdateResult', { updated: update.updated, from: update.from, to: update.to }, update, null],
                         ['Stats', stats, stats, null],
                     ]) await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_dto_fields: { model_type, context } }, origin, model_type), value => value.model !== expected && JSON.stringify(value.model) === JSON.stringify(expected));
+                    if (requiredModelContexts) {
+                        const core = await import(`${moduleRoot}/core.js`);
+                        for (const [model_type, raw, context, nativeCall] of [
+                            ['ReleaseInfo', { datestamp: pointer.datestamp, format_version: pointer.format_version }, { files: [] }, () => clientModule.toInfo({ datestamp: pointer.datestamp, format_version: pointer.format_version, min_reader_version: null, concept_doi: null, zenodo_version_doi: null, content_sha256: null, files: [] })],
+                            ['FileInfo', { name: pointer.files[0].name, size: 0, sha256: pointer.files[0].sha256.toUpperCase() }, { href: info.files[0].url }, () => core.fileInfoOf(pointer.files[0].name, info.files[0].url, 0, pointer.files[0].sha256.toUpperCase())],
+                            ['Nearby', { distance_km: 0 }, { station: nearby.station }, () => releaseModule.nearbyOf(nearby.station, 0)],
+                            ['UpdateResult', { updated: false, from: update.from, to: update.from }, null, () => clientModule.updateResultOf(false, update.from, update.from)],
+                            ['Stats', { type: {}, kind: {}, country: {}, source: {}, qc_status: {} }, null, () => releaseModule.statsOf({}, {}, {}, {}, {})],
+                        ]) {
+                            const expected = nativeCall();
+                            await observation(`B07.context.${model_type}.default_fields`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_dto_fields: { model_type, context } }, origin, model_type), value => JSON.stringify(value.model) === JSON.stringify(expected) && Object.isFrozen(value.model) === Object.isFrozen(expected) && (model_type !== 'Nearby' || value.model.station === nearby.station));
+                            await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        }
+                    }
                 } finally { client.close(); }
             }
             const fitted = goodStation.constantSets().find(row => row.raw.dropped_constituents?.length);
@@ -778,6 +810,10 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                             ['HistoricalOffsetVintage', nativeStation.raw.subordinate_offsets.vintage, offsets.vintage],
                             ['HistoricalOffsetProvenance', nativeStation.raw.subordinate_offsets.provenance, offsets.provenance],
                         ]) await observation(`B07.${model_type}.${slice.station_id}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_historical_parent: nativeStation.raw.subordinate_offsets }, origin, model_type), result => result.model === value && result.model === raw && Object.isFrozen(result.model));
+                        if (requiredModelContexts) for (const [model_type, raw] of [['HistoricalOffsetVintage', nativeStation.raw.subordinate_offsets.vintage], ['HistoricalOffsetProvenance', nativeStation.raw.subordinate_offsets.provenance]]) {
+                            await observation(`B07.context.${model_type}.${slice.station_id}.missing_parent`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                            await observation(`B07.context.${model_type}.${slice.station_id}.foreign_parent`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [], native_historical_parent: sourceStation.raw }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        }
                     }
                     const reference = historical.requireStation('OTC-a6c00a3f');
                     if (releaseModule.historicalVintageOf(reference.raw) !== null || releaseModule.historicalProvenanceOf(reference.raw) !== null) throw new Error('Existing absent historical aliases must remain null');
@@ -845,6 +881,7 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
 }
 
 const m1Inputs = {
+    requiredModelContexts: process.env.OTC_M1_REQUIRED_MODEL_CONTEXTS === 'qualified',
     requiredGuardModels: process.env.OTC_M1_REQUIRED_GUARD_MODELS === 'qualified',
     primitiveGuards: process.env.OTC_M1_PRIMITIVE_GUARDS === 'qualified',
     managedModels: process.env.OTC_M1_MANAGED === 'qualified',
