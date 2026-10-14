@@ -120,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false, requiredManagedFields = false, nativeFilePath }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -498,6 +498,52 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
             await observation('B39.order.times_before_station', () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
         }
         await observation('B07', () => canonical.materialize_typed_model(station.raw, { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: nativeOwner }, origin, 'Station'), value => value.model_type === 'Station' && value.model.station_id === station.station_id && value.model.raw === station.raw);
+        if (requiredManagedFields) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const options = { baseUrl, cacheDir: cacheDir + '-prepared-fallback', offline: false, format: 'json', autoUpdate: false, onNetworkError: 'use_cache' };
+            const seed = await clientModule.OpenTideConstants.open(options);
+            seed.close();
+            await fetch(new URL('../control/fail-metadata', baseUrl));
+            let materialized;
+            try {
+                const fields = await clientModule.prepareClientFields(options);
+                await observation('B07.managed.Client.cached_fallback', () => {
+                    materialized = canonical.materialize_typed_model(options, { model_type: 'Client', fields: [], native_prepared_client: fields }, origin, 'Client').model;
+                    return { diagnostic_identity: materialized.lastError === fields.extra.lastError, diagnostic_name: materialized.lastError?.name, diagnostic_status: materialized.lastError?.status, loaded_from: materialized.loadedFrom, release_identity: materialized.release === fields.release, genuine_brand: materialized.requireStation('OTC-T-0001')._from(fields.release) };
+                }, value => value.diagnostic_identity && value.diagnostic_name === 'NetworkError' && value.diagnostic_status === 503 && value.loaded_from === 'cache_after_error' && value.release_identity && value.genuine_brand);
+            } finally { materialized?.close(); await fetch(new URL('../control/reset-metadata', baseUrl)); }
+            const fileOptions = { file: nativeFilePath, cacheDir: cacheDir + '-prepared-file', autoUpdate: false };
+            if (node) {
+                const fields = await clientModule.prepareClientFields(fileOptions);
+                let fileClient;
+                try {
+                    await observation('B07.managed.Client.file_fields', () => {
+                        fileClient = canonical.materialize_typed_model(fileOptions, { model_type: 'Client', fields: [], native_prepared_client: fields }, origin, 'Client').model;
+                        return { release_identity: fileClient.release === fields.release, loaded_from: fileClient.loadedFrom, last_error: fileClient.lastError, genuine_brand: fileClient.requireStation('OTC-T-0001')._from(fields.release) };
+                    }, value => value.release_identity && value.loaded_from === 'file' && value.last_error === null && value.genuine_brand);
+                } finally { if (fileClient) fileClient.close(); else fields.release._close(); }
+            } else {
+                const expected = await nativeFailure(() => clientModule.OpenTideConstants.open(fileOptions));
+                await observation('B07.managed.Client.browser_file_inapplicable', async () => ({ expected, prepared: await nativeFailure(() => clientModule.prepareClientFields(fileOptions)) }), value => value.expected?.code === 'unsupported' && JSON.stringify(value.expected) === JSON.stringify(value.prepared));
+            }
+            for (const commercialOnly of [false, true]) for (const [commercialBasis, historicalPolicy] of [['strict', 'fallback'], ['as_published_upstream', 'exclude']]) {
+                const bytes = new TextEncoder().encode(goodSource);
+                const native = loader.releaseFromJson(bytes, [], null, undefined, commercialOnly, commercialBasis, historicalPolicy);
+                const fields = loader.prepareReleaseFromJson(bytes, [], null, undefined, commercialOnly, commercialBasis, historicalPolicy);
+                let value;
+                try {
+                    await observation(`B07.managed.Release.policy_${commercialOnly}_${commercialBasis}_${historicalPolicy}`, () => {
+                        value = canonical.materialize_typed_model(fields.authenticHeader.raw, { model_type: 'Release', fields: [], native_prepared_release: fields }, origin, 'Release').model;
+                        return { commercial_only: value._commercialOnly, historical_policy: value.historicalOffsetsPolicy, station_ids: value.stations().map(row => row.station_id), expected_ids: native.stations().map(row => row.station_id), stats: value.stats, expected_stats: native.stats, header_identity: value._header === fields.header };
+                    }, row => row.commercial_only === commercialOnly && row.historical_policy === historicalPolicy && row.header_identity && JSON.stringify(row.station_ids) === JSON.stringify(row.expected_ids) && JSON.stringify(row.stats) === JSON.stringify(row.expected_stats));
+                } finally { native._close(); if (value) value._close(); else fields.source.close(); }
+            }
+            const aliasStation = good.stations({ includeFlagged: true, includeFallback: true }).find(row => Object.keys(row.aliases).length);
+            if (!aliasStation) throw new Error('Genuine Station alias fixture missing');
+            const aliasHeader = releaseModule.parseHeader(good._header);
+            const aliasEntry = releaseModule.indexDoc(aliasStation.raw, aliasHeader, 0, 0, new Set(aliasHeader.conventions.map(row => row.convention_id)), new Set(aliasHeader.licences.map(row => row.licence_id)));
+            await observation('B07.managed.Station.alias_fields', () => canonical.materialize_typed_model(aliasStation.raw, { model_type: 'Station', fields: [], native_owner: { release: good, entry: aliasEntry } }, origin, 'Station'), value => value.model._from(good) && value.model.raw === aliasStation.raw && JSON.stringify(value.model.aliases) === JSON.stringify(aliasStation.aliases) && JSON.stringify(value.model.subordinateOffsets) === JSON.stringify(aliasStation.subordinateOffsets));
+        }
         if (requiredModelEdges) {
             const closed = loader.releaseFromJson(new TextEncoder().encode(predictSource), []);
             closed._close();
@@ -823,6 +869,7 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                     const sourceStation = historical.requireStation('OTC-000cb5d3');
                     if (!sourceStation.source_records.length) throw new Error('Authentic original SourceRecord fixture missing');
                     const originalSourceRecord = sourceStation.source_records[0];
+                    if (requiredManagedFields) await observation('B07.managed.Station.source_record_fields', () => canonical.materialize_typed_model(sourceStation.raw, { model_type: 'Station', fields: [], native_owner: { release: historical, entry: entries.find(entry => entry.station_id === sourceStation.station_id) } }, origin, 'Station'), value => value.model._from(historical) && value.model.raw === sourceStation.raw && JSON.stringify(value.model.source_records) === JSON.stringify(sourceStation.source_records) && value.model.source_records[0].licence === originalSourceRecord.licence && value.model.source_records[0].upstreamLicence === originalSourceRecord.upstreamLicence);
                     await observation('B07.SourceRecord', () => canonical.materialize_typed_model(originalSourceRecord.raw, { model_type: 'SourceRecord', fields: [], native_release: historical }, origin, 'SourceRecord'), value => value.model !== originalSourceRecord && value.model.raw === originalSourceRecord.raw && JSON.stringify(value.model) === JSON.stringify(originalSourceRecord));
                     for (const slice of slices.filter(row => row.historical)) {
                         const nativeStation = historical.requireStation(slice.station_id), offsets = nativeStation.subordinateOffsets;
@@ -903,6 +950,8 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
 }
 
 const m1Inputs = {
+    requiredManagedFields: process.env.OTC_M1_REQUIRED_MANAGED_FIELDS === 'qualified',
+    nativeFilePath: path.join(root, 'conformance/fixtures/good/OTC_20991231.2.json'),
     requiredModelEdges: process.env.OTC_M1_REQUIRED_MODEL_EDGES === 'qualified',
     requiredModelContexts: process.env.OTC_M1_REQUIRED_MODEL_CONTEXTS === 'qualified',
     requiredGuardModels: process.env.OTC_M1_REQUIRED_GUARD_MODELS === 'qualified',
