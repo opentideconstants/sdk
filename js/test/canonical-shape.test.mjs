@@ -120,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -498,6 +498,28 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
             await observation('B39.order.times_before_station', () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
         }
         await observation('B07', () => canonical.materialize_typed_model(station.raw, { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: nativeOwner }, origin, 'Station'), value => value.model_type === 'Station' && value.model.station_id === station.station_id && value.model.raw === station.raw);
+        if (requiredModelEdges) {
+            const closed = loader.releaseFromJson(new TextEncoder().encode(predictSource), []);
+            closed._close();
+            const owner = { recommended: false, convention: constants.convention, licence: constants.licence, validation: constants.validation };
+            const constantFields = { model_type: 'ConstantSet', fields: [], native_constant_set: owner };
+            const cases = [
+                ...[['valid_dates', { built_at: '2000-01-01T01:00:00.125+01:00', fetched_at: '2000-01-01T00:00:00Z' }], ['malformed_dates', { built_at: 'not-a-date', fetched_at: '2000-02-30T00:00:00Z' }]].map(([label, raw]) => ['ProvenanceBuild', label, raw, { model_type: 'ProvenanceBuild', fields: [] }, () => releaseModule.buildOf(raw)]),
+                ...[['end_after_start', { start: '2000-01-01T00:00:00Z', end: 'invalid' }], ['wrong_scalar', { start: 1, end: null }]].map(([label, raw]) => ['RecordSpan', label, raw, { model_type: 'RecordSpan', fields: [], native_record_span: { set_id: constants.set_id } }, () => releaseModule.recordSpanOf(raw, constants.set_id)]),
+                ...[['fractional_year', { first_year: 2000.5, last_year: 2001, constituents: {} }], ['row_length', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [], f: [1], speed_deg_per_hour: 1 } } }], ['row_nonfinite', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [NaN], speed_deg_per_hour: 1 } } }], ['speed_null', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: null } } }], ['speed_negative', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: -1 } } }], ['speed_nonfinite', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: Infinity } } }]].map(([label, raw]) => ['AstroTable', label, raw, { model_type: 'AstroTable', fields: [] }, () => new astro.AstroTable(raw)]),
+                ['Station', 'foreign_release', station.raw, { model_type: 'Station', fields: [], native_owner: { entry: index, release: good } }, () => new releaseModule.Station(station.raw, index, good)],
+                ['Station', 'closed_release', station.raw, { model_type: 'Station', fields: [], native_owner: { entry: index, release: closed } }, () => new releaseModule.Station(station.raw, index, closed)],
+                ['ConstantSet', 'recommended_false', constants.raw, constantFields, () => new releaseModule.ConstantSet(constants.raw, false, owner.convention, owner.licence, owner.validation)],
+                ...[['invalid_span', { record_span: { start: 'invalid', end: 'also-invalid' } }], ['fallback_provenance', { fallback: { reason: 'time_base_disputed', basis: 'native-control' }, provenance: { build: { built_at: '2000-01-01T00:00:00Z' } } }]].map(([label, raw]) => ['ConstantSet', label, raw, constantFields, () => new releaseModule.ConstantSet(raw, false, owner.convention, owner.licence, owner.validation)]),
+                ['SourceRecord', 'closed_licence', { licence_id: constants.licence.licence_id }, { model_type: 'SourceRecord', fields: [], native_release: closed }, () => releaseModule.sourceRecordOf({ licence_id: constants.licence.licence_id }, closed)],
+                ...[['licence_present', { licence_id: constants.licence.licence_id, upstream_licence_id: constants.licence.licence_id }], ['licence_missing', { licence_id: 'not-present', upstream_licence_id: null }]].map(([label, raw]) => ['SourceRecord', label, raw, { model_type: 'SourceRecord', fields: [], native_release: release }, () => releaseModule.sourceRecordOf(raw, release)]),
+                ...['R', 'A', null].map(adjustment => ['SubordinateOffsets', `adjustment_${adjustment}`, { height_adjusted_type: adjustment }, { model_type: 'SubordinateOffsets', fields: [] }, () => releaseModule.subordinateOffsetsOf({ height_adjusted_type: adjustment })]),
+            ];
+            for (const [model_type, label, raw, contract, nativeCall] of cases) {
+                const expectedError = await nativeFailure(nativeCall);
+                await observation(`B07.edge.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, contract, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model(raw, contract, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && (model_type !== 'AstroTable' || JSON.stringify(value.native.validRange) === JSON.stringify(value.actual.validRange)) && (model_type !== 'ConstantSet' || value.actual.isRecommended === value.native.isRecommended && value.actual.convention === owner.convention && value.actual.licence === owner.licence && value.actual.validation === owner.validation) && (model_type !== 'SourceRecord' || value.actual.licence === value.native.licence && value.actual.upstreamLicence === value.native.upstreamLicence));
+            }
+        }
         if (requiredGuardModels) {
             // Runtime invalid arguments exercise native binders; they are not fabricated data failures.
             for (const [label, operation, member_id, arguments_, publicCall] of [
@@ -881,6 +903,7 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
 }
 
 const m1Inputs = {
+    requiredModelEdges: process.env.OTC_M1_REQUIRED_MODEL_EDGES === 'qualified',
     requiredModelContexts: process.env.OTC_M1_REQUIRED_MODEL_CONTEXTS === 'qualified',
     requiredGuardModels: process.env.OTC_M1_REQUIRED_GUARD_MODELS === 'qualified',
     primitiveGuards: process.env.OTC_M1_PRIMITIVE_GUARDS === 'qualified',
