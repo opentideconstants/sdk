@@ -232,6 +232,8 @@ export function prunePartialSync(dir: string, verified: (file: string, requireDa
     try {
         // Taking the lock changes the parent mtime. Judge age only from this pre-take reading (DR89).
         const mtime = fs.statSync(dir).mtimeMs;
+        // Leave a young directory untouched so repeated pruning does not restart its abandonment age.
+        if (Date.now() - mtime <= 120_000) return;
         const plant = process.env["OTC_TEST_PRUNE_PLANT_VERIFIED"];
         const scale = process.env["OTC_TEST_LOCK_SCALE"];
         if (plant && scale && /^[1-9]\d*$/.test(scale) && Number(scale) <= 1000 && verified(plant, true)) {
