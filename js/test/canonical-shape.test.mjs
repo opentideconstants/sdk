@@ -120,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -498,6 +498,47 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
             await observation('B39.order.times_before_station', () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
         }
         await observation('B07', () => canonical.materialize_typed_model(station.raw, { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: nativeOwner }, origin, 'Station'), value => value.model_type === 'Station' && value.model.station_id === station.station_id && value.model.raw === station.raw);
+        if (requiredGuardModels) {
+            // Runtime invalid arguments exercise native binders; they are not fabricated data failures.
+            for (const [label, operation, member_id, arguments_, publicCall] of [
+                ['filters_nullable', 'stations', 'Release.stations', { country: null, source_type: null }, () => good.stations({ country: null, sourceType: null })],
+                ['filters_unknown_enum', 'stations', 'Release.stations', { type: 'future-kind' }, () => good.stations({ type: 'future-kind' })],
+                ['filters_country_scalar', 'stations', 'Release.stations', { country: 1 }, () => good.stations({ country: 1 })],
+                ['filters_flag_null', 'stations', 'Release.stations', { include_flagged: null }, () => good.stations({ includeFlagged: null })],
+                ['filters_fallback_scalar', 'iter_stations', 'Release.iter_stations', { include_fallback: 1 }, () => good.iterStations({ includeFallback: 1 })],
+                ['country_before_flag', 'stations', 'Release.stations', { country: 1, include_flagged: 1 }, () => good.stations({ country: 1, includeFlagged: 1 })],
+                ['search_missing_name', 'search', 'Release.search', {}, () => good.search({})],
+                ['search_empty_name', 'search', 'Release.search', { name: ' ' }, () => good.search({ name: ' ' })],
+                ['search_match_enum', 'search', 'Release.search', { name: 'a', match: 'prefix' }, () => good.search({ name: 'a', match: 'prefix' })],
+                ['search_limit_fractional', 'search', 'Release.search', { name: 'a', limit: 0.5 }, () => good.search({ name: 'a', limit: 0.5 })],
+                ['search_filters_before_name', 'search', 'Release.search', { country: 1, name: null }, () => good.search({ country: 1, name: null })],
+                ['near_missing_lat', 'near', 'Release.near', { lon: 0, radius_km: 0 }, () => good.near({ lon: 0, radiusKm: 0 })],
+                ['near_lat_boundary', 'near', 'Release.near', { lat: 90, lon: 180, radius_km: 0 }, () => good.near({ lat: 90, lon: 180, radiusKm: 0 })],
+                ['near_lat_outside', 'near', 'Release.near', { lat: 91, lon: 0, radius_km: 0 }, () => good.near({ lat: 91, lon: 0, radiusKm: 0 })],
+                ['near_lat_before_filter', 'near', 'Release.near', { lat: null, lon: null, radius_km: -1, country: 1 }, () => good.near({ lat: null, lon: null, radiusKm: -1, country: 1 })],
+                ['nearest_max_nullable', 'nearest', 'Release.nearest', { lat: -90, lon: -180, max_km: null }, () => good.nearest({ lat: -90, lon: -180, maxKm: null })],
+                ['nearest_max_negative', 'nearest', 'Release.nearest', { lat: 0, lon: 0, max_km: -1 }, () => good.nearest({ lat: 0, lon: 0, maxKm: -1 })],
+                ['constant_sets_nullable', 'constant_sets', 'Station.constant_sets', { include_no_constants: null }, () => station.constantSets({ includeNoConstants: null })],
+                ['constant_sets_scalar', 'constant_sets', 'Station.constant_sets', { include_no_constants: 1 }, () => station.constantSets({ includeNoConstants: 1 })],
+            ]) {
+                const selected = { member_id, arguments: arguments_ };
+                const expected = await nativeFailure(publicCall);
+                const contract = { ...selected, native_receiver: { kind: 'release', owner: good } };
+                await observation(`B01.required.${label}`, async () => ({ expected, actual: await nativeFailure(() => canonical.validate_operation_arguments(operation, selected, contract)) }), value => JSON.stringify(value.actual) === JSON.stringify(value.expected));
+            }
+            // Pure native mapper controls qualify defaults and tolerant parsing, separately from acquired rows.
+            for (const [model_type, mapper, variants] of [
+                ['Constituent', 'constituentOf', [['absent', {}], ['nullable', { name: null, amplitude_m: null }], ['wrong_scalar', { name: 1, amplitude_m: '1', phase_deg: false }]]],
+                ['TimeBase', 'timeBaseOf', [['absent', {}], ['nullable', { code: null, correction: null, months_dropped: null, evidence: null }], ['filtered_arrays', { code: 'unknown', correction: { from: 1, to: null }, months_dropped: ['a', 1, null], evidence: [null, 1, { distance_km: '1' }] }]]],
+                ['Validation', 'validationOf', [['absent', {}], ['nullable', { previous_release: null, missed_events: null }], ['wrong_scalar', { set_id: 1, time_mae_min: '1', previous_release: { extra_events: '1' } }]]],
+                ['QcFlag', 'qcFlagOf', [['absent', {}], ['nullable', { flag: null, values: null }], ['filtered_values', { flag: 'future_flag', values: { okay: 1, nullable: null, ignored: '1' } }]]],
+            ]) {
+                for (const [label, raw] of variants) {
+                    const native = releaseModule[mapper](raw);
+                    await observation(`B07.required.${model_type}.${label}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type), value => value.model !== native && Object.isFrozen(value.model) && JSON.stringify(value.model) === JSON.stringify(native) && (!('raw' in native) || value.model.raw === raw));
+                }
+            }
+        }
         if (primitiveGuards) {
             const start = new Date('2000-01-01T00:00:00Z'), stop = new Date('2000-01-02T00:00:00Z');
             for (const [id, operation, selected, publicCall] of [
@@ -773,6 +814,7 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
 }
 
 const m1Inputs = {
+    requiredGuardModels: process.env.OTC_M1_REQUIRED_GUARD_MODELS === 'qualified',
     primitiveGuards: process.env.OTC_M1_PRIMITIVE_GUARDS === 'qualified',
     managedModels: process.env.OTC_M1_MANAGED === 'qualified',
     streamMetadata: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.meta.json'), 'utf8'),
