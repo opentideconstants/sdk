@@ -120,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false, requiredManagedFields = false, nativeFilePath }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false, requiredManagedFields = false, nativeFilePath, requiredCurrentPhase = false, currentPhaseSource }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -945,11 +945,34 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
         const currentArgs = { member_id: 'Release.current_events', arguments: { station: currentStation.station_id, start: new Date(currentWindow.start * 1000), stop: new Date(currentWindow.stop * 1000) } };
         const publicCurrent = await release.currentEvents(currentStation, { start: currentArgs.arguments.start, stop: currentArgs.arguments.stop });
         await observation('B44.roots', () => canonical.find_unrounded_current_events(currentModel, currentWindow, currentArgs), value => value.length > 0 && JSON.stringify(value.filter(row => currentWindow.start <= Math.floor(row.root_seconds + 0.5) && Math.floor(row.root_seconds + 0.5) < currentWindow.stop).map(row => [Math.floor(row.root_seconds + 0.5), row.event_type, row.velocity_m_s, row.direction_deg])) === JSON.stringify(publicCurrent.items.map(row => [row.time.getTime() / 1000, row.type, row.velocity_ms, row.direction_deg])));
+        if (requiredCurrentPhase) {
+            const phaseRelease = loader.releaseFromJson(new TextEncoder().encode(currentPhaseSource), []);
+            try {
+                const engine = await import(`${moduleRoot}/predict/engine.js`);
+                const phaseStation = phaseRelease.requireStation('OTC-V-NOAA-ACT1616');
+                const phaseSet = phaseStation.recommendedSet;
+                if (!phaseSet || phaseSet.set_id !== 'OTC-V-NOAA-ACT1616/noaa-currents' || phaseSet.convention.convention_id !== 'noaa-currents-harcon-gmt') throw new Error('Qualified ACT1616 selected source missing');
+                const phaseTable = await phaseRelease.astroTable(phaseSet.convention.raw.astro_table_id);
+                if (!phaseTable) throw new Error('Qualified current own convention AstroTable missing');
+                const requestedBin = null;
+                const phaseContext = engine.contextFor(phaseStation, phaseSet, phaseTable);
+                const selectedBin = engine.bin(phaseStation, phaseSet.raw.current_bins, requestedBin);
+                engine.currentContext(phaseContext, selectedBin);
+                const native = engine.unroundedCurrentEventsFor(phaseContext, currentWindow.start, currentWindow.stop).map(([seconds, type, velocity, direction], order) => [seconds, type, velocity, direction, order]);
+                const phaseModel = { station: phaseStation, release_view: phaseRelease, constant_set: phaseSet, convention: phaseSet.convention, astro_table: phaseTable._raw, required_constituents: phaseSet.raw.constituents ?? [], reference_bin: null, mean_term: 0, datum_source: null };
+                const request = { member_id: 'Release.current_events', arguments: { station: phaseStation, start: new Date(currentWindow.start * 1000), stop: new Date(currentWindow.stop * 1000), bin_number: requestedBin } };
+                await observation('B44.exact_native_phase.ACT1616', () => {
+                    const actual = canonical.find_unrounded_current_events(phaseModel, currentWindow, request).map(row => [row.root_seconds, row.event_type, row.velocity_m_s, row.direction_deg, row.reference_order]);
+                    return { native, actual, station_id: phaseStation.station_id, set_id: phaseSet.set_id, convention_id: phaseSet.convention.convention_id, astro_table_id: phaseTable._raw.astro_table_id, selected_bin: selectedBin.bin, window: currentWindow, requested_bin: requestedBin };
+                }, value => value.native.length > 0 && value.actual.length === value.native.length && value.actual.every((row, index) => row.length === value.native[index].length && row.every((field, column) => Object.is(field, value.native[index][column]))));
+            } finally { phaseRelease._close(); }
+        }
         return { result, public_control: { good_station_id: good.requireStation('OTC-T-0001').station_id, unchanged_astro: table.equilibriumArgument('M2', new Date(at * 1000)), raw_identity: release.requireStation(station.station_id).raw === station.raw } };
     } finally { good._close(); release._close(); }
 }
 
 const m1Inputs = {
+    requiredCurrentPhase: process.env.OTC_M1_REQUIRED_CURRENT_PHASE === 'qualified',
     requiredManagedFields: process.env.OTC_M1_REQUIRED_MANAGED_FIELDS === 'qualified',
     nativeFilePath: path.join(root, 'conformance/fixtures/good/OTC_20991231.2.json'),
     requiredModelEdges: process.env.OTC_M1_REQUIRED_MODEL_EDGES === 'qualified',
@@ -986,6 +1009,12 @@ const m1Inputs = {
     astroCase: JSON.parse(fs.readFileSync(path.join(root, 'conformance/cases/predict-astro-values.json'))).cases[0].steps.find(step => step.op === 'equilibrium_argument' && step.args.name === 'M2' && step.args.at === '2000-01-01T00:00:00Z'),
     cacheCase: JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonical/cache-golden.json'))).cases[0],
 };
+if (m1Inputs.requiredCurrentPhase) {
+    const source = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS/public-fixture/OTC_20261011.json';
+    const bytes = fs.readFileSync(source);
+    assert.equal(sha256(bytes), 'd853e3920cf0585dc8bfa3d47f0c5ca862b659732ba7b8d5c8104e05b8e470f4');
+    m1Inputs.currentPhaseSource = bytes.toString('utf8');
+}
 if (process.env.OTC_M1_HISTORICAL === 'qualified') {
     const historicalLocatorsPath = process.env.OTC_M1_HISTORICAL_LOCATORS ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-PY/fixture-locators/locators.json';
     const historicalLocatorsBytes = fs.readFileSync(historicalLocatorsPath);
