@@ -13,6 +13,8 @@ import { predictionAstroTable } from '../dist/release.js';
 import { select_canonical_error } from '../dist/canonical.js';
 import { evaluate_astronomy, find_unrounded_tide_events, evaluate_harmonic_height } from '../dist/canonical.js';
 import { InvalidArgumentError } from '../dist/errors.js';
+import { OpenTideConstants } from '../dist/client.js';
+import { translate_native_binding } from '../dist/canonical.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.resolve(packageRoot, '..');
@@ -25,8 +27,13 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const pin = relative => ({ path: relative, sha256: sha256(fs.readFileSync(path.join(root, relative))) });
 
 function m1Server() {
+    let failMetadata = false;
     return createServer((request, response) => {
         const pathname = new URL(request.url, 'http://localhost').pathname;
+        if (pathname === '/control/fail-metadata' || pathname === '/control/reset-metadata') {
+            failMetadata = pathname === '/control/fail-metadata'; response.end('native fixture phase selected'); return;
+        }
+        if (failMetadata && pathname.startsWith('/fixture-good/OTC_latest')) { response.writeHead(503); response.end('actual local metadata failure'); return; }
         if (pathname === '/') { response.setHeader('content-type', 'text/html'); response.end('<!doctype html>'); return; }
         const fixture = pathname.startsWith('/fixture-good/');
         const filename = fixture ? path.resolve(root, 'conformance/fixtures/good', pathname.slice('/fixture-good/'.length)) : path.resolve(packageRoot, `.${pathname}`);
@@ -113,7 +120,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -235,6 +242,69 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
         }
         await observation('B03', () => canonical.select_canonical_error('open', [canonicalFailure], null), value => value.code === 'invalid_argument' && value.structured_fields.message === failure.message);
         await observation('B04', () => canonical.translate_native_binding({ native_profile: typeof process === 'object' ? 'typescript_node' : 'typescript_browser', canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: release.station('missing') } } }), value => value.member_id === 'Release.station' && value.value === null);
+        if (requiredNativeChannels) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const options = { baseUrl, cacheDir: cacheDir + '-native-channel', offline: false, format: 'json', autoUpdate: false, onNetworkError: 'use_cache' };
+            const seed = await clientModule.OpenTideConstants.open(options);
+            const date = seed.release.datestamp;
+            seed.close();
+            await fetch(new URL('../control/fail-metadata', baseUrl));
+            let cached;
+            try {
+                cached = await clientModule.OpenTideConstants.open(options);
+                const diagnostic = cached.lastError, acquired = cached.release;
+                if (!(diagnostic instanceof errors.NetworkError) || cached.loadedFrom !== 'cache_after_error') throw new Error('Genuine native cached fallback is required');
+                const binding = { member_id: 'Client.open', value: cached };
+                await observation('B04.channel.cached_client', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding } }), value => value === binding && value.value === cached && value.value.lastError === diagnostic && value.value.release === acquired && acquired.datestamp === date && value.value.requireStation('OTC-T-0001')._from(acquired));
+                for (const [label, controlOptions, Constructor] of [
+                    ['raise_with_cache', { ...options, onNetworkError: 'raise' }, errors.NetworkError],
+                    ['no_cache', { ...options, cacheDir: options.cacheDir + '-empty' }, errors.NetworkError],
+                    ['non_network_guard', { ...options, mode: 'invalid-mode' }, errors.InvalidArgumentError],
+                ]) await observation(`B04.channel.control.${label}`, async () => {
+                    try { const unexpected = await clientModule.OpenTideConstants.open(controlOptions); unexpected.close(); return false; }
+                    catch (error) { return error instanceof Constructor; }
+                }, value => value === true);
+                await observation('B04.channel.null_station', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: acquired.station('native-absent-id') } } }), value => value.value === null);
+                if (!node) {
+                    let failure;
+                    try { cached.prune({ keep: 0 }); throw new Error('Expected native browser prune refusal'); }
+                    catch (error) { if (!(error instanceof errors.UnsupportedError)) throw error; failure = error; }
+                    await observation('B04.channel.browser_prune_terminal', () => {
+                        try { canonical.translate_native_binding({ native_profile, native_exception: failure, member_id: 'Client.prune' }); return false; }
+                        catch (actual) { return actual === failure; }
+                    }, value => value === true);
+                }
+                const closed = cached.close();
+                await observation('B04.channel.close_void', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'successful_no_value', member_id: 'Client.close' } }), value => closed === undefined && value.member_id === 'Client.close' && Object.hasOwn(value, 'value') && value.value === undefined);
+                await observation('B04.channel.close_controls', () => {
+                    const repeated = cached.close();
+                    try { cached.requireStation('OTC-T-0001'); return false; }
+                    catch (error) { return repeated === undefined && error instanceof errors.FileError && cached.lastError === diagnostic; }
+                }, value => value === true);
+            } finally { cached?.close(); await fetch(new URL('../control/reset-metadata', baseUrl)); }
+        }
+        if (requiredCoreCause) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            // Native constructor controls; these do not claim acquisition or data failures.
+            for (const [Constructor, fields] of [
+                [errors.FileError, { path: '/native/core-constructor-control' }],
+                [errors.NetworkError, { url: 'https://native.invalid/core-constructor', status: 503 }],
+                [errors.ChecksumError, { file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64) }],
+                [errors.CacheError, { removed: ['20991231.2', '20991231'] }],
+            ]) for (const [label, cause] of [['absent', undefined], ['error', new Error('native core constructor cause')], ['null', null]]) {
+                const expected = new Constructor('native core constructor control', { ...fields, cause });
+                const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message, ...fields }, cause: expected.cause ?? null },
+                    native_cause_option: Object.hasOwn(expected, 'cause') ? { presence: 'present', value: expected.cause } : { presence: 'absent' } };
+                await observation(`B04.core_cause.${expected.code}.${label}`, () => {
+                    try { canonical.translate_native_binding(input); return { threw: false }; }
+                    catch (actual) { return { native_class: actual instanceof Constructor, code: actual.code, message: actual.message,
+                        fields: Object.fromEntries(Object.keys(fields).map(name => [name, actual[name]])),
+                        cause_identity: actual.cause === expected.cause, cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(expected, 'cause') }; }
+                }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message
+                    && JSON.stringify(actual.fields) === JSON.stringify(fields) && actual.cause_identity && actual.cause_presence);
+            }
+        }
         if (requiredDetailCodes) {
             const native_profile = node ? 'typescript_node' : 'typescript_browser';
             const nativeSeries = await release.heightsAt(station, [new Date('2000-01-01T00:00:00Z')]);
@@ -714,6 +784,8 @@ const m1Inputs = {
     requiredOptionOrder: process.env.OTC_M1_REQUIRED_OPTION_ORDER === 'qualified',
     requiredErrorContexts: process.env.OTC_M1_REQUIRED_ERROR_CONTEXTS === 'qualified',
     requiredDetailCodes: process.env.OTC_M1_REQUIRED_DETAIL_CODES === 'qualified',
+    requiredCoreCause: process.env.OTC_M1_REQUIRED_CORE_CAUSE === 'qualified',
+    requiredNativeChannels: process.env.OTC_M1_REQUIRED_NATIVE_CHANNELS === 'qualified',
     foreignTables: process.env.OTC_M1_FOREIGN_TABLES === 'qualified',
     dtoModels: process.env.OTC_M1_DTO === 'qualified',
     pointerSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_latest.json'), 'utf8'),
@@ -827,6 +899,34 @@ test('M1 B41 fractional instant uses the exact original native year-cache terms'
     } finally { release._close(); }
 });
 
+async function observeNodePruneChannels(baseUrl, directory) {
+    const cacheRoot = fs.mkdtempSync(path.join(directory, 'native-prune-cache-'));
+    for (const date of ['20991231.2', '20991231']) {
+        const seed = await OpenTideConstants.open({ release: date, baseUrl, cacheDir: cacheRoot, format: 'json', autoUpdate: false });
+        seed.close();
+    }
+    const client = await OpenTideConstants.open({ file: path.join(root, 'conformance/fixtures/good/OTC_20991231.2.jsonl'), cacheDir: cacheRoot });
+    const blocked = path.join(cacheRoot, 'v1/releases/20991231');
+    const removed = path.join(cacheRoot, 'v1/releases/20991231.2');
+    const result = [];
+    try {
+        fs.chmodSync(blocked, 0o555);
+        let failure;
+        try { client.prune({ keep: 0 }); throw new Error('Expected actual native filesystem prune failure'); }
+        catch (error) { if (error.code !== 'cache' || !error.removed?.length) throw error; failure = error; }
+        const partial = JSON.stringify(failure.removed) === JSON.stringify(['20991231.2']) && !fs.existsSync(removed) && fs.existsSync(blocked);
+        let mapped;
+        try { translate_native_binding({ native_profile: 'typescript_node', canonical_error: { code: 'cache', structured_fields: { message: failure.message, removed: failure.removed }, cause: failure.cause } }); }
+        catch (error) { mapped = error; }
+        result.push({ id: 'B04.channel.node_prune_partial_effect', passed: partial && mapped instanceof failure.constructor && mapped.message === failure.message && mapped.cause === failure.cause && JSON.stringify(mapped.removed) === JSON.stringify(failure.removed) && Object.isFrozen(mapped.removed), value_json: JSON.stringify({ code: mapped?.code, removed: mapped?.removed, actual_partial_effect: partial }) });
+        let terminal;
+        try { translate_native_binding({ native_profile: 'typescript_node', native_exception: failure, member_id: 'Client.prune' }); }
+        catch (error) { terminal = error; }
+        result.push({ id: 'B04.channel.node_prune_terminal', passed: terminal === failure, value_json: JSON.stringify({ exact_exception_identity: terminal === failure }) });
+    } finally { fs.chmodSync(blocked, 0o755); client.close(); }
+    return result;
+}
+
 test('M1 actual Node canonical leaves match authenticated original native values', async () => {
     const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
     const server = m1Server();
@@ -834,6 +934,7 @@ test('M1 actual Node canonical leaves match authenticated original native values
     let observed;
     try {
         observed = await observeM1({ ...m1Inputs, moduleRoot: path.join(packageRoot, 'dist'), baseUrl: `http://127.0.0.1:${server.address().port}/fixture-good/`, cacheDir: fs.mkdtempSync(path.join(directory, 'dto-cache-')) });
+        if (m1Inputs.requiredNativeChannels) observed.result.push(...await observeNodePruneChannels(`http://127.0.0.1:${server.address().port}/fixture-good/`, directory));
     } finally { await new Promise(resolve => server.close(resolve)); }
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, `${process.env.OTC_M1_PHASE ?? 'current'}-node.json`), JSON.stringify(observed, null, 2));

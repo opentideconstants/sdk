@@ -215,17 +215,17 @@ export function translate_native_binding(inputs: C.NativeBindingInputs): C.nativ
         }
     }
     if (failure.code === 'invalid_argument') throw new X.InvalidArgumentError(message);
-    if (failure.code === 'io') throw new X.FileError(message, { path: str(fields, 'path') ?? '', cause: failure.cause ?? undefined });
-    if (failure.code === 'network') throw new X.NetworkError(message, { url: str(fields, 'url'), status: num(fields, 'status'), cause: failure.cause ?? undefined });
+    if (failure.code === 'io') throw new X.FileError(message, { path: str(fields, 'path') ?? '', ...cause });
+    if (failure.code === 'network') throw new X.NetworkError(message, { url: str(fields, 'url'), status: num(fields, 'status'), ...cause });
     if (failure.code === 'checksum_mismatch') {
         const file = str(fields, 'file');
         if (file === null) throw new CanonicalUnimplementedError('B04 checksum error requires its native file field');
-        throw new X.ChecksumError(message, { file, expected: str(fields, 'expected'), actual: str(fields, 'actual'), cause: failure.cause ?? undefined });
+        throw new X.ChecksumError(message, { file, expected: str(fields, 'expected'), actual: str(fields, 'actual'), ...cause });
     }
     if (failure.code === 'cache') {
         const removed = fields?.['removed'];
         if (removed !== undefined && (!Array.isArray(removed) || removed.some(item => typeof item !== 'string'))) throw new CanonicalUnimplementedError('B04 cache error requires its native removed fields');
-        throw new X.CacheError(message, { removed: arr(fields, 'removed').filter((item): item is string => typeof item === 'string'), cause: failure.cause ?? undefined });
+        throw new X.CacheError(message, { removed: arr(fields, 'removed').filter((item): item is string => typeof item === 'string'), ...cause });
     }
     throw new CanonicalUnimplementedError(`B04 native error mapping ${failure.code}`);
 }
