@@ -586,6 +586,113 @@
      "equals": "${tmp}/index-copy/index-v1.json"
     },
     {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/10/country",
+     "value": "ZZ"
+    },
+    {
+     "driver": "assert_json",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "match": {
+      "/stations/10/country": "ZZ"
+     }
+    },
+    {
+     "driver": "copy",
+     "files": [
+      "${cache}/v1/releases/20991231.2/index-v1.json"
+     ],
+     "to": "${tmp}/index-marker-copy"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "stats",
+     "expect": {
+      "stats": {
+       "type": {
+        "reference": 18,
+        "subordinate": 2
+       },
+       "kind": {
+        "current": 1,
+        "tide": 19
+       },
+       "country": {
+        "DEU": 1,
+        "FJI": 1,
+        "GAB": 1,
+        "GBR": 5,
+        "IRL": 1,
+        "KIR": 1,
+        "NOR": 1,
+        "POL": 1,
+        "SJM": 1,
+        "USA": 6,
+        "ZZ": 1
+       },
+       "source": {
+        "eot20": 3,
+        "gesla-fit": 11,
+        "kartverket": 1,
+        "noaa": 4,
+        "ticon-fallback": 1
+       },
+       "qc_status": {
+        "flagged": 3,
+        "no_constants": 1,
+        "ok": 17
+       }
+      }
+     }
+    },
+    {
+     "driver": "assert_sha256",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "equals": "${tmp}/index-marker-copy/index-v1.json"
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0011"
+     },
+     "expect": {
+      "error": "invalid_release",
+      "error_message": {
+       "$contains": "index-v1.json"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified"
+     ],
+     "absent": [
+      "index-v1.json"
+     ]
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
      "driver": "assert_requests",
      "source": "any",
      "count": 0

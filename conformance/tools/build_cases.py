@@ -2293,6 +2293,10 @@ def group_cross(R2):
     # source fields must still agree with the .jsonl; changing country would test a corrupt index.
     pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
     country = R2.by_id["OTC-T-0011"]["country"]
+    # Index-only stats may show a fresh marker; materializing that changed row must reject it (§6.2).
+    marked_stats = stats(R2)
+    marked_stats["country"][country] -= 1
+    marked_stats["country"]["ZZ"] = 1
     out.append(case("cross/index-shared", "the reader uses the stream index the writer built (a fresh index is read, not rebuilt)", "6.2",
                     fill + [drv("assert_json", path=idx, match={f"/stations/{pos}/country": country}),
                             drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
@@ -2301,6 +2305,15 @@ def group_cross(R2):
                                                                       if s.get("country") == country]}, country=country)),
                         as_("reader", step("close")),
                         drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"),
+                        drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
+                        drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ"}),
+                        drv("copy", files=[idx], to="${tmp}/index-marker-copy"),
+                        as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
+                        as_("reader", step("stats", {"stats": marked_stats})),
+                        drv("assert_sha256", path=idx, equals="${tmp}/index-marker-copy/index-v1.json"),
+                        as_("reader", step("station", {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}, station_id="OTC-T-0011")),
+                        drv("assert_files", dir="${cache}/v1/releases/" + d, present=[".verified"], absent=["index-v1.json"]),
+                        as_("reader", step("close")),
                         no_requests],
                     roles=roles))
     out.append(case("cross/index-stale", "a stale stream index (its jsonl_sha256 does not match) is ignored, rebuilt and rewritten", "6.2",
