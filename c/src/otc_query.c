@@ -431,20 +431,35 @@ static int name_rank(const char *n, size_t nl, const char *q, int exact)
     return find_in(n, nl, 0, q, ql) ? 3 : -1;
 }
 
+otc_status otc__query_search_arguments(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
+                                     otc_hit *out, size_t cap, size_t *count)
+{
+    if (!rel || !name || !count || (!out && cap) || !filter_ok(filter))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_search: bad argument");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    return OTC_OK;
+}
+
+otc_status otc__query_search_folded_arguments(const otc_release *rel, const char *folded)
+{
+    if (!folded[0]) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "the search query is empty");
+    return OTC_OK;
+}
+
 otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
                       otc_hit *out, size_t cap, size_t *count)
 {
     char *q;
     ranked *r;
     size_t i, n = 0, total;
-    if (!rel || !name || !count || (!out && cap) || !filter_ok(filter))
-        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_search: bad argument");
-    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    otc_status status = otc__query_search_arguments(rel, name, filter, limit, out, cap, count);
+    if (status != OTC_OK) return status;
     q = otc__fold(name);
     if (!q) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
-    if (!q[0]) {
+    status = otc__query_search_folded_arguments(rel, q);
+    if (status != OTC_OK) {
         free(q);
-        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "the search query is empty");
+        return status;
     }
     r = (ranked *)malloc((rel->n_st ? rel->n_st : 1) * sizeof *r);
     if (!r) { free(q); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
@@ -525,17 +540,25 @@ static otc_status geo_scan(const otc_release *rel, double lat, double lon, doubl
     return OTC_OK;
 }
 
+otc_status otc__query_near_arguments(const otc_release *rel, double lat, double lon, double radius_km, const otc_filter *filter,
+                                   size_t limit, otc_nearby *out, size_t cap, size_t *count)
+{
+    if (!rel || !count || (!out && cap) || !filter_ok(filter))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_near: bad argument");
+    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
+    if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    return OTC_OK;
+}
+
 otc_status otc_near(const otc_release *rel, double lat, double lon, double radius_km, const otc_filter *filter,
                     size_t limit, otc_nearby *out, size_t cap, size_t *count)
 {
     otc_nearby *hits = NULL;
     size_t n = 0, total, i;
     otc_status st;
-    if (!rel || !count || (!out && cap) || !filter_ok(filter))
-        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_near: bad argument");
-    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
-    if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
-    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    st = otc__query_near_arguments(rel, lat, lon, radius_km, filter, limit, out, cap, count);
+    if (st != OTC_OK) return st;
     st = geo_scan(rel, lat, lon, radius_km, filter, &hits, &n);
     if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
     total = limit < n ? limit : n;
@@ -544,6 +567,16 @@ otc_status otc_near(const otc_release *rel, double lat, double lon, double radiu
     *count = total;
     if (!out) return OTC_OK;
     return total > cap ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}
+
+otc_status otc__query_nearest_arguments(const otc_release *rel, double lat, double lon, double *max_km,
+                                      const otc_filter *filter, otc_nearby *hit)
+{
+    if (!rel || !hit || !filter_ok(filter)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_nearest: bad argument");
+    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
+    if (isnan(*max_km)) *max_km = INFINITY;
+    if (*max_km < 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "max_km must be >= 0");
+    return OTC_OK;
 }
 
 otc_status otc_nearest(const otc_release *rel, double lat, double lon, double max_km, const otc_filter *filter,
@@ -556,10 +589,8 @@ otc_status otc_nearest(const otc_release *rel, double lat, double lon, double ma
         hit->id = NULL;
         hit->distance_km = NAN;
     }
-    if (!rel || !hit || !filter_ok(filter)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_nearest: bad argument");
-    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
-    if (isnan(max_km)) max_km = INFINITY;
-    if (max_km < 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "max_km must be >= 0");
+    st = otc__query_nearest_arguments(rel, lat, lon, &max_km, filter, hit);
+    if (st != OTC_OK) return st;
     st = geo_scan(rel, lat, lon, max_km, filter, &hits, &n);
     if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
     if (n == 0) {

@@ -295,7 +295,16 @@ static void reset_info(const otc_predict_opts *opts)
     if (opts && opts->struct_size >= sizeof *opts && opts->info && opts->info->struct_size >= sizeof *opts->info)
         otc_prediction_info_clear(opts->info);
 }
-static otc_status window(
+int otc__prediction_available(void)
+{
+#if defined(OTC_WITH_PREDICT) && OTC_WITH_PREDICT
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+otc_status otc__prediction_window(
 otc_release *rel, const otc_predict_opts *opts, int64_t start, int64_t stop, int series)
 {
 #if !defined(OTC_WITH_PREDICT) || !OTC_WITH_PREDICT
@@ -352,7 +361,7 @@ otc_status otc_heights(otc_release *rel, const otc_station_t *station, const otc
     size_t i, n;
     int64_t step = opts ? opts->step_s : 600;
     if (count) *count = 0;
-    st = window(rel, opts, start, stop, 1); if (st != OTC_OK) return st;
+    st = otc__prediction_window(rel, opts, start, stop, 1); if (st != OTC_OK) return st;
     if (!count || (!out && cap)) return OTC_E_INVALID_ARGUMENT;
     st = build_context(&c, rel, station, opts, "water_level", 1); if (st != OTC_OK) return finish_count(&c, st, opts, 1, count);
     n = (size_t)((stop - start) / step + ((stop - start) % step != 0));
@@ -382,7 +391,7 @@ otc_status otc_extremes(otc_release *rel, const otc_station_t *station, const ot
     size_t i, n = 0;
     double margin = 0;
     if (count) *count = 0;
-    st = window(rel, opts, start, stop, 0); if (st != OTC_OK) return st;
+    st = otc__prediction_window(rel, opts, start, stop, 0); if (st != OTC_OK) return st;
     if (!count || (!out && cap)) return OTC_E_INVALID_ARGUMENT;
     st = build_context(&c, rel, station, opts, "water_level", 0); if (st != OTC_OK) return finish_count(&c, st, opts, 1, count);
     if (c.method == OTC_PREDICTION_METHOD_OFFSETS && start != stop)
@@ -419,7 +428,7 @@ otc_status otc_currents(otc_release *rel, const otc_station_t *station, const ot
     int64_t step = opts ? opts->step_s : 600;
     double theta;
     if (count) *count = 0;
-    st = window(rel, opts, start, stop, 1); if (st != OTC_OK) return st;
+    st = otc__prediction_window(rel, opts, start, stop, 1); if (st != OTC_OK) return st;
     if (!count || (!out && cap)) return OTC_E_INVALID_ARGUMENT;
     st = build_context(&c, rel, station, opts, "current", 1); if (st != OTC_OK) return finish_count(&c, st, opts, 0, count);
     theta = num(c.current_bin, "azimuth_deg", 0) * OTC__RAD;
@@ -441,7 +450,7 @@ otc_status otc_currents(otc_release *rel, const otc_station_t *station, const ot
     return finish_count(&c, st, opts, 0, count);
 }
 
-typedef struct current_candidate { otc__event event; double direction; } current_candidate;
+typedef otc__current_candidate current_candidate;
 static int candidate_order(const void *aa, const void *bb)
 {
     const current_candidate *a = aa, *b = bb;
@@ -450,6 +459,27 @@ static int candidate_order(const void *aa, const void *bb)
     return a->event.sequence < b->event.sequence ? -1 : a->event.sequence > b->event.sequence;
 }
 static int candidate_rounded_order(const void *aa, const void *bb) { return rounded_order(&((const current_candidate *)aa)->event, &((const current_candidate *)bb)->event); }
+
+otc_status otc__current_candidate_assembly(const cJSON *selected_bin, const otc__events *extrema, const otc__events *slack,
+    otc__current_candidate **out, size_t *count)
+{
+    current_candidate *candidates = NULL;
+    size_t i, n = 0;
+    if (extrema->n > SIZE_MAX - slack->n || extrema->n + slack->n > SIZE_MAX / sizeof *candidates) { return OTC_E_NOMEM; }
+    if (extrema->n + slack->n && !(candidates = calloc(extrema->n + slack->n, sizeof *candidates))) { return OTC_E_NOMEM; }
+    for (i = 0; i < extrema->n; i++) {
+        otc__event e = extrema->items[i];
+        if (e.kind == OTC_EXTREME_TYPE_HIGH && e.value > 0) { e.kind = OTC_CURRENT_EVENT_TYPE_MAX_FLOOD; candidates[n].direction = otc__jnum(selected_bin, "mean_flood_dir_deg"); }
+        else if (e.kind == OTC_EXTREME_TYPE_LOW && e.value < 0) { e.kind = OTC_CURRENT_EVENT_TYPE_MAX_EBB; candidates[n].direction = otc__jnum(selected_bin, "mean_ebb_dir_deg"); }
+        else continue;
+        e.sequence = n; candidates[n++].event = e;
+    }
+    for (i = 0; i < slack->n; i++) { candidates[n].event = slack->items[i]; candidates[n].event.sequence = n; candidates[n++].direction = NAN; }
+    qsort(candidates, n, sizeof *candidates, candidate_order);
+
+    *out = candidates; *count = n;
+    return OTC_OK;
+}
 
 otc_status otc_current_events(otc_release *rel, const otc_station_t *station, const otc_predict_opts *opts, int64_t start, int64_t stop, otc_current_event_t *out, size_t cap, size_t *count)
 {
@@ -464,7 +494,7 @@ otc_status otc_current_events(otc_release *rel, const otc_station_t *station, co
     unsigned kept = 15;
     memset(&total, 0, sizeof total);
     if (count) *count = 0;
-    st = window(rel, opts, start, stop, 0); if (st != OTC_OK) return st;
+    st = otc__prediction_window(rel, opts, start, stop, 0); if (st != OTC_OK) return st;
     if (!count || (!out && cap)) return OTC_E_INVALID_ARGUMENT;
     st = build_context(&c, rel, station, opts, "current", 0); if (st != OTC_OK) return finish_count(&c, st, opts, 0, count);
     if (c.method == OTC_PREDICTION_METHOD_OFFSETS) {
@@ -480,17 +510,8 @@ otc_status otc_current_events(otc_release *rel, const otc_station_t *station, co
         st = otc__events_find(&total, start - margin, stop + margin, 0, &extrema); if (st != OTC_OK) goto done;
         st = otc__events_find(&total, start - margin, stop + margin, 1, &slack); if (st != OTC_OK) goto done;
     }
-    if (extrema.n > SIZE_MAX - slack.n || extrema.n + slack.n > SIZE_MAX / sizeof *candidates) { st = OTC_E_NOMEM; goto done; }
-    if (extrema.n + slack.n && !(candidates = calloc(extrema.n + slack.n, sizeof *candidates))) { st = OTC_E_NOMEM; goto done; }
-    for (i = 0; i < extrema.n; i++) {
-        otc__event e = extrema.items[i];
-        if (e.kind == OTC_EXTREME_TYPE_HIGH && e.value > 0) { e.kind = OTC_CURRENT_EVENT_TYPE_MAX_FLOOD; candidates[n].direction = otc__jnum(c.current_bin, "mean_flood_dir_deg"); }
-        else if (e.kind == OTC_EXTREME_TYPE_LOW && e.value < 0) { e.kind = OTC_CURRENT_EVENT_TYPE_MAX_EBB; candidates[n].direction = otc__jnum(c.current_bin, "mean_ebb_dir_deg"); }
-        else continue;
-        e.sequence = n; candidates[n++].event = e;
-    }
-    for (i = 0; i < slack.n; i++) { candidates[n].event = slack.items[i]; candidates[n].event.sequence = n; candidates[n++].direction = NAN; }
-    qsort(candidates, n, sizeof *candidates, candidate_order);
+    st = otc__current_candidate_assembly(c.current_bin, &extrema, &slack, &candidates, &n);
+    if (st != OTC_OK) goto done;
     if (c.method == OTC_PREDICTION_METHOD_OFFSETS) {
         size_t retained = 0;
         for (i = 0; i < n; i++) {
@@ -584,4 +605,19 @@ otc_status otc_datums(otc_release *rel, const otc_station_t *station, const char
     info->dhq=range_difference(named,basis,"mhhw","mhw"); info->dlq=range_difference(named,basis,"mlw","mllw");
     *count=n;
     return cap<n ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}
+
+otc_status otc__selected_datum_term(const otc_release *rel, const otc_station_t *station,
+                                  const otc_set *set, const char *argument, double *out)
+{
+    context c;
+#if !defined(OTC_WITH_PREDICT) || !OTC_WITH_PREDICT
+    (void)rel; (void)station; (void)set; (void)argument; (void)out;
+    return OTC_E_NOT_BUILT;
+#endif
+    if (!rel || !station || !set || !out || station->rel != rel || set->station != station)
+        return OTC_E_INVALID_ARGUMENT;
+    memset(&c, 0, sizeof c);
+    c.rel = (otc_release *)rel; c.station = station; c.set = set; c.uncertainty = NAN;
+    return datum(&c, otc__jget(set->json, "datum"), argument, 0, out);
 }

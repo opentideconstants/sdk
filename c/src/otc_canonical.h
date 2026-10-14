@@ -9,6 +9,7 @@ otc_status otc__canonical_translate_native_binding(const otc_cp_canonical_result
 otc_status otc__canonical_decode_release_document(const otc_cp_source_bytes *source_bytes, const otc_cp_reader_version *reader_version, const otc_cp_document_kind *document_kind, otc_cp_parsed_document *parsed_document_out);
 otc_status otc__canonical_validate_release_links(const otc_cp_parsed_document *parsed_document, const otc_cp_required_links *required_links, otc_cp_validated_release_graph *validated_release_graph_out);
 otc_status otc__canonical_materialize_typed_model(const otc_cp_raw_fields *raw_fields, const otc_cp_field_contract *field_contract, const otc_cp_origin *origin, const otc_cp_model_type *model_type, otc_cp_typed_model *typed_model_out);
+void otc__canonical_model_clear(otc_cp_typed_model *model);
 otc_status otc__canonical_access_raw_record(const otc_cp_access_kind *access_kind, const otc_cp_source_record *source_record, const otc_cp_station *station, const otc_cp_release_origin *release_origin, const otc_cp_native_profile *native_profile, otc_cp_raw_record_or_valid_station *raw_record_or_valid_station_out);
 otc_status otc__canonical_open_client_release(const otc_cp_arguments *arguments, const otc_cp_environment *environment, const otc_cp_platform_defaults *platform_defaults, const otc_cp_cache_state *cache_state, const otc_cp_clock *clock, const otc_cp_native_profile *native_profile, const otc_cp_reader_version *reader_version, otc_cp_client_and_release *client_and_release_out);
 otc_status otc__canonical_resolve_release_request(const otc_cp_release_request *release_request, const otc_cp_effective_options *effective_options, const otc_cp_cache_state *cache_state, const otc_cp_clock *clock, const otc_cp_reader_version *reader_version, otc_cp_loaded_release *loaded_release_out);
@@ -62,4 +63,8 @@ otc_status otc__canonical_convert_result_to_local_time(const otc_cp_utc_result *
 otc_status otc__canonical_find_unrounded_tide_events(const otc_cp_selected_prediction_model *selected_prediction_model, const otc_cp_prediction_window *prediction_window, otc_cp_unrounded_tide_events *unrounded_tide_events_out);
 otc_status otc__canonical_find_unrounded_current_events(const otc_cp_selected_prediction_model *selected_prediction_model, const otc_cp_prediction_window *prediction_window, const otc_cp_current_request *current_request, otc_cp_unrounded_current_events *unrounded_current_events_out);
 otc_status otc__canonical_acquire_checksum_sidecar(const otc_cp_acquisition_descriptor *acquisition_descriptor, const otc_cp_effective_options *effective_options, otc_cp_checksum_bytes *checksum_bytes_out);
+void otc__canonical_station_index_clear(otc_cp_station_index_entry *entry);
+void otc__canonical_raw_clear(otc_cp_raw_record *record);
+void otc__canonical_astronomy_clear(otc_cp_astronomical_terms *terms);
+
 #endif

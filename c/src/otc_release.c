@@ -223,10 +223,9 @@ static void free_files(otc_file_info *f, size_t n)
     free(f);
 }
 
-void otc_close(otc_release *rel)
+static void release_clear_resource_fields(otc_release *rel)
 {
     size_t i;
-    if (!rel) return;
     otc__file_close(rel->file);
     free(rel->path);
     while (rel->astro) { otc_astro_tab *next = rel->astro->next; free(rel->astro); rel->astro = next; }
@@ -249,10 +248,15 @@ void otc_close(otc_release *rel)
     free(rel->zenodo_version_doi);
     otc__kv_free(&rel->source_counts);
     otc__kv_free(&rel->qc_counts);
+}
+
+void otc_close(otc_release *rel)
+{
+    if (!rel) return;
+    release_clear_resource_fields(rel);
     otc__mutex_destroy(&rel->lock);
     free(rel);
 }
-
 /* ------------------------------------------------------------------ open */
 
 typedef struct builder {
@@ -1332,16 +1336,13 @@ static void put(cJSON *o, const char *key, cJSON *item, int *ok)
 /* One entry of index-v1.json, from its line (spec 6.2). Any allocation that
  * fails makes the whole index fail (OTC_E_NOMEM): a partial entry is never
  * written. */
-static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint64_t offset)
+otc_status otc__project_station_entry(const otc_release *rel, const cJSON *d, uint64_t offset, size_t len, cJSON **out)
 {
-    ix_ctx *x = (ix_ctx *)ctx;
-    cJSON *d, *o, *sets, *al;
+    cJSON *o, *sets, *al;
     const cJSON *offs, *cs, *a, *v;
     const cJSON *rec, *name;
     const char *kind = NULL, *status;
     int ok = 1;
-    otc_status pst = otc__json_parse_st(text, len, &d);
-    if (pst != OTC_OK) return pst;
     o = cJSON_CreateObject();
     sets = cJSON_CreateArray();
     al = cJSON_CreateObject();
@@ -1390,7 +1391,7 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
         }
     }
     if (status && !strcmp(status, "active") && otc__jstr(d, "station_id")) {
-        const otc__entry *e = otc__find_entry(x->rel, otc__jstr(d, "station_id"));
+        const otc__entry *e = otc__find_entry(rel, otc__jstr(d, "station_id"));
         if (e) kind = e->kind == OTC_KIND_UNSET ? NULL : otc_kind_name(e->kind);
     }
     put(o, "kind", kind ? cJSON_CreateString(kind) : cJSON_CreateNull(), &ok);
@@ -1408,11 +1409,24 @@ static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint6
     put(o, "subordinate_offsets", offs ? otc__json_dup(offs) : cJSON_CreateNull(), &ok);
     put(o, "current_offsets", current_summaries(otc__jget(d, "current_offsets")), &ok);
     put(o, "sets", sets, &ok);
-    cJSON_Delete(d);
     if (!ok) {
         cJSON_Delete(o);
-        return x->st = OTC_E_NOMEM;
+        return OTC_E_NOMEM;
     }
+    *out = o;
+    return OTC_OK;
+}
+
+static otc_status stored_entry_cb(void *ctx, const char *text, size_t len, uint64_t offset)
+{
+    ix_ctx *x = (ix_ctx *)ctx;
+    cJSON *d, *o = NULL;
+    int ok = 1;
+    otc_status pst = otc__json_parse_st(text, len, &d);
+    if (pst != OTC_OK) return pst;
+    pst = otc__project_station_entry(x->rel, d, offset, len, &o);
+    cJSON_Delete(d);
+    if (pst != OTC_OK) return x->st = pst;
     put(x->arr, NULL, o, &ok);
     return ok ? OTC_OK : (x->st = OTC_E_NOMEM);
 }
@@ -1870,12 +1884,160 @@ done:
     return st;
 }
 
+/* Private owning preparation view. The original producer remains one body;
+ * this unpublished view never owns a mutex or becomes a public handle. */
+static void release_export_fields(otc_release *view, otc__prepared_release_fields *prepared)
+{
+    prepared->file = view->file;
+    prepared->path = view->path;
+    prepared->meta = view->meta;
+    prepared->release_obj = view->release_obj;
+    prepared->conv = view->conv;
+    prepared->n_conv = view->n_conv;
+    prepared->lic = view->lic;
+    prepared->n_lic = view->n_lic;
+    prepared->st = view->st;
+    prepared->n_st = view->n_st;
+    prepared->tomb = view->tomb;
+    prepared->n_tomb = view->n_tomb;
+    prepared->alias = view->alias;
+    prepared->n_alias = view->n_alias;
+    prepared->cnames = view->cnames;
+    prepared->n_cnames = view->n_cnames;
+    prepared->files = view->files;
+    prepared->n_files = view->n_files;
+    prepared->zenodo_version_doi = view->zenodo_version_doi;
+    memcpy(prepared->created, view->created, sizeof prepared->created);
+    prepared->loaded_from = view->loaded_from;
+    prepared->index_used = view->index_used;
+    prepared->index_fields = view->index_fields;
+    prepared->commercial_only = view->commercial_only;
+    prepared->commercial_upstream = view->commercial_upstream;
+    prepared->historical_excluded = view->historical_excluded;
+    prepared->source_counts = view->source_counts;
+    prepared->qc_counts = view->qc_counts;
+    prepared->astro = view->astro;
+    prepared->last_status = view->last_status;
+    memcpy(prepared->last_message, view->last_message, sizeof prepared->last_message);
+    memset(view, 0, sizeof *view);
+}
+
+otc_status otc__release_prepare_fields(const char *path, const otc_open_options *opts,
+    otc_error *err, otc_release *destination, int use_index, otc__prepared_release_fields *prepared)
+{
+    otc_release view = {0};
+    otc_status status;
+    if (!path || !destination || !prepared) return OTC_E_INVALID_ARGUMENT;
+    memset(prepared, 0, sizeof *prepared);
+    prepared->destination = destination;
+    status = open_impl(path, opts, err, &view, use_index);
+    release_export_fields(&view, prepared);
+    prepared->complete = status == OTC_OK;
+    return status;
+}
+
+static void release_import_fields(otc_release *view, const otc__prepared_release_fields *prepared)
+{
+    view->file = prepared->file;
+    view->path = prepared->path;
+    view->meta = prepared->meta;
+    view->release_obj = prepared->release_obj;
+    view->conv = prepared->conv;
+    view->n_conv = prepared->n_conv;
+    view->lic = prepared->lic;
+    view->n_lic = prepared->n_lic;
+    view->st = prepared->st;
+    view->n_st = prepared->n_st;
+    view->tomb = prepared->tomb;
+    view->n_tomb = prepared->n_tomb;
+    view->alias = prepared->alias;
+    view->n_alias = prepared->n_alias;
+    view->cnames = prepared->cnames;
+    view->n_cnames = prepared->n_cnames;
+    view->files = prepared->files;
+    view->n_files = prepared->n_files;
+    view->zenodo_version_doi = prepared->zenodo_version_doi;
+    memcpy(view->created, prepared->created, sizeof view->created);
+    view->loaded_from = prepared->loaded_from;
+    view->index_used = prepared->index_used;
+    view->index_fields = prepared->index_fields;
+    view->commercial_only = prepared->commercial_only;
+    view->commercial_upstream = prepared->commercial_upstream;
+    view->historical_excluded = prepared->historical_excluded;
+    view->source_counts = prepared->source_counts;
+    view->qc_counts = prepared->qc_counts;
+    view->astro = prepared->astro;
+    view->last_status = prepared->last_status;
+    memcpy(view->last_message, prepared->last_message, sizeof view->last_message);
+}
+
+static int release_destination_blank(const otc_release *view)
+{
+    const otc_release zero = {0};
+    return view && !view->file &&
+        !view->path &&
+        !view->meta &&
+        !view->release_obj &&
+        !view->conv &&
+        !view->n_conv &&
+        !view->lic &&
+        !view->n_lic &&
+        !view->st &&
+        !view->n_st &&
+        !view->tomb &&
+        !view->n_tomb &&
+        !view->alias &&
+        !view->n_alias &&
+        !view->cnames &&
+        !view->n_cnames &&
+        !view->files &&
+        !view->n_files &&
+        !view->zenodo_version_doi &&
+        !memcmp(view->created, zero.created, sizeof view->created) &&
+        !view->loaded_from &&
+        !view->index_used &&
+        !view->index_fields &&
+        !view->commercial_only &&
+        !view->commercial_upstream &&
+        !view->historical_excluded &&
+        (!view->source_counts.items && !view->source_counts.n && !view->source_counts.cap) &&
+        (!view->qc_counts.items && !view->qc_counts.n && !view->qc_counts.cap) &&
+        !view->astro &&
+        !view->last_status &&
+        !memcmp(view->last_message, zero.last_message, sizeof view->last_message);
+}
+
+otc_status otc__release_bind_prepared_fields(otc__prepared_release_fields *prepared, otc_release **out)
+{
+    otc_release *destination;
+    if (!prepared || !out || !prepared->complete || !prepared->file || !prepared->meta ||
+        !release_destination_blank(prepared->destination)) return OTC_E_INVALID_ARGUMENT;
+    destination = prepared->destination;
+    release_import_fields(destination, prepared);
+    memset(prepared, 0, sizeof *prepared);
+    *out = destination;
+    return OTC_OK;
+}
+
+void otc__release_prepared_clear(otc__prepared_release_fields *prepared)
+{
+    otc_release view = {0};
+    otc_release *destination;
+    if (!prepared) return;
+    destination = prepared->destination;
+    release_import_fields(&view, prepared);
+    release_clear_resource_fields(&view);
+    memset(prepared, 0, sizeof *prepared);
+    otc_close(destination);
+}
+
 otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_release **out)
 {
     /* the error field is at the same place in every layout that has it (C56) */
     otc_error *err = (opts && opts->struct_size >= offsetof(otc_open_options, error) + sizeof opts->error)
                          ? otc__err_usable(opts->error) : NULL;
     otc_release *r;
+    otc__prepared_release_fields prepared = {0};
     otc_status st;
     otc__err_reset(err);
     if (!out || !path) {
@@ -1896,10 +2058,10 @@ otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_rel
         return OTC_E_NOMEM;
     }
     otc__mutex_init(&r->lock);
-    st = open_impl(path, opts, err, r, 1);
-    if (st != OTC_OK && st != OTC_E_NOMEM && r->index_used) {
+    st = otc__release_prepare_fields(path, opts, err, r, 1, &prepared);
+    if (st != OTC_OK && st != OTC_E_NOMEM && prepared.index_used) {
         /* an index that looked fresh but could not be used: open again with the one pass */
-        otc_close(r);
+        otc__release_prepared_clear(&prepared);
         r = (otc_release *)calloc(1, sizeof *r);
         if (!r) {
             otc__err_set(err, OTC_E_NOMEM, path, "out of memory");
@@ -1907,10 +2069,11 @@ otc_status otc_open_file(const char *path, const otc_open_options *opts, otc_rel
         }
         otc__mutex_init(&r->lock);
         otc__err_reset(err);
-        st = open_impl(path, opts, err, r, 0);
+        st = otc__release_prepare_fields(path, opts, err, r, 0, &prepared);
     }
+    if (st == OTC_OK) st = otc__release_bind_prepared_fields(&prepared, &r);
     if (st != OTC_OK) {
-        otc_close(r);
+        otc__release_prepared_clear(&prepared);
         return st;
     }
     if (opts && opts->log_fn) {
@@ -2210,15 +2373,17 @@ struct otc_stats {
     otc__kvlist type, kind, country, source, qc_status;
 };
 
-otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
+otc_status otc__release_prepare_stats_fields(const otc_release *rel, otc__prepared_stats_fields *prepared)
 {
-    otc_stats *s;
+    otc_stats fields = {0}, *s = &fields;
+    otc_stats *destination;
     size_t i;
     otc_status st = OTC_OK;
-    if (out) *out = NULL;
-    if (!rel || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_release_stats: NULL argument");
-    s = (otc_stats *)calloc(1, sizeof *s);
-    if (!s) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    if (prepared) memset(prepared, 0, sizeof *prepared);
+    if (!rel || !prepared) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_release_stats: NULL argument");
+    destination = (otc_stats *)calloc(1, sizeof *destination);
+    if (!destination) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    prepared->destination = destination;
     for (i = 0; i < rel->n_st && st == OTC_OK; i++) {
         const otc__entry *e = &rel->st[i];
         st = otc__kv_add(&s->type, otc_station_type_name(e->type), 1);   /* typed: unknown is "other" (CR2 DR7) */
@@ -2229,14 +2394,53 @@ otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
         st = otc__kv_add(&s->source, rel->source_counts.items[i].key, rel->source_counts.items[i].n);
     for (i = 0; i < rel->qc_counts.n && st == OTC_OK; i++)
         st = otc__kv_add(&s->qc_status, rel->qc_counts.items[i].key, rel->qc_counts.items[i].n);
-    if (st != OTC_OK) { otc_stats_free(s); return otc__fail(rel, st, "out of memory"); }
+    if (st != OTC_OK) { prepared->type = s->type; prepared->kind = s->kind; prepared->country = s->country; prepared->source = s->source; prepared->qc_status = s->qc_status; otc__stats_prepared_clear(prepared); return otc__fail(rel, st, "out of memory"); }
     otc__kv_sort(&s->type);
     otc__kv_sort(&s->kind);
     otc__kv_sort(&s->country);
     otc__kv_sort(&s->source);
     otc__kv_sort(&s->qc_status);
-    *out = s;
+    prepared->type = s->type; prepared->kind = s->kind; prepared->country = s->country; prepared->source = s->source; prepared->qc_status = s->qc_status;
+    prepared->complete = true;
     return OTC_OK;
+}
+
+otc_status otc__stats_bind_prepared(otc__prepared_stats_fields *prepared, otc_stats **out)
+{
+    otc_stats *destination;
+    if (out) *out = NULL;
+    if (!prepared || !out || !prepared->complete || !prepared->destination)
+        return OTC_E_INVALID_ARGUMENT;
+    destination = prepared->destination;
+    if (destination->type.items || destination->kind.items || destination->country.items ||
+        destination->source.items || destination->qc_status.items) return OTC_E_INVALID_ARGUMENT;
+    destination->type = prepared->type; destination->kind = prepared->kind;
+    destination->country = prepared->country; destination->source = prepared->source;
+    destination->qc_status = prepared->qc_status;
+    memset(prepared, 0, sizeof *prepared);
+    *out = destination;
+    return OTC_OK;
+}
+
+void otc__stats_prepared_clear(otc__prepared_stats_fields *prepared)
+{
+    if (!prepared) return;
+    otc__kv_free(&prepared->type); otc__kv_free(&prepared->kind);
+    otc__kv_free(&prepared->country); otc__kv_free(&prepared->source); otc__kv_free(&prepared->qc_status);
+    free(prepared->destination);
+    memset(prepared, 0, sizeof *prepared);
+}
+
+otc_status otc_release_stats(const otc_release *rel, otc_stats **out)
+{
+    otc__prepared_stats_fields prepared = {0};
+    otc_status status;
+    if (out) *out = NULL;
+    if (!rel || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_release_stats: NULL argument");
+    status = otc__release_prepare_stats_fields(rel, &prepared);
+    if (status == OTC_OK) status = otc__stats_bind_prepared(&prepared, out);
+    otc__stats_prepared_clear(&prepared);
+    return status;
 }
 
 void otc_stats_free(otc_stats *s)
@@ -2367,6 +2571,36 @@ otc_status otc_licence_raw_json(const otc_licence *l, char *buf, size_t len, siz
 }
 
 /* ---------------------------------------------------------- release info */
+
+otc_status otc__release_info_bind_prepared(otc__prepared_release_info_fields *prepared, otc_release_info **out)
+{
+    otc_release_info *destination;
+    if (out) *out = NULL;
+    if (!prepared || !out || !prepared->complete || !prepared->destination || !prepared->datestamp)
+        return OTC_E_INVALID_ARGUMENT;
+    destination = prepared->destination;
+    if (destination->datestamp || destination->format_version || destination->min_reader_version ||
+        destination->concept_doi || destination->zenodo_version_doi || destination->content_sha256 ||
+        destination->files || destination->n_files) return OTC_E_INVALID_ARGUMENT;
+    destination->datestamp = prepared->datestamp; destination->format_version = prepared->format_version;
+    destination->min_reader_version = prepared->min_reader_version;
+    destination->concept_doi = prepared->concept_doi; destination->zenodo_version_doi = prepared->zenodo_version_doi;
+    destination->content_sha256 = prepared->content_sha256; destination->files = prepared->files;
+    destination->n_files = prepared->n_files;
+    memset(prepared, 0, sizeof *prepared);
+    *out = destination;
+    return OTC_OK;
+}
+
+void otc__release_info_prepared_clear(otc__prepared_release_info_fields *prepared)
+{
+    if (!prepared) return;
+    free(prepared->datestamp); free(prepared->format_version); free(prepared->min_reader_version);
+    free(prepared->concept_doi); free(prepared->zenodo_version_doi); free(prepared->content_sha256);
+    free_files(prepared->files, prepared->n_files);
+    free(prepared->destination);
+    memset(prepared, 0, sizeof *prepared);
+}
 
 void otc_release_info_free(otc_release_info *ri)
 {

@@ -208,7 +208,7 @@ option(OTC_CANONICAL_SHAPE_ONLY "Build private canonical construction fixtures" 
 if(OTC_CANONICAL_SHAPE_ONLY)
     enable_testing()
     add_library(otc_canonical_shape OBJECT src/otc_canonical.c)
-    target_include_directories(otc_canonical_shape PRIVATE src include)
+    target_include_directories(otc_canonical_shape PRIVATE src include vendor/cjson)
     target_compile_options(otc_canonical_shape PRIVATE ${OTC_WARNINGS})
     add_executable(test_canonical_shape tests/test_canonical_shape.c
         $<TARGET_OBJECTS:otc_canonical_shape>)

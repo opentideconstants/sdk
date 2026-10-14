@@ -1655,3 +1655,23 @@ int otc__time_text(int64_t t, char out[21])
     memcpy(out, tmp, 21);
     return 1;
 }
+
+int otc__option_env_on(const char *v)
+{
+    static const char *const ON[] = {"1", "true", "yes", "on", NULL};
+    size_t n, i, k;
+    if (!v) return 0;
+    while (*v == ' ' || *v == '\t') v++;
+    n = strlen(v);
+    while (n && (v[n - 1] == ' ' || v[n - 1] == '\t')) n--;
+    for (k = 0; ON[k]; k++) {
+        if (strlen(ON[k]) != n) continue;
+        for (i = 0; i < n; i++) {
+            char ch = v[i];
+            if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32);
+            if (ch != ON[k][i]) break;
+        }
+        if (i == n) return 1;
+    }
+    return 0;
+}

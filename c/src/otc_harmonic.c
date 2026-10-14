@@ -50,6 +50,11 @@ static otc_status prepare(otc__sum *sum, int year)
     return OTC_OK;
 }
 
+otc_status otc__sum_prepare(otc__sum *sum, int year)
+{
+    return prepare(sum, year);
+}
+
 otc_status otc__sum_value(otc__sum *sum, double seconds, int year, int derivative, double *out)
 {
     size_t i;
@@ -149,7 +154,7 @@ static size_t survivor(const otc__event *items, size_t n, int slack)
 }
 void otc__events_clear(otc__events *events) { free(events->items); memset(events, 0, sizeof *events); }
 
-otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack, otc__events *out)
+otc_status otc__events_find_unrounded(otc__sum *sum, double start, double stop, int slack, otc__events *out)
 {
     double first, last, point, fa, fb, bounded;
     int year, index, first_year, last_year;
@@ -208,7 +213,7 @@ otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack,
     for (i = 0; i < out->n; i += n) {
         for (n = 1; i + n < out->n && out->items[i + n].t - out->items[i + n - 1].t < 1.0; n++) {}
         selected = survivor(out->items + i, n, slack);
-        if (selected != SIZE_MAX && start <= floor(out->items[i + selected].t + 0.5) && floor(out->items[i + selected].t + 0.5) < stop)
+        if (selected != SIZE_MAX)
             out->items[written++] = out->items[i + selected];
     }
     out->n = written;
@@ -216,4 +221,16 @@ otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack,
 fail:
     otc__events_clear(out);
     return st;
+}
+
+otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack, otc__events *out)
+{
+    size_t i, written = 0;
+    otc_status st = otc__events_find_unrounded(sum, start, stop, slack, out);
+    if (st != OTC_OK) return st;
+    for (i = 0; i < out->n; i++)
+        if (start <= floor(out->items[i].t + 0.5) && floor(out->items[i].t + 0.5) < stop)
+            out->items[written++] = out->items[i];
+    out->n = written;
+    return OTC_OK;
 }

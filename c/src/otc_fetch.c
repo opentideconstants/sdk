@@ -560,22 +560,7 @@ static const char *env_get(const char *name)
  * yes or on, without regard to case, after trimming spaces and tabs. */
 static int env_on(const char *v)
 {
-    static const char *const ON[] = {"1", "true", "yes", "on", NULL};
-    size_t n, i, k;
-    if (!v) return 0;
-    while (*v == ' ' || *v == '\t') v++;
-    n = strlen(v);
-    while (n && (v[n - 1] == ' ' || v[n - 1] == '\t')) n--;
-    for (k = 0; ON[k]; k++) {
-        if (strlen(ON[k]) != n) continue;
-        for (i = 0; i < n; i++) {
-            char ch = v[i];
-            if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32);
-            if (ch != ON[k][i]) break;
-        }
-        if (i == n) return 1;
-    }
-    return 0;
+    return otc__option_env_on(v);
 }
 
 static char *default_root(void)
@@ -1507,23 +1492,26 @@ static void free_file_infos(otc_file_info *f, size_t n)
 }
 
 /* A pointer or index entry -> ReleaseInfo (files sorted by name, urls absolute). */
-static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, otc_release_info **out)
+static otc_status prepare_info_from_entry(fctx *c, const cJSON *e, const char *doc_url, otc__prepared_release_info_fields *prepared)
 {
-    otc_release_info *ri;
+    otc_release_info fields = {0}, *ri = &fields;
+    otc_release_info *destination;
     const cJSON *files = otc__jget(e, "files"), *f;
     const char *ds = otc__jstr(e, "datestamp"), *fv = otc__jstr(e, "format_version");
     const char *mrv = otc__jstr(e, "min_reader_version"), *cdoi = otc__jstr(e, "concept_doi");
     const char *zdoi = otc__jstr(e, "zenodo_version_doi"), *csha = otc__jstr(e, "content_sha256");
     size_t n = 0;
-    *out = NULL;
+    memset(prepared, 0, sizeof *prepared);
     if (!cJSON_IsObject(e) || !ds || !valid_datestamp(ds) || (files && !cJSON_IsArray(files)))
         return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a release entry without a valid datestamp or files", doc_url);
     if ((otc__jget(e, "format_version") && !otc__version_valid(fv))   /* spec 7.4 (CR D9) */
         || (otc__jget(e, "min_reader_version") && !otc__version_valid(mrv)))
         return fail(c, OTC_E_INVALID_RELEASE, doc_url,
                     "%s: release %s has a format_version or min_reader_version that is not MAJOR.MINOR", doc_url, ds);
-    ri = (otc_release_info *)calloc(1, sizeof *ri);
-    if (!ri) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    destination = (otc_release_info *)calloc(1, sizeof *destination);
+    if (!destination) return fail(c, OTC_E_NOMEM, NULL, "out of memory");
+    prepared->destination = destination;
+    prepared->source_entry = e;
     ri->datestamp = otc__strdup(ds);
     ri->format_version = fv ? otc__strdup(fv) : NULL;
     ri->min_reader_version = mrv ? otc__strdup(mrv) : NULL;
@@ -1533,7 +1521,7 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     ri->files = (otc_file_info *)calloc((size_t)cJSON_GetArraySize(files) + 1, sizeof *ri->files);
     if (!ri->datestamp || (fv && !ri->format_version) || (mrv && !ri->min_reader_version) || (cdoi && !ri->concept_doi)
         || (zdoi && !ri->zenodo_version_doi) || (csha && !ri->content_sha256) || !ri->files) {
-        otc_release_info_free(ri);
+        prepared->datestamp = ri->datestamp; prepared->format_version = ri->format_version; prepared->min_reader_version = ri->min_reader_version; prepared->concept_doi = ri->concept_doi; prepared->zenodo_version_doi = ri->zenodo_version_doi; prepared->content_sha256 = ri->content_sha256; prepared->files = ri->files; prepared->n_files = ri->n_files; otc__release_info_prepared_clear(prepared);
         return fail(c, OTC_E_NOMEM, NULL, "out of memory");
     }
     cJSON_ArrayForEach(f, files) {
@@ -1541,12 +1529,12 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
         otc_file_info *fi = &ri->files[n];
         if (!name) {
             ri->n_files = n;
-            otc_release_info_free(ri);
+            prepared->datestamp = ri->datestamp; prepared->format_version = ri->format_version; prepared->min_reader_version = ri->min_reader_version; prepared->concept_doi = ri->concept_doi; prepared->zenodo_version_doi = ri->zenodo_version_doi; prepared->content_sha256 = ri->content_sha256; prepared->files = ri->files; prepared->n_files = ri->n_files; otc__release_info_prepared_clear(prepared);
             return fail(c, OTC_E_INVALID_RELEASE, doc_url, "%s: a file entry without a name", doc_url);
         }
         if (!sha || otc__jint(f, "size") < 0) {   /* as the schema requires (CR2 DR12) */
             ri->n_files = n;
-            otc_release_info_free(ri);
+            prepared->datestamp = ri->datestamp; prepared->format_version = ri->format_version; prepared->min_reader_version = ri->min_reader_version; prepared->concept_doi = ri->concept_doi; prepared->zenodo_version_doi = ri->zenodo_version_doi; prepared->content_sha256 = ri->content_sha256; prepared->files = ri->files; prepared->n_files = ri->n_files; otc__release_info_prepared_clear(prepared);
             return fail(c, OTC_E_INVALID_RELEASE, doc_url,
                         "%s: the entry for %s of %s needs a string sha256 and an integer size of 0 or more", doc_url, name, ds);
         }
@@ -1557,7 +1545,7 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
         n++;
         if (!fi->name || !fi->url || (sha && !fi->sha256)) {
             ri->n_files = n;
-            otc_release_info_free(ri);
+            prepared->datestamp = ri->datestamp; prepared->format_version = ri->format_version; prepared->min_reader_version = ri->min_reader_version; prepared->concept_doi = ri->concept_doi; prepared->zenodo_version_doi = ri->zenodo_version_doi; prepared->content_sha256 = ri->content_sha256; prepared->files = ri->files; prepared->n_files = ri->n_files; otc__release_info_prepared_clear(prepared);
             return fail(c, OTC_E_NOMEM, NULL, "out of memory");
         }
         {
@@ -1569,8 +1557,32 @@ static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, 
     }
     ri->n_files = n;
     if (n > 1) qsort(ri->files, n, sizeof *ri->files, fi_cmp);
-    *out = ri;
+    prepared->datestamp = ri->datestamp; prepared->format_version = ri->format_version; prepared->min_reader_version = ri->min_reader_version; prepared->concept_doi = ri->concept_doi; prepared->zenodo_version_doi = ri->zenodo_version_doi; prepared->content_sha256 = ri->content_sha256; prepared->files = ri->files; prepared->n_files = ri->n_files;
+    prepared->complete = true;
     return OTC_OK;
+}
+
+static otc_status info_from_entry(fctx *c, const cJSON *e, const char *doc_url, otc_release_info **out)
+{
+    otc__prepared_release_info_fields prepared = {0};
+    otc_status status;
+    *out = NULL;
+    status = prepare_info_from_entry(c, e, doc_url, &prepared);
+    if (status == OTC_OK) status = otc__release_info_bind_prepared(&prepared, out);
+    otc__release_info_prepared_clear(&prepared);
+    return status;
+}
+
+otc_status otc__fetch_prepare_release_info_fields(const otc_fetch_options *opts,
+        const cJSON *entry, const char *doc_url, otc__prepared_release_info_fields *prepared)
+{
+    fctx c;
+    otc_status status = ctx_init(&c, opts);
+    if (status == OTC_OK && (!prepared || !doc_url))
+        status = fail(&c, OTC_E_INVALID_ARGUMENT, NULL, "prepared catalogue fields and doc_url are required");
+    if (status == OTC_OK) status = prepare_info_from_entry(&c, entry, doc_url, prepared);
+    ctx_free(&c);
+    return status;
 }
 
 static const otc_file_info *info_file(const otc_release_info *ri, const char *name)
@@ -3098,14 +3110,15 @@ otc_status otc_fetch_newer_format_major(const otc_fetch_options *opts, int *majo
     return st;
 }
 
-otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
-                            size_t *needed, bool *updated)
+static otc_status fetch_update_impl(const otc_fetch_options *opts, const char *current, char *path, size_t len,
+                            size_t *needed, bool *updated, otc__prepared_update_fields *prepared)
 {
     fctx c;
     otc_release_info *ri = NULL;
     otc_release *rel = NULL;
     otc_loaded_from lf;
     otc_status st = ctx_init(&c, opts);
+    if (prepared) memset(prepared, 0, sizeof *prepared);
     size_t need = 0;
     if (updated) *updated = false;
     if (needed) *needed = 0;
@@ -3135,9 +3148,32 @@ otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, 
         }
         free(p);
     }
-    otc_release_info_free(ri);
+if (st == OTC_OK && prepared) {
+    prepared->updated = *updated;
+    prepared->has_from = true;
+    memcpy(prepared->from, current, strlen(current) + 1);
+    if (*updated) {
+        prepared->has_to = true;
+        memcpy(prepared->to, ri->datestamp, strlen(ri->datestamp) + 1);
+    }
+    prepared->complete = true;
+}
+otc_release_info_free(ri);
     ctx_free(&c);
     return st;
+}
+
+otc_status otc_fetch_update(const otc_fetch_options *opts, const char *current, char *path, size_t len,
+                            size_t *needed, bool *updated)
+{
+    return fetch_update_impl(opts, current, path, len, needed, updated, NULL);
+}
+
+otc_status otc__fetch_update_prepare(const otc_fetch_options *opts, const char *current, char *path, size_t len,
+                            size_t *needed, bool *updated, otc__prepared_update_fields *prepared)
+{
+    if (!prepared) return OTC_E_INVALID_ARGUMENT;
+    return fetch_update_impl(opts, current, path, len, needed, updated, prepared);
 }
 
 /* Returns a malloc'd string list entry. */

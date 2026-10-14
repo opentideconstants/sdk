@@ -4,7 +4,7 @@
 
 /* --------------------------------------------------------------- building */
 
-static void fill_validation(otc_validation_t *v, const cJSON *row)
+void otc__fill_validation(otc_validation_t *v, const cJSON *row)
 {
     const cJSON *prev = otc__jget(row, "previous_release");
     memset(v, 0, sizeof *v);
@@ -44,7 +44,7 @@ static const char *borrowed(const cJSON *j, const char *key)
     return v ? v : "";
 }
 
-static void fill_constituent(otc_constituent_t *c, const cJSON *j)
+void otc__fill_constituent(otc_constituent_t *c, const cJSON *j)
 {
     memset(c, 0, sizeof *c);
     c->struct_size = sizeof *c;
@@ -110,16 +110,15 @@ void otc_station_free(otc_station_t *st)
     free(st);
 }
 
-static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const cJSON *rec_id, const cJSON *vals)
+static otc_status build_set(const otc_release *rel, size_t n_val, otc_validation_t *validation, otc_station_t *parent, otc_set *s, const cJSON *j, const cJSON *rec_id, const cJSON *vals)
 {
-    const otc_release *rel = st->rel;
     const cJSON *cons = otc__jget(j, "constituents"), *flags = otc__jget(j, "qc_flags");
     const cJSON *drops = otc__jget(j, "dropped_constituents"), *x;
     const cJSON *set_id = otc__jstr_item(j, "set_id");
     size_t i;
     s->json = j;
     s->fallback.json = otc__jget(j, "fallback");
-    s->station = st;
+    s->station = parent;
     s->conv = otc__find_convention(rel, otc__jstr(j, "convention_id"));
     s->lic = otc__find_licence(rel, otc__jstr(j, "licence_id"));
     s->recommended = otc__jstr_same(rec_id, set_id);   /* in full: a NUL inside never matches less (CR2 DR33) */
@@ -128,7 +127,7 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     s->cons = (otc_constituent_t *)calloc(s->n_cons ? s->n_cons : 1, sizeof *s->cons);
     if (!s->cons) return OTC_E_NOMEM;
     i = 0;
-    if (cJSON_IsArray(cons)) cJSON_ArrayForEach(x, cons) fill_constituent(&s->cons[i++], x);
+    if (cJSON_IsArray(cons)) cJSON_ArrayForEach(x, cons) otc__fill_constituent(&s->cons[i++], x);
     s->n_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
     s->flags = (otc_qc_flag *)calloc(s->n_flags ? s->n_flags : 1, sizeof *s->flags);
     if (!s->flags) return OTC_E_NOMEM;
@@ -156,12 +155,12 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     s->build.json = otc__jget(otc__jget(j, "provenance"), "build");
     s->has_build = cJSON_IsObject(s->build.json);
     /* the station's validation rows for this set, by window */
-    s->val = (const otc_validation_t **)calloc(st->n_val ? st->n_val : 1, sizeof *s->val);
+    s->val = (const otc_validation_t **)calloc(n_val ? n_val : 1, sizeof *s->val);
     if (!s->val) return OTC_E_NOMEM;
     i = 0;
     if (cJSON_IsArray(vals)) {
-        cJSON_ArrayForEach(x, vals) {   /* st->val[i] is the i-th row */
-            if (otc__jstr_same(otc__jstr_item(x, "set_id"), set_id)) s->val[s->n_val++] = &st->val[i];
+        cJSON_ArrayForEach(x, vals) {   /* validation[i] is the i-th row */
+            if (otc__jstr_same(otc__jstr_item(x, "set_id"), set_id)) s->val[s->n_val++] = &validation[i];
             i++;
         }
     }
@@ -169,66 +168,121 @@ static otc_status build_set(otc_station_t *st, otc_set *s, const cJSON *j, const
     return OTC_OK;
 }
 
-otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out)
+static void bind_station_fields(otc_station_t *station, const otc__prepared_station_fields *prepared)
 {
-    otc_station_t *st = (otc_station_t *)calloc(1, sizeof *st);
+    station->source_records = prepared->source_records;
+    station->n_source_records = prepared->n_source_records;
+    station->offset_flags = prepared->offset_flags;
+    station->n_offset_flags = prepared->n_offset_flags;
+    station->offset_fallback = prepared->offset_fallback;
+    station->offset_vintage = prepared->offset_vintage;
+    station->offset_provenance = prepared->offset_provenance;
+    station->root = prepared->root;
+    station->rel = prepared->rel;
+    station->kind = prepared->kind;
+    station->sets = prepared->sets;
+    station->n_sets = prepared->n_sets;
+    station->order_all = prepared->order_all;
+    station->n_all = prepared->n_all;
+    station->order_usable = prepared->order_usable;
+    station->n_usable = prepared->n_usable;
+    station->rec = prepared->rec;
+    station->val = prepared->val;
+    station->n_val = prepared->n_val;
+}
+
+void otc__station_prepared_clear(otc__prepared_station_fields *prepared)
+{
+    if (!prepared) return;
+    if (prepared->destination) {
+        bind_station_fields(prepared->destination, prepared);
+        otc_station_free(prepared->destination);
+    }
+    memset(prepared, 0, sizeof *prepared);
+}
+
+otc_status otc__station_bind_prepared_fields(otc__prepared_station_fields *prepared, otc_station_t **out)
+{
+    otc_station_t *station;
+    if (!prepared || !out || !prepared->complete || !prepared->destination || !prepared->root) return OTC_E_INVALID_ARGUMENT;
+    station = prepared->destination;
+    bind_station_fields(station, prepared);
+    memset(prepared, 0, sizeof *prepared);
+    *out = station;
+    return OTC_OK;
+}
+
+otc_status otc__station_prepare_fields(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc__prepared_station_fields *prepared)
+{
+    otc_station_t *destination = (otc_station_t *)calloc(1, sizeof *destination);
     const cJSON *sets = otc__jget(root, "constant_sets"), *vals = otc__jget(root, "validation"), *x;
     const cJSON *rec_id = otc__jstr_item(root, "recommended_set_id");
     size_t i;
     otc_status rc = OTC_OK;
-    *out = NULL;
-    if (!st) { cJSON_Delete(root); return OTC_E_NOMEM; }
-    st->root = root;
-    st->rel = rel;
-    st->kind = kind;
+    memset(prepared, 0, sizeof *prepared);
+    prepared->destination = destination;
+    if (!prepared->destination) { cJSON_Delete(root); return OTC_E_NOMEM; }
+    prepared->root = root;
+    prepared->rel = rel;
+    prepared->kind = kind;
     {
         const cJSON *records = otc__jget(root, "source_records"), *record;
         const cJSON *off = otc__jget(root, "subordinate_offsets"), *flags = otc__jget(off, "qc_flags");
-        st->n_source_records = cJSON_IsArray(records) ? (size_t)cJSON_GetArraySize(records) : 0;
-        st->source_records = (otc_source_record *)calloc(st->n_source_records ? st->n_source_records : 1, sizeof *st->source_records);
-        st->n_offset_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
-        st->offset_flags = (otc_qc_flag *)calloc(st->n_offset_flags ? st->n_offset_flags : 1, sizeof *st->offset_flags);
-        if (!st->source_records || !st->offset_flags) { otc_station_free(st); return OTC_E_NOMEM; }
+        prepared->n_source_records = cJSON_IsArray(records) ? (size_t)cJSON_GetArraySize(records) : 0;
+        prepared->source_records = (otc_source_record *)calloc(prepared->n_source_records ? prepared->n_source_records : 1, sizeof *prepared->source_records);
+        prepared->n_offset_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
+        prepared->offset_flags = (otc_qc_flag *)calloc(prepared->n_offset_flags ? prepared->n_offset_flags : 1, sizeof *prepared->offset_flags);
+        if (!prepared->source_records || !prepared->offset_flags) { return OTC_E_NOMEM; }
         i = 0;
-        cJSON_ArrayForEach(record, records) { st->source_records[i].json = record; st->source_records[i++].rel = rel; }
+        cJSON_ArrayForEach(record, records) { prepared->source_records[i].json = record; prepared->source_records[i++].rel = rel; }
         i = 0;
-        cJSON_ArrayForEach(record, flags) st->offset_flags[i++].json = record;
-        st->offset_fallback.json = otc__jget(off, "fallback");
-        st->offset_vintage.json = otc__jget(off, "vintage");
-        st->offset_provenance.json = otc__jget(off, "provenance");
+        cJSON_ArrayForEach(record, flags) prepared->offset_flags[i++].json = record;
+        prepared->offset_fallback.json = otc__jget(off, "fallback");
+        prepared->offset_vintage.json = otc__jget(off, "vintage");
+        prepared->offset_provenance.json = otc__jget(off, "provenance");
     }
 
-    st->n_val = cJSON_IsArray(vals) ? (size_t)cJSON_GetArraySize(vals) : 0;
-    st->val = (otc_validation_t *)calloc(st->n_val ? st->n_val : 1, sizeof *st->val);
-    st->n_sets = cJSON_IsArray(sets) ? (size_t)cJSON_GetArraySize(sets) : 0;
-    st->sets = (otc_set *)calloc(st->n_sets ? st->n_sets : 1, sizeof *st->sets);
-    st->order_all = (otc_set **)calloc(st->n_sets ? st->n_sets : 1, sizeof *st->order_all);
-    st->order_usable = (otc_set **)calloc(st->n_sets ? st->n_sets : 1, sizeof *st->order_usable);
-    if (!st->val || !st->sets || !st->order_all || !st->order_usable) { otc_station_free(st); return OTC_E_NOMEM; }
+    prepared->n_val = cJSON_IsArray(vals) ? (size_t)cJSON_GetArraySize(vals) : 0;
+    prepared->val = (otc_validation_t *)calloc(prepared->n_val ? prepared->n_val : 1, sizeof *prepared->val);
+    prepared->n_sets = cJSON_IsArray(sets) ? (size_t)cJSON_GetArraySize(sets) : 0;
+    prepared->sets = (otc_set *)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->sets);
+    prepared->order_all = (otc_set **)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->order_all);
+    prepared->order_usable = (otc_set **)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->order_usable);
+    if (!prepared->val || !prepared->sets || !prepared->order_all || !prepared->order_usable) { return OTC_E_NOMEM; }
     i = 0;
-    if (cJSON_IsArray(vals)) cJSON_ArrayForEach(x, vals) fill_validation(&st->val[i++], x);
+    if (cJSON_IsArray(vals)) cJSON_ArrayForEach(x, vals) otc__fill_validation(&prepared->val[i++], x);
     i = 0;
     if (cJSON_IsArray(sets)) {
         cJSON_ArrayForEach(x, sets) {
-            if ((rc = build_set(st, &st->sets[i], x, rec_id, vals)) != OTC_OK) break;
+            if ((rc = build_set(rel, prepared->n_val, prepared->val, prepared->destination, &prepared->sets[i], x, rec_id, vals)) != OTC_OK) break;
             /* under commercial_only the recommended set is the effective one (spec 4.2, K-NC DR106) */
-            if (eff_pos != OTC__REC_FROM_LINE) st->sets[i].recommended = (long)i == eff_pos;
-            if (st->sets[i].recommended) st->rec = &st->sets[i];
-            st->order_all[i] = &st->sets[i];
+            if (eff_pos != OTC__REC_FROM_LINE) prepared->sets[i].recommended = (long)i == eff_pos;
+            if (prepared->sets[i].recommended) prepared->rec = &prepared->sets[i];
+            prepared->order_all[i] = &prepared->sets[i];
             i++;
         }
     }
     if (rc != OTC_OK) {
-        st->n_sets = i + 1;
-        otc_station_free(st);
+        prepared->n_sets = i + 1;
         return rc;
     }
-    st->n_all = st->n_sets;
-    if (st->n_all > 1) qsort(st->order_all, st->n_all, sizeof *st->order_all, set_ptr_cmp);
-    for (i = 0; i < st->n_all; i++)
-        if (!st->order_all[i]->no_constants) st->order_usable[st->n_usable++] = st->order_all[i];
-    *out = st;
+    prepared->n_all = prepared->n_sets;
+    if (prepared->n_all > 1) qsort(prepared->order_all, prepared->n_all, sizeof *prepared->order_all, set_ptr_cmp);
+    for (i = 0; i < prepared->n_all; i++)
+        if (!prepared->order_all[i]->no_constants) prepared->order_usable[prepared->n_usable++] = prepared->order_all[i];
+    prepared->complete = true;
     return OTC_OK;
+}
+
+otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out)
+{
+    otc__prepared_station_fields prepared;
+    otc_status status;
+    *out = NULL;
+    status = otc__station_prepare_fields(rel, root, kind, eff_pos, &prepared);
+    if (status == OTC_OK) status = otc__station_bind_prepared_fields(&prepared, out);
+    if (status != OTC_OK) otc__station_prepared_clear(&prepared);
+    return status;
 }
 
 /* --------------------------------------------------------- station fields */

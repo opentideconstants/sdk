@@ -252,6 +252,39 @@ otc_status otc__kv_add(otc__kvlist *l, const char *key, int64_t n);
 void otc__kv_sort(otc__kvlist *l);
 void otc__kv_free(otc__kvlist *l);
 
+/* Original catalogue/statistics producers export unpublished owned fields.
+ * A blank destination is owned by the tuple until its one-time bind. */
+typedef struct otc__prepared_release_info_fields {
+    otc_release_info *destination;
+    char *datestamp, *format_version, *min_reader_version;
+    char *concept_doi, *zenodo_version_doi, *content_sha256;
+    otc_file_info *files;
+    size_t n_files;
+    const cJSON *source_entry;
+    bool complete;
+} otc__prepared_release_info_fields;
+typedef struct otc__prepared_stats_fields {
+    otc_stats *destination;
+    otc__kvlist type, kind, country, source, qc_status;
+    bool complete;
+} otc__prepared_stats_fields;
+typedef struct otc__prepared_update_fields {
+    bool updated, has_from, has_to, complete;
+    char from[20], to[20];
+} otc__prepared_update_fields;
+otc_status otc__fetch_prepare_release_info_fields(const otc_fetch_options *opts,
+        const cJSON *entry, const char *doc_url, otc__prepared_release_info_fields *prepared);
+otc_status otc__release_info_bind_prepared(otc__prepared_release_info_fields *prepared,
+        otc_release_info **out);
+void otc__release_info_prepared_clear(otc__prepared_release_info_fields *prepared);
+otc_status otc__release_prepare_stats_fields(const otc_release *rel,
+        otc__prepared_stats_fields *prepared);
+otc_status otc__stats_bind_prepared(otc__prepared_stats_fields *prepared, otc_stats **out);
+void otc__stats_prepared_clear(otc__prepared_stats_fields *prepared);
+otc_status otc__fetch_update_prepare(const otc_fetch_options *opts, const char *current,
+        char *path, size_t len, size_t *needed, bool *updated,
+        otc__prepared_update_fields *prepared);
+
 /* One active station in the stream index (spec 6.2). */
 typedef struct otc__entry {
     char              *id;
@@ -343,6 +376,47 @@ struct otc_release {
     char            last_message[512];
 };
 
+typedef struct otc__prepared_release_fields {
+    otc_release *destination;
+    bool complete;
+    otc__file      *file;
+    char           *path;
+    cJSON          *meta;
+    const cJSON    *release_obj;
+    otc_convention *conv;
+    size_t          n_conv;
+    otc_licence    *lic;
+    size_t          n_lic;
+    otc__entry     *st;
+    size_t          n_st;
+    otc__tomb      *tomb;
+    size_t          n_tomb;
+    otc__alias     *alias;
+    size_t          n_alias;
+    char          **cnames;
+    size_t          n_cnames;
+    otc_file_info  *files;
+    size_t          n_files;
+    char           *zenodo_version_doi; /* set by otc_fetch_open from .verified (spec 4.3) */
+    char            created[21];        /* release.created in UTC (spec 4.3); "" when absent or not a time */
+    otc_loaded_from loaded_from;
+    int             index_used;   /* 1: the stations came from a fresh index-v1.json (spec 6.2) */
+    unsigned        index_fields; /* admitted optional-field/profile descriptor; never written */
+    bool            commercial_only;   /* the open option (spec 4.2, K-NC DR106) */
+    bool            commercial_upstream;
+    bool            historical_excluded;
+    otc__kvlist     source_counts;
+    otc__kvlist     qc_counts;
+    /* the only mutable state after open: the last failure on this handle */
+    struct otc_astro_tab *astro; /* lazy validated table wrappers, release-owned */
+    otc_status      last_status;
+    char            last_message[512];} otc__prepared_release_fields;
+
+otc_status otc__release_prepare_fields(const char *path, const otc_open_options *opts,
+    otc_error *err, otc_release *destination, int use_index, otc__prepared_release_fields *prepared);
+otc_status otc__release_bind_prepared_fields(otc__prepared_release_fields *prepared, otc_release **out);
+void otc__release_prepared_clear(otc__prepared_release_fields *prepared);
+
 /* Records a failure on the handle (not NOT_FOUND / BUFFER_TOO_SMALL) and returns st. */
 otc_status otc__fail(const otc_release *rel, otc_status st, const char *fmt, ...);
 const otc__entry *otc__find_entry(const otc_release *rel, const char *id);
@@ -351,6 +425,7 @@ const otc_convention *otc__find_convention(const otc_release *rel, const char *i
 const otc_licence *otc__find_licence(const otc_release *rel, const char *id);
 /* The index-v1.json document (spec 6.2) of an open release: one more pass
  * over the .jsonl. NULL when out of memory or the file cannot be read. */
+otc_status otc__project_station_entry(const otc_release *rel, const cJSON *row, uint64_t offset, size_t length, cJSON **out);
 cJSON *otc__index_doc(const otc_release *rel, const char *jsonl_sha256, const char *by);
 /* Reads and parses one line of the .jsonl file. */
 otc_status otc__read_line(const otc_release *rel, uint64_t offset, size_t length, cJSON **out);
@@ -364,6 +439,13 @@ otc_status otc__read_station_line(const otc_release *rel, const char *id, uint64
 int otc__historical_valid(const cJSON *offsets);
 int otc__ordinary_path(const otc_release *rel, const otc__entry *e);
 int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e);
+otc_status otc__query_search_arguments(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
+                                     otc_hit *out, size_t cap, size_t *count);
+otc_status otc__query_search_folded_arguments(const otc_release *rel, const char *folded);
+otc_status otc__query_near_arguments(const otc_release *rel, double lat, double lon, double radius_km, const otc_filter *filter,
+                                   size_t limit, otc_nearby *out, size_t cap, size_t *count);
+otc_status otc__query_nearest_arguments(const otc_release *rel, double lat, double lon, double *max_km,
+                                      const otc_filter *filter, otc_nearby *hit);
 
 /* ---------------------------------------------------------------- stations */
 
@@ -435,12 +517,41 @@ struct otc_tombstone {
     cJSON *root;
 };
 
+typedef struct otc__prepared_station_fields {
+    otc_station_t *destination;
+    otc_source_record *source_records;
+    size_t n_source_records;
+    otc_qc_flag *offset_flags;
+    size_t n_offset_flags;
+    otc_fallback offset_fallback;
+    otc_historical_offset_vintage offset_vintage;
+    otc_historical_offset_provenance offset_provenance;
+    cJSON *root;
+    const otc_release *rel;
+    otc_kind kind;
+    otc_set *sets;
+    size_t n_sets;
+    otc_set **order_all;
+    size_t n_all;
+    otc_set **order_usable;
+    size_t n_usable;
+    otc_set *rec;
+    otc_validation_t *val;
+    size_t n_val;
+    bool complete;
+} otc__prepared_station_fields;
+
 /* Builds a station from its parsed line (takes ownership of root). eff_pos:
  * OTC__REC_FROM_LINE for the line's recommended_set_id, else the position in
  * constant_sets of the set the station gives as recommended (-1: none; the
  * effective recommended set of commercial_only, K-NC DR106). */
 #define OTC__REC_FROM_LINE (-2L)
 otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out);
+otc_status otc__station_prepare_fields(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc__prepared_station_fields *prepared);
+otc_status otc__station_bind_prepared_fields(otc__prepared_station_fields *prepared, otc_station_t **out);
+void otc__station_prepared_clear(otc__prepared_station_fields *prepared);
+void otc__fill_constituent(otc_constituent_t *value, const cJSON *raw);
+void otc__fill_validation(otc_validation_t *value, const cJSON *raw);
 
 /* Native prediction internals. Terms and events retain source order. */
 #define OTC__RAD (3.14159265358979323846 / 180.0)
@@ -455,10 +566,20 @@ otc_status otc__astro_index(const otc_astro_tab *tab, int year, int *out);
 typedef struct otc__term { const cJSON *row; double speed, amplitude, phase, scaled, argument, omega; } otc__term;
 typedef struct otc__sum { const otc_astro_tab *table; otc__term *terms; size_t n; double mean; int year; double origin; } otc__sum;
 typedef struct otc__event { double t; int kind; double value; size_t sequence; } otc__event;
+typedef struct otc__current_candidate { otc__event event; double direction; } otc__current_candidate;
 typedef struct otc__events { otc__event *items; size_t n, cap; } otc__events;
 otc_status otc__sum_init(otc__sum *sum, const otc_astro_tab *table, const cJSON *constituents, const char *amplitude, const char *phase, double mean, double multiplier, double shift);
 void otc__sum_clear(otc__sum *sum);
 otc_status otc__sum_value(otc__sum *sum, double seconds, int year, int derivative, double *out);
+otc_status otc__sum_prepare(otc__sum *sum, int year);
 otc_status otc__events_find(otc__sum *sum, double start, double stop, int slack, otc__events *out);
 void otc__events_clear(otc__events *events);
+otc_status otc__current_candidate_assembly(const cJSON *selected_bin, const otc__events *extrema, const otc__events *slack, otc__current_candidate **out, size_t *count);
+int otc__option_env_on(const char *value);
+int otc__prediction_available(void);
+otc_status otc__prediction_window(otc_release *rel, const otc_predict_opts *opts,
+                                  int64_t start, int64_t stop, int series);
+otc_status otc__selected_datum_term(const otc_release *rel, const otc_station_t *station,
+                                  const otc_set *set, const char *argument, double *out);
+otc_status otc__events_find_unrounded(otc__sum *sum, double start, double stop, int slack, otc__events *out);
 #endif /* OTC_INTERNAL_H */
