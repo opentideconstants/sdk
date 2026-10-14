@@ -231,7 +231,13 @@ export function prunePartialSync(dir: string, verified: (file: string, requireDa
     };
     try {
         // Taking the lock changes the parent mtime. Judge age only from this pre-take reading (DR89).
-        const mtime = fs.statSync(dir).mtimeMs;
+        const candidate = fs.lstatSync(dir);
+        if (!candidate.isDirectory()) return;
+        const sameDirectory = (): boolean => {
+            const current = fs.lstatSync(dir);
+            return current.isDirectory() && current.dev === candidate.dev && current.ino === candidate.ino;
+        };
+        const mtime = candidate.mtimeMs;
         // Leave a young directory untouched so repeated pruning does not restart its abandonment age.
         if (Date.now() - mtime <= 120_000) return;
         const plant = process.env["OTC_TEST_PRUNE_PLANT_VERIFIED"];
@@ -241,6 +247,7 @@ export function prunePartialSync(dir: string, verified: (file: string, requireDa
             fs.writeFileSync(path.join(dir, ".verified"), fs.readFileSync(plant));
             log("warn", `test hook planted .verified in ${dir}`);
         }
+        if (!sameDirectory()) return;
         if (!tryLockSync(dir)) {
             log("info", `prune: ${dir} is locked by another process; it is kept`);
             return;
@@ -254,7 +261,7 @@ export function prunePartialSync(dir: string, verified: (file: string, requireDa
             return;
         }
         if (Date.now() - mtime <= 120_000) return;
-        if (!owns()) return;
+        if (!owns() || !sameDirectory()) return;
         // Invalidate first; remove content while holding the lock, then release and rmdir, without recursion.
         fs.rmSync(path.join(dir, ".verified"), { force: true });
         for (const name of fs.readdirSync(dir)) {
