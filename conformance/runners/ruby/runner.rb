@@ -402,11 +402,13 @@ class Runner
 
     def station(st)
         set = st.recommended_set
-        { "station_id" => st.station_id, "name" => st.name, "country" => st.country, "lat" => st.lat,
+        out = { "station_id" => st.station_id, "name" => st.name, "country" => st.country, "lat" => st.lat,
           "lon" => st.lon, "type" => s(st.type), "kind" => s(st.kind), "timezone" => st.timezone,
           "aliases" => st.aliases.to_h { |k, v| [k.to_s, v] }, "status" => s(st.status),
           "is_reference" => st.reference?, "is_subordinate" => st.subordinate?, "is_tide" => st.tide?,
           "is_current" => st.current?, "recommended_set_id" => set && set.set_id }
+        out["recommended_is_fallback"] = st.recommended_is_fallback unless st.recommended_is_fallback.nil?
+        out
     end
 
     def tombstone(t)
@@ -418,7 +420,7 @@ class Runner
     def constant_set(set)
         span = set.record_span
         datum = set.datum
-        { "set_id" => set.set_id, "source" => set.source, "source_type" => s(set.source_type),
+        out = { "set_id" => set.set_id, "source" => set.source, "source_type" => s(set.source_type),
           "quantity" => s(set.quantity), "source_record_id" => set.source_record_id,
           "source_version" => set.source_version,
           "record_span" => span && { "start" => time(span.start), "end" => time(span.end), "good_samples" => span.good_samples },
@@ -429,6 +431,8 @@ class Runner
           "time_base" => time_base(set.time_base),
           "is_recommended" => set.recommended?, "convention_id" => set.convention.convention_id,
           "licence_id" => set.licence.licence_id, "constituent_count" => set.constituents.size }
+        out["fallback"] = as_returned(set.fallback, %w[reason basis otc_finding preferred_set_id]) unless set.fallback.nil?
+        out
     end
 
     def constituent(c)
