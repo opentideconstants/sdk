@@ -270,16 +270,24 @@ internal extension Reader {
             }
         }
         if supplied != nil || indexPath.map({ FileManager.default.fileExists(atPath:$0.path) })==true {
+            var authenticated:(JSONValue,[IndexEntry])?
             do {
                 let doc=try JSONValue.parse(supplied?.bytes ?? read(indexPath!))
                 let admitted=try authenticate_station_index(doc,url:url,meta:meta,digest:digest!,size:size!)
+                authenticated=(doc,admitted)
+            } catch {
+                if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+            }
+            if let (doc,admitted)=authenticated {
                 try eachLine(url) { line,_ in
                     try validateSourceStation(JSONValue.parse(line),conventions:conventions,licences:licences)
                 }
-                let release=try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
-                return AuthenticatedStationIndex(release:release,document:doc)
-            } catch {
-                if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+                do {
+                    let release=try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+                    return AuthenticatedStationIndex(release:release,document:doc)
+                } catch {
+                    if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+                }
             }
         }
         var entries:[IndexEntry]=[]
