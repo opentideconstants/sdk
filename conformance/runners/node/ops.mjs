@@ -87,7 +87,13 @@ function encSet(cs) {
         constituent_count: cs.constituents.length,
     };
     const fallback = need(cs, "fallback");
-    if (fallback !== null) out.fallback = pick(fallback, ["reason", "basis", "otc_finding", "preferred_set_id"]);
+    if (fallback !== null) {
+        out.fallback = pick(fallback, ["reason", "basis", "otc_finding", "preferred_set_id"]);
+        const raw = need(fallback, "raw");
+        for (const field of ["reason", "basis", "otc_finding"]) {
+            if (!Object.hasOwn(raw, field) || raw[field] === null) out.fallback[field] = null;
+        }
+    }
     return out;
 }
 
