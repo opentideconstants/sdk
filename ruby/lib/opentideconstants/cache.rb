@@ -249,7 +249,8 @@ class OpenTideConstants
             taken = try_lock(dir) do
                 ver = verified(datestamp) # again, now under the lock
                 next if same.call(ver)
-                write_verified(datestamp, {}, "zenodo_version_doi" => doi)
+                ver["zenodo_version_doi"] = doi
+                write_atomic(File.join(dir, ".verified"), Cache.encode_cache_json(ver))
             end
             log(:debug, "#{dir} is locked by another process; its version DOI is noted later") unless taken
         rescue CacheError, FileError => e
