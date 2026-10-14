@@ -79,7 +79,7 @@ class OpenTideConstants
             end
             request = context.prepared_station_request
             matches = arguments.station.is_a?(Station) ? request.equal?(arguments.station) : request == arguments.station
-            unless matches && context.prepared_station.instance_variable_get(:@origin).equal?(context.native_receiver) && context.prepared_station.station_id == (request.is_a?(Station) ? request.station_id : request)
+            unless matches && context.prepared_station.instance_variable_get(:@origin).equal?(context.native_receiver.__send__(:station_origin)) && context.prepared_station.station_id == (request.is_a?(Station) ? request.station_id : request)
                 raise Unimplemented.new("B01 mismatched prepared B29/B08 station binding")
             end
         end
@@ -219,11 +219,52 @@ class OpenTideConstants
         end
 
         def decode_release_document(source_bytes:, reader_version:, document_kind:)
-            raise Unimplemented.new("B05")
+            require_native_reader_version(reader_version)
+            if document_kind == "station_row" && reader_version.native_context.is_a?(Release)
+                # Keep the native lazy parser's error text and the subsequent
+                # owner's check_line! boundary, rather than moving its guards.
+                raw, why = reader_version.native_context.__send__(:parse_station, source_bytes.dup)
+                raise InvalidReleaseError, why if why
+                return raw
+            end
+            document = Reader.parse_json(source_bytes.dup.force_encoding(Encoding::UTF_8))
+            case document_kind
+            when "release"
+                Release.check_format!(document)
+            when "station_row"
+                raise InvalidReleaseError, "a station is not an object" unless document.is_a?(Hash)
+                if document["status"] == "removed"
+                    Release.check_tombstone!(document)
+                elsif document["status"].nil? || document["status"] == "active"
+                    Release.check_station!(document)
+                end
+            when "pointer"
+                OpenTideConstants.allocate.__send__(:check_entry!, document, "OTC_latest.json")
+            when "catalogue"
+                OpenTideConstants.allocate.__send__(:index_entries, document)
+            when "cache"
+                # The caller's cache-kind admission is separate from decoding.
+                # Cache documents keep their exact optional/unknown fields.
+            else
+                raise Unimplemented.new("B05 unsupported document kind #{document_kind}")
+            end
+            document
+        end
+
+        def require_native_reader_version(version)
+            declared = "#{version.major}.#{version.minor}"
+            raise Unimplemented.new("B05 requires the native Ruby reader version") unless declared == SUPPORTED_FORMAT_VERSION
         end
 
         def validate_release_links(parsed_document:, required_links:)
-            raise Unimplemented.new("B06")
+            Release.check_format!(parsed_document)
+            stations = parsed_document["stations"]
+            raise InvalidReleaseError, "stations missing" unless stations.is_a?(Array)
+            graph = Release.allocate
+            graph.__send__(:prepare_release_fields, meta: parsed_document.reject { |key, _| key == "stations" }, mode: :eager, files: [], checks: {})
+            graph.__send__(:load_stations, stations.map { |station| [station, nil, nil] })
+            graph.__send__(:close)
+            parsed_document
         end
 
         def materialize_typed_model(raw_fields:, field_contract:, origin:, model_type:)
@@ -364,7 +405,14 @@ class OpenTideConstants
         end
 
         def access_raw_record(access_kind:, source_record:, station:, release_origin:, native_profile:)
-            raise Unimplemented.new("B08")
+            case access_kind
+            when "raw_record"
+                retain_raw_source_record(source_record: source_record, native_profile: native_profile)
+            when "station_object"
+                check_station_origin(station: station, release_origin: release_origin)
+            else
+                raise Unimplemented.new("B08 unsupported access kind #{access_kind}")
+            end
         end
 
         def open_client_release(arguments:, environment:, platform_defaults:, cache_state:, clock:, native_profile:, reader_version:)
@@ -392,11 +440,40 @@ class OpenTideConstants
         end
 
         def enforce_resource_lifetime(resource_state:, lifetime_action:)
-            raise Unimplemented.new("B15")
+            owner = resource_state.is_a?(CanonicalTypes::StreamReader) ? resource_state.release_view : resource_state
+            unless owner.is_a?(OpenTideConstants) || owner.is_a?(Release)
+                raise Unimplemented.new("B15 requires genuine native resource owner")
+            end
+            if lifetime_action == "close"
+                owner.__send__(:close)
+            elsif !%w[release_metadata raw provenance last_error loaded_from newer_format_major].include?(lifetime_action)
+                owner.__send__(:check_open!)
+            end
+            resource_state
         end
 
         def bind_checksum_manifest(checksum_bytes:, pointer_digests:, required_files:)
-            raise Unimplemented.new("B16")
+            path = required_files.first
+            sha_name = if checksum_bytes.is_a?(CanonicalTypes::ChecksumBytes)
+                checksum_bytes.source
+            else
+                path ? "#{Reader.parse_name(path).first}.sha256" : pointer_digests.keys.find { |name| name.end_with?(".sha256") }
+            end
+            sha_name ||= "the .sha256 file"
+            expected = pointer_digests[sha_name]
+            if expected
+                actual = Digest::SHA256.hexdigest(checksum_bytes.b)
+                unless expected.downcase == actual
+                    raise ChecksumError.new("#{sha_name} does not match the pointer", file: sha_name, expected: expected.downcase, actual: actual)
+                end
+            end
+            rows = Reader.parse_sha256(checksum_bytes, sha_name)
+            Reader.need_rows!(path, required_files, rows, sha_name) if path
+            unless pointer_digests.empty?
+                entry = { "files" => pointer_digests.map { |name, digest| { "name" => name, "sha256" => digest } } }
+                Downloader.check_agreement(entry, sha_name, rows)
+            end
+            rows
         end
 
         def acquire_release_files(acquisition_descriptor:, effective_options:, load_mode:, cache_state:, clock:, reader_version:)
@@ -412,7 +489,9 @@ class OpenTideConstants
         end
 
         def verify_release_files(release_files:, trusted_cached_pointer:)
-            raise Unimplemented.new("B20")
+            raise Unimplemented.new("B20 requires genuine loaded file owner") unless release_files.is_a?(OpenTideConstants)
+            release_files.__send__(:check_open!)
+            release_files.__send__(:verify_release_integrity, canonical: self, trusted_cached_pointer: trusted_cached_pointer)
         end
 
         def publish_download(destination:, format_selection:, overwrite_policy:, release_files:, checksum_bytes:, pointer_digests:)
@@ -432,15 +511,59 @@ class OpenTideConstants
         end
 
         def authenticate_station_index(source_files:, supplied_index:, index_presence:, reader_version:)
-            raise Unimplemented.new("B25")
+            owner = source_files
+            unless owner.is_a?(OpenTideConstants) && owner.instance_variable_get(:@file).nil? && owner.instance_variable_get(:@mode) == :stream
+                raise Unimplemented.new("B25 requires genuine cached stream source owner")
+            end
+            owner.__send__(:check_open!)
+            require_native_reader_version(reader_version)
+            release = owner.instance_variable_get(:@release)
+            datestamp = release.datestamp
+            verified = owner.__send__(:cache).verified(datestamp)
+            raise Unimplemented.new("B25 requires actual verified source files") unless verified
+            paths = release.__send__(:opened_paths)
+            opts = { mode: :stream, files: release.files, checks: release.instance_variable_get(:@checks), verify: true,
+                     zenodo_version_doi: release.zenodo_version_doi, logger: owner.instance_variable_get(:@logger),
+                     commercial_only: owner.instance_variable_get(:@commercial_only), commercial_basis: owner.instance_variable_get(:@commercial_basis),
+                     historical_offsets_policy: owner.instance_variable_get(:@historical_offsets_policy) }
+            document = nil
+            native_release = owner.__send__(:load_cached_stream, datestamp, verified, paths.first, opts, canonical: self,
+                                           supplied_index: supplied_index, index_presence: index_presence,
+                                           on_index: ->(index) { document = index })
+            Util.deep_freeze(document)
+            CanonicalTypes::AuthenticatedIndex.new(
+                index_version: document.fetch("index_version"), discovery_index_version: document.fetch("discovery_index_version", CanonicalTypes::ABSENT),
+                datestamp: document.fetch("datestamp"), jsonl: document.fetch("jsonl"), jsonl_sha256: document.fetch("jsonl_sha256"),
+                jsonl_size: document.fetch("jsonl_size"), by: document.fetch("by", CanonicalTypes::ABSENT), stations: document.fetch("stations"),
+                native_context: native_release, source_document: document)
         end
 
         def compare_station_source(index_entry:, station_source_row:, index_presence:)
-            raise Unimplemented.new("B26")
+            owner = index_presence
+            unless owner.is_a?(Release) && index_entry.is_a?(Release::Entry) && owner.instance_variable_get(:@by_id)[index_entry.station_id].equal?(index_entry) && index_entry.view
+                raise Unimplemented.new("B26 requires genuine indexed Entry and its producing Release presence")
+            end
+            owner.__send__(:check_line!, station_source_row, index_entry)
+            station_source_row
         end
 
         def read_station_lazily(stream_reader:, station_id:, release_origin:, reader_version:)
-            raise Unimplemented.new("B27")
+            owner = stream_reader.is_a?(CanonicalTypes::StreamReader) ? stream_reader.release_view : stream_reader
+            unless owner.is_a?(Release) && release_origin.equal?(owner)
+                raise Unimplemented.new("B27 requires genuine producing Release reader context")
+            end
+            enforce_resource_lifetime(resource_state: stream_reader, lifetime_action: "station_read")
+            require_native_reader_version(reader_version)
+            if stream_reader.is_a?(CanonicalTypes::StreamReader)
+                io = owner.instance_variable_get(:@io)
+                unless io && io.fileno == stream_reader.file_descriptor && owner.instance_variable_get(:@station_cache).equal?(stream_reader.station_lru)
+                    raise Unimplemented.new("B27 mismatched borrowed reader descriptor or native LRU")
+                end
+            end
+            entry = owner.instance_variable_get(:@by_id)[station_id]
+            raise StationNotFoundError, "station #{station_id} not found" unless entry
+            native_version = CanonicalTypes::ReaderVersion.new(major: reader_version.major, minor: reader_version.minor, native_context: owner)
+            owner.__send__(:materialize, entry, canonical: self, reader_version: native_version).raw
         end
 
         def lookup_station_identity(release_view:, identity_query:, reader_version:)
@@ -548,7 +671,9 @@ class OpenTideConstants
         end
 
         def check_station_origin(station:, release_origin:)
-            raise Unimplemented.new("B08.origin")
+            raise Unimplemented.new("B08.origin requires genuine producing Release") unless release_origin.is_a?(Release)
+            release_origin.__send__(:own_station!, station, "station")
+            station
         end
 
         def manage_cache_lock(lock_request:, lock_state:, clock:)

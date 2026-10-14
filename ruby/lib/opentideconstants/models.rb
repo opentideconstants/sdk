@@ -459,13 +459,13 @@ class OpenTideConstants
         attr_reader :station_id, :name, :country, :lat, :lon, :type, :kind, :timezone, :aliases, :status,
                     :recommended_set, :subordinate_offsets, :validation, :recommended_is_fallback, :source_records, :raw
 
-        # origin: the Release that built it (attribution checks that a Station
-        # is from its own release, spec §4.6).
+        # origin: the producing Release's private token; it retains no Release
+        # or reader descriptor (attribution still checks identity, spec §4.6).
         def initialize(raw, sets:, kind:, validation:, origin: nil, licences: {})
             @raw = Util.deep_freeze(raw)
             @recommended_is_fallback = raw["recommended_is_fallback"]
             @source_records = Array(raw["source_records"]).map { |r| SourceRecord.new(r, licences: licences) }.freeze
-            @origin = origin
+            @origin = origin.is_a?(Release) ? origin.__send__(:station_origin) : origin
             @station_id = raw["station_id"]
             @name = raw["name"]
             @country = raw["country"]

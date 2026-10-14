@@ -4,6 +4,7 @@ require "digest"
 require "fileutils"
 require "logger"
 require "time"
+require "weakref"
 require "rbs"
 require "rbs/test"
 require "opentideconstants"
@@ -11,6 +12,7 @@ require "opentideconstants/canonical"
 require_relative "support"
 
 class CanonicalShapeTest < Minitest::Test
+    include TestSupport
     ROOT = File.expand_path("../..", __dir__)
     T = OpenTideConstants.const_get(:CanonicalTypes, false)
     C = OpenTideConstants.const_get(:Canonical, false)
@@ -20,6 +22,7 @@ class CanonicalShapeTest < Minitest::Test
     EVENTS = []
     PREDICT = OpenTideConstants.const_get(:Predict, false)
     M1 = %w[B01 B02 B03 B04 B07 B08.raw B24 B39 B41 B42 B43.roots B44.roots].freeze
+    M2 = %w[B05 B06 B08 B08.origin B15 B16 B20 B25 B26 B27].freeze
 
     def setup
         @subject = C.new
@@ -142,6 +145,38 @@ class CanonicalShapeTest < Minitest::Test
         @native_client&.close
         @native_predict&.close
         @native_vectors&.__send__(:close)
+        @native_stream_client&.close
+        @native_source_graph&.__send__(:close)
+        super
+    end
+
+    def native_source_arguments(callee)
+        native_arguments
+        release = @native_client.release
+        station = release.require_station("OTC-T-0001")
+        version = OpenTideConstants::SUPPORTED_FORMAT_VERSION.split(".").map(&:to_i)
+        arguments = {
+            "B05" => { source_bytes: File.binread(File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json")), reader_version: T::ReaderVersion.new(major: version.first, minor: version.last), document_kind: "release" },
+            "B06" => { parsed_document: OpenTideConstants::Reader.parse_json(File.read(File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json"))), required_links: [] },
+            "B08" => { access_kind: "raw_record", source_record: station.raw, station: station, release_origin: release, native_profile: "ruby" },
+            "B08.origin" => { station: station, release_origin: release },
+            "B15" => { resource_state: @native_client, lifetime_action: "close" },
+            "B16" => { checksum_bytes: File.binread(File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.sha256")), pointer_digests: {}, required_files: [File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json")] },
+            "B20" => { release_files: @native_client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {}) }
+        }
+        if %w[B25 B26 B27].include?(callee)
+            server = serve
+            cache_root = tmpdir
+            OpenTideConstants.new(release: "20991231.2", base_url: server.url("/"), cache_dir: cache_root, mode: :stream).close
+            @native_stream_client = OpenTideConstants.new(release: "20991231.2", cache_dir: cache_root, mode: :stream, offline: true)
+            stream = @native_stream_client.release
+            entry = stream.instance_variable_get(:@by_id).fetch("OTC-T-0001")
+            arguments["B26"] = { index_entry: entry, station_source_row: stream.__send__(:materialize, entry).raw, index_presence: stream }
+            arguments["B27"] = { stream_reader: stream, station_id: entry.station_id, release_origin: stream, reader_version: T::ReaderVersion.new(major: version.first, minor: version.last) }
+            index = JSON.parse(File.read(File.join(@native_stream_client.__send__(:cache).release_dir("20991231.2"), "index-v1.json")))
+            arguments["B25"] = { source_files: @native_stream_client, supplied_index: index, index_presence: index.to_h { |key, _| [key, true] }, reader_version: T::ReaderVersion.new(major: version.first, minor: version.last) }
+        end
+        arguments
     end
 
     def assert_native_value(callee, result, arguments)
@@ -159,7 +194,7 @@ class CanonicalShapeTest < Minitest::Test
             original = arguments.fetch(:field_contract).native_context
             assert_equal original.station_id, result.station_id
             assert_equal original.raw, result.raw
-            assert_same arguments.fetch(:origin), result.instance_variable_get(:@origin)
+            assert_same arguments.fetch(:origin).__send__(:station_origin), result.instance_variable_get(:@origin)
             assert_same original.instance_variable_get(:@sets), result.instance_variable_get(:@sets)
             assert_equal original.constant_sets.map(&:set_id), result.constant_sets.map(&:set_id)
         when "B08.raw"
@@ -204,11 +239,36 @@ class CanonicalShapeTest < Minitest::Test
             assert_equal expected, tuples
             assert_equal (0...result.length).to_a, result.map(&:reference_order)
             refute_empty result
+        when "B05"
+            assert_equal OpenTideConstants::Reader.parse_json(arguments.fetch(:source_bytes).dup.force_encoding(Encoding::UTF_8)), result
+        when "B06"
+            assert_same arguments.fetch(:parsed_document), result
+        when "B25"
+            @native_source_graph = result.native_context
+            assert_equal arguments.fetch(:supplied_index), result.source_document
+            assert_equal @native_client.release.station_count, result.native_context.station_count
+        when "B08"
+            assert_same arguments.fetch(:source_record), result
+            assert result.frozen?
+        when "B08.origin"
+            assert_same arguments.fetch(:station), result
+        when "B15"
+            assert_same arguments.fetch(:resource_state), result
+            assert_raises(OpenTideConstants::FileError) { result.station("OTC-T-0001") }
+        when "B16"
+            assert_equal OpenTideConstants::Reader.parse_sha256(arguments.fetch(:checksum_bytes)), result
+        when "B20"
+            assert_equal true, result
+        when "B26"
+            assert_same arguments.fetch(:station_source_row), result
+        when "B27"
+            assert_equal arguments.fetch(:station_id), result.fetch("station_id")
         end
     end
 
     def observe(id, callee, arguments)
         arguments.replace(native_arguments.fetch(callee)) if M1.include?(callee)
+        arguments.replace(native_source_arguments(callee).fetch(callee)) if M2.include?(callee)
         row = LEDGER.fetch("runtime").find { |entry| entry.fetch("id") == callee }
         declaration = row.fetch("declaration")
         method = callee == "B28" ? OpenTideConstants::Cache.method(:encode_cache_json) : @subject.method(row.fetch("name"))
@@ -229,7 +289,7 @@ class CanonicalShapeTest < Minitest::Test
             assert_instance_of String, result
             assert_equal "{}", result
             refusal = nil
-        elsif M1.include?(callee)
+        elsif M1.include?(callee) || M2.include?(callee)
             if callee == "B01"
                 error = assert_raises(OpenTideConstants::InvalidArgumentError) { yield }
                 assert_equal @native_error.code, error.code
@@ -1448,8 +1508,8 @@ class CanonicalShapeTest < Minitest::Test
         assert_equal original.station_count, receiver.station_count
         assert_equal original.stations.map(&:station_id), receiver.stations.map(&:station_id)
         station = receiver.require_station(held.station_id)
-        assert_same receiver, station.instance_variable_get(:@origin)
-        assert_same original, held.instance_variable_get(:@origin)
+        assert_same receiver.__send__(:station_origin), station.instance_variable_get(:@origin)
+        assert_same original.__send__(:station_origin), held.instance_variable_get(:@origin)
         assert_equal before, JSON.generate(station.raw)
         assert_equal original.attribution([held]), receiver.attribution([station])
         assert_raises(OpenTideConstants::InvalidArgumentError) { receiver.attribution([held]) }
@@ -1511,7 +1571,7 @@ class CanonicalShapeTest < Minitest::Test
             if tag == "Station"
                 assert_same expected.instance_variable_get(:@sets), actual.instance_variable_get(:@sets)
                 assert_same expected.validation, actual.validation
-                assert_same release, actual.instance_variable_get(:@origin)
+                assert_same release.__send__(:station_origin), actual.instance_variable_get(:@origin)
                 assert_equal expected.station_id, actual.station_id
             else
                 assert_same expected.convention, actual.convention
@@ -1834,5 +1894,525 @@ class CanonicalShapeTest < Minitest::Test
         FileUtils.mkdir_p(directory)
         File.write(File.join(directory, "invocations.json"), JSON.pretty_generate(EVENTS.sort_by { |event| event.fetch("id") }) + "\n")
         puts "ACTUAL_NATIVE_INVOCATIONS runtime=#{EVENTS.count { |event| !event.fetch('id').include?('.S') }} actions=#{EVENTS.count { |event| event.fetch('id').include?('.S') }}"
+    end
+end
+
+# These consumers exercise the installed source and actual owned files. They
+# deliberately share the existing native fixtures and socket/cache helpers.
+class CanonicalSourceNativeTest < Minitest::Test
+    include TestSupport
+    OTC = OpenTideConstants
+    T = OTC.const_get(:CanonicalTypes, false)
+    C = OTC.const_get(:Canonical, false)
+    D = "20991231.2".freeze
+
+    def setup
+        @canonical = C.new
+        @clients = []
+        @releases = []
+    end
+
+    def teardown
+        @clients.each(&:close)
+        @releases.each { |release| release.__send__(:close) }
+        super
+    end
+
+    def native_client(mode: :eager, cached: false)
+        client = if cached
+            server = serve
+            cache_root = tmpdir
+            OTC.new(release: D, base_url: server.url("/"), cache_dir: cache_root, mode: mode).close
+            OTC.new(release: D, cache_dir: cache_root, mode: mode, offline: true)
+        else
+            OTC.new(file: fixture("good", "OTC_#{D}.#{mode == :stream ? 'jsonl' : 'json'}"), mode: mode)
+        end
+        @clients << client
+        client
+    end
+
+    def reader_version
+        major, minor = OTC::SUPPORTED_FORMAT_VERSION.split(".").map(&:to_i)
+        T::ReaderVersion.new(major: major, minor: minor)
+    end
+
+    def call_native(id, method, **arguments)
+        value = @canonical.__send__(method, **arguments)
+        puts "M2_NATIVE #{id} #{value.class}"
+        value
+    rescue C::Unimplemented => error
+        puts "M2_NATIVE_RED #{id} #{error.message}"
+        raise
+    end
+
+    def native_phase_trace
+        calls = []
+        trace = TracePoint.new(:call) do |point|
+            next unless point.path.include?("/opentideconstants/")
+            calls << point.method_id if %i[decode_release_document compare_station_source enforce_resource_lifetime materialize project_station_index write_stream_index drop_stream_index].include?(point.method_id)
+        end
+        trace.enable
+        result = yield
+        [result, calls]
+    ensure
+        trace&.disable
+    end
+
+    def same_native_error(expected, actual)
+        assert_equal expected.class, actual.class
+        assert_equal expected.code, actual.code
+        assert_equal expected.message, actual.message
+        %i[file expected actual path].each do |field|
+            next unless expected.respond_to?(field)
+            value = expected.public_send(field)
+            value.nil? ? assert_nil(actual.public_send(field)) : assert_equal(value, actual.public_send(field))
+        end
+    end
+
+    def test_m2_B05_native_release_decode
+        bytes = File.binread(fixture("good", "OTC_#{D}.json"))
+        document = call_native("B05", :decode_release_document, source_bytes: bytes, reader_version: reader_version, document_kind: "release")
+        assert_equal OTC::Reader.parse_json(bytes.force_encoding(Encoding::UTF_8)), document
+    end
+
+    def test_m2_B06_native_release_links
+        document = OTC::Reader.parse_json(File.read(fixture("good", "OTC_#{D}.json")))
+        graph = call_native("B06", :validate_release_links, parsed_document: document, required_links: [])
+        assert_same document, graph
+    end
+
+    def test_m2_B06_returns_the_actual_validated_source_graph
+        document = OTC::Reader.parse_json(File.read(fixture("good", "OTC_#{D}.json")))
+        result = @canonical.__send__(:validate_release_links, parsed_document: document, required_links: [])
+        @releases << result if result.is_a?(OTC::Release)
+        assert_same document, result
+    end
+
+    def test_m2_B06_native_identity_and_link_error_matrix
+        cases = %w[duplicate-station-id tombstone-twice duplicate-alias duplicate-set-id set-id-across-stations duplicate-convention-id duplicate-licence-id constituent-name-twice unresolved-convention unresolved-licence unresolved-recommended unresolved-reference-station unresolved-offsets-licence]
+        cases.each do |name|
+            path = fixture("bad/#{name}", "OTC_20991231.json")
+            document = OTC::Reader.parse_json(File.read(path))
+            expected = assert_raises(OTC::InvalidReleaseError) { OTC::Reader.eager_from_doc(document, files: [], checks: {}) }
+            actual = assert_raises(OTC::InvalidReleaseError) { @canonical.__send__(:validate_release_links, parsed_document: document, required_links: []) }
+            same_native_error(expected, actual)
+        end
+        document = OTC::Reader.parse_json(File.read(fixture("good", "OTC_#{D}.json")))
+        row = document.fetch("stations").first
+        row["current_offsets"] = [{ "reference_station_id" => "absent", "reference_bin" => 1, "bin" => 1 }]
+        native = OTC::Reader.eager_from_doc(document, files: [], checks: {})
+        graph = @canonical.__send__(:validate_release_links, parsed_document: document, required_links: [])
+        @releases << native
+        assert_equal native.require_station(row.fetch("station_id")).raw, graph.fetch("stations").find { |station| station["station_id"] == row["station_id"] }
+    end
+
+    def test_m2_B08_native_raw_access
+        release = native_client.release
+        station = release.require_station("OTC-T-0001")
+        result = call_native("B08", :access_raw_record, access_kind: "raw_record", source_record: station.raw, station: station, release_origin: release, native_profile: "ruby")
+        assert_same station.raw, result
+        assert result.frozen?
+    end
+
+    def test_m2_B08_origin_native_same_release
+        release = native_client.release
+        station = release.require_station("OTC-T-0001")
+        assert_same station, call_native("B08.origin", :check_station_origin, station: station, release_origin: release)
+    end
+
+    def test_m2_B08_native_station_dispatch
+        release = native_client.release
+        station = release.require_station("OTC-T-0001")
+        assert_same station, call_native("B08", :access_raw_record, access_kind: "station_object", source_record: station.raw, station: station, release_origin: release, native_profile: "ruby")
+    end
+
+    def test_m2_B15_native_owned_lifetime
+        client = native_client(mode: :stream)
+        io = client.release.instance_variable_get(:@io)
+        assert_same client, call_native("B15", :enforce_resource_lifetime, resource_state: client, lifetime_action: "close")
+        assert io.closed?
+        assert_raises(OTC::FileError) { client.require_station("OTC-T-0001") }
+    end
+
+    def test_m2_B16_native_checksum_manifest
+        path = fixture("good", "OTC_#{D}.sha256")
+        bytes = File.binread(path)
+        rows = call_native("B16", :bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: {}, required_files: [fixture("good", "OTC_#{D}.jsonl"), fixture("good", "OTC_#{D}.meta.json")])
+        assert_equal OTC::Reader.parse_sha256(bytes), rows
+    end
+
+    def test_m2_B20_native_file_verification
+        client = native_client
+        assert_equal true, call_native("B20", :verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {}))
+        assert_equal true, client.verify
+    end
+
+    def test_m2_B20_malformed_sidecar_keeps_native_filename_error
+        directory = tmpdir
+        FileUtils.cp_r(Dir[File.join(FIXTURES, "good", "*")], directory)
+        client = OTC.new(file: File.join(directory, "OTC_#{D}.json"))
+        @clients << client
+        File.binwrite(File.join(directory, "OTC_#{D}.sha256"), "bad row\n")
+        expected = assert_raises(OTC::InvalidReleaseError) { client.verify }
+        actual = assert_raises(OTC::InvalidReleaseError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
+        assert_equal expected.message, actual.message
+    end
+
+    def test_m2_B20_actual_tamper_missing_and_cached_pointer_fail_before_healing
+        client = native_client(mode: :stream, cached: true)
+        directory = client.__send__(:cache).release_dir(D)
+        path = File.join(directory, "OTC_#{D}.jsonl")
+        original = File.binread(path)
+        changed = original.sub('"country":"USA"', '"country":"ZZZ"')
+        refute_equal original, changed
+        File.binwrite(path, changed)
+        request_count = @servers.sum { |server| server.requests.size }
+        expected = assert_raises(OTC::ChecksumError) { client.verify }
+        actual = assert_raises(OTC::ChecksumError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
+        same_native_error(expected, actual)
+        assert_equal changed, File.binread(path)
+        assert_equal request_count, @servers.sum { |server| server.requests.size }
+        File.binwrite(path, original)
+        sums = File.join(directory, "OTC_#{D}.sha256")
+        pointer = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json")))
+        client.__send__(:cache).write_pointer("OTC_latest-f1.json", JSON.generate(pointer), nil)
+        File.open(sums, "ab") { |file| file.write("\n") }
+        expected = assert_raises(OTC::ChecksumError) { client.verify }
+        actual = assert_raises(OTC::ChecksumError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
+        same_native_error(expected, actual)
+        assert File.file?(sums)
+        File.unlink(sums)
+        expected = assert_raises(OTC::ChecksumError) { client.verify }
+        actual = assert_raises(OTC::ChecksumError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
+        same_native_error(expected, actual)
+        assert_equal request_count, @servers.sum { |server| server.requests.size }
+        File.binwrite(sums, File.binread(fixture("good", "OTC_#{D}.sha256")))
+        File.unlink(path)
+        expected = assert_raises(OTC::FileError) { client.verify }
+        actual = assert_raises(OTC::FileError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
+        same_native_error(expected, actual)
+        assert_equal request_count, @servers.sum { |server| server.requests.size }
+    end
+
+    def test_m2_B25_native_authenticated_index
+        client = native_client(mode: :stream, cached: true)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        doc = JSON.parse(File.read(path))
+        result = call_native("B25", :authenticate_station_index, source_files: client, supplied_index: doc, index_presence: doc.to_h { |key, _| [key, true] }, reader_version: reader_version)
+        @releases << result.native_context
+        assert_equal client.release.station_count, result.native_context.station_count
+        assert_equal doc, JSON.parse(File.read(path))
+    end
+
+    def test_m2_B25_returns_actual_authenticated_index_fields_and_owner
+        client = native_client(mode: :stream, cached: true)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        document = JSON.parse(File.read(path))
+        result = authenticated_native_index(client)
+        assert_respond_to result, :jsonl_sha256
+        assert_equal document.fetch("jsonl_sha256"), result.jsonl_sha256
+        assert_equal document.fetch("stations"), result.stations
+        assert_equal document, result.source_document
+        assert_instance_of OTC::Release, result.native_context
+    end
+
+    def test_m2_B25_actual_legacy_presence_and_unknown_fields_are_retained
+        client = native_client(mode: :stream, cached: true)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        original = JSON.parse(File.read(path))
+        [false, true].each do |sparse|
+            document = Marshal.load(Marshal.dump(original))
+            document.delete("discovery_index_version")
+            document.delete("by")
+            document["unknown"] = { "ordered" => [false, nil, "e\u0301", { "z" => 2, "a" => 1 }] }
+            document["stations"].each do |row|
+                row["sets"].each do |set|
+                    set.delete("fallback") if sparse && set["fallback"].nil?
+                    set.delete("current_bins") if sparse
+                end
+                row.delete("subordinate_offsets") if sparse && row["subordinate_offsets"].nil?
+                row.delete("current_offsets") if sparse && row["current_offsets"].empty?
+            end
+            File.binwrite(path, JSON.generate(document))
+            before = File.binread(path)
+            result, calls = native_phase_trace { authenticated_native_index(client) }
+            assert_equal before, File.binread(path)
+            assert_equal document, result.source_document
+            assert_same T::ABSENT, result.discovery_index_version
+            assert_same T::ABSENT, result.by
+            refute_includes calls, :project_station_index
+            assert_equal client.release.require_station("OTC-T-0001").raw, result.native_context.require_station("OTC-T-0001").raw
+            assert result.source_document.frozen?
+        end
+    end
+
+    def authenticated_native_index(client)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        document = File.file?(path) ? JSON.parse(File.read(path)) : nil
+        presence = document.is_a?(Hash) ? document.to_h { |key, _| [key, true] } : {}
+        result = @canonical.__send__(:authenticate_station_index, source_files: client, supplied_index: document, index_presence: presence, reader_version: reader_version)
+        @releases << result.native_context
+        result
+    end
+
+    def test_m2_B25_stale_index_rebuilds_native_source_once
+        client = native_client(mode: :stream, cached: true)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        original = JSON.parse(File.read(path))
+        invalid = Marshal.load(Marshal.dump(original))
+        invalid["discovery_index_version"] = 2
+        File.binwrite(path, JSON.generate(invalid))
+        result = authenticated_native_index(client)
+        assert_equal original, JSON.parse(File.read(path))
+        assert_equal client.release.station_count, result.native_context.station_count
+    end
+
+    def test_m2_B25_valid_stale_absent_and_index_fault_ordered_effects
+        client = native_client(mode: :stream, cached: true)
+        path = File.join(client.__send__(:cache).release_dir(D), "index-v1.json")
+        original = File.binread(path)
+        before = File.stat(path).ino
+        result, calls = native_phase_trace { authenticated_native_index(client) }
+        assert_equal before, File.stat(path).ino
+        refute_includes calls, :project_station_index
+        refute_includes calls, :write_stream_index
+        refute_includes calls, :drop_stream_index
+        assert_empty result.native_context.instance_variable_get(:@station_cache)
+        mutations = [
+            ->(index) { index["discovery_index_version"] = nil },
+            ->(index) { index["stations"].first["offset"] = -1 },
+            ->(index) { index["stations"].reject! { |row| row["station_id"] == "OTC-T-0011" } },
+            ->(index) { index["stations"].first["kind"] = "current" }
+        ]
+        source_rows = File.readlines(File.join(client.__send__(:cache).release_dir(D), "OTC_#{D}.jsonl")).count { |line| !OTC::Reader.blank?(line) }
+        mutations.each do |mutate|
+            index = JSON.parse(original)
+            mutate.call(index)
+            File.binwrite(path, JSON.generate(index))
+            _result, calls = native_phase_trace { authenticated_native_index(client) }
+            assert_equal 1, calls.count(:drop_stream_index)
+            assert_equal source_rows, calls.count(:project_station_index)
+            assert_equal 1, calls.count(:write_stream_index)
+            assert_operator calls.index(:drop_stream_index), :<, calls.index(:project_station_index)
+            assert_operator calls.rindex(:project_station_index), :<, calls.index(:write_stream_index)
+            assert_equal original, File.binread(path)
+        end
+        File.unlink(path)
+        _result, calls = native_phase_trace { authenticated_native_index(client) }
+        assert_equal 0, calls.count(:drop_stream_index)
+        assert_equal source_rows, calls.count(:project_station_index)
+        assert_equal original, File.binread(path)
+    end
+
+    def test_m2_B25_authentication_failure_precedes_index_read_or_delete
+        client = native_client(mode: :stream, cached: true)
+        directory = client.__send__(:cache).release_dir(D)
+        index_path = File.join(directory, "index-v1.json")
+        index_bytes = File.binread(index_path)
+        %w[jsonl meta.json].each do |extension|
+            path = File.join(directory, "OTC_#{D}.#{extension}")
+            original = File.binread(path)
+            File.binwrite(path, "X" + original.byteslice(1..))
+            _result, calls = native_phase_trace do
+                assert_raises(OTC::ChecksumError) { authenticated_native_index(client) }
+            end
+            refute_includes calls, :drop_stream_index
+            refute_includes calls, :project_station_index
+            assert_equal index_bytes, File.binread(index_path)
+            File.binwrite(path, original)
+        end
+    end
+
+    def test_m2_B26_native_source_comparison
+        client = native_client(mode: :stream, cached: true)
+        release = client.release
+        station = release.require_station("OTC-T-0001")
+        entry = release.instance_variable_get(:@by_id).fetch(station.station_id)
+        assert_same station.raw, call_native("B26", :compare_station_source, index_entry: entry, station_source_row: station.raw, index_presence: release)
+    end
+
+    def test_m2_B27_native_lazy_read
+        release = native_client(mode: :stream).release
+        assert_empty release.instance_variable_get(:@station_cache)
+        row = call_native("B27", :read_station_lazily, stream_reader: release, station_id: "OTC-T-0001", release_origin: release, reader_version: reader_version)
+        assert_equal "OTC-T-0001", row.fetch("station_id")
+        assert_same row, release.require_station("OTC-T-0001").raw
+        assert_equal 1, release.instance_variable_get(:@station_cache).size
+    end
+
+    def test_m2_B27_closed_borrowed_reader_checks_lifetime_first
+        release = native_client(mode: :stream).release
+        io = release.instance_variable_get(:@io)
+        reader = T::StreamReader.new(release_view: release, file_descriptor: io.fileno, index: nil, index_presence: nil, station_lru: release.instance_variable_get(:@station_cache), closed: false)
+        release.__send__(:close)
+        error = assert_raises(OTC::FileError) { @canonical.__send__(:read_station_lazily, stream_reader: reader, station_id: "OTC-T-0001", release_origin: release, reader_version: reader_version) }
+        assert_equal "io", error.code
+        assert_equal io.path, error.path
+    end
+
+    def test_m2_B27_nonobject_row_keeps_native_first_error
+        client = native_client(mode: :stream, cached: true)
+        release = client.release
+        entry = release.instance_variable_get(:@by_id).fetch("OTC-T-0001")
+        io = release.instance_variable_get(:@io)
+        File.open(io.path, "r+b") do |file|
+            file.seek(entry.pos)
+            file.write("null" + " " * (entry.len - 4))
+        end
+        expected = assert_raises(OTC::InvalidReleaseError) { release.require_station(entry.station_id) }
+        actual = assert_raises(OTC::InvalidReleaseError) { @canonical.__send__(:read_station_lazily, stream_reader: release, station_id: entry.station_id, release_origin: release, reader_version: reader_version) }
+        assert_equal expected.message, actual.message
+    end
+
+    def test_m2_B26_B27_lazy_presence_mismatch_and_exact_cache_actions
+        client = native_client(mode: :stream, cached: true)
+        release = client.release
+        arguments = { stream_reader: release, station_id: "OTC-T-0001", release_origin: release, reader_version: reader_version }
+        first, calls = native_phase_trace { @canonical.__send__(:read_station_lazily, **arguments) }
+        assert_operator calls.index(:enforce_resource_lifetime), :<, calls.index(:decode_release_document)
+        assert_operator calls.index(:decode_release_document), :<, calls.index(:compare_station_source)
+        assert_equal 1, calls.count(:decode_release_document)
+        assert_equal 1, calls.count(:compare_station_source)
+        again, calls = native_phase_trace { @canonical.__send__(:read_station_lazily, **arguments) }
+        assert_same first, again
+        refute_includes calls, :decode_release_document
+        refute_includes calls, :compare_station_source
+        entry = release.instance_variable_get(:@by_id).fetch("OTC-T-0001")
+        tampered = Marshal.load(Marshal.dump(first))
+        tampered["country"] = "ZZ"
+        expected = assert_raises(OTC::InvalidReleaseError) { release.__send__(:check_line!, tampered, entry) }
+        actual = assert_raises(OTC::InvalidReleaseError) { @canonical.__send__(:compare_station_source, index_entry: entry, station_source_row: tampered, index_presence: release) }
+        same_native_error(expected, actual)
+        refute File.file?(File.join(client.__send__(:cache).release_dir(D), "index-v1.json"))
+        assert_equal 1, release.instance_variable_get(:@station_cache).size
+    end
+
+    def test_m2_B08_B27_real_native_lru_eviction_preserves_token_and_raw
+        path = release_file("jsonl") do |document|
+            original = document.fetch("stations").first
+            document["stations"] = 257.times.map do |index|
+                row = Marshal.load(Marshal.dump(original))
+                row["station_id"] = "LRU-#{index}"
+                row["aliases"] = {}
+                row["constant_sets"].each { |set| set["set_id"] = "LRU-#{index}/#{set.fetch('source')}" }
+                row["recommended_set_id"] = row["constant_sets"].first.fetch("set_id")
+                row
+            end
+        end
+        client = OTC.new(file: path, mode: :stream)
+        @clients << client
+        release = client.release
+        first = release.require_station("LRU-0")
+        (1..256).each { |index| @canonical.__send__(:read_station_lazily, stream_reader: release, station_id: "LRU-#{index}", release_origin: release, reader_version: reader_version) }
+        cache = release.instance_variable_get(:@station_cache)
+        assert_equal 256, cache.size
+        refute cache.key?("LRU-0")
+        raw = @canonical.__send__(:read_station_lazily, stream_reader: release, station_id: "LRU-0", release_origin: release, reader_version: reader_version)
+        again = release.require_station("LRU-0")
+        refute_same first, again
+        assert_equal first.raw, raw
+        assert_same first.instance_variable_get(:@origin), again.instance_variable_get(:@origin)
+        assert_same first, @canonical.__send__(:check_station_origin, station: first, release_origin: release)
+        assert_same again, @canonical.__send__(:check_station_origin, station: again, release_origin: release)
+        client.close
+        assert_empty cache
+        assert_equal first.raw, raw
+    end
+
+    def test_m2_B05_native_decode_errors_and_document_kinds
+        release = native_client.release
+        row = release.require_station("OTC-T-0001").raw
+        decoded = call_native("B05", :decode_release_document, source_bytes: JSON.generate(row).b, reader_version: reader_version, document_kind: "station_row")
+        assert_equal row, decoded
+        cases = ["\xff".b, '{"format_version":', '{"format_version":"99.0"}', '{"format_version":"1.0","release":{"min_reader_version":"99.0"}}']
+        cases.each do |bytes|
+            expected = begin
+                doc = OTC::Reader.parse_json(bytes.dup.force_encoding(Encoding::UTF_8))
+                OTC::Release.check_format!(doc)
+            rescue OTC::Error => error
+                error
+            end
+            actual = assert_raises(expected.class) { @canonical.__send__(:decode_release_document, source_bytes: bytes.b, reader_version: reader_version, document_kind: "release") }
+            assert_equal expected.code, actual.code
+            assert_equal expected.message, actual.message
+        end
+        pointer = { "datestamp" => D, "files" => [] }
+        assert_equal pointer, @canonical.__send__(:decode_release_document, source_bytes: JSON.generate(pointer).b, reader_version: reader_version, document_kind: "pointer")
+        catalogue = { "releases" => [pointer] }
+        assert_equal catalogue, @canonical.__send__(:decode_release_document, source_bytes: JSON.generate(catalogue).b, reader_version: reader_version, document_kind: "catalogue")
+        cache = '{"unknown":[1,null,"e\\u0301"],"duplicate":1,"duplicate":2}'
+        assert_equal OTC::Reader.parse_json(cache), @canonical.__send__(:decode_release_document, source_bytes: cache.b, reader_version: reader_version, document_kind: "cache")
+    end
+
+    def test_m2_B08_foreign_release_and_raw_provenance
+        first, second = native_client.release, native_client.release
+        station = first.require_station("OTC-T-0001")
+        foreign = second.require_station(station.station_id)
+        assert_equal first.datestamp, second.datestamp
+        assert_equal station.raw, foreign.raw
+        error = assert_raises(OTC::InvalidArgumentError) { @canonical.__send__(:check_station_origin, station: foreign, release_origin: first) }
+        assert_equal "invalid_argument", error.code
+        raw = station.raw.fetch("constant_sets").first
+        assert_same raw, @canonical.__send__(:access_raw_record, access_kind: "raw_record", source_record: raw, station: station, release_origin: first, native_profile: "ruby")
+        assert_same station, @canonical.__send__(:check_station_origin, station: station, release_origin: first)
+        first.__send__(:close)
+        assert_equal station.raw, @canonical.__send__(:access_raw_record, access_kind: "raw_record", source_record: station.raw, station: station, release_origin: first, native_profile: "ruby")
+    end
+
+    def retained_native_station
+        client = OTC.new(file: fixture("good", "OTC_#{D}.json"))
+        station = client.release.require_station("OTC-T-0001")
+        reference = WeakRef.new(client.release)
+        client.close
+        client = nil
+        [station, reference]
+    end
+
+    def test_m2_B08_origin_retained_station_has_lightweight_token
+        # A completed native thread releases its conservative VM stack roots.
+        # The only retained values are the Station and the actual WeakRef.
+        station, release_reference = Thread.new { retained_native_station }.value
+        3.times { GC.start(full_mark: true, immediate_sweep: true) }
+        refute release_reference.weakref_alive?, "retained Station keeps its entire producing Release alive"
+        assert_equal "OTC-T-0001", station.station_id
+        assert station.raw.frozen?
+    end
+
+    def test_m2_B15_closed_query_retained_metadata_and_idempotent_close
+        client = native_client(mode: :stream)
+        release = client.release
+        station = release.require_station("OTC-T-0001")
+        iterator = release.iter_stations
+        iterator.next
+        original_raw = station.raw
+        @canonical.__send__(:enforce_resource_lifetime, resource_state: client, lifetime_action: "close")
+        assert_empty release.instance_variable_get(:@station_cache)
+        assert_same release, @canonical.__send__(:enforce_resource_lifetime, resource_state: release, lifetime_action: "release_metadata")
+        assert_same original_raw, station.raw
+        assert_equal D, release.datestamp
+        assert_raises(OTC::FileError) { @canonical.__send__(:enforce_resource_lifetime, resource_state: release, lifetime_action: "station_read") }
+        assert_raises(OTC::FileError) { iterator.next }
+        assert_same client, @canonical.__send__(:enforce_resource_lifetime, resource_state: client, lifetime_action: "close")
+    end
+
+    def test_m2_B16_real_manifest_binding_and_controlled_faults
+        bytes = File.binread(fixture("good", "OTC_#{D}.sha256"))
+        parsed = OTC::Reader.parse_sha256(bytes)
+        source_pointer = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json")))
+        pointer = source_pointer.fetch("files").to_h { |file| [file.fetch("name"), file.fetch("sha256")] }
+        required = [fixture("good", "OTC_#{D}.jsonl"), fixture("good", "OTC_#{D}.meta.json")]
+        assert_equal parsed, @canonical.__send__(:bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: pointer, required_files: required)
+        duplicates = bytes + bytes.lines.first
+        assert_raises(OTC::InvalidReleaseError) { @canonical.__send__(:bind_checksum_manifest, checksum_bytes: duplicates, pointer_digests: {}, required_files: required) }
+        missing = bytes.lines.reject { |line| line.end_with?("  OTC_#{D}.meta.json\n") }.join
+        error = assert_raises(OTC::ChecksumError) { @canonical.__send__(:bind_checksum_manifest, checksum_bytes: missing, pointer_digests: {}, required_files: required) }
+        assert_equal required.last, error.file
+        assert_nil error.expected
+        mismatch = pointer.merge("OTC_#{D}.sha256" => "0" * 64)
+        assert_raises(OTC::ChecksumError) { @canonical.__send__(:bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: mismatch, required_files: required) }
+        mismatch = parsed.merge("OTC_#{D}.jsonl" => "0" * 64)
+        error = assert_raises(OTC::ChecksumError) { @canonical.__send__(:bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: mismatch, required_files: required) }
+        assert_equal "OTC_#{D}.jsonl", error.file
+        assert_equal "0" * 64, error.expected
     end
 end

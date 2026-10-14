@@ -1,6 +1,17 @@
 # Private construction records. No source acquisition or behavior bodies.
 class OpenTideConstants
     module CanonicalTypes
+        # Native checksum parsing reports the actual sidecar filename. The
+        # String remains the original bytes, with only that source context.
+        class ChecksumBytes < String
+            attr_reader :source
+            def initialize(bytes, source:)
+                super(bytes)
+                @source = source
+                freeze
+            end
+        end
+
         class Origin
             def initialize()
                 freeze
@@ -1060,8 +1071,8 @@ class OpenTideConstants
         end
 
         class AuthenticatedIndex
-            attr_reader :index_version, :discovery_index_version, :datestamp, :jsonl, :jsonl_sha256, :jsonl_size, :by, :stations
-            def initialize(index_version:, discovery_index_version:, datestamp:, jsonl:, jsonl_sha256:, jsonl_size:, by:, stations:)
+            attr_reader :index_version, :discovery_index_version, :datestamp, :jsonl, :jsonl_sha256, :jsonl_size, :by, :stations, :native_context, :source_document
+            def initialize(index_version:, discovery_index_version:, datestamp:, jsonl:, jsonl_sha256:, jsonl_size:, by:, stations:, native_context: nil, source_document: nil)
                 @index_version = index_version
                 @discovery_index_version = discovery_index_version
                 @datestamp = datestamp
@@ -1070,6 +1081,8 @@ class OpenTideConstants
                 @jsonl_size = jsonl_size
                 @by = by
                 @stations = stations
+                @native_context = native_context
+                @source_document = source_document
                 freeze
             end
         end
@@ -2324,10 +2337,11 @@ class OpenTideConstants
         end
 
         class ReaderVersion
-            attr_reader :major, :minor
-            def initialize(major:, minor:)
+            attr_reader :major, :minor, :native_context
+            def initialize(major:, minor:, native_context: nil)
                 @major = major
                 @minor = minor
+                @native_context = native_context
                 freeze
             end
         end

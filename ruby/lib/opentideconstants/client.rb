@@ -261,6 +261,10 @@ class OpenTideConstants
     # with: checksum_mismatch (CR D20).
     def verify
         check_open!
+        verify_release_integrity
+    end
+
+    def verify_release_integrity(canonical: nil, trusted_cached_pointer: nil)
         if @loaded_from == :file_unverified
             raise ChecksumError.new("no OTC_#{@release.datestamp}.sha256 next to the file", file: @file, expected: nil, actual: nil)
         end
@@ -278,17 +282,26 @@ class OpenTideConstants
         # that a cached pointer lists for it, when one lists it. verify
         # fetches nothing, so a mismatch is checksum_mismatch and the file
         # stays (CR2 DR45).
-        unless @file
+        if !@file || trusted_cached_pointer
             actual = Digest::SHA256.hexdigest(text)
-            cached_pointer_sha256(d).each do |expected|
+            digests = @file ? [] : cached_pointer_sha256(d)
+            supplied = trusted_cached_pointer&.digests&.fetch(sha_name, nil)
+            digests = digests + [supplied.downcase] if supplied
+            digests.each do |expected|
                 next if expected == actual
                 raise ChecksumError.new("#{sha_name}: SHA-256 #{actual}, but the cached pointer lists #{expected}",
                                         file: sha_path, expected: expected, actual: actual)
             end
         end
-        rows = Reader.parse_sha256(text, sha_name)
+        rows = if canonical
+            bytes = OpenTideConstants.const_get(:CanonicalTypes, false)::ChecksumBytes.new(text, source: sha_name)
+            canonical.__send__(:bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: {}, required_files: [])
+        else
+            Reader.parse_sha256(text, sha_name)
+        end
         @release.send(:verify, rows)
     end
+    private :verify_release_integrity
 
     # Datestamps in the cache, newest first.
     def cached_releases
@@ -863,26 +876,44 @@ class OpenTideConstants
         opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open || @mode == :stream,
                  logger: @logger, commercial_only: @commercial_only, commercial_basis: @commercial_basis, historical_offsets_policy: @historical_offsets_policy }
         return Reader.load(paths.first, **opts) unless @mode == :stream
-        index = fresh_stream_index(d, ver, paths.first)
-        if index
-            begin
-                return Reader.load(paths.first, index: index, on_bad_index: ->(msg) { drop_stream_index(d, msg) }, **opts)
-            rescue InvalidReleaseError => e
-                log(:warn, "the stream index for #{d} cannot be used (#{e.message}); rebuilding it")
-            end
-        end
-        drop_stream_index(d, "the stream index is stale") if File.file?(File.join(dir, "index-v1.json"))
+        load_cached_stream(d, ver, paths.first, opts)
+    end
+
+    # Authenticate the opened source before the index admission callback.
+    # Its complete source pass and one index-derived retry stay in this phase.
+    def load_cached_stream(d, ver, jsonl_path, opts, canonical: nil, supplied_index: nil, index_presence: nil, on_index: nil)
+        selected = nil
         rows = []
-        rel = Reader.load(paths.first, index_rows: rows, **opts)
-        write_stream_index(d, rel, rows, ver, paths.first)
+        admission = lambda do
+            selected = fresh_stream_index(d, ver, jsonl_path, supplied_index: supplied_index, index_presence: index_presence, on_index: on_index)
+            drop_stream_index(d, "the stream index is stale") if !selected && File.file?(File.join(cache.release_dir(d), "index-v1.json"))
+            selected
+        end
+        begin
+            rel = Reader.load(jsonl_path, index: admission, index_rows: rows, canonical: canonical,
+                              on_bad_index: ->(msg) { drop_stream_index(d, msg) }, **opts)
+        rescue InvalidReleaseError => error
+            raise unless selected
+            log(:warn, "the stream index for #{d} cannot be used (#{error.message}); rebuilding it")
+            drop_stream_index(d, "the stream index is stale") if File.file?(File.join(cache.release_dir(d), "index-v1.json"))
+            rows = []
+            rel = Reader.load(jsonl_path, index_rows: rows, canonical: canonical, **opts)
+            selected = nil
+        end
+        write_stream_index(d, rel, rows, ver, jsonl_path, on_index: on_index) unless selected
         rel
     end
 
     # The entries of index-v1.json when it is fresh for release d (spec §6.2), else nil.
-    def fresh_stream_index(d, ver, jsonl_path)
+    def fresh_stream_index(d, ver, jsonl_path, supplied_index: nil, index_presence: nil, on_index: nil)
         path = File.join(cache.release_dir(d), "index-v1.json")
         return nil unless File.file?(path)
         idx = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
+        if index_presence
+            unless supplied_index == idx && index_presence.all? { |key, present| idx.is_a?(Hash) && idx.key?(key) == present }
+                raise OpenTideConstants.const_get(:Canonical, false)::Unimplemented.new("B25 mismatched authenticated index source or presence")
+            end
+        end
         jsonl = "OTC_#{d}.jsonl"
         return nil unless idx.is_a?(Hash)
         # An integer key may be written as a number with an integral value, 12.0 (CR2 DR10).
@@ -901,6 +932,7 @@ class OpenTideConstants
         profile = Reader.index_profile(idx["stations"])
         return nil unless profile && idx["stations"].all? { |e| Reader.index_entry_ok?(e, profile: profile) }
         return nil unless index_in_bounds?(idx["stations"], idx["jsonl_size"])
+        on_index&.call(idx)
         idx["stations"]
     rescue JSON::ParserError, EncodingError, SystemCallError, IOError
         nil
@@ -931,7 +963,7 @@ class OpenTideConstants
     # Writes index-v1.json (spec §6.2): rows are the entries of every line,
     # from the pass that loaded rel. A failure to write it is logged, not
     # raised: the index only saves work.
-    def write_stream_index(d, rel, rows, ver, jsonl_path)
+    def write_stream_index(d, rel, rows, ver, jsonl_path, on_index: nil)
         jsonl = "OTC_#{d}.jsonl"
         sha = ver["files"].dig(jsonl, "sha256")
         return unless sha.is_a?(String)
@@ -943,6 +975,7 @@ class OpenTideConstants
         end
         doc = { "index_version" => 1, "discovery_index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
                 "jsonl_size" => File.size(jsonl_path), "by" => "opentideconstants-ruby/#{VERSION}", "stations" => rows }
+        on_index&.call(doc)
         cache.write_atomic(File.join(cache.release_dir(d), "index-v1.json"), Cache.encode_cache_json(doc))
     rescue CacheError, SystemCallError, IOError => e
         log(:warn, "cannot write the stream index for #{d}: #{e.message}")

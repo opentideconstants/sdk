@@ -130,7 +130,7 @@ class OpenTideConstants
         # json_sha256: for a .json.gz, the .json row that the decompressed
         # bytes must match (spec §5.3, CR3 DR77).
         def load(path, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil, verify: false,
-                 on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, json_sha256: nil)
+                 on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, json_sha256: nil, canonical: nil)
             _, _, ext = parse_name(path)
             expect = ->(p) { verify ? checks[p] : nil }
             case ext
@@ -150,7 +150,7 @@ class OpenTideConstants
                 Release.check_format!(meta)
                 load_jsonl(path, meta, mode: mode, files: files, checks: checks, index: index, index_rows: index_rows,
                                        zenodo_version_doi: zenodo_version_doi, expected_sha256: expect.call(path),
-                                       on_bad_index: on_bad_index, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
+                                       on_bad_index: on_bad_index, logger: logger, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy, canonical: canonical)
             else
                 raise InvalidArgumentError, "unknown release file type: #{path}"
             end
@@ -171,7 +171,7 @@ class OpenTideConstants
         # every line is read, and index_rows (an Array, if given) gets the
         # index entry of each line.
         def load_jsonl(path, meta, mode:, files:, checks:, index: nil, index_rows: nil, zenodo_version_doi: nil,
-                       expected_sha256: nil, on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
+                       expected_sha256: nil, on_bad_index: nil, logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, canonical: nil)
             io = File.open(path, "rb")
             if expected_sha256
                 digest = Digest::SHA256.new
@@ -186,6 +186,12 @@ class OpenTideConstants
                                                                                          actual: actual)
                 end
             end
+            begin
+                index = index.call if index.respond_to?(:call)
+            rescue Exception
+                io.close
+                raise
+            end
             lines = Enumerator.new do |y|
                 if index
                     profile = index_profile(index)
@@ -196,7 +202,18 @@ class OpenTideConstants
                         body = line.end_with?("\n") ? line.delete_suffix("\n").delete_suffix("\r") : line
                         unless blank?(body)
                             raw = parse_json(body.force_encoding(Encoding::UTF_8))
-                            index_rows << index_entry(raw, pos, body.bytesize) if index_rows && raw.is_a?(Hash)
+                            if index_rows && raw.is_a?(Hash)
+                                if canonical
+                                    types = OpenTideConstants.const_get(:CanonicalTypes, false)
+                                    index_rows << canonical.__send__(:project_station_index, station_source_row: raw,
+                                                                    source_byte_span: types::SourceByteSpan.new(offset_bytes: pos, length_bytes: body.bytesize),
+                                                                    projection_contract: types::ProjectionContract.new(
+                                                                        scalar_types: "Reader.index_entry native field types", models: "Reader.index_entry native projection",
+                                                                        subordinate_offsets: "complete source object", scope: "station source row", fallback: "complete source object"))
+                                else
+                                    index_rows << index_entry(raw, pos, body.bytesize)
+                                end
+                            end
                             y << [raw, pos, body.bytesize]
                         end
                         pos += line.bytesize

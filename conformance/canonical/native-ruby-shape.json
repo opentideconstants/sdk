@@ -221,7 +221,7 @@
       "declaration": "type acceptance_decision = AcceptanceDecision",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -240,7 +240,7 @@
       "declaration": "type access_kind = \"raw_record\" | \"station_object\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -255,7 +255,7 @@
       "declaration": "type acquisition_descriptor = domain_release_descriptor",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -272,7 +272,7 @@
       "declaration": "type actual_profile_results = Hash[String, json_value]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -291,7 +291,7 @@
       "declaration": "type arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -325,7 +325,7 @@
       "declaration": "type astronomical_terms = AstronomicalTerms",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -340,7 +340,7 @@
       "declaration": "type attribution_text = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -359,7 +359,7 @@
       "declaration": "type authenticated_index = AuthenticatedIndex",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -379,7 +379,7 @@
       "declaration": "type auxiliary_kind = \"model_access\" | \"result_context\" | \"local_time\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -408,7 +408,7 @@
       "declaration": "type auxiliary_model_value = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -449,7 +449,7 @@
       "declaration": "type auxiliary_operation = \"astro_table\" | \"datums\" | \"ranges\" | \"constituent\" | \"constituents\" | \"constituent_names\" | \"convention\" | \"conventions\" | \"licence\" | \"licences\" | \"provenance\" | \"set_validation\" | \"station_validation\" | \"valid_range\" | \"equilibrium_argument\" | \"equilibrium_for_year\" | \"node_factor\" | \"node_factor_for_year\" | \"raw\" | \"release_files\" | \"release_metadata\" | \"station_count\" | \"tombstone_count\" | \"subordinate_offsets\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -493,7 +493,7 @@
       "declaration": "type auxiliary_result = member_result | prediction_result | local_time_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -508,7 +508,7 @@
       "declaration": "type bound_checksums = domain_digest_map",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -523,7 +523,7 @@
       "declaration": "type cache_bytes = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -561,7 +561,7 @@
       "declaration": "type cache_document = CacheDocumentStreamIndex | CacheDocumentVerifiedReceipt | json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -598,7 +598,7 @@
       "declaration": "type cache_inventory_result = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -613,7 +613,7 @@
       "declaration": "type cache_state = domain_cache_state",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -628,7 +628,7 @@
       "declaration": "type candidate_path = domain_candidate_path",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -689,7 +689,7 @@
       "declaration": "type canonical_error = CanonicalError",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -708,7 +708,7 @@
       "declaration": "type canonical_result = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -723,7 +723,7 @@
       "declaration": "type cause = Exception | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -743,7 +743,7 @@
       "declaration": "type changed_behaviors = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -758,7 +758,7 @@
       "declaration": "type checksum_bytes = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -775,7 +775,7 @@
       "declaration": "type citation_style = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -790,7 +790,7 @@
       "declaration": "type citation_text = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -815,7 +815,7 @@
       "declaration": "type client_and_release = ClientAndRelease",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -856,7 +856,7 @@
       "declaration": "type client_state = ClientState",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -872,7 +872,7 @@
       "declaration": "type clock = Float | Integer",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -897,7 +897,7 @@
       "declaration": "type commercial_admission = CommercialAdmission",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -916,7 +916,7 @@
       "declaration": "type commercial_basis = \"strict\" | \"as_published_upstream\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -931,7 +931,7 @@
       "declaration": "type commercial_only = bool",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -946,7 +946,7 @@
       "declaration": "type compared_station_row = domain_station_row",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -961,7 +961,7 @@
       "declaration": "type current_cache_directory = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -980,7 +980,7 @@
       "declaration": "type current_request = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -995,7 +995,7 @@
       "declaration": "type destination = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1032,7 +1032,7 @@
       "declaration": "type direct_current_result = ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1054,7 +1054,7 @@
       "declaration": "type document_kind = \"release\" | \"station_row\" | \"pointer\" | \"catalogue\" | \"cache\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1075,7 +1075,7 @@
       "declaration": "type download_result = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1090,7 +1090,7 @@
       "declaration": "type effective_options = domain_effective_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1105,7 +1105,7 @@
       "declaration": "type effective_recommendation = ::OpenTideConstants::ConstantSet | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1122,7 +1122,7 @@
       "declaration": "type environment = Hash[String, String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1159,7 +1159,7 @@
       "declaration": "type evidence_bundle = EvidenceBundle",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1174,7 +1174,7 @@
       "declaration": "type expected_result = json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1189,7 +1189,7 @@
       "declaration": "type explicit_options = domain_effective_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1207,7 +1207,7 @@
       "declaration": "type field_contract = FieldContracts",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1228,7 +1228,7 @@
       "declaration": "type folded_height_values = ::OpenTideConstants::HeightSeries",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1258,7 +1258,7 @@
       "declaration": "type format_selection = FormatSelection",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1279,7 +1279,7 @@
       "declaration": "type height_values = Array[Float | Integer]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1294,7 +1294,7 @@
       "declaration": "type held_release = ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1313,7 +1313,7 @@
       "declaration": "type held_release_result = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1338,7 +1338,7 @@
       "declaration": "type historical_admission = HistoricalAdmission",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1357,7 +1357,7 @@
       "declaration": "type historical_policy = \"fallback\" | \"exclude\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1382,7 +1382,7 @@
       "declaration": "type http_request = HttpRequest",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1415,7 +1415,7 @@
       "declaration": "type http_response = HttpResponse",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1450,7 +1450,7 @@
       "declaration": "type identity_query = String | IdentityQuery1",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1465,7 +1465,7 @@
       "declaration": "type include_fallback = bool",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1480,7 +1480,7 @@
       "declaration": "type include_flagged = bool",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1495,7 +1495,7 @@
       "declaration": "type include_no_constants = bool",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1514,10 +1514,10 @@
         "nullable": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::index_entry",
-      "declaration": "type index_entry = IndexEntry",
+      "declaration": "type index_entry = IndexEntry | ::OpenTideConstants::Release::Entry",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1531,10 +1531,10 @@
         "nullable": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::index_presence",
-      "declaration": "type index_presence = Hash[String, bool]",
+      "declaration": "type index_presence = Hash[String, bool] | ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1553,7 +1553,7 @@
       "declaration": "type inventory_action = \"list\" | \"prune\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1572,7 +1572,7 @@
       "declaration": "type io_kind = \"lock\" | \"http\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1598,7 +1598,7 @@
       "declaration": "type io_options = lock_state | transport_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1624,7 +1624,7 @@
       "declaration": "type io_request = lock_request | http_request",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1649,7 +1649,7 @@
       "declaration": "type io_result = lock_outcome | http_response",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1665,7 +1665,7 @@
       "declaration": "type keep = Integer",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1682,7 +1682,7 @@
       "declaration": "type lifetime_action = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1701,7 +1701,7 @@
       "declaration": "type load_mode = \"eager\" | \"stream\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1716,7 +1716,7 @@
       "declaration": "type loaded_release = ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1734,7 +1734,7 @@
       "declaration": "type local_time_profile = ArgsHeightSeriesToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1753,7 +1753,7 @@
       "declaration": "type local_time_result = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1782,7 +1782,7 @@
       "declaration": "type lock_outcome = LockOutcome",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1819,7 +1819,7 @@
       "declaration": "type lock_request = LockRequest",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1834,7 +1834,7 @@
       "declaration": "type lock_state = domain_lock_state",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1849,7 +1849,7 @@
       "declaration": "type locked_cache_state = domain_cache_state",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1868,7 +1868,7 @@
       "declaration": "type member_contract = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal | MemberValidationContext",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1887,7 +1887,7 @@
       "declaration": "type merged_receipt = MergedReceipt",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1912,7 +1912,7 @@
       "declaration": "type metadata_request = MetadataRequest",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1935,7 +1935,7 @@
       "declaration": "type native_profile = \"python\" | \"ruby\" | \"typescript_node\" | \"typescript_browser\" | \"c\" | \"swift\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1954,7 +1954,7 @@
       "declaration": "type native_result = native_member_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -1975,7 +1975,7 @@
       "declaration": "type offset_current_result = ::OpenTideConstants::CurrentEventList",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2012,7 +2012,7 @@
       "declaration": "type offset_tide_result = ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2090,7 +2090,7 @@
       "declaration": "type operation = \"astro_table\" | \"attribution\" | \"cached_releases\" | \"check_for_update\" | \"citation\" | \"close\" | \"constant_set\" | \"constant_sets\" | \"constituent\" | \"constituent_names\" | \"constituents\" | \"convention\" | \"conventions\" | \"current_events\" | \"currents\" | \"datums\" | \"download\" | \"equilibrium_argument\" | \"equilibrium_for_year\" | \"extremes\" | \"heights\" | \"heights_at\" | \"hold_release\" | \"iter_stations\" | \"last_error\" | \"latest\" | \"licence\" | \"licences\" | \"loaded_from\" | \"near\" | \"nearest\" | \"newer_format_major\" | \"node_factor\" | \"node_factor_for_year\" | \"open\" | \"provenance\" | \"prune\" | \"ranges\" | \"raw\" | \"recommended_set\" | \"reference_station\" | \"release_files\" | \"release_metadata\" | \"releases\" | \"require_station\" | \"search\" | \"set_validation\" | \"station\" | \"station_by_alias\" | \"station_count\" | \"station_validation\" | \"stations\" | \"stats\" | \"subordinate_offsets\" | \"subordinates_of\" | \"to_local\" | \"tombstone\" | \"tombstone_count\" | \"update\" | \"valid_range\" | \"verify\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2110,7 +2110,7 @@
       "declaration": "type ordered_constant_sets = Array[::OpenTideConstants::ConstantSet]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2130,7 +2130,7 @@
       "declaration": "type ordered_failures = Array[canonical_error]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2150,7 +2150,7 @@
       "declaration": "type ordered_station_results = Array[::OpenTideConstants::Station]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2165,7 +2165,7 @@
       "declaration": "type origin = Origin | ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2180,7 +2180,7 @@
       "declaration": "type original_recommendation = ::OpenTideConstants::ConstantSet | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2201,7 +2201,7 @@
       "declaration": "type overwrite_policy = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2226,7 +2226,7 @@
       "declaration": "type own_current_offsets = Hash[String, json_value] | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2247,7 +2247,7 @@
       "declaration": "type own_offset = ::OpenTideConstants::SubordinateOffsets | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2285,7 +2285,7 @@
       "declaration": "type parsed_document = domain_station_row | json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2302,7 +2302,7 @@
       "declaration": "type path_request = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2317,7 +2317,7 @@
       "declaration": "type platform_defaults = domain_effective_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2332,7 +2332,7 @@
       "declaration": "type pointer_digests = domain_digest_map",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2352,7 +2352,7 @@
       "declaration": "type prediction_instants = Array[Float | Integer]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2409,7 +2409,7 @@
       "declaration": "type prediction_result = ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2424,7 +2424,7 @@
       "declaration": "type prediction_window = domain_prediction_window",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2442,7 +2442,7 @@
       "declaration": "type projection_contract = ProjectionContract",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2480,7 +2480,7 @@
       "declaration": "type published_metadata = PublishedMetadata",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2505,7 +2505,7 @@
       "declaration": "type quality_admission = QualityAdmission",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2524,7 +2524,7 @@
       "declaration": "type query_arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2539,7 +2539,7 @@
       "declaration": "type query_client_state = client_state",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2561,7 +2561,7 @@
       "declaration": "type query_kind = \"stations\" | \"iter_stations\" | \"search\" | \"near\" | \"nearest\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2576,7 +2576,7 @@
       "declaration": "type query_options = domain_query_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2601,7 +2601,7 @@
       "declaration": "type raw_fields = json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2626,7 +2626,7 @@
       "declaration": "type raw_record = json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2651,7 +2651,7 @@
       "declaration": "type raw_record_or_valid_station = json_value | ::OpenTideConstants::Station",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2676,7 +2676,7 @@
       "declaration": "type reader_version = ReaderVersion",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2691,7 +2691,7 @@
       "declaration": "type reference_model = domain_prediction_model",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2706,7 +2706,7 @@
       "declaration": "type reference_path = domain_reference_path",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2726,7 +2726,7 @@
       "declaration": "type release_candidates = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2748,10 +2748,10 @@
         ]
       },
       "native_type": "OpenTideConstants::CanonicalTypes::release_files",
-      "declaration": "type release_files = Array[::OpenTideConstants::FileInfo]",
+      "declaration": "type release_files = Array[::OpenTideConstants::FileInfo] | ::OpenTideConstants",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2766,7 +2766,7 @@
       "declaration": "type release_metadata = json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2778,10 +2778,10 @@
         "nullable": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::release_origin",
-      "declaration": "type release_origin = Origin",
+      "declaration": "type release_origin = Origin | ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2807,7 +2807,7 @@
       "declaration": "type release_request = \"latest\" | String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2828,7 +2828,7 @@
       "declaration": "type release_statistics = ::OpenTideConstants::Stats",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2843,7 +2843,7 @@
       "declaration": "type release_view = ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2858,7 +2858,7 @@
       "declaration": "type requested_datum = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2873,7 +2873,7 @@
       "declaration": "type required_files = domain_file_rows",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2889,7 +2889,7 @@
       "declaration": "type required_links = Array[RequiredLink]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2915,10 +2915,10 @@
         "nullable": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::resource_state",
-      "declaration": "type resource_state = client_state | ::OpenTideConstants::Release | stream_reader",
+      "declaration": "type resource_state = client_state | ::OpenTideConstants | ::OpenTideConstants::Release | stream_reader",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2944,10 +2944,10 @@
         "nullable": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-      "declaration": "type resource_state_or_error = client_state | ::OpenTideConstants::Release | stream_reader",
+      "declaration": "type resource_state_or_error = client_state | ::OpenTideConstants | ::OpenTideConstants::Release | stream_reader",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2962,7 +2962,7 @@
       "declaration": "type result_context = domain_result_context",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -2981,7 +2981,7 @@
       "declaration": "type result_values = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3001,7 +3001,7 @@
       "declaration": "type review_reports = Array[String]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3043,7 +3043,7 @@
       "declaration": "type scenario = Scenario",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3073,7 +3073,7 @@
       "declaration": "type scenario_comparison = ScenarioComparison",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3088,7 +3088,7 @@
       "declaration": "type selected_prediction_model = domain_prediction_model",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3103,7 +3103,7 @@
       "declaration": "type selected_reference_path = domain_reference_path",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3123,7 +3123,7 @@
       "declaration": "type selection_kind = \"discovery\" | \"explicit_prediction\" | \"default_prediction\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3138,7 +3138,7 @@
       "declaration": "type selection_options = domain_selection_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3163,7 +3163,7 @@
       "declaration": "type source_byte_span = SourceByteSpan",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3178,7 +3178,7 @@
       "declaration": "type source_bytes = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3216,10 +3216,10 @@
         "additional_fields": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::source_files",
-      "declaration": "type source_files = SourceFiles",
+      "declaration": "type source_files = SourceFiles | ::OpenTideConstants",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3244,7 +3244,7 @@
       "declaration": "type source_record = Hash[String, json_value]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3259,7 +3259,7 @@
       "declaration": "type source_values = domain_auxiliary_values",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3274,7 +3274,7 @@
       "declaration": "type station = ::OpenTideConstants::Station",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3289,7 +3289,7 @@
       "declaration": "type station_id = String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3311,7 +3311,7 @@
       "declaration": "type station_index_entry = native_index_entry",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3326,7 +3326,7 @@
       "declaration": "type station_or_tombstone_or_null = domain_station_lookup",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3356,7 +3356,7 @@
       "declaration": "type station_request = ::OpenTideConstants::Station | String",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3376,7 +3376,7 @@
       "declaration": "type station_sets = Array[::OpenTideConstants::ConstantSet]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3391,7 +3391,7 @@
       "declaration": "type station_source_row = domain_station_row",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3416,7 +3416,7 @@
       "declaration": "type station_summary = release_statistics | ordered_constant_sets",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3432,7 +3432,7 @@
       "declaration": "type step = Float | Integer | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3470,10 +3470,10 @@
         "additional_fields": false
       },
       "native_type": "OpenTideConstants::CanonicalTypes::stream_reader",
-      "declaration": "type stream_reader = StreamReader",
+      "declaration": "type stream_reader = StreamReader | ::OpenTideConstants::Release",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3492,7 +3492,7 @@
       "declaration": "type summary_kind = \"stats\" | \"constant_sets\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3522,7 +3522,7 @@
       "declaration": "type summary_options = SummaryOptions",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3538,10 +3538,10 @@
         "nullable": true
       },
       "native_type": "OpenTideConstants::CanonicalTypes::supplied_index",
-      "declaration": "type supplied_index = SuppliedIndex | nil",
+      "declaration": "type supplied_index = SuppliedIndex | Hash[String, json_value] | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3562,7 +3562,7 @@
       "declaration": "type tide_events = ::OpenTideConstants::ExtremeList",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3581,7 +3581,7 @@
       "declaration": "type tide_request = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3600,7 +3600,7 @@
       "declaration": "type time_inputs = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3615,7 +3615,7 @@
       "declaration": "type transport_options = domain_transport_options",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3630,7 +3630,7 @@
       "declaration": "type trusted_cache = json_value | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3652,7 +3652,7 @@
       "declaration": "type trusted_cached_pointer = TrustedCachedPointer | nil",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3672,7 +3672,7 @@
       "declaration": "type typed_model = ::OpenTideConstants | ::OpenTideConstants::Release | ::OpenTideConstants::ReleaseInfo | ::OpenTideConstants::FileInfo | ::OpenTideConstants::Station | ::OpenTideConstants::Tombstone | ::OpenTideConstants::ConstantSet | ::OpenTideConstants::Constituent | ::OpenTideConstants::Convention | ::OpenTideConstants::Licence | ::OpenTideConstants::Provenance | ::OpenTideConstants::ProvenanceBuild | ::OpenTideConstants::TimeBase | ::OpenTideConstants::QcFlag | ::OpenTideConstants::DroppedConstituent | ::OpenTideConstants::Validation | ::OpenTideConstants::SubordinateOffsets | ::OpenTideConstants::Nearby | ::OpenTideConstants::UpdateResult | ::OpenTideConstants::RecordSpan | ::OpenTideConstants::Datum | ::OpenTideConstants::Stats | ::OpenTideConstants::AstroTable | ::OpenTideConstants::HeightPoint | ::OpenTideConstants::Extreme | ::OpenTideConstants::CurrentPoint | ::OpenTideConstants::CurrentEvent | ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList | ::OpenTideConstants::DatumInfo | ::OpenTideConstants::DatumLevel | ::OpenTideConstants::Ranges | ::OpenTideConstants::Fallback | ::OpenTideConstants::SourceRecord | ::OpenTideConstants::HistoricalOffsetVintage | ::OpenTideConstants::HistoricalOffsetProvenance",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3692,7 +3692,7 @@
       "declaration": "type unrounded_current_events = Array[domain_unrounded_current_event]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3712,7 +3712,7 @@
       "declaration": "type unrounded_tide_events = Array[domain_unrounded_tide_event]",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3727,7 +3727,7 @@
       "declaration": "type update_request = metadata_request",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3742,7 +3742,7 @@
       "declaration": "type updated_client_state = client_state",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3767,7 +3767,7 @@
       "declaration": "type usable_cached_release_or_error = ::OpenTideConstants::Release | canonical_error",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3783,7 +3783,7 @@
       "declaration": "type utc_instant = Float | Integer",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3802,7 +3802,7 @@
       "declaration": "type utc_result = member_result",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3817,7 +3817,7 @@
       "declaration": "type valid_station = ::OpenTideConstants::Station",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3836,7 +3836,7 @@
       "declaration": "type validated_arguments = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3869,7 +3869,7 @@
       "declaration": "type validated_metadata = ValidatedMetadata",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3884,7 +3884,7 @@
       "declaration": "type validated_release_graph = json_value",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3905,7 +3905,7 @@
       "declaration": "type verification_result = bool",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3920,7 +3920,7 @@
       "declaration": "type verified_file_rows = domain_file_rows",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -3939,7 +3939,7 @@
       "declaration": "type window_inputs = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -4363,7 +4363,7 @@
       "declaration": "type auxiliary_member_id = \"Client.open\" | \"Client.release\" | \"Client.loaded_from\" | \"Client.last_error\" | \"Client.releases\" | \"Client.latest\" | \"Client.check_for_update\" | \"Client.newer_format_major\" | \"Client.update\" | \"Client.download\" | \"Client.verify\" | \"Client.cached_releases\" | \"Client.prune\" | \"Release.datestamp\" | \"Release.created\" | \"Release.format_version\" | \"Release.zenodo_version_doi\" | \"Release.concept_doi\" | \"Release.source_versions\" | \"Release.build_commit\" | \"Release.changelog_url\" | \"Release.files\" | \"Release.conventions\" | \"Release.convention\" | \"Release.licences\" | \"Release.licence\" | \"Release.constituent_names\" | \"Release.stats\" | \"Release.station_count\" | \"Release.tombstone_count\" | \"Release.citation\" | \"Release.station\" | \"Release.require_station\" | \"Release.tombstone\" | \"Release.station_by_alias\" | \"Release.stations\" | \"Release.iter_stations\" | \"Release.search\" | \"Release.near\" | \"Release.nearest\" | \"Release.reference_station\" | \"Release.subordinates_of\" | \"Release.attribution\" | \"Release.heights\" | \"Release.heights_at\" | \"Release.extremes\" | \"Release.currents\" | \"Release.current_events\" | \"Release.datums\" | \"Release.ranges\" | \"Release.astro_table\" | \"Release.historical_offsets_policy\" | \"ReleaseInfo.datestamp\" | \"ReleaseInfo.format_version\" | \"ReleaseInfo.concept_doi\" | \"ReleaseInfo.zenodo_version_doi\" | \"ReleaseInfo.content_sha256\" | \"ReleaseInfo.files\" | \"FileInfo.name\" | \"FileInfo.url\" | \"FileInfo.size\" | \"FileInfo.sha256\" | \"Station.station_id\" | \"Station.name\" | \"Station.country\" | \"Station.lat\" | \"Station.lon\" | \"Station.type\" | \"Station.kind\" | \"Station.timezone\" | \"Station.aliases\" | \"Station.status\" | \"Station.is_reference\" | \"Station.is_subordinate\" | \"Station.is_tide\" | \"Station.is_current\" | \"Station.recommended_set\" | \"Station.constant_sets\" | \"Station.constant_set\" | \"Station.subordinate_offsets\" | \"Station.validation\" | \"Station.raw\" | \"Station.recommended_is_fallback\" | \"Station.source_records\" | \"Tombstone.station_id\" | \"Tombstone.name\" | \"Tombstone.status\" | \"Tombstone.removed_in\" | \"Tombstone.removed_reason\" | \"Tombstone.merged_into\" | \"Tombstone.detail\" | \"Tombstone.raw\" | \"ConstantSet.set_id\" | \"ConstantSet.source\" | \"ConstantSet.source_type\" | \"ConstantSet.quantity\" | \"ConstantSet.source_record_id\" | \"ConstantSet.source_version\" | \"ConstantSet.record_span\" | \"ConstantSet.datum\" | \"ConstantSet.qc_status\" | \"ConstantSet.qc_flags\" | \"ConstantSet.dropped_constituents\" | \"ConstantSet.time_base\" | \"ConstantSet.is_recommended\" | \"ConstantSet.convention\" | \"ConstantSet.licence\" | \"ConstantSet.provenance\" | \"ConstantSet.validation\" | \"ConstantSet.constituents\" | \"ConstantSet.constituent\" | \"ConstantSet.raw\" | \"ConstantSet.fallback\" | \"Constituent.name\" | \"Constituent.source_name\" | \"Constituent.doodson\" | \"Constituent.speed_deg_per_hour\" | \"Constituent.amplitude_m\" | \"Constituent.phase_deg\" | \"Constituent.amp_uncertainty_m\" | \"Constituent.phase_uncertainty_deg\" | \"Constituent.kept_reason\" | \"Constituent.raw\" | \"Convention.convention_id\" | \"Convention.phase_reference\" | \"Convention.utc_offset_hours\" | \"Convention.v0_model\" | \"Convention.nodal_handling\" | \"Convention.nodal_formula_ids\" | \"Convention.constituent_table_version\" | \"Convention.tables_sha256\" | \"Convention.canary\" | \"Convention.raw\" | \"Licence.licence_id\" | \"Licence.spdx\" | \"Licence.provider\" | \"Licence.citation\" | \"Licence.attribution\" | \"Licence.url\" | \"Licence.commercial_use\" | \"Licence.restriction\" | \"Licence.terms_url\" | \"Licence.raw\" | \"Provenance.adapter_version\" | \"Provenance.input_sha256\" | \"Provenance.selection_reason\" | \"Provenance.decision\" | \"Provenance.build\" | \"Provenance.carried_from_release\" | \"Provenance.raw\" | \"ProvenanceBuild.build_commit\" | \"ProvenanceBuild.built_at\" | \"ProvenanceBuild.fetched_at\" | \"ProvenanceBuild.run_id\" | \"ProvenanceBuild.tool_versions\" | \"TimeBase.code\" | \"TimeBase.reason\" | \"TimeBase.declared\" | \"TimeBase.published\" | \"TimeBase.correction\" | \"TimeBase.months_dropped\" | \"TimeBase.decided_in\" | \"TimeBase.decided_build_commit\" | \"TimeBase.evidence\" | \"QcFlag.flag\" | \"QcFlag.reason\" | \"QcFlag.values\" | \"DroppedConstituent.name\" | \"DroppedConstituent.dropped_reason\" | \"DroppedConstituent.detail\" | \"Validation.set_id\" | \"Validation.reference_source\" | \"Validation.reference_station\" | \"Validation.reference_distance_km\" | \"Validation.window\" | \"Validation.time_mae_min\" | \"Validation.time_p95_min\" | \"Validation.time_bias_min\" | \"Validation.height_mae_m\" | \"Validation.range_error_m\" | \"Validation.missed_events\" | \"Validation.extra_events\" | \"Validation.previous_release\" | \"SubordinateOffsets.reference_station_id\" | \"SubordinateOffsets.time_offset_high_min\" | \"SubordinateOffsets.time_offset_low_min\" | \"SubordinateOffsets.height_offset_high\" | \"SubordinateOffsets.height_offset_low\" | \"SubordinateOffsets.height_adjusted_type\" | \"SubordinateOffsets.licence_id\" | \"SubordinateOffsets.offset_id\" | \"SubordinateOffsets.source\" | \"SubordinateOffsets.source_type\" | \"SubordinateOffsets.source_version\" | \"SubordinateOffsets.source_record_id\" | \"SubordinateOffsets.qc_status\" | \"SubordinateOffsets.qc_flags\" | \"SubordinateOffsets.fallback\" | \"SubordinateOffsets.vintage\" | \"SubordinateOffsets.provenance\" | \"Nearby.station\" | \"Nearby.distance_km\" | \"UpdateResult.updated\" | \"UpdateResult.from\" | \"UpdateResult.to\" | \"RecordSpan.start\" | \"RecordSpan.end\" | \"RecordSpan.good_samples\" | \"Datum.msl_offset_m\" | \"Datum.named\" | \"Stats.type\" | \"Stats.kind\" | \"Stats.country\" | \"Stats.source\" | \"Stats.qc_status\" | \"AstroTable.equilibrium_argument\" | \"AstroTable.node_factor\" | \"AstroTable.equilibrium_for_year\" | \"AstroTable.node_factor_for_year\" | \"AstroTable.valid_range\" | \"HeightPoint.time\" | \"HeightPoint.height_m\" | \"HeightPoint.local_time\" | \"HeightPoint.utc_offset_s\" | \"HeightPoint.local_datetime\" | \"HeightPoint.local_time_object\" | \"Extreme.time\" | \"Extreme.type\" | \"Extreme.height_m\" | \"Extreme.local_time\" | \"Extreme.utc_offset_s\" | \"Extreme.local_datetime\" | \"Extreme.local_time_object\" | \"CurrentPoint.time\" | \"CurrentPoint.velocity_major_ms\" | \"CurrentPoint.velocity_minor_ms\" | \"CurrentPoint.speed_ms\" | \"CurrentPoint.direction_deg\" | \"CurrentPoint.local_time\" | \"CurrentPoint.utc_offset_s\" | \"CurrentPoint.local_datetime\" | \"CurrentPoint.local_time_object\" | \"CurrentEvent.time\" | \"CurrentEvent.type\" | \"CurrentEvent.velocity_ms\" | \"CurrentEvent.direction_deg\" | \"CurrentEvent.local_time\" | \"CurrentEvent.utc_offset_s\" | \"CurrentEvent.local_datetime\" | \"CurrentEvent.local_time_object\" | \"HeightSeries.items\" | \"HeightSeries.station_id\" | \"HeightSeries.timezone\" | \"HeightSeries.method\" | \"HeightSeries.set_id\" | \"HeightSeries.convention_id\" | \"HeightSeries.astro_table_id\" | \"HeightSeries.reference_station_id\" | \"HeightSeries.reference_bin\" | \"HeightSeries.datum\" | \"HeightSeries.datum_name\" | \"HeightSeries.datum_kind\" | \"HeightSeries.datum_uncertainty_m\" | \"HeightSeries.tz\" | \"HeightSeries.tz_version\" | \"HeightSeries.release\" | \"HeightSeries.algorithm\" | \"HeightSeries.to_local\" | \"HeightSeries.offset_id\" | \"HeightSeries.offset_source\" | \"HeightSeries.offset_source_version\" | \"HeightSeries.historical_offsets\" | \"HeightSeries.current_validity\" | \"HeightSeries.current_accuracy\" | \"HeightSeries.reference_set_id\" | \"HeightSeries.reference_source_version\" | \"HeightSeries.reference_2020_equivalence\" | \"HeightSeries.source_note\" | \"ExtremeList.items\" | \"ExtremeList.station_id\" | \"ExtremeList.timezone\" | \"ExtremeList.method\" | \"ExtremeList.set_id\" | \"ExtremeList.convention_id\" | \"ExtremeList.astro_table_id\" | \"ExtremeList.reference_station_id\" | \"ExtremeList.reference_bin\" | \"ExtremeList.datum\" | \"ExtremeList.datum_name\" | \"ExtremeList.datum_kind\" | \"ExtremeList.datum_uncertainty_m\" | \"ExtremeList.tz\" | \"ExtremeList.tz_version\" | \"ExtremeList.release\" | \"ExtremeList.algorithm\" | \"ExtremeList.to_local\" | \"ExtremeList.offset_id\" | \"ExtremeList.offset_source\" | \"ExtremeList.offset_source_version\" | \"ExtremeList.historical_offsets\" | \"ExtremeList.current_validity\" | \"ExtremeList.current_accuracy\" | \"ExtremeList.reference_set_id\" | \"ExtremeList.reference_source_version\" | \"ExtremeList.reference_2020_equivalence\" | \"ExtremeList.source_note\" | \"CurrentSeries.items\" | \"CurrentSeries.station_id\" | \"CurrentSeries.timezone\" | \"CurrentSeries.method\" | \"CurrentSeries.set_id\" | \"CurrentSeries.convention_id\" | \"CurrentSeries.astro_table_id\" | \"CurrentSeries.reference_station_id\" | \"CurrentSeries.reference_bin\" | \"CurrentSeries.datum\" | \"CurrentSeries.datum_name\" | \"CurrentSeries.datum_kind\" | \"CurrentSeries.datum_uncertainty_m\" | \"CurrentSeries.bin_number\" | \"CurrentSeries.tz\" | \"CurrentSeries.tz_version\" | \"CurrentSeries.release\" | \"CurrentSeries.algorithm\" | \"CurrentSeries.to_local\" | \"CurrentEventList.items\" | \"CurrentEventList.station_id\" | \"CurrentEventList.timezone\" | \"CurrentEventList.method\" | \"CurrentEventList.set_id\" | \"CurrentEventList.convention_id\" | \"CurrentEventList.astro_table_id\" | \"CurrentEventList.reference_station_id\" | \"CurrentEventList.reference_bin\" | \"CurrentEventList.datum\" | \"CurrentEventList.datum_name\" | \"CurrentEventList.datum_kind\" | \"CurrentEventList.datum_uncertainty_m\" | \"CurrentEventList.bin_number\" | \"CurrentEventList.omitted_event_types\" | \"CurrentEventList.tz\" | \"CurrentEventList.tz_version\" | \"CurrentEventList.release\" | \"CurrentEventList.algorithm\" | \"CurrentEventList.to_local\" | \"DatumInfo.set_id\" | \"DatumInfo.zero\" | \"DatumInfo.zero_name\" | \"DatumInfo.chart_datum\" | \"DatumInfo.msl_offset_m\" | \"DatumInfo.levels\" | \"DatumLevel.key\" | \"DatumLevel.value_m\" | \"DatumLevel.above_chart_m\" | \"DatumLevel.kind\" | \"DatumLevel.method\" | \"DatumLevel.source_name\" | \"DatumLevel.epoch\" | \"DatumLevel.data_span\" | \"DatumLevel.control_station_id\" | \"DatumLevel.control_set_id\" | \"DatumLevel.control_source_id\" | \"DatumLevel.uncertainty_m\" | \"DatumLevel.uncertainty_basis\" | \"DatumLevel.flags\" | \"Ranges.mn\" | \"Ranges.gt\" | \"Ranges.dhq\" | \"Ranges.dlq\" | \"Fallback.reason\" | \"Fallback.basis\" | \"Fallback.otc_finding\" | \"Fallback.preferred_set_id\" | \"Fallback.raw\" | \"SourceRecord.source\" | \"SourceRecord.source_version\" | \"SourceRecord.source_record_id\" | \"SourceRecord.role\" | \"SourceRecord.disposition\" | \"SourceRecord.detail\" | \"SourceRecord.licence_id\" | \"SourceRecord.upstream_licence_id\" | \"SourceRecord.published_set_ids\" | \"SourceRecord.provenance\" | \"SourceRecord.original_metadata\" | \"SourceRecord.original_harmonics\" | \"SourceRecord.licence\" | \"SourceRecord.upstream_licence\" | \"SourceRecord.raw\" | \"HistoricalOffsetVintage.publication_year\" | \"HistoricalOffsetVintage.source_lifecycle\" | \"HistoricalOffsetVintage.removal_events\" | \"HistoricalOffsetVintage.current_validity\" | \"HistoricalOffsetVintage.current_accuracy\" | \"HistoricalOffsetVintage.reference_2020_equivalence\" | \"HistoricalOffsetVintage.reference_2020_equivalence_sha256\" | \"HistoricalOffsetProvenance.source_manifest_sha256\" | \"HistoricalOffsetProvenance.input_sha256\" | \"HistoricalOffsetProvenance.book\" | \"HistoricalOffsetProvenance.annual_table_row\" | \"HistoricalOffsetProvenance.printed_page\" | \"HistoricalOffsetProvenance.pdf_page\" | \"HistoricalOffsetProvenance.raw_row_text\" | \"HistoricalOffsetProvenance.raw_values_json\" | \"HistoricalOffsetProvenance.id_crosswalk\" | \"HistoricalOffsetProvenance.reference_binding\" | \"HistoricalOffsetProvenance.acceptance_report_sha256\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -4418,7 +4418,7 @@
       "declaration": "type model_type = \"Client\" | \"Release\" | \"ReleaseInfo\" | \"FileInfo\" | \"Station\" | \"Tombstone\" | \"ConstantSet\" | \"Constituent\" | \"Convention\" | \"Licence\" | \"Provenance\" | \"ProvenanceBuild\" | \"TimeBase\" | \"QcFlag\" | \"DroppedConstituent\" | \"Validation\" | \"SubordinateOffsets\" | \"Nearby\" | \"UpdateResult\" | \"RecordSpan\" | \"Datum\" | \"Stats\" | \"AstroTable\" | \"HeightPoint\" | \"Extreme\" | \"CurrentPoint\" | \"CurrentEvent\" | \"HeightSeries\" | \"ExtremeList\" | \"CurrentSeries\" | \"CurrentEventList\" | \"DatumInfo\" | \"DatumLevel\" | \"Ranges\" | \"Fallback\" | \"SourceRecord\" | \"HistoricalOffsetVintage\" | \"HistoricalOffsetProvenance\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -4437,7 +4437,7 @@
       "declaration": "type current_operation = \"currents\" | \"current_events\"",
       "source": {
         "path": "ruby/sig/canonical.rbs",
-        "sha256": "d8e6304d038e735a6ee19821bce40a921f7c1f49b2a6e12921a82d8a2ad87511"
+        "sha256": "65f074453fd55975dcf27b645bd0554264926665cb31aab7766a3550855a7bf2"
       },
       "ownership": "Ruby GC; borrowed input; frozen private records",
       "cleanup": "Ruby GC; no acquired resource"
@@ -4477,7 +4477,7 @@
         "signature": "def validate_operation_arguments(operation:, arguments:, member_contract:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -4548,7 +4548,7 @@
         "signature": "def resolve_effective_options(explicit_options:, environment:, platform_defaults:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -4619,7 +4619,7 @@
         "signature": "def select_canonical_error(operation:, ordered_failures:, cause:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -4694,7 +4694,7 @@
         "signature": "def translate_native_binding(canonical_result: CanonicalTypes::ABSENT, canonical_error: CanonicalTypes::ABSENT, native_profile:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -4765,12 +4765,12 @@
         "signature": "def decode_release_document(source_bytes:, reader_version:, document_kind:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "source_bytes",
@@ -4800,8 +4800,7 @@
           "native_type": "OpenTideConstants::CanonicalTypes::parsed_document",
           "ownership": "Ruby GC; existing value or honest private native refusal",
           "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B05 body is unimplemented"
+        }
       }
     },
     {
@@ -4832,12 +4831,12 @@
         "signature": "def validate_release_links(parsed_document:, required_links:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "parsed_document",
@@ -4858,10 +4857,9 @@
           "canonical_name": "validated_release_graph",
           "concept_ref": "validated_release_graph",
           "native_type": "OpenTideConstants::CanonicalTypes::validated_release_graph",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B06 body is unimplemented"
+          "ownership": "Original parsed_document is returned after genuine native metadata/link validation; temporary validation owner holds no file descriptor",
+          "cleanup": "Native temporary validation owner is closed; original source values remain caller-owned"
+        }
       }
     },
     {
@@ -4902,7 +4900,7 @@
         "signature": "def materialize_typed_model(raw_fields:, field_contract:, origin:, model_type:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -4990,12 +4988,12 @@
         "signature": "def access_raw_record(access_kind:, source_record:, station:, release_origin:, native_profile:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "access_kind",
@@ -5039,8 +5037,7 @@
           "native_type": "OpenTideConstants::CanonicalTypes::raw_record_or_valid_station",
           "ownership": "Ruby GC; existing value or honest private native refusal",
           "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B08 body is unimplemented"
+        }
       }
     },
     {
@@ -5097,7 +5094,7 @@
         "signature": "def open_client_release(arguments:, environment:, platform_defaults:, cache_state:, clock:, native_profile:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5207,7 +5204,7 @@
         "signature": "def resolve_release_request(release_request:, effective_options:, cache_state:, clock:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5308,7 +5305,7 @@
         "signature": "def exchange_release_metadata(metadata_request:, trusted_cache:, transport_options:, cache_state:, clock:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5406,7 +5403,7 @@
         "signature": "def update_client_release(client_state:, update_request:, clock:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5490,7 +5487,7 @@
         "signature": "def refresh_client_if_due(client_state:, query_kind:, clock:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5564,7 +5561,7 @@
         "signature": "def forward_held_release(held_release:, query_arguments:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5624,12 +5621,12 @@
         "signature": "def enforce_resource_lifetime(resource_state:, lifetime_action:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "resource_state",
@@ -5650,10 +5647,9 @@
           "canonical_name": "resource_state_or_error",
           "concept_ref": "resource_state_or_error",
           "native_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B15 body is unimplemented"
+          "ownership": "Same borrowed native resource owner with its actual open/closed state; no replacement actor or fabricated return channel",
+          "cleanup": "Existing Client/Release close is idempotent, clears native cache and closes owned readers; remaining caller-scoped owners close in fixture teardown"
+        }
       }
     },
     {
@@ -5689,12 +5685,12 @@
         "signature": "def bind_checksum_manifest(checksum_bytes:, pointer_digests:, required_files:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "checksum_bytes",
@@ -5724,8 +5720,7 @@
           "native_type": "OpenTideConstants::CanonicalTypes::bound_checksums",
           "ownership": "Ruby GC; existing value or honest private native refusal",
           "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B16 body is unimplemented"
+        }
       }
     },
     {
@@ -5776,7 +5771,7 @@
         "signature": "def acquire_release_files(acquisition_descriptor:, effective_options:, load_mode:, cache_state:, clock:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5869,7 +5864,7 @@
         "signature": "def merge_cache_receipt(locked_cache_state:, verified_file_rows:, release_metadata:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -5946,7 +5941,7 @@
         "signature": "def select_cached_release(release_candidates:, effective_options:, cache_state:, clock:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6020,12 +6015,12 @@
         "signature": "def verify_release_files(release_files:, trusted_cached_pointer:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "release_files",
@@ -6048,8 +6043,7 @@
           "native_type": "OpenTideConstants::CanonicalTypes::verification_result",
           "ownership": "Ruby GC; existing value or honest private native refusal",
           "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B20 body is unimplemented"
+        }
       }
     },
     {
@@ -6100,7 +6094,7 @@
         "signature": "def publish_download(destination:, format_selection:, overwrite_policy:, release_files:, checksum_bytes:, pointer_digests:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6203,7 +6197,7 @@
         "signature": "def manage_cache_inventory(inventory_action:, cache_state:, keep:, current_cache_directory:, clock:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6294,7 +6288,7 @@
         "signature": "def perform_guarded_io(io_kind:, io_request:, io_options:, clock:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6373,7 +6367,7 @@
         "signature": "def project_station_index(station_source_row:, source_byte_span:, projection_contract:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6449,12 +6443,12 @@
         "signature": "def authenticate_station_index(source_files:, supplied_index:, index_presence:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "source_files",
@@ -6489,10 +6483,9 @@
           "canonical_name": "authenticated_index",
           "concept_ref": "authenticated_index",
           "native_type": "OpenTideConstants::CanonicalTypes::authenticated_index",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B25 body is unimplemented"
+          "ownership": "AuthenticatedIndex preserves actual source index fields/presence and owns its native_context Release reader",
+          "cleanup": "Caller closes native_context once through original Release close, closing the real descriptor and clearing its LRU"
+        }
       }
     },
     {
@@ -6528,12 +6521,12 @@
         "signature": "def compare_station_source(index_entry:, station_source_row:, index_presence:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "index_entry",
@@ -6561,10 +6554,9 @@
           "canonical_name": "compared_station_row",
           "concept_ref": "compared_station_row",
           "native_type": "OpenTideConstants::CanonicalTypes::compared_station_row",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B26 body is unimplemented"
+          "ownership": "Original source row and actual Entry are borrowed from their producing Release; native owner retains index deletion custody",
+          "cleanup": "No descriptor acquisition; mismatch invokes original owner deletion callback before native invalid_release"
+        }
       }
     },
     {
@@ -6605,12 +6597,12 @@
         "signature": "def read_station_lazily(stream_reader:, station_id:, release_origin:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "stream_reader",
@@ -6645,10 +6637,9 @@
           "canonical_name": "station_source_row",
           "concept_ref": "station_source_row",
           "native_type": "OpenTideConstants::CanonicalTypes::station_source_row",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B27 body is unimplemented"
+          "ownership": "Original requested source row is the native materialized Station.raw; borrowed input Release owns the single reader and bounded LRU",
+          "cleanup": "No additional reader handle; original owning Release close clears its LRU and closes the descriptor"
+        }
       }
     },
     {
@@ -6731,7 +6722,7 @@
         "signature": "def lookup_station_identity(release_view:, identity_query:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6803,7 +6794,7 @@
         "signature": "def select_effective_recommendation(station_sets:, original_recommendation:, commercial_only:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6875,7 +6866,7 @@
         "signature": "def admit_quality_path(candidate_path:, include_flagged:, include_fallback:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -6947,7 +6938,7 @@
         "signature": "def admit_commercial_path(candidate_path:, commercial_only:, commercial_basis:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7019,7 +7010,7 @@
         "signature": "def resolve_reference_path(station_source_row:, path_request:, release_view:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7097,7 +7088,7 @@
         "signature": "def execute_discovery_query(release_view:, query_kind:, query_options:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7181,7 +7172,7 @@
         "signature": "def summarize_station_sets(summary_kind:, release_view:, station_sets:, summary_options:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7271,7 +7262,7 @@
         "signature": "def admit_historical_offset(own_offset:, reference_path:, historical_policy:, selection_kind:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7357,7 +7348,7 @@
         "signature": "def format_attribution(station:, release_view:, commercial_only:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7424,7 +7415,7 @@
         "signature": "def format_citation(published_metadata:, citation_style:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7494,7 +7485,7 @@
         "signature": "def parse_prediction_window(time_inputs:, window_inputs:, step:, local_time_profile:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7577,7 +7568,7 @@
         "signature": "def select_prediction_model(station_request:, release_view:, selection_options:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7651,7 +7642,7 @@
         "signature": "def evaluate_astronomy(selected_prediction_model:, utc_instant:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7715,7 +7706,7 @@
         "signature": "def evaluate_harmonic_height(selected_prediction_model:, prediction_instants:, requested_datum:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7781,7 +7772,7 @@
         "signature": "def find_tide_events(selected_prediction_model:, prediction_window:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7851,7 +7842,7 @@
         "signature": "def evaluate_direct_current(selected_prediction_model:, prediction_window:, current_request:, current_operation:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -7940,7 +7931,7 @@
         "signature": "def evaluate_tide_offset(own_offset:, reference_path:, prediction_window:, tide_request:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8031,7 +8022,7 @@
         "signature": "def fold_equal_tide_offset(own_offset:, reference_model:, prediction_instants:, requested_datum:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8120,7 +8111,7 @@
         "signature": "def evaluate_current_offset(own_current_offsets:, reference_path:, prediction_window:, current_request:, reader_version:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8242,7 +8233,7 @@
         "signature": "def dispatch_auxiliary_result(auxiliary_kind:, auxiliary_operation:, source_values:, result_context:, local_time_profile:, result_values:, utc_result:, selection_options:, reader_version:, auxiliary_member_id:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8358,7 +8349,7 @@
         "signature": "def retain_raw_source_record(source_record:, native_profile:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8417,12 +8408,12 @@
         "signature": "def check_station_origin(station:, release_origin:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
-        "status": "private_unimplemented_refusal",
-        "visibility": "private",
+        "status": "reused_callable",
+        "visibility": "private reused native phase adapter",
         "parameters": [
           {
             "canonical_name": "station",
@@ -8443,10 +8434,9 @@
           "canonical_name": "valid_station",
           "concept_ref": "valid_station",
           "native_type": "OpenTideConstants::CanonicalTypes::valid_station",
-          "ownership": "Ruby GC; existing value or honest private native refusal",
-          "cleanup": "Ruby GC; no acquired resource"
-        },
-        "refusal": "Private canonical construction only: B08.origin body is unimplemented"
+          "ownership": "Borrowed actual Station from the same producing Release; its frozen private token retains no heavyweight Release",
+          "cleanup": "Station remains usable as retained metadata; owning Release/Client closes its own resources"
+        }
       }
     },
     {
@@ -8482,7 +8472,7 @@
         "signature": "def manage_cache_lock(lock_request:, lock_state:, clock:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8549,7 +8539,7 @@
         "signature": "def request_http_resource(http_request:, transport_options:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8604,7 +8594,7 @@
         "signature": "def count_release_statistics(release_view:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8667,7 +8657,7 @@
         "signature": "def order_constant_sets(station_sets:, original_recommendation:, commercial_only:, include_no_constants:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8756,7 +8746,7 @@
         "signature": "def read_auxiliary_model_value(auxiliary_operation:, source_values:, selection_options:, reader_version:, auxiliary_member_id:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8837,7 +8827,7 @@
         "signature": "def construct_prediction_result(result_values:, result_context:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8897,7 +8887,7 @@
         "signature": "def convert_result_to_local_time(utc_result:, local_time_profile:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -8957,7 +8947,7 @@
         "signature": "def find_unrounded_tide_events(selected_prediction_model:, prediction_window:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -9021,7 +9011,7 @@
         "signature": "def find_unrounded_current_events(selected_prediction_model:, prediction_window:, current_request:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -9087,7 +9077,7 @@
         "signature": "def acquire_checksum_sidecar(acquisition_descriptor:, effective_options:)",
         "source": {
           "path": "ruby/lib/opentideconstants/canonical.rb",
-          "sha256": "06a54c95e983167d36004c84debc324aa0433cc391c8f8e7e1f303681860eb28"
+          "sha256": "d7d38fdf4b41682175bd592a46aee4b2048dc1579da8d4f802972707ff1ca732"
         },
         "async": "synchronous Ruby",
         "lifetime": "GC owned caller scope; no new acquisition",
@@ -9212,8 +9202,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::valid_station",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Borrowed actual Station from the same producing Release; its frozen private token retains no heavyweight Release",
+      "cleanup": "Station remains usable as retained metadata; owning Release/Client closes its own resources"
     },
     {
       "caller_id": "B09",
@@ -9557,8 +9547,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::validated_release_graph",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Original parsed_document is returned after genuine native metadata/link validation; temporary validation owner holds no file descriptor",
+      "cleanup": "Native temporary validation owner is closed; original source values remain caller-owned"
     },
     {
       "caller_id": "B10",
@@ -10248,8 +10238,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Same borrowed native resource owner with its actual open/closed state; no replacement actor or fabricated return channel",
+      "cleanup": "Existing Client/Release close is idempotent, clears native cache and closes owned readers; remaining caller-scoped owners close in fixture teardown"
     },
     {
       "caller_id": "B12",
@@ -10517,8 +10507,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Same borrowed native resource owner with its actual open/closed state; no replacement actor or fabricated return channel",
+      "cleanup": "Existing Client/Release close is idempotent, clears native cache and closes owned readers; remaining caller-scoped owners close in fixture teardown"
     },
     {
       "caller_id": "B17",
@@ -10907,8 +10897,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::authenticated_index",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "AuthenticatedIndex preserves actual source index fields/presence and owns its native_context Release reader",
+      "cleanup": "Caller closes native_context once through original Release close, closing the real descriptor and clearing its LRU"
     },
     {
       "caller_id": "B18",
@@ -11416,8 +11406,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Same borrowed native resource owner with its actual open/closed state; no replacement actor or fabricated return channel",
+      "cleanup": "Existing Client/Release close is idempotent, clears native cache and closes owned readers; remaining caller-scoped owners close in fixture teardown"
     },
     {
       "caller_id": "B27",
@@ -11531,8 +11521,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::compared_station_row",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Original source row and actual Entry are borrowed from their producing Release; native owner retains index deletion custody",
+      "cleanup": "No descriptor acquisition; mismatch invokes original owner deletion callback before native invalid_release"
     },
     {
       "caller_id": "B29",
@@ -11596,8 +11586,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::station_source_row",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Original requested source row is the native materialized Station.raw; borrowed input Release owns the single reader and bounded LRU",
+      "cleanup": "No additional reader handle; original owning Release close clears its LRU and closes the descriptor"
     },
     {
       "caller_id": "B29",
@@ -11708,8 +11698,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::resource_state_or_error",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Same borrowed native resource owner with its actual open/closed state; no replacement actor or fabricated return channel",
+      "cleanup": "Existing Client/Release close is idempotent, clears native cache and closes owned readers; remaining caller-scoped owners close in fixture teardown"
     },
     {
       "caller_id": "B34",
@@ -12226,8 +12216,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::valid_station",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Borrowed actual Station from the same producing Release; its frozen private token retains no heavyweight Release",
+      "cleanup": "Station remains usable as retained metadata; owning Release/Client closes its own resources"
     },
     {
       "caller_id": "B37",
@@ -12385,8 +12375,8 @@
         }
       ],
       "result_type": "OpenTideConstants::CanonicalTypes::valid_station",
-      "owner": "native Ruby fixture caller",
-      "cleanup": "Ruby GC; no acquired resource"
+      "owner": "Borrowed actual Station from the same producing Release; its frozen private token retains no heavyweight Release",
+      "cleanup": "Station remains usable as retained metadata; owning Release/Client closes its own resources"
     },
     {
       "caller_id": "B40",

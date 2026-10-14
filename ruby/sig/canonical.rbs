@@ -109,6 +109,10 @@ class OpenTideConstants
         end
     end
     module CanonicalTypes
+        class ChecksumBytes < String
+            def self.new: (String, source: String) -> ChecksumBytes
+            attr_reader source: String
+        end
         interface _Logger
             def debug: (String) -> void
             def info: (String) -> void
@@ -812,15 +816,17 @@ class OpenTideConstants
             attr_reader current_offsets: Array[AuthenticatedIndexStationsItemCurrentOffsetsItem]
         end
         class AuthenticatedIndex
-            def self.new: (index_version: 1, discovery_index_version: 1, datestamp: String, jsonl: String, jsonl_sha256: String, jsonl_size: Integer, by: String, stations: Array[AuthenticatedIndexStationsItem]) -> AuthenticatedIndex
+            def self.new: (index_version: 1, discovery_index_version: 1 | AbsentValue, datestamp: String, jsonl: String, jsonl_sha256: String, jsonl_size: Integer, by: json_value | AbsentValue, stations: Array[AuthenticatedIndexStationsItem | Hash[String, json_value]], ?native_context: ::OpenTideConstants::Release | nil, ?source_document: Hash[String, json_value] | nil) -> AuthenticatedIndex
             attr_reader index_version: 1
-            attr_reader discovery_index_version: 1
+            attr_reader discovery_index_version: 1 | AbsentValue
             attr_reader datestamp: String
             attr_reader jsonl: String
             attr_reader jsonl_sha256: String
             attr_reader jsonl_size: Integer
-            attr_reader by: String
-            attr_reader stations: Array[AuthenticatedIndexStationsItem]
+            attr_reader by: json_value | AbsentValue
+            attr_reader stations: Array[AuthenticatedIndexStationsItem | Hash[String, json_value]]
+            attr_reader native_context: ::OpenTideConstants::Release | nil
+            attr_reader source_document: Hash[String, json_value] | nil
         end
         class SelectedResult0
             def self.new: (member_id: "Client.open", value: ::OpenTideConstants) -> SelectedResult0
@@ -1556,9 +1562,10 @@ class OpenTideConstants
             attr_reader reason: String | nil
         end
         class ReaderVersion
-            def self.new: (major: Integer, minor: Integer) -> ReaderVersion
+            def self.new: (major: Integer, minor: Integer, ?native_context: ::OpenTideConstants::Release | nil) -> ReaderVersion
             attr_reader major: Integer
             attr_reader minor: Integer
+            attr_reader native_context: ::OpenTideConstants::Release | nil
         end
         class Scenario
             def self.new: (behavior_ids: Array[String], input: json_value, expected_output: json_value, expected_error: canonical_error | nil, expected_state: json_value) -> Scenario
@@ -1789,8 +1796,8 @@ class OpenTideConstants
         type include_fallback = bool
         type include_flagged = bool
         type include_no_constants = bool
-        type index_entry = IndexEntry
-        type index_presence = Hash[String, bool]
+        type index_entry = IndexEntry | ::OpenTideConstants::Release::Entry
+        type index_presence = Hash[String, bool] | ::OpenTideConstants::Release
         type inventory_action = "list" | "prune"
         type io_kind = "lock" | "http"
         type io_options = lock_state | transport_options
@@ -1843,17 +1850,17 @@ class OpenTideConstants
         type reference_model = domain_prediction_model
         type reference_path = domain_reference_path
         type release_candidates = Array[String]
-        type release_files = Array[::OpenTideConstants::FileInfo]
+        type release_files = Array[::OpenTideConstants::FileInfo] | ::OpenTideConstants
         type release_metadata = json_value
-        type release_origin = Origin
+        type release_origin = Origin | ::OpenTideConstants::Release
         type release_request = "latest" | String
         type release_statistics = ::OpenTideConstants::Stats
         type release_view = ::OpenTideConstants::Release
         type requested_datum = String
         type required_files = domain_file_rows
         type required_links = Array[RequiredLink]
-        type resource_state = client_state | ::OpenTideConstants::Release | stream_reader
-        type resource_state_or_error = client_state | ::OpenTideConstants::Release | stream_reader
+        type resource_state = client_state | ::OpenTideConstants | ::OpenTideConstants::Release | stream_reader
+        type resource_state_or_error = client_state | ::OpenTideConstants | ::OpenTideConstants::Release | stream_reader
         type result_context = domain_result_context
         type result_values = member_result
         type review_reports = Array[String]
@@ -1865,7 +1872,7 @@ class OpenTideConstants
         type selection_options = domain_selection_options
         type source_byte_span = SourceByteSpan
         type source_bytes = String
-        type source_files = SourceFiles
+        type source_files = SourceFiles | ::OpenTideConstants
         type source_record = Hash[String, json_value]
         type source_values = domain_auxiliary_values
         type station = ::OpenTideConstants::Station
@@ -1877,10 +1884,10 @@ class OpenTideConstants
         type station_source_row = domain_station_row
         type station_summary = release_statistics | ordered_constant_sets
         type step = Float | Integer | nil
-        type stream_reader = StreamReader
+        type stream_reader = StreamReader | ::OpenTideConstants::Release
         type summary_kind = "stats" | "constant_sets"
         type summary_options = SummaryOptions
-        type supplied_index = SuppliedIndex | nil
+        type supplied_index = SuppliedIndex | Hash[String, json_value] | nil
         type tide_events = ::OpenTideConstants::ExtremeList
         type tide_request = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
         type time_inputs = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal

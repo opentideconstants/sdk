@@ -50,6 +50,17 @@ class OpenTideConstants
         # commercial_only: the open option of spec §4.2 (K-NC DR106).
         def initialize(meta:, stations:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
                        logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
+            prepare_release_fields(meta: meta, mode: mode, files: files, checks: checks, io: io,
+                                   zenodo_version_doi: zenodo_version_doi, on_bad_index: on_bad_index, logger: logger,
+                                   commercial_only: commercial_only, commercial_basis: commercial_basis,
+                                   historical_offsets_policy: historical_offsets_policy)
+            load_stations(stations)
+            freeze
+        end
+
+        def prepare_release_fields(meta:, mode:, files:, checks:, io: nil, zenodo_version_doi: nil, on_bad_index: nil,
+                                   logger: nil, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
+            @station_origin = Object.new.freeze
             @mode = mode
             @commercial_only = commercial_only
             @commercial_basis = commercial_basis.to_s
@@ -102,9 +113,8 @@ class OpenTideConstants
             Release.no_repeats!(@licences.map(&:licence_id), "licence_id")
             @convention_by_id = @conventions.to_h { |c| [c.convention_id, c] }.freeze
             @licence_by_id = @licences.to_h { |l| [l.licence_id, l] }.freeze
-            load_stations(stations)
-            freeze
         end
+        private :prepare_release_fields
 
         # Raises unsupported_format unless the format major is supported, and
         # reader_too_old when release.min_reader_version is newer than
@@ -533,17 +543,21 @@ class OpenTideConstants
         # Station is invalid_argument (CR2 DR24).
         def own_station!(station, what)
             raise InvalidArgumentError, "#{what}: station must be a Station" unless station.is_a?(Station)
-            return if @by_id.key?(station.station_id) && station.instance_variable_get(:@origin).equal?(self)
+            return if @by_id.key?(station.station_id) && station.instance_variable_get(:@origin).equal?(@station_origin)
             raise InvalidArgumentError, "#{what}: station #{station.station_id} is not a station of release #{@datestamp}"
         end
 
         def validate_attribution_station_owner(station)
             raise InvalidArgumentError, "stations must be an Array of Station" unless station.is_a?(Station)
             entry = @by_id[station.station_id]
-            unless entry && station.instance_variable_get(:@origin).equal?(self)
+            unless entry && station.instance_variable_get(:@origin).equal?(@station_origin)
                 raise InvalidArgumentError, "station #{station.station_id} is not a station of release #{@datestamp}"
             end
             entry
+        end
+
+        def station_origin
+            @station_origin
         end
 
 
@@ -600,7 +614,7 @@ class OpenTideConstants
             end
         end
 
-        def materialize(e)
+        def materialize(e, canonical: nil, reader_version: nil)
             check_open!
             return e.station if e.station
             cached = @station_cache_lock.synchronize do
@@ -614,11 +628,17 @@ class OpenTideConstants
                 @io.seek(e.pos)
                 @io.read(e.len)
             end
-            raw, why = line && line.bytesize == e.len ? parse_station(line) : nil
+            raw, why = line && line.bytesize == e.len ? parse_station(line, canonical: canonical, reader_version: reader_version) : nil
             unless raw.is_a?(Hash) && raw["station_id"] == e.station_id
                 bad_line!(e, raw.is_a?(Hash) ? "is #{raw['station_id'].inspect}" : ["is not a station line", why].compact.join(": "))
             end
-            check_line!(raw, e) if e.view
+            if e.view
+                if canonical
+                    canonical.__send__(:compare_station_source, index_entry: e, station_source_row: raw, index_presence: self)
+                else
+                    check_line!(raw, e)
+                end
+            end
             effective = e.eff_id
             if @commercial_only && Reader.policy_uncached?(e.view)
                 sets = raw["constant_sets"] || []
@@ -670,7 +690,8 @@ class OpenTideConstants
 
         # [the parsed line, nil], or [nil, why it does not parse] (R3-226: the
         # reason goes into the invalid_release message).
-        def parse_station(line)
+        def parse_station(line, canonical: nil, reader_version: nil)
+            return [canonical.__send__(:decode_release_document, source_bytes: line, reader_version: reader_version, document_kind: "station_row"), nil] if canonical
             line = line.force_encoding(Encoding::UTF_8)
             Util.no_lone_surrogate!(line)
             [JSON.parse(line), nil]
@@ -702,6 +723,7 @@ class OpenTideConstants
         end
 
         def bind_prepared_release_fields(prepared)
+            @station_origin = Object.new.freeze
             @mode = prepared.mode
             @commercial_only = prepared.commercial_only
             @commercial_basis = prepared.commercial_basis
