@@ -199,6 +199,31 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    def test_prune_keeps_young_unlocked_partial_without_refreshing_its_age
+        cache = tmpdir
+        partial = File.join(cache, "v1", "releases", "20991230")
+        FileUtils.mkdir_p(partial)
+        payload = File.join(partial, "source-record-original")
+        bytes = "source record and provenance retained"
+        File.binwrite(payload, bytes)
+        at = Time.now - 60
+        File.utime(at, at, partial)
+        original_mtime = File.mtime(partial)
+        c = OTC.new(file: fixture("good", "OTC_20991231.2.json"), cache_dir: cache)
+        original_raw = JSON.generate(c.station("OTC-T-0001").raw)
+
+        assert_equal [], c.cached_releases
+        assert_equal [], c.prune(keep: 0)
+        assert File.directory?(partial), "prune removed a young, unlocked partial directory"
+        assert_equal bytes, File.binread(payload)
+        assert_equal original_mtime, File.mtime(partial), "prune refreshed a young partial directory's age"
+        refute File.exist?(File.join(partial, ".lock"))
+        refute File.exist?(File.join(partial, ".verified"))
+        assert_equal original_raw, JSON.generate(c.station("OTC-T-0001").raw)
+    ensure
+        c&.close
+    end
+
     # R13-A1: prune protects only the current release directory. On POSIX,
     # an earlier held stream release still reads its removed files.
     def test_prune_removes_an_earlier_held_release_and_keeps_the_current_one
