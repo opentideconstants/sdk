@@ -2146,7 +2146,9 @@ export function subordinateOffsetsOf(off: JsonObject): SubordinateOffsets {
 /** @internal Existing retained historical alias; admission belongs to the original caller. */
 export function historicalVintageOf(off: JsonObject): HistoricalOffsetVintage | null {
     if (!Object.hasOwn(off, "offset_id")) return null;
-    return obj(off, "vintage") as unknown as HistoricalOffsetVintage | null;
+    const vintage = obj(off, "vintage");
+    if (vintage === null) return null;
+    return Object.freeze({ ...vintage, reference_2020_equivalence_sha256: str(vintage, "reference_2020_equivalence_sha256") }) as unknown as HistoricalOffsetVintage;
 }
 
 /** @internal Existing retained historical alias; admission belongs to the original caller. */
