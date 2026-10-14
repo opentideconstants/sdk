@@ -75,6 +75,18 @@ internal struct Cache {
     }
     static func validVerified(_ value:JSONValue,stamp:String)->Bool {
         guard case .object=value,case .object=value["files"] else { return false }
+        var pending:[(JSONValue,Int)]=[(value,1)]
+        while let (node,depth)=pending.popLast() {
+            switch node {
+            case .array(let children):
+                guard depth<=64 else { return false }
+                pending.append(contentsOf:children.map { ($0,depth+1) })
+            case .object(let children):
+                guard depth<=64 else { return false }
+                pending.append(contentsOf:children.values.map { ($0,depth+1) })
+            default:break
+            }
+        }
         for row in value["files"].object.values {
             guard case .object=row,let size=row["size"].integer,(0...9_007_199_254_740_991).contains(size),row["url"].isNull || row["url"].string != nil else { return false }
             if !row["sha256"].isNull {
@@ -83,7 +95,7 @@ internal struct Cache {
         }
         if !value["datestamp"].isNull && value["datestamp"].string != stamp { return false }
         for key in ["format_version","min_reader_version"] where !value[key].isNull {
-            guard let version=value[key].string,version.range(of:#"^[0-9]+\.[0-9]+$"#,options:.regularExpression)?.upperBound==version.endIndex else { return false }
+            guard let version=value[key].string,version.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression)?.upperBound==version.endIndex else { return false }
         }
         for key in ["zenodo_version_doi","verified_at","by"] where !value[key].isNull {
             guard value[key].string != nil else { return false }
