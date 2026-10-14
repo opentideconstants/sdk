@@ -253,7 +253,13 @@ class OpenTideConstants
             @decided_in = raw["decided_in"]
             @decided_build_commit = raw["decided_build_commit"]
             @evidence = Array(raw["evidence"]).select { |e| e.is_a?(Hash) }
-                                              .map { |e| EVIDENCE_KEYS.to_h { |k| [k, e[k]] }.freeze }.freeze
+                                              .map do |e|
+                EVIDENCE_KEYS.to_h do |k|
+                    value = e[k]
+                    value = value.to_f if %w[distance_km lag_min].include?(k) && value.is_a?(Numeric)
+                    [k, value]
+                end.freeze
+            end.freeze
             freeze
         end
     end
