@@ -102,7 +102,10 @@ public struct TimeBase: Sendable, Equatable {
     public var reason: String { raw["reason"].string ?? "" }
     public var declared: String { raw["declared"].string ?? "" }
     public var published: String { raw["published"].string ?? "" }
-    public var correction: JSONValue? { raw["correction"].isNull ? nil : raw["correction"] }
+    public var correction: JSONValue? {
+        guard case .object(let correction) = raw["correction"] else { return nil }
+        return .object(["from": correction["from"] ?? .null, "to": correction["to"] ?? .null])
+    }
     public var monthsDropped: [String] { raw["months_dropped"].array.compactMap(\.string) }
     public var decidedIn: String { raw["decided_in"].string ?? "" }
     public var decidedBuildCommit: String? { raw["decided_build_commit"].string }
