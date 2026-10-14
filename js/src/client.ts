@@ -20,6 +20,7 @@ import { headerFromMeta, parseSha256, releaseFromJson, releaseFromJsonl, scanJso
 import type { BlockingResult, NodeMod } from "./node-api.js";
 import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
+import { noteReleaseVersionDoi } from "./release.js";
 import type {
     DownloadOptions, FileInfo, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
     PruneOptions, ReleaseInfo, SearchOptions, StationFilters, Tombstone, UpdateResult,
@@ -728,6 +729,20 @@ export class OpenTideConstants {
         this.#lastError = null;
     }
 
+    /** Note the selected entry's DOI for its cached release and, when it matches, the current session. */
+    async #observeEntry(entry: PointerEntry): Promise<void> {
+        if (entry.zenodo_version_doi === null) return;
+        if (entry.datestamp === this.#release.datestamp) noteReleaseVersionDoi(this.#release, entry.zenodo_version_doi);
+        const ctx = this.#ctx;
+        if (!ctx.store) return;
+        try {
+            const verified = await readVerified(ctx.store, entry.datestamp);
+            if (verified) await syncZenodo(ctx, verified, entry);
+        } catch (e) {
+            log(ctx, "warn", `cannot update the .verified of ${entry.datestamp}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
     /** After close, every query and release-management call is io (spec 4.2, CR D21). */
     #check(): void {
         if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
@@ -814,6 +829,7 @@ get release(): Release {
         if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
         const entry = await getPointer(this.#ctx);
         this.#reachedPointer();
+        await this.#observeEntry(entry);
         return toInfo(entry);
     }
 
@@ -832,6 +848,7 @@ get release(): Release {
         try {
             read = await readPointer(ctx);
             this.#reachedPointer();
+            await this.#observeEntry(read.entry);
         } catch (e) {
             if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
             tooNew = e;
@@ -877,6 +894,8 @@ get release(): Release {
         const entry = await getPointer(this.#ctx);
         this.#reachedPointer();
         // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
+        this.#check();
+        await this.#observeEntry(entry);
         this.#check();
         if (compareDatestamps(entry.datestamp, from) <= 0) return updateResultOf(false, from, from);
         const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false,

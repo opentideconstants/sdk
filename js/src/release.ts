@@ -22,6 +22,13 @@ const QC_STATUSES = ["ok", "flagged", "no_constants"] as const;
 const WITH_CONSTANTS: ReadonlySet<string> = new Set(["ok", "flagged"]);
 const DEG = Math.PI / 180;
 
+const versionDoiNotes = new WeakMap<Release, string | null>();
+
+/** @internal Metadata read for this release may refresh its DOI without changing its frozen data. */
+export function noteReleaseVersionDoi(release: Release, doi: string | null): void {
+    if (doi !== null) versionDoiNotes.set(release, doi);
+}
+
 // ------------------------------------------------------------------------------------------ index
 
 /** @internal One constant set in a stream index entry (spec 6.2). */
@@ -1205,7 +1212,7 @@ export class Release {
      * The DOI of this release's own Zenodo version, from the pointer or index entry the SDK read for it, or null
      * (always null for a file; spec 4.3).
      */
-    readonly zenodo_version_doi: string | null;
+    readonly zenodo_version_doi!: string | null;
     readonly source_versions: Readonly<Record<string, string>>;
     readonly build_commit: string | null;
     readonly changelog_url: string | null;
@@ -1244,7 +1251,10 @@ export class Release {
         this.created = fields.created;
         this.format_version = fields.format_version;
         this.concept_doi = fields.concept_doi;
-        this.zenodo_version_doi = fields.zenodo_version_doi;
+        versionDoiNotes.set(this, fields.zenodo_version_doi);
+        Object.defineProperty(this, "zenodo_version_doi", {
+            enumerable: true, get: () => versionDoiNotes.get(this) ?? null,
+        });
         this.source_versions = fields.source_versions;
         this.build_commit = fields.build_commit;
         this.changelog_url = fields.changelog_url;
