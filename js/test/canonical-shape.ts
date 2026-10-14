@@ -331,6 +331,11 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
             { native_profile: profile, canonical_error: { code: 'station_removed', structured_fields: {}, cause: null }, native_constructor_context: { code: 'station_removed', stationId: removedTombstone.station_id, tombstone: removedTombstone, reason: removedReason } },
             { native_profile: profile, canonical_error: { code: 'file_exists', structured_fields: {}, cause: null }, native_constructor_context: { code: 'file_exists', path: '/native/typed-constructor-control' } },
             { native_profile: profile, canonical_error: { code: 'release_not_found', structured_fields: { message: '' }, cause: null }, native_cause_option: { presence: 'present', value: null } },
+            { native_profile: profile, canonical_error: { code: 'unsupported_constituent', structured_fields: { message: 'unsupported constituent ZZ9', constituent: 'ZZ9' }, cause: null } },
+            { native_profile: profile, canonical_error: { code: 'time_out_of_range', structured_fields: { message: 'year 2031 is outside the astro table', first_year: 2000, last_year: 2030 }, cause: null } },
+            { native_profile: profile, canonical_error: { code: 'datum_unavailable', structured_fields: { message: 'datum is missing msl_offset_m', missing: 'msl_offset_m' }, cause: null } },
+            { native_profile: profile, canonical_error: { code: 'unknown_time_zone', structured_fields: { message: 'unknown time zone Mars/Olympus', zone: 'Mars/Olympus' }, cause: null } },
+            { native_profile: profile, canonical_error: { code: 'reference_unavailable', structured_fields: { message: 'reference OTC-P-0048 has no usable set', reference_station_id: 'OTC-P-0048' }, cause: null } },
         ];
         const b04_presence_controls = await Promise.all(bindingVariants.map(async (input, index) => ({ ...await invoke('B04', () => native.translate_native_binding(input), JSON.stringify(input)), id: `B04.presence.${index}` })));
         return { runtime, call_actions, b04_presence_controls, control: { station_id: station.station_id, raw_preserved: station.raw.station_id === station.station_id, public_route_unchanged: release.station(station.station_id) === station } };

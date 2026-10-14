@@ -1,5 +1,5 @@
 import type * as C from './canonical-types.js';
-import { deepFreeze, isObject, arr, str, num } from './json.js';
+import { deepFreeze, isObject, arr, str, num, type JsonObject } from './json.js';
 import { encodeCacheJson } from './cache-json.js';
 import { Station, ConstantSet, indexDoc, constituentOf, timeBaseOf, buildOf, validationOf, fallbackOf, qcFlagOf, sourceRecordOf, checkFilters, validateSearchOptions, validateNearOptions, validateNearestOptions, validateConstantSetsOptions,
     recordSpanOf, datumOf, droppedConstituentOf, provenanceOf, conventionOf, licenceOf, tombstoneOf, subordinateOffsetsOf, historicalVintageOf, historicalProvenanceOf, nearbyOf, statsOf, releaseFromPrepared, predictionOptions, validateAllSets, validateAttributionList } from './release.js';
@@ -204,6 +204,15 @@ export function translate_native_binding(inputs: C.NativeBindingInputs): C.nativ
         case 'historical_offsets_excluded': throw new X.HistoricalOffsetsExcludedError(message, cause);
         case 'pinned_release': throw new X.PinnedReleaseError(message);
         case 'unsupported': throw new X.UnsupportedError(message);
+        case 'unsupported_constituent': throw new X.UnsupportedConstituentError(message, { constituent: nativeErrorString(fields, 'constituent'), ...cause });
+        case 'datum_unavailable': throw new X.DatumUnavailableError(message, { missing: nativeErrorString(fields, 'missing'), ...cause });
+        case 'unknown_time_zone': throw new X.UnknownTimeZoneError(message, { zone: nativeErrorString(fields, 'zone'), ...cause });
+        case 'reference_unavailable': throw new X.ReferenceUnavailableError(message, { reference_station_id: nativeErrorString(fields, 'reference_station_id'), ...cause });
+        case 'time_out_of_range': {
+            const first_year = num(fields, 'first_year'), last_year = num(fields, 'last_year');
+            if (first_year === null || last_year === null) throw new CanonicalUnimplementedError('B04 requires its native year-range fields');
+            throw new X.TimeOutOfRangeError(message, { first_year, last_year, ...cause });
+        }
     }
     if (failure.code === 'invalid_argument') throw new X.InvalidArgumentError(message);
     if (failure.code === 'io') throw new X.FileError(message, { path: str(fields, 'path') ?? '', cause: failure.cause ?? undefined });
@@ -219,6 +228,12 @@ export function translate_native_binding(inputs: C.NativeBindingInputs): C.nativ
         throw new X.CacheError(message, { removed: arr(fields, 'removed').filter((item): item is string => typeof item === 'string'), cause: failure.cause ?? undefined });
     }
     throw new CanonicalUnimplementedError(`B04 native error mapping ${failure.code}`);
+}
+
+function nativeErrorString(fields: JsonObject | null, key: 'constituent' | 'missing' | 'zone' | 'reference_station_id'): string | null {
+    const value = fields?.[key];
+    if (value !== null && typeof value !== 'string') throw new CanonicalUnimplementedError(`B04 requires its native ${key} field`);
+    return value;
 }
 
 export function decode_release_document(source_bytes: C.source_bytes, reader_version: C.reader_version, document_kind: C.document_kind): C.parsed_document {

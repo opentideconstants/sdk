@@ -4480,7 +4480,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -4551,7 +4551,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -4622,7 +4622,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -4697,7 +4697,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -4768,7 +4768,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B05 is unimplemented",
@@ -4835,7 +4835,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B06 is unimplemented",
@@ -4905,7 +4905,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -4993,7 +4993,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B08 is unimplemented",
@@ -5100,7 +5100,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B09 is unimplemented",
@@ -5210,7 +5210,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B10 is unimplemented",
@@ -5311,7 +5311,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B11 is unimplemented",
@@ -5409,7 +5409,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B12 is unimplemented",
@@ -5493,7 +5493,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B13 is unimplemented",
@@ -5567,7 +5567,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B14 is unimplemented",
@@ -5627,7 +5627,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B15 is unimplemented",
@@ -5692,7 +5692,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B16 is unimplemented",
@@ -5779,7 +5779,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B17 is unimplemented",
@@ -5872,7 +5872,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B18 is unimplemented",
@@ -5949,7 +5949,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B19 is unimplemented",
@@ -6023,7 +6023,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B20 is unimplemented",
@@ -6103,7 +6103,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B21 is unimplemented",
@@ -6206,7 +6206,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B22 is unimplemented",
@@ -6297,7 +6297,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B23 is unimplemented",
@@ -6376,7 +6376,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -6452,7 +6452,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B25 is unimplemented",
@@ -6531,7 +6531,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B26 is unimplemented",
@@ -6608,7 +6608,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B27 is unimplemented",
@@ -6677,7 +6677,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -6734,7 +6734,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B29 is unimplemented",
@@ -6806,7 +6806,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B30 is unimplemented",
@@ -6878,7 +6878,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B31 is unimplemented",
@@ -6950,7 +6950,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B32 is unimplemented",
@@ -7022,7 +7022,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B33 is unimplemented",
@@ -7100,7 +7100,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B34 is unimplemented",
@@ -7184,7 +7184,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B35 is unimplemented",
@@ -7274,7 +7274,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B36 is unimplemented",
@@ -7360,7 +7360,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B37 is unimplemented",
@@ -7427,7 +7427,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B38 is unimplemented",
@@ -7497,7 +7497,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -7580,7 +7580,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B40 is unimplemented",
@@ -7654,7 +7654,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -7718,7 +7718,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -7784,7 +7784,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B43 is unimplemented",
@@ -7854,7 +7854,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B44 is unimplemented",
@@ -7943,7 +7943,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B45 is unimplemented",
@@ -8034,7 +8034,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B46 is unimplemented",
@@ -8123,7 +8123,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B47 is unimplemented",
@@ -8245,7 +8245,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B48 is unimplemented",
@@ -8361,7 +8361,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -8420,7 +8420,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B08.origin is unimplemented",
@@ -8485,7 +8485,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B23.lock is unimplemented",
@@ -8552,7 +8552,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B23.http is unimplemented",
@@ -8607,7 +8607,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B35.stats is unimplemented",
@@ -8670,7 +8670,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B35.sets is unimplemented",
@@ -8759,7 +8759,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B48.aux is unimplemented",
@@ -8840,7 +8840,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B48.context is unimplemented",
@@ -8900,7 +8900,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B48.local is unimplemented",
@@ -8960,7 +8960,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -9024,7 +9024,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "reused_callable",
         "parameters": [
@@ -9090,7 +9090,7 @@
         "visibility": "private",
         "source": {
           "path": "js/src/canonical.ts",
-          "sha256": "8bc8cfd591ae30e095662f4581b5fcc3ed2b134b153533c7488131d03a6d0dae"
+          "sha256": "f0750519b2349c21075af23df1aa244cdaa6edeb384d4c823b550bbe81548fd5"
         },
         "status": "private_unimplemented_refusal",
         "refusal": "Private canonical seam B17.sidecar is unimplemented",
