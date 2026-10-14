@@ -69,13 +69,26 @@ internal struct Cache {
         guard FileManager.default.fileExists(atPath:path.path) else { return nil }
         do {
             let value=try JSONValue.parse(Data(contentsOf:path))
-            guard value["datestamp"].string==stamp,case .object=value["files"],!value["files"].object.isEmpty else { return nil }
-            for (name,row) in value["files"].object {
-                guard !name.contains("/"),name.hasPrefix("OTC_\(stamp)."),let size=row["size"].integer,size>=0,let sha=row["sha256"].string,sha.range(of:#"^[a-fA-F0-9]{64}$"#,options:.regularExpression)?.upperBound==sha.endIndex,row["url"].isNull || row["url"].string != nil else { return nil }
-            }
-            return value
+            return Self.validVerified(value,stamp:stamp) ? value:nil
         } catch let error as OpenTideConstantsError { if error.code=="invalid_release" { return nil };throw error }
         catch { throw OpenTideConstantsError.cache("cannot read \(path.path): \(error)") }
+    }
+    static func validVerified(_ value:JSONValue,stamp:String)->Bool {
+        guard case .object=value,case .object=value["files"] else { return false }
+        for row in value["files"].object.values {
+            guard case .object=row,let size=row["size"].integer,(0...9_007_199_254_740_991).contains(size),row["url"].isNull || row["url"].string != nil else { return false }
+            if !row["sha256"].isNull {
+                guard let sha=row["sha256"].string,sha.range(of:#"^[a-fA-F0-9]{64}$"#,options:.regularExpression)?.upperBound==sha.endIndex else { return false }
+            }
+        }
+        if !value["datestamp"].isNull && value["datestamp"].string != stamp { return false }
+        for key in ["format_version","min_reader_version"] where !value[key].isNull {
+            guard let version=value[key].string,version.range(of:#"^[0-9]+\.[0-9]+$"#,options:.regularExpression)?.upperBound==version.endIndex else { return false }
+        }
+        for key in ["zenodo_version_doi","verified_at","by"] where !value[key].isNull {
+            guard value[key].string != nil else { return false }
+        }
+        return true
     }
     func fileOK(_ stamp:String,_ name:String,_ row:JSONValue)throws->Bool {
         let path=try releaseDir(stamp).appendingPathComponent(name)
@@ -89,13 +102,13 @@ internal struct Cache {
         if let path=error.fields["file"]?.string { try? FileManager.default.removeItem(at:directory.appendingPathComponent(URL(fileURLWithPath:path).lastPathComponent)) }
     }
     // Directory locks are shared with the other SDKs. Only the token owner releases one.
-    func takeLock(_ directory:URL,wait:Bool=true)async throws->String? {
+    func takeLock(_ directory:URL,wait:Bool=true,beforeMkdir:(()->Void)?=nil)async throws->String? {
         do { try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true) }
         catch { throw OpenTideConstantsError.cache("cannot create \(directory.path): \(error)") }
         let lock=directory.appendingPathComponent(".lock"),start=ProcessInfo.processInfo.systemUptime
         var failures=0
         while true {
-            do { try FileManager.default.createDirectory(at:lock,withIntermediateDirectories:false) }
+            do { beforeMkdir?();try FileManager.default.createDirectory(at:lock,withIntermediateDirectories:false) }
             catch {
                 guard FileManager.default.fileExists(atPath:lock.path) else { throw OpenTideConstantsError.cache("cannot take lock \(lock.path): \(error)") }
                 let owner=(try? JSONValue.parse(Data(contentsOf:lock.appendingPathComponent("owner.json")))) ?? .null

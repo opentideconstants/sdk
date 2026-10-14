@@ -235,18 +235,43 @@ public final class OpenTideConstants {
         let directory=cache.base.appendingPathComponent("releases")
         guard FileManager.default.fileExists(atPath:directory.path) else { return [] }
         let candidates=try FileManager.default.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil).map(\.lastPathComponent).filter(Cache.validStamp).sorted(by:Cache.newer)
-        let retain=Set(try cache.cached().prefix(Int(min(keep,Int64(Int.max)))))
+        let verified=Set(try cache.cached())
+        let retain=Set(verified.sorted(by:Cache.newer).prefix(Int(min(keep,Int64(Int.max)))))
         var removed:[String]=[]
         for stamp in candidates where !protected.contains(stamp) && !retain.contains(stamp) {
+            let partial = !verified.contains(stamp)
             do {
-                let path=try cache.releaseDir(stamp),token=try await cache.takeLock(path,wait:false)
-                guard token != nil else { continue }
+                let path=try cache.releaseDir(stamp)
+                let modified=partial ? (try FileManager.default.attributesOfItem(atPath:path.path)[.modificationDate] as? Date):nil
+                let environment=ProcessInfo.processInfo.environment
+                let scaleText=environment["OTC_TEST_LOCK_SCALE"] ?? ""
+                let validScale=scaleText.range(of:#"^[1-9][0-9]{0,3}$"#,options:.regularExpression)?.upperBound==scaleText.endIndex && (1...1000).contains(Int(scaleText) ?? 0)
+                let scale=validScale ? Double(scaleText)!:1
+                let beforeMkdir:(()->Void)?=partial ? { [io] in
+                    guard validScale,let plant=environment["OTC_TEST_PRUNE_PLANT_VERIFIED"],!plant.isEmpty else { return }
+                    do {
+                        let bytes=try Data(contentsOf:URL(fileURLWithPath:plant)),value=try JSONValue.parse(bytes)
+                        guard value["datestamp"].string==stamp,Cache.validVerified(value,stamp:stamp) else { io.logger?("opentideconstants: ignored OTC_TEST_PRUNE_PLANT_VERIFIED for \(stamp)");return }
+                        try Cache.atomic(bytes,path.appendingPathComponent(".verified"))
+                        io.logger?("opentideconstants: warning: OTC_TEST_PRUNE_PLANT_VERIFIED wrote \(stamp)")
+                    } catch { io.logger?("opentideconstants: ignored OTC_TEST_PRUNE_PLANT_VERIFIED for \(stamp): \(error)") }
+                }:nil
+                let token=try await cache.takeLock(path,wait:false,beforeMkdir:beforeMkdir)
+                guard token != nil else { io.logger?("opentideconstants: skipped locked release \(stamp)");continue }
                 defer { cache.releaseLock(path,token) }
-                let verified=FileManager.default.fileExists(atPath:path.appendingPathComponent(".verified").path)
+                if partial {
+                    if try cache.verified(stamp) != nil { io.logger?("opentideconstants: kept newly verified release \(stamp)");continue }
+                    guard let modified,Date().timeIntervalSince(modified)>120/scale else { continue }
+                }
+                let marker=path.appendingPathComponent(".verified")
+                if FileManager.default.fileExists(atPath:marker.path) { try FileManager.default.removeItem(at:marker) }
                 for child in try FileManager.default.contentsOfDirectory(at:path,includingPropertiesForKeys:nil) where child.lastPathComponent != ".lock" { try FileManager.default.removeItem(at:child) }
-                cache.releaseLock(path,token);try? FileManager.default.removeItem(at:path)
-                if verified { removed.append(stamp) }
+                cache.releaseLock(path,token)
+                if rmdir(path.path) != 0 && errno != ENOENT && errno != ENOTEMPTY && errno != EEXIST { throw OpenTideConstantsError.cache("cannot remove directory \(path.path)") }
+                if partial { io.logger?("opentideconstants: removed partial release \(stamp)") }
+                else { removed.append(stamp) }
             } catch {
+                if partial { io.logger?("opentideconstants: warning: cannot prune partial release \(stamp): \(error)");continue }
                 var fields=(error as? OpenTideConstantsError)?.fields ?? [:]
                 fields["removed"] = .array(removed.map(JSONValue.string))
                 throw OpenTideConstantsError.cache("cannot prune \(stamp)",fields)
