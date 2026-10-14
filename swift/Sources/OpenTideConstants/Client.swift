@@ -209,6 +209,7 @@ public final class OpenTideConstants {
         let from=release.datestamp,entry=try await io.resolveLatest(),to=entry["datestamp"].string!
         state { lastError=nil }
         guard Cache.newer(to,from) else { state { lastCheck=ProcessInfo.processInfo.systemUptime };return UpdateResult(updated:false,from:from,to:from) }
+        await io.noteVersionDoi(entry)
         let loaded:ClientIO.Loaded
         if let cached=try io.usableCached(to,doi:entry["zenodo_version_doi"].string) { loaded=cached } else { loaded=try await io.fetch(to,entry:entry) }
         return try state {
