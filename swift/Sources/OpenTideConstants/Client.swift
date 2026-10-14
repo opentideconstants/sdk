@@ -166,7 +166,11 @@ public final class OpenTideConstants {
     internal func checkOpen()throws { try state { guard !closed else { throw OpenTideConstantsError.io("the release is closed") };try release.checkOpen() } }
     public func releases()async throws->[ReleaseInfo] {
         try checkOpen()
-        do { return try await io.index().map(ReleaseInfo.init) }
+        do {
+            let entries=try await io.index()
+            for entry in entries { await io.noteVersionDoi(entry) }
+            return entries.map(ReleaseInfo.init)
+        }
         catch let error as OpenTideConstantsError {
             guard error.code=="network",io.onNetworkError == .useCache,let doc=try? JSONValue.parse(Data(contentsOf:cache.pointer("OTC_index.json"))),case .array=doc["releases"] else { throw error }
             return try doc["releases"].array.map { ReleaseInfo(try io.entry($0,source:baseUrl.appendingPathComponent("OTC_index.json"))) }.sorted { Cache.newer($0.datestamp,$1.datestamp) }
@@ -409,12 +413,26 @@ internal struct ClientIO:@unchecked Sendable {
         if offline { guard let loaded=try newestCached() else { throw OpenTideConstantsError.offlineUnavailable("no cached readable release") };return loaded }
         do {
             let entry=try await resolveLatest()
+            await noteVersionDoi(entry)
             if let loaded=try usableCached(entry["datestamp"].string!) { return loaded }
             return try await fetch(entry["datestamp"].string!,entry:entry)
         } catch let error as OpenTideConstantsError {
             guard error.code=="network",onNetworkError == .useCache,let loaded=try newestCached() else { throw error }
             return Loaded(release:loaded.release,from:.cacheAfterError,paths:loaded.paths,error:error)
         }
+    }
+    func noteVersionDoi(_ entry:JSONValue)async {
+        guard let stamp=entry["datestamp"].string,Cache.validStamp(stamp),let doi=entry["zenodo_version_doi"].string else { return }
+        do {
+            guard let marker=try cache.verified(stamp),marker["zenodo_version_doi"].string != doi else { return }
+            let directory=try cache.releaseDir(stamp)
+            guard let token=try await cache.takeLock(directory,wait:false) else { return }
+            defer { cache.releaseLock(directory,token) }
+            guard let current=try cache.verified(stamp),current["zenodo_version_doi"].string != doi else { return }
+            var updated=current.object
+            updated["zenodo_version_doi"] = .string(doi)
+            try Cache.atomic(JSONValue.object(updated).data(),directory.appendingPathComponent(".verified"))
+        } catch { logger?("opentideconstants: cannot update cached version DOI") }
     }
     func pointerShape(_ name:String,_ value:JSONValue)->Bool {
         guard case .object=value else { return false }
