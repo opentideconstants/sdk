@@ -2145,11 +2145,13 @@ export function subordinateOffsetsOf(off: JsonObject): SubordinateOffsets {
 
 /** @internal Existing retained historical alias; admission belongs to the original caller. */
 export function historicalVintageOf(off: JsonObject): HistoricalOffsetVintage | null {
+    if (!Object.hasOwn(off, "offset_id")) return null;
     return obj(off, "vintage") as unknown as HistoricalOffsetVintage | null;
 }
 
 /** @internal Existing retained historical alias; admission belongs to the original caller. */
 export function historicalProvenanceOf(off: JsonObject): HistoricalOffsetProvenance | null {
+    if (!Object.hasOwn(off, "offset_id")) return null;
     return obj(off, "provenance") as unknown as HistoricalOffsetProvenance | null;
 }
 
