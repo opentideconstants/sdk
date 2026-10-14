@@ -330,6 +330,7 @@ internal struct ClientIO:@unchecked Sendable {
     func file(_ file:String)throws->Loaded {
         let path=URL(fileURLWithPath:file),name=path.lastPathComponent
         guard name.range(of:#"^OTC_[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?\.(json|json.gz|jsonl)$"#,options:.regularExpression)?.upperBound==name.endIndex else { throw OpenTideConstantsError.invalidArgument("invalid filename") }
+        guard mode != .stream || name.hasSuffix(".jsonl") else { throw OpenTideConstantsError.invalidArgument("stream mode needs .jsonl and .meta.json") }
         let stamp=String(name.dropFirst(4)).components(separatedBy:".json")[0]
         let directory=path.deletingLastPathComponent(),sha=directory.appendingPathComponent("OTC_\(stamp).sha256")
         let names=name.hasSuffix(".jsonl") ? [name,"OTC_\(stamp).meta.json"]:[name]
