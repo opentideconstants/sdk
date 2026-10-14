@@ -1146,6 +1146,7 @@ class OpenTideConstants:
             return UpdateResult(False, cur, cur)
         if self._usable(info.datestamp, self._mode) is not None:
             rel, lf = self._load_cached_or_heal(info.datestamp, self._mode, info)
+            self._note_entry(info)
         else:
             rel, lf = self._download_to_cache(info.datestamp, self._mode, info), "download"
         self._set(rel, lf)
