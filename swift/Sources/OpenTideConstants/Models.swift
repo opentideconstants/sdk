@@ -106,7 +106,11 @@ public struct TimeBase: Sendable, Equatable {
     public var monthsDropped: [String] { raw["months_dropped"].array.compactMap(\.string) }
     public var decidedIn: String { raw["decided_in"].string ?? "" }
     public var decidedBuildCommit: String? { raw["decided_build_commit"].string }
-    public var evidence: JSONValue { raw["evidence"].isNull ? .array([]) : raw["evidence"] }
+    public var evidence: JSONValue {
+        .array(raw["evidence"].array.map { item in
+            .object(Dictionary(uniqueKeysWithValues: ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"].map { ($0, item[$0]) }))
+        })
+    }
 }
 
 public struct QcFlag: Sendable, Equatable {
