@@ -177,7 +177,7 @@ public struct Datum: Sendable, Equatable {
     public let raw: JSONValue
     internal init(_ raw: JSONValue) { self.raw = raw }
     public var mslOffsetM: Double? { raw["msl_offset_m"].number }
-    public var named: JSONValue? { raw["named"].isNull ? nil : raw["named"] }
+    public var named: JSONValue? { raw["named"].isNull ? .object([:]) : raw["named"] }
 }
 
 public struct Fallback: Sendable, Equatable {
