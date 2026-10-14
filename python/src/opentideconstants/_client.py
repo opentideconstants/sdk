@@ -666,11 +666,13 @@ class OpenTideConstants:
         without waiting (spec §5.4, CR2 DR3): when another process holds a young lock, the note is skipped."""
         if info.zenodo_version_doi is None:
             return
-        v = self._cache.read_verified(info.datestamp)
-        if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
-            return
-        d = self._cache.release_dir(info.datestamp)
+        if self._release is not None and self._release.datestamp == info.datestamp:
+            self._release._zenodo_version_doi = info.zenodo_version_doi
         try:
+            v = self._cache.read_verified(info.datestamp)
+            if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
+                return
+            d = self._cache.release_dir(info.datestamp)
             with lock_dir(d, SDK, wait=False) as held:
                 v = self._cache.read_verified(info.datestamp) if held else None
                 if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
@@ -844,6 +846,7 @@ class OpenTideConstants:
                 raise ReleaseNotFoundError(f"no latest pointer under {self._base_url}")
         doc, url = got
         info = self._info(doc, url)
+        self._note_entry(info)
         # a check that reaches the pointer clears last_error; loaded_from does not change (spec §4.3, CR2 DR4)
         self._last_error = None
         if readable(info.format_version, info._min_reader_version):
@@ -856,6 +859,7 @@ class OpenTideConstants:
         except ReleaseNotFoundError:
             infos = []
         for i in infos:
+            self._note_entry(i)
             if readable(i.format_version, i._min_reader_version):
                 return i
         too_new = [i for i in [info] + list(infos) if _major(i.format_version) in SUPPORTED_FORMAT_MAJORS]
