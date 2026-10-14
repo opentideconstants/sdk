@@ -247,6 +247,9 @@ public final class OpenTideConstants {
                 let scaleText=environment["OTC_TEST_LOCK_SCALE"] ?? ""
                 let validScale=scaleText.range(of:#"^[1-9][0-9]{0,3}$"#,options:.regularExpression)?.upperBound==scaleText.endIndex && (1...1000).contains(Int(scaleText) ?? 0)
                 let scale=validScale ? Double(scaleText)!:1
+                if partial {
+                    guard let modified,Date().timeIntervalSince(modified)>120/scale else { continue }
+                }
                 let beforeMkdir:(()->Void)?=partial ? { [io] in
                     guard validScale,let plant=environment["OTC_TEST_PRUNE_PLANT_VERIFIED"],!plant.isEmpty else { return }
                     do {
@@ -261,7 +264,6 @@ public final class OpenTideConstants {
                 defer { cache.releaseLock(path,token) }
                 if partial {
                     if try cache.verified(stamp) != nil { io.logger?("opentideconstants: kept newly verified release \(stamp)");continue }
-                    guard let modified,Date().timeIntervalSince(modified)>120/scale else { continue }
                 }
                 let marker=path.appendingPathComponent(".verified")
                 if FileManager.default.fileExists(atPath:marker.path) { try FileManager.default.removeItem(at:marker) }
