@@ -32,6 +32,43 @@ public final class Release {
         let version=zenodoVersionDoi.flatMap { $0.isEmpty ? nil : " (version DOI: https://doi.org/\($0))" } ?? ""
         return "OpenTideConstants contributors (\(datestamp.prefix(4))). OpenTideConstants, release \(datestamp) [Data set]. \(link)\(version)"
     }
+    internal struct OriginContext {
+        fileprivate let owner:Release
+        fileprivate init(_ owner:Release) { self.owner=owner }
+        internal func check(_ station:Station)throws->Station { try owner.own(station);return station }
+        internal func belongs(to reader:LazyReadContext)->Bool { owner === reader.owner }
+    }
+    internal func prepareOrigin()->OriginContext { OriginContext(self) }
+    internal struct LazyReadContext {
+        fileprivate let owner:Release
+        fileprivate init(_ owner:Release) { self.owner=owner }
+        internal func enforce(_ action:String)throws {
+            if action=="close" { owner.close() }
+            else if action != "retained_metadata" { try owner.checkOpen() }
+        }
+        internal func read(_ id:String)throws->JSONValue {
+            guard let station=try owner.readStation(id) else {
+                if let tombstone=try owner.tombstone(stationId:id) { throw OpenTideConstantsError.stationRemoved("station removed",["tombstone":tombstone.raw]) }
+                throw OpenTideConstantsError.stationNotFound("no station \(id)")
+            }
+            return station.raw
+        }
+    }
+    internal func prepareLazyRead()->LazyReadContext { LazyReadContext(self) }
+    internal struct SourceComparisonContext {
+        fileprivate let owner:Release
+        fileprivate let entry:IndexEntry
+        fileprivate init(owner:Release,entry:IndexEntry) { self.owner=owner;self.entry=entry }
+        internal func compare(_ row:JSONValue)throws->JSONValue {
+            do { try owner.compare_station_source(entry,row);return row }
+            catch { if let path=owner.indexPath { try? FileManager.default.removeItem(at:path) };throw error }
+        }
+    }
+    internal func prepareSourceComparison(stationId:String)throws->SourceComparisonContext {
+        try checkOpen()
+        guard let entry=byId[stationId] else { throw OpenTideConstantsError.stationNotFound("no station \(stationId)") }
+        return SourceComparisonContext(owner:self,entry:entry)
+    }
     internal struct PreparedFields {
         let originToken:UUID
         let meta:JSONValue
@@ -65,9 +102,17 @@ public final class Release {
             documents:source.documents,jsonl:source.jsonl,indexPath:source.indexPath,files:source.files,
             reader:reader,astroCache:[:],closed:false,lru:[:],lruOrder:[],zenodoVersionDoi:source.zenodoVersionDoi)
     }
-    internal init(meta:JSONValue,entries:[IndexEntry],documents:[String:JSONValue],jsonl:URL?,indexPath:URL?,files:[FileInfo],commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String)throws {
-        originToken=UUID()
-        self.meta=meta;self.entries=entries;self.documents=documents;self.jsonl=jsonl;self.indexPath=indexPath;self.files=files;self.commercialOnly=commercialOnly;self.commercialBasis=commercialBasis;self.historicalOffsetsPolicy=historicalOffsetsPolicy
+    internal struct ValidatedLinks {
+        let conventions:[String:Convention]
+        let licences:[String:Licence]
+        let entries:[IndexEntry]
+        let byId:[String:IndexEntry]
+        fileprivate init(conventions:[String:Convention],licences:[String:Licence],entries:[IndexEntry],byId:[String:IndexEntry]) {
+            self.conventions=conventions;self.licences=licences;self.entries=entries;self.byId=byId
+        }
+    }
+    // The original constructor's validation and kind resolution, before resource acquisition.
+    internal static func validateLinks(meta:JSONValue,entries:[IndexEntry],commercialBasis:String,historicalOffsetsPolicy:String)throws->ValidatedLinks {
         guard ["strict","as_published_upstream"].contains(commercialBasis),["fallback","exclude"].contains(historicalOffsetsPolicy) else { throw OpenTideConstantsError.invalidArgument("invalid policy") }
         guard let stamp=meta["release"]["datestamp"].string,Cache.validStamp(stamp) else { throw OpenTideConstantsError.invalidRelease("invalid datestamp") }
         _ = try parseTime(meta["release"]["created"].string)
@@ -75,7 +120,6 @@ public final class Release {
         var conv:[String:Convention]=[:],lic:[String:Licence]=[:]
         for row in meta["conventions"].array { guard let id=row["convention_id"].string,conv[id]==nil else { throw OpenTideConstantsError.invalidRelease("duplicate/missing convention") };conv[id]=Convention(row) }
         for row in meta["licences"].array { let l=try Reader.licence(row);guard lic[l.licenceId]==nil else { throw OpenTideConstantsError.invalidRelease("duplicate licence") };lic[l.licenceId]=l }
-        convById=conv;licById=lic
         var seen:Set<String>=[],sets:Set<String>=[],aliases:Set<String>=[]
         for e in entries {
             guard seen.insert(e.id).inserted else { throw OpenTideConstantsError.invalidRelease("duplicate station id") }
@@ -90,8 +134,14 @@ public final class Release {
             guard depth<16,e.summary["type"].string=="subordinate",let id=e.summary["reference_station_id"].string,!visited.contains(id),let ref=active[id] else { return nil }
             return resolve(ref,visited.union([e.id]),depth+1)
         }
-        self.entries=entries.map { e in var e=e;var s=e.summary.object;s["kind"]=resolve(e,[],0).map { .string($0.rawValue) } ?? .null;e.summary = .object(s);return e }.sorted { $0.id<$1.id }
-        byId=Dictionary(uniqueKeysWithValues:self.entries.map { ($0.id,$0) })
+        let resolvedEntries=entries.map { e in var e=e;var s=e.summary.object;s["kind"]=resolve(e,[],0).map { .string($0.rawValue) } ?? .null;e.summary = .object(s);return e }.sorted { $0.id<$1.id }
+        return ValidatedLinks(conventions:conv,licences:lic,entries:resolvedEntries,byId:Dictionary(uniqueKeysWithValues:resolvedEntries.map { ($0.id,$0) }))
+    }
+    internal init(meta:JSONValue,entries:[IndexEntry],documents:[String:JSONValue],jsonl:URL?,indexPath:URL?,files:[FileInfo],commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String)throws {
+        originToken=UUID()
+        self.meta=meta;self.entries=entries;self.documents=documents;self.jsonl=jsonl;self.indexPath=indexPath;self.files=files;self.commercialOnly=commercialOnly;self.commercialBasis=commercialBasis;self.historicalOffsetsPolicy=historicalOffsetsPolicy
+        let graph=try Self.validateLinks(meta:meta,entries:entries,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+        convById=graph.conventions;licById=graph.licences;self.entries=graph.entries;byId=graph.byId
         if let jsonl { reader=try FileHandle(forReadingFrom:jsonl) }
     }
     internal init(prepared fields:PreparedFields) {
@@ -188,6 +238,9 @@ public final class Release {
         }
     }
     public func station(stationId:String)throws->Station? {
+        try readStation(stationId)
+    }
+    internal func readStation(_ stationId:String)throws->Station? {
         try checkOpen();try hydratePolicy(stationId:stationId)
         try checkOpen();guard let e=byId[stationId],e.status=="active" else { return nil }
         if let s=lru[stationId] { lruOrder.removeAll { $0==stationId };lruOrder.append(stationId);return s }

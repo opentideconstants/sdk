@@ -40,6 +40,39 @@ internal enum Reader {
                            "amplitude_uncertainty_unit_basis": "T"]
 }
 internal extension Reader {
+    struct ValidatedReleaseDocument {
+        let document:JSONValue
+        let links:Release.ValidatedLinks
+        fileprivate init(document:JSONValue,links:Release.ValidatedLinks) { self.document=document;self.links=links }
+    }
+    static func decodeDocument(_ bytes:Data,readerVersion:CanonicalReaderVersion,kind:CanonicalDocumentKind)throws->CanonicalParsedDocument {
+        let doc=try JSONValue.parse(bytes)
+        switch kind {
+        case .release:
+            guard case .array=doc["stations"] else { throw OpenTideConstantsError.invalidRelease("stations missing") }
+            try validateHeader(doc,readerVersion:readerVersion)
+            return .release(doc)
+        case .stationRow: try check(doc,_station_types,"station");return .stationRow(doc)
+        case .cache: return .cache(doc)
+        case .pointer,.catalogue: throw CanonicalUnimplemented.behavior("B05.metadata_source")
+        }
+    }
+    static func validateDocumentLinks(_ doc:JSONValue)throws->ValidatedReleaseDocument {
+        let (meta,entries,documents)=try releaseRows(doc)
+        let (conventions,licences)=try documentLookupTables(meta)
+        for row in documents.values { try validateSourceStation(row,conventions:conventions,licences:licences) }
+        return ValidatedReleaseDocument(document:doc,links:try Release.validateLinks(meta:meta,entries:entries,commercialBasis:"strict",historicalOffsetsPolicy:"fallback"))
+    }
+    static func releaseRows(_ doc:JSONValue)throws->(JSONValue,[IndexEntry],[String:JSONValue]) {
+        guard case .array=doc["stations"] else { throw OpenTideConstantsError.invalidRelease("stations missing") }
+        var entries:[IndexEntry]=[],documents:[String:JSONValue]=[:]
+        for row in doc["stations"].array {
+            guard let id=row["station_id"].string else { throw OpenTideConstantsError.invalidRelease("station_id missing") }
+            entries.append(IndexEntry.make(row));documents[id]=row
+        }
+        var fields=doc.object;fields.removeValue(forKey:"stations");let meta=JSONValue.object(fields)
+        return (meta,entries,documents)
+    }
     static func check(_ raw: JSONValue, _ fields: [String:String], _ what: String) throws {
         guard case .object = raw else { throw OpenTideConstantsError.invalidRelease("\(what): not object") }
         for (k,t) in fields {
@@ -169,16 +202,7 @@ internal extension Reader {
     }
 }
 internal extension Reader {
-    static func load(_ url:URL,mode:Mode,commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String,indexPath:URL?=nil,files:[FileInfo]=[],logger:((String)->Void)?=nil)throws->Release {
-        let isLines=url.lastPathComponent.hasSuffix(".jsonl")
-        var meta:JSONValue,entries:[IndexEntry]=[],docs:[String:JSONValue]=[:]
-        if isLines { meta=try JSONValue.parse(read(URL(fileURLWithPath:String(url.path.dropLast(6))+".meta.json"))) }
-        else {
-            var bytes=try read(url);if url.lastPathComponent.hasSuffix(".gz") { bytes=try gunzip(bytes) }
-            let doc=try JSONValue.parse(bytes);guard case .array=doc["stations"] else { throw OpenTideConstantsError.invalidRelease("stations missing") }
-            var m=doc.object;m.removeValue(forKey:"stations");meta = .object(m)
-            for d in doc["stations"].array { guard let id=d["station_id"].string else { throw OpenTideConstantsError.invalidRelease("station_id missing") };entries.append(IndexEntry.make(d));docs[id]=d }
-        }
+    static func validateHeader(_ meta:JSONValue,readerVersion:CanonicalReaderVersion=CanonicalReaderVersion(major:1,minor:0))throws {
         let created = meta["release"]["created"]
         guard created.isNull || created.string != nil else {
             throw OpenTideConstantsError.invalidRelease("created has the wrong type")
@@ -190,8 +214,10 @@ internal extension Reader {
             guard let mr=meta["release"]["min_reader_version"].string else { throw OpenTideConstantsError.invalidRelease("min_reader_version missing or wrong type") }
             guard mr.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.invalidRelease("invalid min_reader_version") }
             let parts=mr.split(separator:".").compactMap { Int64($0) }
-            guard parts.count==2,parts[0]<1 || parts[0]==1 && parts[1]==0 else { throw OpenTideConstantsError.readerTooOld("needs reader \(mr); SDK reads 1.0") }
+            guard parts.count==2,parts[0]<readerVersion.major || parts[0]==readerVersion.major && parts[1]<=readerVersion.minor else { throw OpenTideConstantsError.readerTooOld("needs reader \(mr); SDK reads \(readerVersion.major).\(readerVersion.minor)") }
         }
+    }
+    static func documentLookupTables(_ meta:JSONValue)throws->([String:Convention],[String:Licence]) {
         var conventions: [String: Convention] = [:]
         for row in meta["conventions"].array {
             guard let id = row["convention_id"].string else { continue }
@@ -201,45 +227,88 @@ internal extension Reader {
             conventions[id] = Convention(row)
         }
         var licences:[String:Licence]=[:];for row in meta["licences"].array { let l=try licence(row);if licences[l.licenceId] != nil { throw OpenTideConstantsError.invalidRelease("duplicate licence") };licences[l.licenceId]=l }
+        return (conventions,licences)
+    }
+    static func validateSourceStation(_ d:JSONValue,conventions:[String:Convention],licences:[String:Licence])throws {
+        guard d["station_id"].string != nil else { throw OpenTideConstantsError.invalidRelease("station_id missing") }
+        let status=d["status"].string ?? "active"
+        if !d["status"].isNull && d["status"].string==nil { throw OpenTideConstantsError.invalidRelease("invalid station status") }
+        if status=="active" { _ = try station(d,conventions:conventions,licences:licences,kind:nil,recommended:d["recommended_set_id"].string) }
+    }
+    struct SuppliedStationIndex {
+        fileprivate let bytes:Data
+        fileprivate init(_ bytes:Data) { self.bytes=bytes }
+    }
+    static func prepareSuppliedStationIndex(_ bytes:Data)->SuppliedStationIndex { SuppliedStationIndex(bytes) }
+    struct AuthenticatedStationIndex {
+        let release:Release
+        let document:JSONValue
+        var nativeEntries:[IndexEntry] { release.entries }
+        fileprivate init(release:Release,document:JSONValue) {
+            self.release=release;self.document=document
+        }
+    }
+    // Existing stream index source checks, admission, one-pass rebuild and publication.
+    static func prepareStreamIndex(_ url:URL,meta:JSONValue,conventions:[String:Convention],licences:[String:Licence],indexPath:URL?,files:[FileInfo],commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String,logger:((String)->Void)?,supplied:SuppliedStationIndex?=nil)throws->AuthenticatedStationIndex {
         var digest:String?,size:Int64?
-        if isLines,mode == .stream {
-            digest=try SHA256.file(url)
-            size=(try FileManager.default.attributesOfItem(atPath:url.path)[.size] as? NSNumber)?.int64Value
-            let metaURL=URL(fileURLWithPath:String(url.path.dropLast(6))+".meta.json")
-            for source in [url,metaURL] {
-                guard let declared=files.first(where:{ $0.name==source.lastPathComponent }) else { continue }
-                let actualSize=(try FileManager.default.attributesOfItem(atPath:source.path)[.size] as? NSNumber)?.int64Value
-                let actualHash=source==url ? digest:try SHA256.file(source)
-                if (declared.size != nil && declared.size != actualSize) || (declared.sha256 != nil && declared.sha256?.lowercased() != actualHash) {
-                    if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
-                    throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(source.path),"expected":declared.sha256.map(JSONValue.string) ?? .null,"actual":actualHash.map(JSONValue.string) ?? .null])
-                }
-            }
-            if let indexPath,FileManager.default.fileExists(atPath:indexPath.path) {
-                do {
-                    let doc=try JSONValue.parse(read(indexPath))
-                    let admitted=try authenticate_station_index(doc,url:url,meta:meta,digest:digest!,size:size!)
-                    return try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
-                } catch {
-                    try? FileManager.default.removeItem(at:indexPath)
-                }
+        digest=try SHA256.file(url)
+        size=(try FileManager.default.attributesOfItem(atPath:url.path)[.size] as? NSNumber)?.int64Value
+        let metaURL=URL(fileURLWithPath:String(url.path.dropLast(6))+".meta.json")
+        for source in [url,metaURL] {
+            guard let declared=files.first(where:{ $0.name==source.lastPathComponent }) else { continue }
+            let actualSize=(try FileManager.default.attributesOfItem(atPath:source.path)[.size] as? NSNumber)?.int64Value
+            let actualHash=source==url ? digest:try SHA256.file(source)
+            if (declared.size != nil && declared.size != actualSize) || (declared.sha256 != nil && declared.sha256?.lowercased() != actualHash) {
+                if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+                throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(source.path),"expected":declared.sha256.map(JSONValue.string) ?? .null,"actual":actualHash.map(JSONValue.string) ?? .null])
             }
         }
+        if supplied != nil || indexPath.map({ FileManager.default.fileExists(atPath:$0.path) })==true {
+            do {
+                let doc=try JSONValue.parse(supplied?.bytes ?? read(indexPath!))
+                let admitted=try authenticate_station_index(doc,url:url,meta:meta,digest:digest!,size:size!)
+                let release=try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+                return AuthenticatedStationIndex(release:release,document:doc)
+            } catch {
+                if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
+            }
+        }
+        var entries:[IndexEntry]=[]
+        try eachLine(url) { line,offset in
+            let d=try JSONValue.parse(line)
+            try validateSourceStation(d,conventions:conventions,licences:licences)
+            entries.append(IndexEntry.make(d,offset:offset,length:line.count))
+        }
+        let release=try Release(meta:meta,entries:entries,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+        let document:JSONValue = .object(["index_version":.integer(1),"discovery_index_version":.integer(1),"datestamp":.string(release.datestamp),"jsonl":.string(url.lastPathComponent),"jsonl_sha256":.string(digest!),"jsonl_size":.integer(size!),"by":.string("opentideconstants-swift/0.1.0"),"stations":.array(entries.map { release.byId[$0.id]!.summary })])
+        if let indexPath {
+            do { try Cache.atomic(document.data(),indexPath) }
+            catch { logger?("opentideconstants: cannot cache index-v1.json") }
+        }
+        return AuthenticatedStationIndex(release:release,document:document)
+    }
+    static func load(_ url:URL,mode:Mode,commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String,indexPath:URL?=nil,files:[FileInfo]=[],logger:((String)->Void)?=nil)throws->Release {
+        let isLines=url.lastPathComponent.hasSuffix(".jsonl")
+        var meta:JSONValue,entries:[IndexEntry]=[],docs:[String:JSONValue]=[:]
+        if isLines { meta=try JSONValue.parse(read(URL(fileURLWithPath:String(url.path.dropLast(6))+".meta.json"))) }
+        else {
+            var bytes=try read(url);if url.lastPathComponent.hasSuffix(".gz") { bytes=try gunzip(bytes) }
+            (meta,entries,docs)=try releaseRows(JSONValue.parse(bytes))
+        }
+        try validateHeader(meta)
+        let (conventions,licences)=try documentLookupTables(meta)
+        if isLines,mode == .stream {
+            let index=try prepareStreamIndex(url,meta:meta,conventions:conventions,licences:licences,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy,logger:logger)
+            return index.release
+        }
         func consume(_ d:JSONValue,_ offset:UInt64?,_ length:Int?)throws {
-            guard let id=d["station_id"].string else { throw OpenTideConstantsError.invalidRelease("station_id missing") }
-            let status=d["status"].string ?? "active"
-            if !d["status"].isNull && d["status"].string==nil { throw OpenTideConstantsError.invalidRelease("invalid station status") }
-            if status=="active" { _ = try station(d,conventions:conventions,licences:licences,kind:nil,recommended:d["recommended_set_id"].string) }
+            try validateSourceStation(d,conventions:conventions,licences:licences)
+            let id=d["station_id"].string!
             if isLines { entries.append(IndexEntry.make(d,offset:offset,length:length));if mode != .stream { docs[id]=d } }
         }
         if isLines { try eachLine(url) { line,offset in try consume(JSONValue.parse(line),offset,line.count) } }
         else { for d in docs.values { try consume(d,nil,nil) } }
         let release=try Release(meta:meta,entries:entries,documents:docs,jsonl:isLines && mode == .stream ? url:nil,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
-        if isLines,mode == .stream,let indexPath {
-            let doc:JSONValue = .object(["index_version":.integer(1),"discovery_index_version":.integer(1),"datestamp":.string(release.datestamp),"jsonl":.string(url.lastPathComponent),"jsonl_sha256":.string(digest!),"jsonl_size":.integer(size!),"by":.string("opentideconstants-swift/0.1.0"),"stations":.array(entries.map { release.byId[$0.id]!.summary })])
-            do { try Cache.atomic(doc.data(),indexPath) }
-            catch { logger?("opentideconstants: cannot cache index-v1.json") }
-        }
         return release
     }
 }

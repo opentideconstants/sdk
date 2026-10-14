@@ -1,18 +1,438 @@
 import Foundation
 import XCTest
+import Darwin
 @testable import OpenTideConstants
 
 final class CanonicalShapeTests: XCTestCase {
     private var observationFile: FileHandle?
+    private func m2SameFailure(_ id:String,fixture:String,code:String,reference:()throws->Void,leaf:()throws->Void)throws {
+        let expected=try m1NativeError(code,reference)
+        try m2Observe(id,fixture:fixture) {
+            let actual=try m1NativeError(code,leaf)
+            XCTAssertEqual(actual.code,expected.code)
+            func stableMessage(_ value:String)->String {
+                value.replacingOccurrences(of:#"(?<=NSUnderlyingError=)0x[0-9a-fA-F]+"#,with:"<native-address>",options:.regularExpression)
+            }
+            XCTAssertEqual(stableMessage(actual.message),stableMessage(expected.message))
+            XCTAssertEqual(actual.fields,expected.fields)
+            return .object(["code":.string(actual.code),"message":.string(actual.message),"fields":.object(actual.fields)])
+        }
+    }
+    private func m2Directory(_ label:String)throws->URL {
+        let base=ProcessInfo.processInfo.environment["OTC_M2_SW_EVENTS"].map { URL(fileURLWithPath:$0).deletingLastPathComponent() }
+            ?? FileManager.default.temporaryDirectory
+        let path=base.appendingPathComponent(label+"-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:path,withIntermediateDirectories:true)
+        return path
+    }
+    private func m2CopySource(_ directory:URL,_ suffixes:[String])throws {
+        for suffix in suffixes {
+            let name="OTC_20991231.2."+suffix
+            try FileManager.default.copyItem(at:m1Root.appendingPathComponent("conformance/fixtures/good/"+name),to:directory.appendingPathComponent(name))
+        }
+    }
+    func testM2SourceAndLinkControls() throws {
+        let version=CanonicalReaderVersion(major:1,minor:0)
+        for (label,code) in [("format-major","unsupported_format"),("min-reader","reader_too_old"),
+            ("format-version-malformed","invalid_release"),("min-reader-malformed","invalid_release"),
+            ("created-not-string","invalid_release"),("invalid-utf8","invalid_release"),("lone-surrogate","invalid_release")] {
+            let fixture="conformance/fixtures/bad/\(label)/OTC_20991231.json"
+            let file=m1Root.appendingPathComponent(fixture),bytes=try Reader.read(file)
+            try m2SameFailure("B05",fixture:fixture,code:code,reference:{ _ = try self.m1Release(fixture) },leaf:{
+                _ = try Canonical.decodeReleaseDocument(sourceBytes:.bytes(bytes),readerVersion:version,documentKind:.release)
+            })
+        }
+        let links=CanonicalRequiredLinks(stationIds:[],constantSetIds:[],conventionIds:[],licenceIds:[],astroTableIds:[],sourceRecordIds:[])
+        for label in ["duplicate-convention-id","duplicate-licence-id","duplicate-station-id","duplicate-set-id","duplicate-alias",
+            "set-id-across-stations","unresolved-convention","unresolved-licence","unresolved-recommended","unresolved-reference-station"] {
+            let fixture="conformance/fixtures/bad/\(label)/OTC_20991231.json",file=m1Root.appendingPathComponent(fixture)
+            // Only existing corpus fixtures are selected; an absent file is a setup error.
+            let document=try JSONValue.parse(Reader.read(file))
+            try m2SameFailure("B06",fixture:fixture,code:"invalid_release",reference:{ _ = try self.m1Release(fixture) },leaf:{
+                _ = try Canonical.validateReleaseLinks(parsedDocument:.release(document),requiredLinks:links)
+            })
+        }
+        for name in ["OTC_20991231.json","OTC_20991231.2.json"] {
+            let fixture="conformance/fixtures/good/"+name,document=try m1Document(fixture)
+            try m2Observe("B05",fixture:fixture+" full original fields") {
+                guard case .release(let actual)=try Canonical.decodeReleaseDocument(sourceBytes:.bytes(Reader.read(self.m1Root.appendingPathComponent(fixture))),readerVersion:version,documentKind:.release) else { throw NSError(domain:"M2DocumentKind",code:1) }
+                XCTAssertEqual(actual,document);return .object(["all_original_fields_equal":.bool(actual==document)])
+            }
+        }
+    }
+    func testM2MetadataControls() async throws {
+        let client=try await OpenTideConstants.open(file:m1Root.appendingPathComponent("conformance/fixtures/good/OTC_20991231.2.json").path)
+        defer { client.close() }
+        let io=try XCTUnwrap(Mirror(reflecting:client).children.first { $0.label=="io" }?.value as? ClientIO)
+        let version=CanonicalReaderVersion(major:1,minor:0)
+        for (name,kind) in [("OTC_latest-f1.json",CanonicalDocumentKind.pointer),("OTC_index.json",CanonicalDocumentKind.catalogue)] {
+            let fixture="conformance/fixtures/good/"+name,bytes=try Reader.read(m1Root.appendingPathComponent(fixture))
+            // Original accepted bytes are injected at the native decode phase with
+            // the real receiver's configured source URL; this is not HTTP admission.
+            let source=client.baseUrl.appendingPathComponent(name)
+            let context=ClientIO.prepareMetadataDecode(bytes:bytes,source:source)
+            try m2Observe("B05",fixture:fixture+" original raw / real configured source URL") {
+                let parsed=try Canonical.decodeReleaseDocument(sourceBytes:.metadata(context),readerVersion:version,documentKind:kind)
+                let original=try JSONValue.parse(bytes)
+                switch parsed {
+                case .pointer(let actual): XCTAssertEqual(actual,try io.entry(original,source:source));return actual
+                case .catalogue(let actual):
+                    let expected=try original["releases"].array.map { try io.entry($0,source:source) }.sorted { Cache.newer($0["datestamp"].string!,$1["datestamp"].string!) }
+                    XCTAssertEqual(actual["releases"],.array(expected));return actual
+                default: throw NSError(domain:"M2MetadataKind",code:1)
+                }
+            }
+        }
+        let fixture="conformance/fixtures/good/OTC_20991231.2.json",doc=try m1Document(fixture)
+        let id=try XCTUnwrap(doc["stations"].array.first?["station_id"].string)
+        var rowBytes:Data?
+        try eachLine(m1Root.appendingPathComponent("conformance/fixtures/good/OTC_20991231.2.jsonl")) { bytes,_ in
+            if (try JSONValue.parse(bytes))["station_id"].string==id { rowBytes=bytes }
+        }
+        let originalBytes=try XCTUnwrap(rowBytes),row=try JSONValue.parse(originalBytes)
+        try m2Observe("B05",fixture:fixture+" actual station-row / cache parse variants") {
+            guard case .stationRow(let actual)=try Canonical.decodeReleaseDocument(sourceBytes:.bytes(originalBytes),readerVersion:version,documentKind:.stationRow) else { throw NSError(domain:"M2StationKind",code:1) }
+            XCTAssertEqual(actual,row)
+            guard case .cache(let cache)=try Canonical.decodeReleaseDocument(sourceBytes:.bytes(doc["release"].data()),readerVersion:version,documentKind:.cache) else { throw NSError(domain:"M2CacheKind",code:1) }
+            XCTAssertEqual(cache,doc["release"])
+            return .object(["station_original_equal":.bool(actual==row),"cache_original_equal":.bool(cache==doc["release"])])
+        }
+    }
+    func testM2OwnerAndLifetimeControls() async throws {
+        let fixture="conformance/fixtures/good/OTC_20991231.2.json"
+        let owner=try m1Release(fixture),foreign=try m1Release(fixture)
+        defer { owner.close();foreign.close() }
+        let station=try owner.requireStation(stationId:"OTC-T-0001")
+        let foreignStation=try foreign.requireStation(stationId:station.stationId)
+        XCTAssertEqual(station.raw,foreignStation.raw);XCTAssertEqual(owner.datestamp,foreign.datestamp)
+        try m2SameFailure("B08.origin",fixture:fixture+" equal source foreign owner",code:"invalid_argument",
+            reference:{ try owner.own(foreignStation) },leaf:{ _ = try Canonical.checkStationOrigin(station:foreignStation,releaseOrigin:owner.prepareOrigin()) })
+        try m2Observe("B08",fixture:fixture+" station-object dispatch") {
+            guard case .Station(let actual)=try Canonical.accessRawRecord(accessKind:.stationObject,sourceRecord:station.raw,station:station,releaseOrigin:owner.prepareOrigin(),nativeProfile:.swift) else { throw NSError(domain:"M2AccessKind",code:1) }
+            XCTAssertEqual(actual.raw,station.raw);return .object(["same_source":.bool(actual.raw==station.raw)])
+        }
+        let iterator=try owner.iterStations(),retainedRaw=station.raw
+        _ = try Canonical.enforceResourceLifetime(resourceState:.Release(owner),lifetimeAction:"close")
+        _ = try Canonical.enforceResourceLifetime(resourceState:.Release(owner),lifetimeAction:"close")
+        try m2Observe("B15",fixture:fixture+" repeat-close retained references") {
+            _ = try Canonical.enforceResourceLifetime(resourceState:.Release(owner),lifetimeAction:"retained_metadata")
+            XCTAssertEqual(station.raw,retainedRaw);XCTAssertEqual(owner.datestamp,"20991231.2")
+            XCTAssertTrue(owner.lru.isEmpty);XCTAssertTrue(owner.lruOrder.isEmpty)
+            _ = try self.m1NativeError("io") { try iterator() }
+            return .object(["closed":.bool(owner.closed),"retained_raw_equal":.bool(station.raw==retainedRaw),"lru_empty":.bool(owner.lru.isEmpty)])
+        }
+        try m2SameFailure("B15",fixture:fixture+" closed query",code:"io",reference:{ try owner.checkOpen() },leaf:{ _ = try Canonical.enforceResourceLifetime(resourceState:.Release(owner),lifetimeAction:"station_read") })
+        try m2SameFailure("B08.origin",fixture:fixture+" closed origin check",code:"io",reference:{ try owner.own(station) },leaf:{ _ = try Canonical.checkStationOrigin(station:station,releaseOrigin:owner.prepareOrigin()) })
+        let client=try await OpenTideConstants.open(file:m1Root.appendingPathComponent(fixture).path)
+        let context=client.prepareLifetime(),held=client.release
+        _ = try Canonical.enforceResourceLifetime(resourceState:.clientState(context),lifetimeAction:"close")
+        _ = try Canonical.enforceResourceLifetime(resourceState:.clientState(context),lifetimeAction:"close")
+        XCTAssertTrue(held.closed)
+        try m2SameFailure("B15",fixture:fixture+" actual Client close/held Release",code:"io",reference:{ try client.checkOpen() },leaf:{ _ = try Canonical.enforceResourceLifetime(resourceState:.clientState(context),lifetimeAction:"query") })
+    }
+    func testM2ChecksumControls() async throws {
+        let cases=try m1Document("conformance/cases/load.json")["cases"].array
+        for label in ["sha256-malformed-junk","sha256-malformed-no-name","sha256-malformed-short-digest","sha256-malformed-long-digest","sha256-malformed-no-separator","sha256-malformed-bad-hex","sha256-blank-lines-crlf"] {
+            let nativeCase=try XCTUnwrap(cases.first { $0["id"].string=="load/"+label })
+            let text=try XCTUnwrap(nativeCase["steps"].array.first { $0["driver"].string=="write" }?["text"].string)
+            let bytes=Data(text.utf8)
+            if label=="sha256-blank-lines-crlf" {
+                try m2Observe("B16",fixture:"conformance/cases/load.json#load/"+label) {
+                    let result=try Canonical.bindChecksumManifest(checksumBytes:bytes,pointerDigests:[:],requiredFiles:[])
+                    XCTAssertEqual(result,try Cache.checksums(bytes));return .object(result.mapValues(JSONValue.string))
+                }
+            } else {
+                try m2SameFailure("B16",fixture:"conformance/cases/load.json#load/"+label,code:"invalid_release",reference:{ _ = try Cache.checksums(bytes) },leaf:{ _ = try Canonical.bindChecksumManifest(checksumBytes:bytes,pointerDigests:[:],requiredFiles:[]) })
+            }
+        }
+        let directory=try m2Directory("integrity")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try m2CopySource(directory,["jsonl","meta.json","sha256"])
+        let file=directory.appendingPathComponent("OTC_20991231.2.jsonl"),manifest=directory.appendingPathComponent("OTC_20991231.2.sha256")
+        let client=try await OpenTideConstants.open(file:file.path),context=client.prepareVerification()
+        defer { client.close() }
+        let source=try Reader.read(file),sidecar=try Reader.read(manifest)
+        for label in ["tamper","missing-row","missing-sidecar","missing-file","missing-file-and-row"] {
+            try source.write(to:file);try sidecar.write(to:manifest)
+            if label=="tamper" { try (source+Data([32])).write(to:file) }
+            if label=="missing-row" || label=="missing-file-and-row" {
+                let text=try XCTUnwrap(String(data:sidecar,encoding:.utf8)).components(separatedBy:"\n").filter { !$0.hasSuffix("  OTC_20991231.2.jsonl") }.joined(separator:"\n")
+                try Data(text.utf8).write(to:manifest)
+            }
+            if label=="missing-sidecar" { try FileManager.default.removeItem(at:manifest) }
+            if label=="missing-file" || label=="missing-file-and-row" { try FileManager.default.removeItem(at:file) }
+            try m2SameFailure("B20",fixture:"load/verify-file-jsonl "+label,code:label.hasPrefix("missing-file") ? "io":"checksum_mismatch",
+                reference:{ _ = try client.verify() },leaf:{ _ = try Canonical.verifyReleaseFiles(releaseFiles:context,trustedCachedPointer:nil) })
+        }
+        try source.write(to:file);try sidecar.write(to:manifest)
+        XCTAssertTrue(try Canonical.verifyReleaseFiles(releaseFiles:context,trustedCachedPointer:nil))
+        XCTAssertEqual(try Reader.read(file),source);XCTAssertEqual(try Reader.read(manifest),sidecar)
+    }
+    func testM2ManifestPointerControls() async throws {
+        let fixture="conformance/fixtures/good/",stamp="20991231.2"
+        let bytes=try Reader.read(m1Root.appendingPathComponent(fixture+"OTC_"+stamp+".sha256"))
+        let pointer=try m1Document(fixture+"OTC_latest-f1.json"),rows=try Cache.checksums(bytes)
+        let client=try await OpenTideConstants.open(file:m1Root.appendingPathComponent(fixture+"OTC_"+stamp+".json").path)
+        defer { client.close() }
+        let io=try XCTUnwrap(Mirror(reflecting:client).children.first { $0.label=="io" }?.value as? ClientIO)
+        let digests=Dictionary(uniqueKeysWithValues:pointer["files"].array.map { ($0["name"].string!,$0["sha256"].string!) })
+        try m2Observe("B16",fixture:fixture+" actual sidecar/pointer full agreement") {
+            try io.agreement(rows,entry:pointer,stamp:stamp)
+            let actual=try Canonical.bindChecksumManifest(checksumBytes:bytes,pointerDigests:digests,requiredFiles:[])
+            XCTAssertEqual(actual,rows);return .object(actual.mapValues(JSONValue.string))
+        }
+        let name="OTC_"+stamp+".jsonl"
+        for label in ["pointer-row-disagreement","pointer-missing-listed-row"] {
+            // Controlled raw phase inputs retain original file names and sidecar;
+            // they do not claim HTTP/pointer metadata admission.
+            let files=pointer["files"].array.compactMap { row -> JSONValue? in
+                guard row["name"].string==name else { return row }
+                if label=="pointer-missing-listed-row" { return nil }
+                var fields=row.object;fields["sha256"] = .string(String(repeating:"0",count:64));return .object(fields)
+            }
+            var fields=pointer.object;fields["files"] = .array(files)
+            let injected=JSONValue.object(fields),map=Dictionary(uniqueKeysWithValues:files.map { ($0["name"].string!,$0["sha256"].string!) })
+            try m2SameFailure("B16",fixture:fixture+" controlled raw "+label,code:"checksum_mismatch",
+                reference:{ try io.agreement(rows,entry:injected,stamp:stamp) },
+                leaf:{ _ = try Canonical.bindChecksumManifest(checksumBytes:bytes,pointerDigests:map,requiredFiles:[]) })
+        }
+        let nativeCase=try XCTUnwrap(try m1Document("conformance/cases/load.json")["cases"].array.first { $0["id"].string=="load/file-sha256-no-row-jsonl" })
+        let text=try XCTUnwrap(nativeCase["steps"].array.first { $0["driver"].string=="write" }?["text"].string)
+        let required:CanonicalRequiredFiles=[.object(["name":.string(name)])]
+        try m2Observe("B16",fixture:"conformance/cases/load.json#load/file-sha256-no-row-jsonl required row") {
+            do {
+                _ = try Canonical.bindChecksumManifest(checksumBytes:Data(text.utf8),pointerDigests:[:],requiredFiles:required)
+                XCTFail("Native required row must be present")
+            } catch let error as OpenTideConstantsError {
+                XCTAssertEqual(error.code,"checksum_mismatch");XCTAssertEqual(error.message,name+" not listed")
+                XCTAssertEqual(error.fields,["file":.string(name)])
+                return .object(["code":.string(error.code),"message":.string(error.message)])
+            }
+            return .null
+        }
+    }
+    func testM2IndexAndLazyControls() throws {
+        let directory=try m2Directory("index")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try m2CopySource(directory,["jsonl","meta.json"])
+        let file=directory.appendingPathComponent("OTC_20991231.2.jsonl"),meta=file.deletingPathExtension().appendingPathExtension("meta.json")
+        let path=directory.appendingPathComponent("index-v1.json"),version=CanonicalReaderVersion(major:1,minor:0)
+        let files=CanonicalSourceFiles(jsonl:file,meta:meta,jsonlSha256:try SHA256.file(file),jsonlSize:Int64(try Reader.read(file).count),
+            metaSha256:try SHA256.file(meta),metaSize:Int64(try Reader.read(meta).count),indexPath:path)
+        let first=try Canonical.authenticateStationIndex(sourceFiles:files,suppliedIndex:nil,indexPresence:[:],readerVersion:version)
+        defer { first.release.close() }
+        XCTAssertEqual(first.release.lru.count,0)
+        let published=try Reader.read(path)
+        XCTAssertTrue(indexValueMatches(try JSONValue.parse(published),first.document))
+        let warm=try Canonical.authenticateStationIndex(sourceFiles:files,suppliedIndex:Reader.prepareSuppliedStationIndex(published),indexPresence:[:],readerVersion:version)
+        defer { warm.release.close() }
+        try m2Observe("B25",fixture:"existing INDEX-SW cold publish / current reuse") {
+            XCTAssertTrue(indexValueMatches(warm.document,first.document));XCTAssertEqual(warm.release.lru.count,0)
+            XCTAssertEqual(try Reader.read(path),published)
+            XCTAssertTrue(warm.nativeEntries.allSatisfy { $0.presence != nil })
+            return .object(["unchanged_index_bytes":.bool(true),"admitted_rows":.integer(Int64(warm.nativeEntries.count)),"station_lru":.integer(Int64(warm.release.lru.count))])
+        }
+        let id="OTC-T-0001",expected=try first.release.requireStation(stationId:id).raw
+        let nativeHandle=try XCTUnwrap(Mirror(reflecting:warm.release).children.first { $0.label=="reader" })
+        let handle=try XCTUnwrap(Mirror(reflecting:nativeHandle.value).children.first?.value as? FileHandle)
+        let context=warm.release.prepareLazyRead(),origin=warm.release.prepareOrigin()
+        let actual=try Canonical.readStationLazily(streamReader:context,stationId:id,releaseOrigin:origin,readerVersion:version)
+        let firstPosition=try handle.offset()
+        let again=try Canonical.readStationLazily(streamReader:context,stationId:id,releaseOrigin:origin,readerVersion:version)
+        try m2Observe("B27",fixture:"existing INDEX-SW first-read / LRU-hit") {
+            XCTAssertEqual(actual,expected);XCTAssertEqual(again,expected)
+            XCTAssertEqual(try handle.offset(),firstPosition);XCTAssertEqual(warm.release.lruOrder,[id])
+            return .object(["source_equal":.bool(actual==expected),"cache_hit_no_positional_read":.bool(try handle.offset()==firstPosition),"lru":.integer(Int64(warm.release.lru.count))])
+        }
+        var stale=first.document.object;stale["jsonl_sha256"] = .string(String(repeating:"0",count:64))
+        try JSONValue.object(stale).data().write(to:path)
+        let rebuilt=try Canonical.authenticateStationIndex(sourceFiles:files,suppliedIndex:nil,indexPresence:[:],readerVersion:version)
+        defer { rebuilt.release.close() }
+        try m2Observe("B25",fixture:"existing INDEX-SW stale hash delete/rebuild") {
+            XCTAssertEqual(rebuilt.document,first.document);XCTAssertEqual(try Reader.read(path),published)
+            XCTAssertEqual(rebuilt.release.lru.count,0)
+            return .object(["rebuilt_exact_original":.bool(rebuilt.document==first.document),"live_owner":.bool(!rebuilt.release.closed)])
+        }
+        var inconsistent=first.document.object
+        var rows=first.document["stations"].array
+        let position=try XCTUnwrap(rows.firstIndex { $0["station_id"].string==id })
+        var row=rows[position].object;row["country"] = .string("XX");rows[position] = .object(row)
+        inconsistent["stations"] = .array(rows)
+        let inconsistentBytes=try JSONValue.object(inconsistent).data()
+        try inconsistentBytes.write(to:path)
+        let admitted=try Canonical.authenticateStationIndex(sourceFiles:files,suppliedIndex:nil,indexPresence:[:],readerVersion:version)
+        defer { admitted.release.close() }
+        XCTAssertEqual(admitted.release.byId[id]?.summary["country"].string,"XX","admission must not eagerly parse the source station")
+        let compared=try admitted.release.prepareSourceComparison(stationId:id)
+        try m2SameFailure("B26",fixture:"existing INDEX-SW source mismatch and genuine delete",code:"invalid_release",reference:{
+            _ = try admitted.release.rawStation(try XCTUnwrap(admitted.release.byId[id]))
+        },leaf:{
+            XCTAssertFalse(FileManager.default.fileExists(atPath:path.path))
+            try inconsistentBytes.write(to:path)
+            _ = try Canonical.compareStationSource(indexEntry:compared,stationSourceRow:expected,indexPresence:[:])
+        })
+        XCTAssertFalse(FileManager.default.fileExists(atPath:path.path))
+        let invalid=CanonicalSourceFiles(jsonl:file,meta:meta,jsonlSha256:String(repeating:"0",count:64),jsonlSize:files.jsonlSize,
+            metaSha256:files.metaSha256,metaSize:files.metaSize,indexPath:path)
+        try published.write(to:path)
+        let declarations=[FileInfo(.object(["name":.string(file.lastPathComponent),"sha256":.string(invalid.jsonlSha256),"size":.integer(invalid.jsonlSize)]))]
+        try m2SameFailure("B25",fixture:"existing INDEX-SW source tamper before index trust",code:"checksum_mismatch",reference:{
+            _ = try Reader.load(file,mode:.stream,commercialOnly:false,commercialBasis:"strict",historicalOffsetsPolicy:"fallback",indexPath:path,files:declarations)
+        },leaf:{
+            try published.write(to:path)
+            _ = try Canonical.authenticateStationIndex(sourceFiles:invalid,suppliedIndex:Reader.prepareSuppliedStationIndex(published),indexPresence:[:],readerVersion:version)
+        })
+        XCTAssertFalse(FileManager.default.fileExists(atPath:path.path))
+        let descriptor=handle.fileDescriptor
+        _ = try Canonical.enforceResourceLifetime(resourceState:.streamReader(context),lifetimeAction:"close")
+        try m2Observe("B15",fixture:"existing INDEX-SW single actual descriptor close") {
+            XCTAssertEqual(fcntl(descriptor,F_GETFD),-1);XCTAssertEqual(errno,EBADF)
+            XCTAssertTrue(warm.release.lru.isEmpty);XCTAssertTrue(warm.release.lruOrder.isEmpty)
+            return .object(["descriptor_closed":.bool(fcntl(descriptor,F_GETFD)==(-1)),"cache_cleared":.bool(warm.release.lru.isEmpty)])
+        }
+        try m2SameFailure("B27",fixture:"existing INDEX-SW closed cached read",code:"io",reference:{ try warm.release.checkOpen() },leaf:{
+            _ = try Canonical.readStationLazily(streamReader:context,stationId:id,releaseOrigin:origin,readerVersion:version)
+        })
+    }
+    func testM2NativeLRUEviction() throws {
+        let input=try XCTUnwrap(ProcessInfo.processInfo.environment["OTC_M2_SW_INPUT_ROOT"])
+        let file=URL(fileURLWithPath:input).appendingPathComponent("lifetime/OTC_20261011.jsonl")
+        XCTAssertEqual(try SHA256.file(file),"50c60bb6ceb6226ea4c4f5202b1522fb5277676cd3e974ce5cb21feb884d199b")
+        let release=try Reader.load(file,mode:.stream,commercialOnly:false,commercialBasis:"strict",historicalOffsetsPolicy:"fallback")
+        defer { release.close() }
+        let ids=Array(release.entries.filter { $0.status=="active" }.prefix(257).map(\.id))
+        XCTAssertEqual(ids.count,257)
+        let selected=Set(ids)
+        var original:[String:JSONValue]=[:]
+        try eachLine(file) { bytes,_ in let row=try JSONValue.parse(bytes);if let id=row["station_id"].string,selected.contains(id) { original[id]=row } }
+        let context=release.prepareLazyRead(),origin=release.prepareOrigin(),version=CanonicalReaderVersion(major:1,minor:0)
+        for id in ids.prefix(256) {
+            let actual=try Canonical.readStationLazily(streamReader:context,stationId:id,releaseOrigin:origin,readerVersion:version)
+            XCTAssertEqual(actual,original[id])
+        }
+        let retained=try XCTUnwrap(release.lru[ids[1]])
+        _ = try Canonical.readStationLazily(streamReader:context,stationId:ids[0],releaseOrigin:origin,readerVersion:version)
+        _ = try Canonical.readStationLazily(streamReader:context,stationId:ids[256],releaseOrigin:origin,readerVersion:version)
+        // The accepted source fixture has 257 distinct real station identities.
+        try m2Observe("B27",fixture:"accepted S0 larger-subset actual257 LRU") {
+            XCTAssertEqual(release.lru.count,256);XCTAssertNotNil(release.lru[ids[0]])
+            XCTAssertNil(release.lru[ids[1]])
+            let valid=try Canonical.checkStationOrigin(station:retained,releaseOrigin:origin)
+            XCTAssertEqual(valid.raw,original[ids[1]])
+            XCTAssertEqual(retained.raw,original[ids[1]])
+            return .object(["bounded":.integer(Int64(release.lru.count)),"original_values_equal":.bool(valid.raw==original[ids[1]]),"same_owner_after_eviction":.bool(true)])
+        }
+    }
+    private func m2Observe(_ id: String, fixture: String, _ body: () throws -> JSONValue) throws {
+        let value: JSONValue
+        do {
+            value = .object(["id": .string(id), "fixture": .string(fixture), "profile": .string("swift"),
+                "outcome": .string("GREEN"), "value": try body()])
+        } catch {
+            value = .object(["id": .string(id), "fixture": .string(fixture), "profile": .string("swift"),
+                "outcome": .string("RED_ERROR"), "error": .string(String(reflecting: error))])
+            XCTFail("\(id) actual native fixture refused: \(error)")
+        }
+        if let path = ProcessInfo.processInfo.environment["OTC_M2_SW_EVENTS"] {
+            if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: value.data() + Data([10]))
+        }
+        print("M2_NATIVE \(String(data: try value.data(), encoding: .utf8)!)")
+    }
+
+    func testM2NativeRequiredBodies() async throws {
+        let fixture = "conformance/fixtures/good/OTC_20991231.2"
+        let document = try m1Document(fixture + ".json")
+        let release = try m1Release(fixture + ".json")
+        let stream = try Reader.load(m1Root.appendingPathComponent(fixture + ".jsonl"), mode: .stream,
+            commercialOnly: false, commercialBasis: "strict", historicalOffsetsPolicy: "fallback")
+        defer { release.close(); stream.close() }
+        let station = try release.requireStation(stationId: "OTC-T-0001")
+        let origin = release.prepareOrigin()
+        let version = CanonicalReaderVersion(major: 1, minor: 0)
+        let bytes = try Reader.read(m1Root.appendingPathComponent(fixture + ".json"))
+        let links = CanonicalRequiredLinks(stationIds: Set(release.entries.map(\.id)),
+            constantSetIds: Set(release.entries.flatMap { $0.sets.compactMap { $0["set_id"].string } }),
+            conventionIds: Set(release.convById.keys), licenceIds: Set(release.licById.keys),
+            astroTableIds: [], sourceRecordIds: [])
+        let jsonl = m1Root.appendingPathComponent(fixture + ".jsonl")
+        let meta = m1Root.appendingPathComponent(fixture + ".meta.json")
+        let sourceFiles = CanonicalSourceFiles(jsonl: jsonl, meta: meta,
+            jsonlSha256: try SHA256.file(jsonl), jsonlSize: Int64(try Reader.read(jsonl).count),
+            metaSha256: try SHA256.file(meta), metaSize: Int64(try Reader.read(meta).count))
+        var firstBytes = Data(), firstOffset: UInt64 = 0
+        try eachLine(jsonl) { line, offset in
+            if (try JSONValue.parse(line))["station_id"].string == station.stationId { firstBytes = line; firstOffset = offset }
+        }
+        XCTAssertEqual(stream.byId[station.stationId]?.offset, firstOffset)
+        XCTAssertEqual(stream.byId[station.stationId]?.length, firstBytes.count)
+        let entry = try stream.prepareSourceComparison(stationId: station.stationId)
+        let reader = stream.prepareLazyRead()
+        let sidecar = try Reader.read(m1Root.appendingPathComponent(fixture + ".sha256"))
+        let required: CanonicalRequiredFiles = [.object(["name": .string(jsonl.lastPathComponent)]), .object(["name": .string(meta.lastPathComponent)])]
+        let file = m1Root.appendingPathComponent(fixture + ".json")
+        let client = try await OpenTideConstants.open(file: file.path)
+        defer { client.close() }
+        let releaseFiles = client.prepareVerification()
+        try m2Observe("B05", fixture: fixture + ".json") {
+            guard case .release(let actual) = try Canonical.decodeReleaseDocument(sourceBytes: .bytes(bytes), readerVersion: version, documentKind: .release) else { throw NSError(domain: "M2WrongDocumentKind", code: 1) }
+            XCTAssertEqual(actual, document); return actual["release"]
+        }
+        try m2Observe("B06", fixture: fixture + ".json") {
+            let actual = try Canonical.validateReleaseLinks(parsedDocument: .release(document), requiredLinks: links)
+            XCTAssertEqual(actual.document, document); return actual.document["release"]
+        }
+        try m2Observe("B08", fixture: fixture + ".json retained raw") {
+            guard case .JsonValue(let actual) = try Canonical.accessRawRecord(accessKind: .rawRecord, sourceRecord: station.raw,
+                station: station, releaseOrigin: origin, nativeProfile: .swift) else { throw NSError(domain: "M2WrongRawKind", code: 1) }
+            XCTAssertEqual(actual, station.raw); return actual
+        }
+        try m2Observe("B08.origin", fixture: fixture + ".json producing owner") {
+            let actual = try Canonical.checkStationOrigin(station: station, releaseOrigin: origin)
+            XCTAssertEqual(actual.raw, station.raw); return actual.raw
+        }
+        try m2Observe("B16", fixture: fixture + ".sha256") {
+            let actual = try Canonical.bindChecksumManifest(checksumBytes: sidecar, pointerDigests: [:], requiredFiles: required)
+            XCTAssertEqual(actual, try Cache.checksums(sidecar)); return .object(actual.mapValues(JSONValue.string))
+        }
+        try m2Observe("B20", fixture: fixture + ".json/.sha256 real bytes") {
+            let actual = try Canonical.verifyReleaseFiles(releaseFiles: releaseFiles, trustedCachedPointer: nil)
+            XCTAssertTrue(actual); return .bool(actual)
+        }
+        try m2Observe("B25", fixture: fixture + ".jsonl/.meta.json") {
+            let actual = try Canonical.authenticateStationIndex(sourceFiles: sourceFiles, suppliedIndex: nil, indexPresence: [:], readerVersion: version)
+            defer { actual.release.close() }
+            XCTAssertEqual(actual.nativeEntries.map(\.id).sorted(), stream.entries.map(\.id).sorted())
+            return .array(actual.nativeEntries.map { .string($0.id) })
+        }
+        try m2Observe("B26", fixture: fixture + ".jsonl actual projected row") {
+            let actual = try Canonical.compareStationSource(indexEntry: entry, stationSourceRow: station.raw, indexPresence: [:])
+            XCTAssertEqual(actual, station.raw); return actual
+        }
+        try m2Observe("B27", fixture: fixture + ".jsonl real reader") {
+            _ = try stream.requireStation(stationId: station.stationId)
+            let actual = try Canonical.readStationLazily(streamReader: reader, stationId: station.stationId,
+                releaseOrigin: stream.prepareOrigin(), readerVersion: version)
+            XCTAssertEqual(actual, station.raw); return actual
+        }
+        try m2Observe("B15", fixture: fixture + ".json retained metadata and close") {
+            guard case .Release(let actual) = try Canonical.enforceResourceLifetime(resourceState: .Release(release), lifetimeAction: "close") else { throw NSError(domain: "M2WrongLifetimeKind", code: 1) }
+            XCTAssertTrue(actual === release); XCTAssertTrue(release.closed)
+            XCTAssertEqual(release.datestamp, "20991231.2"); return .bool(release.closed)
+        }
+    }
     func testRequiredPrivateDecodeSeam() throws {
         let bytes = Data("{}".utf8)
         let version = CanonicalReaderVersion(major: 1, minor: 0)
         do {
             let _: CanonicalParsedDocument = try Canonical.decodeReleaseDocument(
-                sourceBytes: bytes, readerVersion: version, documentKind: .release)
-            XCTFail("Construction skeleton must honestly refuse before acquisition or parsing")
-        } catch CanonicalUnimplemented.behavior(let id) {
-            XCTAssertEqual(id, "B05")
+                sourceBytes: .bytes(bytes), readerVersion: version, documentKind: .release)
+            XCTFail("Missing native stations must refuse")
+        } catch let error as OpenTideConstantsError {
+            XCTAssertEqual(error.code, "invalid_release")
         }
     }
 // Calls are independent construction observations. Guards select fixtures;
@@ -32,6 +452,9 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         indexPath: nil, files: [], commercialOnly: false, commercialBasis: "strict",
         historicalOffsetsPolicy: "fallback")
     defer { release.close() }
+    let m2ShapeOwner = try m1Release("conformance/fixtures/good/OTC_20991231.2.json")
+    let m2ShapeClient = try await OpenTideConstants.open(file:m1Root.appendingPathComponent("conformance/fixtures/good/OTC_20991231.2.json").path)
+    defer { m2ShapeOwner.close();m2ShapeClient.close() }
     let convention = Convention(.object([:]))
     let licence = Licence(.object([:]))
     let nativeConstantSet = ConstantSet(raw: .object([:]), convention: convention,
@@ -50,10 +473,10 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         let canonicalError: CanonicalCanonicalError = CanonicalCanonicalError(code: .invalidArgument, structuredFields: .object([:]), cause: nil)
         XCTAssertEqual(canonicalError.code, .invalidArgument)
         let nativeProfile: CanonicalNativeProfile = .swift
-        let sourceBytes: CanonicalSourceBytes = Data("{}".utf8)
+        let sourceBytes: CanonicalSourceBytes = .bytes(Data("{}".utf8))
         let readerVersion: CanonicalReaderVersion = CanonicalReaderVersion(major: 1, minor: 1)
         let documentKind: CanonicalDocumentKind = .release
-        let parsedDocument: CanonicalParsedDocument = .stationRow(.object([:]))
+        let parsedDocument: CanonicalParsedDocument = .release(try m1Document("conformance/fixtures/good/OTC_20991231.2.json"))
         let requiredLinks: CanonicalRequiredLinks = CanonicalLinkTable(stationIds: [], constantSetIds: [], conventionIds: [], licenceIds: [], astroTableIds: [], sourceRecordIds: [])
         let rawFields: CanonicalRawFields = .sourceJSON(.object([:]))
         let fieldContract: CanonicalFieldContract = CanonicalFieldContract(modelType: .Client, members: [])
@@ -62,7 +485,7 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         let accessKind: CanonicalAccessKind = .rawRecord
         let sourceRecord: CanonicalSourceRecord = .object([:])
         let station: CanonicalStation = nativeStation
-        let releaseOrigin: CanonicalReleaseOrigin = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let releaseOrigin = release.prepareOrigin()
         let cacheState: CanonicalCacheState = CanonicalCacheState(cacheRoot: URL(fileURLWithPath: "/shape-only/inert"), releaseCandidates: [], pointerCache: nil, lockState: CanonicalLockState(cacheRoot: URL(fileURLWithPath: "/shape-only/inert"), owner: nil, heldToken: nil))
         let clock: CanonicalClock = 1.0
         let releaseRequest: CanonicalReleaseRequest = .latest(.latest)
@@ -75,7 +498,7 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         let queryKind: CanonicalQueryKind = .stations
         let heldRelease: CanonicalHeldRelease = release
         let queryArguments: CanonicalQueryArguments = .ReleaseStations(CanonicalReleaseStationsArguments(country: nil, type: nil, kind: nil, source: nil, sourceType: nil, includeFlagged: false, includeFallback: false))
-        let resourceState: CanonicalResourceState = .clientState(CanonicalClientState(currentRelease: release, effectiveOptions: CanonicalEffectiveOptions(release: nil, file: nil, cacheDir: nil, offline: nil, mode: .eager, baseUrl: nil, timeout: nil, proxy: nil, caFile: nil, userAgent: nil, onNetworkError: nil, autoUpdate: false, updateInterval: 1.0, logger: nil, verifyOnOpen: false, commercialOnly: false, commercialBasis: "shape-only", historicalOffsetsPolicy: "shape-only"), cacheState: CanonicalCacheState(cacheRoot: URL(fileURLWithPath: "/shape-only/inert"), releaseCandidates: [], pointerCache: nil, lockState: CanonicalLockState(cacheRoot: URL(fileURLWithPath: "/shape-only/inert"), owner: nil, heldToken: nil)), lastError: nil, lastUpdateCheck: nil, closed: false))
+        let resourceState: CanonicalResourceState = .clientState(m2ShapeClient.prepareLifetime())
         let lifetimeAction: CanonicalLifetimeAction = "shape-only"
         let checksumBytes: CanonicalChecksumBytes = Data("{}".utf8)
         let pointerDigests: CanonicalPointerDigests = [:]
@@ -86,7 +509,7 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         let verifiedFileRows: CanonicalVerifiedFileRows = []
         let releaseMetadata: CanonicalReleaseMetadata = .object([:])
         let releaseCandidates: CanonicalReleaseCandidates = []
-        let releaseFiles: CanonicalReleaseFiles = []
+        let releaseFiles = m2ShapeClient.prepareVerification()
         let trustedCachedPointer: CanonicalTrustedCachedPointer = nil
         let destination: CanonicalDestination = URL(fileURLWithPath: "/shape-only/inert")
         let formatSelection: CanonicalFormatSelection = CanonicalFormatSelection(formats: [], requiredFiles: [])
@@ -103,8 +526,8 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
         let sourceFiles: CanonicalSourceFiles = CanonicalSourceFiles(jsonl: URL(fileURLWithPath: "/shape-only/inert"), meta: URL(fileURLWithPath: "/shape-only/inert"), jsonlSha256: "shape-only", jsonlSize: 1, metaSha256: "shape-only", metaSize: 1)
         let suppliedIndex: CanonicalSuppliedIndex = nil
         let indexPresence: CanonicalIndexPresence = [:]
-        let indexEntry: CanonicalIndexEntry = CanonicalStreamIndexStation(stationId: "shape-only", status: "shape-only", name: nil, nameFolded: nil, country: nil, type: nil, kind: nil, referenceStationId: nil, offsetsLicenceId: nil, recommendedSetId: nil, lat: nil, lon: nil, offset: 1, length: 1, aliases: [:], sets: [], subordinateOffsets: nil, currentOffsets: [])
-        let streamReader: CanonicalStreamReader = CanonicalStreamReader(releaseView: release, fileDescriptor: 1, index: .object([:]), indexPresence: .object([:]), stationLru: .object([:]), closed: false)
+        let indexEntry = try m2ShapeOwner.prepareSourceComparison(stationId: "OTC-T-0001")
+        let streamReader = release.prepareLazyRead()
         let stationId: CanonicalStationId = "shape-only"
         let cacheDocument: CanonicalCacheDocument = .streamIndex(CanonicalStreamIndex(indexVersion: 1, discoveryIndexVersion: 1, datestamp: "shape-only", jsonl: "shape-only", jsonlSha256: "shape-only", jsonlSize: 1, by: "shape-only", stations: []))
         let releaseView: CanonicalReleaseView = release
@@ -847,7 +1270,7 @@ func testAllRuntimeAndOrderedCallActionEntries() async throws {
 
     private func observe<Result>(_ id: String, callee: String, resultType: String, arguments: JSONValue,
         _ call: () async throws -> Result) async throws {
-        let migrated = Set(["B01", "B02", "B03", "B04", "B07", "B08.raw", "B24", "B28", "B39", "B41", "B42", "B43.roots", "B44.roots"])
+        let migrated = Set(["B01", "B02", "B03", "B04", "B07", "B08.raw", "B24", "B28", "B39", "B41", "B42", "B43.roots", "B44.roots", "B05", "B06", "B08", "B08.origin", "B15", "B16", "B20", "B25", "B26", "B27"])
         do {
             _ = try await call()
             if !migrated.contains(callee) { XCTFail("\(id): incomplete body fabricated a successful value") }

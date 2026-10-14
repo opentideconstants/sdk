@@ -240,14 +240,18 @@ internal enum Canonical {
         return result
     }
 
-    // B05 decode_release_document — body INCOMPLETE.
+    // B05 decode_release_document — selected native phase available.
     internal static func decodeReleaseDocument(sourceBytes: CanonicalSourceBytes, readerVersion: CanonicalReaderVersion, documentKind: CanonicalDocumentKind) throws -> CanonicalParsedDocument {
-        throw CanonicalUnimplemented.behavior("B05")
+        switch sourceBytes {
+        case .bytes(let bytes): return try Reader.decodeDocument(bytes,readerVersion:readerVersion,kind:documentKind)
+        case .metadata(let context): return try context.decode(documentKind)
+        }
     }
 
-    // B06 validate_release_links — body INCOMPLETE.
+    // B06 validate_release_links — selected native phase available.
     internal static func validateReleaseLinks(parsedDocument: CanonicalParsedDocument, requiredLinks: CanonicalRequiredLinks) throws -> CanonicalValidatedReleaseGraph {
-        throw CanonicalUnimplemented.behavior("B06")
+        guard case .release(let document)=parsedDocument else { throw CanonicalUnimplemented.behavior("B06.release_document") }
+        return try Reader.validateDocumentLinks(document)
     }
 
     // B07 materialize_typed_model — body INCOMPLETE.
@@ -341,9 +345,12 @@ internal enum Canonical {
         throw CanonicalUnimplemented.behavior("B07")
     }
 
-    // B08 access_raw_record — body INCOMPLETE.
+    // B08 access_raw_record — exact selected raw or producing-owner branch.
     internal static func accessRawRecord(accessKind: CanonicalAccessKind, sourceRecord: CanonicalSourceRecord, station: CanonicalStation, releaseOrigin: CanonicalReleaseOrigin, nativeProfile: CanonicalNativeProfile) throws -> CanonicalRawRecordOrValidStation {
-        throw CanonicalUnimplemented.behavior("B08")
+        switch accessKind {
+        case .rawRecord: return .JsonValue(try retainRawSourceRecord(sourceRecord:sourceRecord,nativeProfile:nativeProfile))
+        case .stationObject: return .Station(try checkStationOrigin(station:station,releaseOrigin:releaseOrigin))
+        }
     }
 
     // B09 open_client_release — body INCOMPLETE.
@@ -376,14 +383,21 @@ internal enum Canonical {
         throw CanonicalUnimplemented.behavior("B14")
     }
 
-    // B15 enforce_resource_lifetime — body INCOMPLETE.
+    // B15 enforce_resource_lifetime — borrowed actual owning resources.
     internal static func enforceResourceLifetime(resourceState: CanonicalResourceState, lifetimeAction: CanonicalLifetimeAction) throws -> CanonicalResourceStateOrError {
-        throw CanonicalUnimplemented.behavior("B15")
+        switch resourceState {
+        case .clientState(let context): try context.enforce(lifetimeAction);return .clientState(context)
+        case .Release(let release):
+            if lifetimeAction=="close" { release.close() }
+            else if lifetimeAction != "retained_metadata" { try release.checkOpen() }
+            return .Release(release)
+        case .streamReader(let context): try context.enforce(lifetimeAction);return .streamReader(context)
+        }
     }
 
-    // B16 bind_checksum_manifest — body INCOMPLETE.
+    // B16 bind_checksum_manifest — selected native phase available.
     internal static func bindChecksumManifest(checksumBytes: CanonicalChecksumBytes, pointerDigests: CanonicalPointerDigests, requiredFiles: CanonicalRequiredFiles) throws -> CanonicalBoundChecksums {
-        throw CanonicalUnimplemented.behavior("B16")
+        try ClientIO.bindManifest(checksumBytes,pointerDigests:pointerDigests,requiredFiles:requiredFiles)
     }
 
     // B17 acquire_release_files — body INCOMPLETE.
@@ -401,9 +415,9 @@ internal enum Canonical {
         throw CanonicalUnimplemented.behavior("B19")
     }
 
-    // B20 verify_release_files — body INCOMPLETE.
+    // B20 native verification available; generic B16 argument composition remains INCOMPLETE.
     internal static func verifyReleaseFiles(releaseFiles: CanonicalReleaseFiles, trustedCachedPointer: CanonicalTrustedCachedPointer) throws -> CanonicalVerificationResult {
-        throw CanonicalUnimplemented.behavior("B20")
+        try releaseFiles.verify(trustedPointer:trustedCachedPointer)
     }
 
     // B21 publish_download — body INCOMPLETE.
@@ -428,19 +442,27 @@ internal enum Canonical {
         return try projectIndexSummary(entry.summary)
     }
 
-    // B25 authenticate_station_index — body INCOMPLETE.
+    // B25 authenticate_station_index — selected native phase available.
     internal static func authenticateStationIndex(sourceFiles: CanonicalSourceFiles, suppliedIndex: CanonicalSuppliedIndex, indexPresence: CanonicalIndexPresence, readerVersion: CanonicalReaderVersion) throws -> CanonicalAuthenticatedIndex {
-        throw CanonicalUnimplemented.behavior("B25")
+        let meta=try JSONValue.parse(Reader.read(sourceFiles.meta))
+        try Reader.validateHeader(meta,readerVersion:readerVersion)
+        let (conventions,licences)=try Reader.documentLookupTables(meta)
+        let files=[FileInfo(.object(["name":.string(sourceFiles.jsonl.lastPathComponent),"sha256":.string(sourceFiles.jsonlSha256),"size":.integer(sourceFiles.jsonlSize)])),
+            FileInfo(.object(["name":.string(sourceFiles.meta.lastPathComponent),"sha256":.string(sourceFiles.metaSha256),"size":.integer(sourceFiles.metaSize)]))]
+        return try Reader.prepareStreamIndex(sourceFiles.jsonl,meta:meta,conventions:conventions,licences:licences,
+            indexPath:sourceFiles.indexPath,files:files,commercialOnly:false,commercialBasis:"strict",historicalOffsetsPolicy:"fallback",logger:nil,supplied:suppliedIndex)
     }
 
-    // B26 compare_station_source — body INCOMPLETE.
+    // B26 compare_station_source — selected native phase available.
     internal static func compareStationSource(indexEntry: CanonicalIndexEntry, stationSourceRow: CanonicalStationSourceRow, indexPresence: CanonicalIndexPresence) throws -> CanonicalComparedStationRow {
-        throw CanonicalUnimplemented.behavior("B26")
+        try indexEntry.compare(stationSourceRow)
     }
 
-    // B27 read_station_lazily — body INCOMPLETE.
+    // B27 read_station_lazily — selected native phase available.
     internal static func readStationLazily(streamReader: CanonicalStreamReader, stationId: CanonicalStationId, releaseOrigin: CanonicalReleaseOrigin, readerVersion: CanonicalReaderVersion) throws -> CanonicalStationSourceRow {
-        throw CanonicalUnimplemented.behavior("B27")
+        _ = try enforceResourceLifetime(resourceState:.streamReader(streamReader),lifetimeAction:"station_read")
+        guard releaseOrigin.belongs(to:streamReader) else { throw OpenTideConstantsError.invalidArgument("foreign station") }
+        return try streamReader.read(stationId)
     }
 
     // B28 encode_cache_json — body INCOMPLETE.
@@ -594,9 +616,9 @@ internal enum Canonical {
         sourceRecord
     }
 
-    // B08.origin check_station_origin — body INCOMPLETE.
+    // B08.origin check_station_origin — selected native phase available.
     internal static func checkStationOrigin(station: CanonicalStation, releaseOrigin: CanonicalReleaseOrigin) throws -> CanonicalValidStation {
-        throw CanonicalUnimplemented.behavior("B08.origin")
+        try releaseOrigin.check(station)
     }
 
     // B23.lock manage_cache_lock — body INCOMPLETE.

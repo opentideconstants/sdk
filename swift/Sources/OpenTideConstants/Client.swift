@@ -22,6 +22,15 @@ public final class OpenTideConstants {
     private var lastCheck:Double
     private var closed=false
     private var updating=false
+    internal struct LifetimeContext {
+        fileprivate let owner:OpenTideConstants
+        fileprivate init(_ owner:OpenTideConstants) { self.owner=owner }
+        internal func enforce(_ action:String)throws {
+            if action=="close" { owner.close() }
+            else if action != "retained_metadata" { try owner.checkOpen() }
+        }
+    }
+    internal func prepareLifetime()->LifetimeContext { LifetimeContext(self) }
     fileprivate final class Held { weak var release:Release?;init(_ release:Release) { self.release=release } }
     internal struct PreparedFields {
         let release:Release
@@ -112,19 +121,36 @@ public final class OpenTideConstants {
             let normalized=URL(string:url.absoluteString.hasSuffix("/") ? url.absoluteString:url.absoluteString+"/")!
             return CanonicalEffectiveOptions(release:options.release,file:options.file,cacheDir:options.cacheDir,offline:options.offline,mode:options.mode,baseUrl:normalized.absoluteString,timeout:options.timeout,proxy:options.proxy,caFile:options.caFile,userAgent:options.userAgent,onNetworkError:options.onNetworkError,autoUpdate:options.autoUpdate,updateInterval:options.updateInterval,logger:options.logger,verifyOnOpen:options.verifyOnOpen,commercialOnly:options.commercialOnly,commercialBasis:options.commercialBasis,historicalOffsetsPolicy:options.historicalOffsetsPolicy)
     }
-    public func verify()throws->Bool {
+    internal struct VerificationContext {
+        fileprivate let owner:OpenTideConstants
+        fileprivate init(_ owner:OpenTideConstants) { self.owner=owner }
+        internal func verify(trustedPointer:TrustedVerificationPointerContext?)throws->Bool { try owner.verifyFiles(trustedPointer:trustedPointer) }
+    }
+    internal struct TrustedVerificationPointerContext {
+        fileprivate let owner:OpenTideConstants
+        fileprivate init(_ owner:OpenTideConstants) { self.owner=owner }
+        fileprivate var pointerURLs:[URL] { [owner.cache.pointer("OTC_latest-f1.json"),owner.cache.pointer("OTC_latest.json")] }
+        fileprivate var datestamp:String { owner.release.datestamp }
+    }
+    internal func prepareVerification()->VerificationContext { VerificationContext(self) }
+    internal func prepareTrustedVerificationPointer()->TrustedVerificationPointerContext? {
+        loadedFrom == .file || loadedFrom == .fileUnverified ? nil:TrustedVerificationPointerContext(self)
+    }
+    public func verify()throws->Bool { try state { try verifyFiles(trustedPointer:prepareTrustedVerificationPointer()) } }
+    internal func verifyFiles(trustedPointer:TrustedVerificationPointerContext?)throws->Bool {
         try state {
             try checkOpen();guard let first=opened.first else { throw OpenTideConstantsError.checksumMismatch("no files") }
             let name="OTC_\(release.datestamp).sha256",sha=first.deletingLastPathComponent().appendingPathComponent(name)
             guard FileManager.default.fileExists(atPath:sha.path) else { throw OpenTideConstantsError.checksumMismatch("no \(name) next to file",["file":.string(first.path)]) }
             let bytes=try Reader.read(sha)
             if loadedFrom != .file && loadedFrom != .fileUnverified {
-                for pointer in ["OTC_latest-f1.json","OTC_latest.json"] {
-                    guard let doc=try? JSONValue.parse(Data(contentsOf:cache.pointer(pointer))),doc["datestamp"].string==release.datestamp else { continue }
+                guard let trustedPointer,trustedPointer.owner === self else { throw CanonicalUnimplemented.behavior("B20") }
+                for pointer in trustedPointer.pointerURLs {
+                    guard let doc=try? JSONValue.parse(Data(contentsOf:pointer)),doc["datestamp"].string==trustedPointer.datestamp else { continue }
                     if let expected=doc["files"].array.first(where:{ $0["name"].string==name })?["sha256"].string,SHA256.digest(bytes) != expected.lowercased() { throw OpenTideConstantsError.checksumMismatch("checksum file differs from cached pointer",["file":.string(sha.path),"expected":.string(expected),"actual":.string(SHA256.digest(bytes))]) }
                 }
             }
-            let rows=try Cache.checksums(bytes)
+            let rows=try ClientIO.bindManifest(bytes,pointerDigests:[:],requiredFiles:[])
             for path in opened { try io.check(path,sha:rows[path.lastPathComponent]) }
             for path in opened where path.lastPathComponent.hasSuffix(".json.gz") {
                 let json=URL(fileURLWithPath:String(path.path.dropLast(3)))
@@ -426,7 +452,28 @@ internal struct ClientIO:@unchecked Sendable {
         } catch { logger?("opentideconstants: cannot cache \(name)") }
         return doc
     }
-    func entry(_ value:JSONValue,source:URL)throws->JSONValue {
+    internal struct MetadataDecodeContext {
+        fileprivate let bytes:Data
+        fileprivate let source:URL
+        fileprivate init(bytes:Data,source:URL) { self.bytes=bytes;self.source=source }
+        internal func decode(_ kind:CanonicalDocumentKind)throws->CanonicalParsedDocument {
+            let doc=try JSONValue.parse(bytes)
+            switch kind {
+            case .pointer: return .pointer(try ClientIO.validateEntry(doc,source:source))
+            case .catalogue:
+                var result=doc.object
+                result["releases"] = .array(try ClientIO.catalogueEntries(doc,source:source))
+                return .catalogue(.object(result))
+            default: throw CanonicalUnimplemented.behavior("B05.metadata_kind")
+            }
+        }
+    }
+    internal static func prepareMetadataDecode(bytes:Data,source:URL)->MetadataDecodeContext { MetadataDecodeContext(bytes:bytes,source:source) }
+    internal static func catalogueEntries(_ doc:JSONValue,source:URL)throws->[JSONValue] {
+        try doc["releases"].array.map { try validateEntry($0,source:source) }.sorted { Cache.newer($0["datestamp"].string!,$1["datestamp"].string!) }
+    }
+    func entry(_ value:JSONValue,source:URL)throws->JSONValue { try Self.validateEntry(value,source:source) }
+    static func validateEntry(_ value:JSONValue,source:URL)throws->JSONValue {
         guard case .object=value,let stamp=value["datestamp"].string,Cache.validStamp(stamp) else { throw OpenTideConstantsError.invalidRelease("bad pointer datestamp") }
         for key in ["format_version","min_reader_version"] {
             if key=="min_reader_version",value[key].isNull { continue }
@@ -445,7 +492,7 @@ internal struct ClientIO:@unchecked Sendable {
     }
     func index()async throws->[JSONValue] {
         guard let doc=try await pointer("OTC_index.json") else { throw OpenTideConstantsError.releaseNotFound("index missing") }
-        return try doc["releases"].array.map { try entry($0,source:baseUrl.appendingPathComponent("OTC_index.json")) }.sorted { Cache.newer($0["datestamp"].string!,$1["datestamp"].string!) }
+        return try Self.catalogueEntries(doc,source:baseUrl.appendingPathComponent("OTC_index.json"))
     }
     func readable(_ value:JSONValue)->Bool {
         let format=value["format_version"].string ?? ""
@@ -470,6 +517,24 @@ internal struct ClientIO:@unchecked Sendable {
         if let ref=entry?["files"].array.first(where:{ $0["name"].string==name })?["url"].string,let url=URL(string:ref) { return url }
         return baseUrl.appendingPathComponent(name)
     }
+    // Shared native sidecar hash, grammar, pointer agreement and required-row phases.
+    static func bindManifest(_ bytes:Data,pointerDigests:[String:String],requiredFiles:[JSONValue])throws->[String:String] {
+        if let name=pointerDigests.keys.sorted().first(where:{ $0.hasSuffix(".sha256") }),let expected=pointerDigests[name],SHA256.digest(bytes) != expected.lowercased() {
+            throw OpenTideConstantsError.checksumMismatch("checksum file differs from pointer",["file":.string(name),"expected":.string(expected),"actual":.string(SHA256.digest(bytes))])
+        }
+        let rows=try Cache.checksums(bytes)
+        if !pointerDigests.isEmpty {
+            let manifest=pointerDigests.keys.first(where:{ $0.hasSuffix(".sha256") })
+            let stamp=manifest.map { String($0.dropFirst(4).dropLast(7)) } ?? ""
+            let files=pointerDigests.keys.sorted().map { name in JSONValue.object(["name":.string(name),"sha256":.string(pointerDigests[name]!)]) }
+            try agreement(rows,entry:.object(["files":.array(files)]),stamp:stamp)
+        }
+        for file in requiredFiles {
+            let name=file["name"].string!
+            guard rows[name] != nil else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) }
+        }
+        return rows
+    }
     func sha(_ stamp:String,entry:JSONValue?)async throws->([String:String],Data) {
         let name="OTC_\(stamp).sha256",url=url(name,entry:entry)
         let bytes=try await HTTP.get(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile)
@@ -480,7 +545,8 @@ internal struct ClientIO:@unchecked Sendable {
         try agreement(rows,entry:entry,stamp:stamp)
         return (rows,bytes)
     }
-    func agreement(_ rows:[String:String],entry:JSONValue?,stamp:String)throws {
+    func agreement(_ rows:[String:String],entry:JSONValue?,stamp:String)throws { try Self.agreement(rows,entry:entry,stamp:stamp) }
+    static func agreement(_ rows:[String:String],entry:JSONValue?,stamp:String)throws {
         guard let entry,!entry["files"].array.isEmpty else { return }
         let listed=entry["files"].array.filter { $0["name"].string != "OTC_\(stamp).sha256" }
         for file in listed { let name=file["name"].string!;guard rows[name]==file["sha256"].string else { throw OpenTideConstantsError.checksumMismatch("pointer/checksum disagreement",["file":.string(name),"expected":file["sha256"],"actual":rows[name].map(JSONValue.string) ?? .null]) } }

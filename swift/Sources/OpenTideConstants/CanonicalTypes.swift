@@ -1521,7 +1521,7 @@ internal struct CanonicalAstronomicalTerms {
 
 internal typealias CanonicalAttributionText = String
 
-internal typealias CanonicalAuthenticatedIndex = CanonicalStreamIndex
+internal typealias CanonicalAuthenticatedIndex = Reader.AuthenticatedStationIndex
 
 internal enum CanonicalAuxiliaryKind: String, CaseIterable {
     case modelAccess = "model_access"
@@ -1746,7 +1746,7 @@ internal typealias CanonicalIncludeFlagged = Bool
 
 internal typealias CanonicalIncludeNoConstants = Bool
 
-internal typealias CanonicalIndexEntry = CanonicalStreamIndexStation
+internal typealias CanonicalIndexEntry = Release.SourceComparisonContext
 
 internal typealias CanonicalIndexPresence = [String: Bool]
 
@@ -2244,11 +2244,11 @@ internal typealias CanonicalReferenceModel = CanonicalPredictionModel
 
 internal typealias CanonicalReleaseCandidates = [String]
 
-internal typealias CanonicalReleaseFiles = [FileInfo]
+internal typealias CanonicalReleaseFiles = OpenTideConstants.VerificationContext
 
 internal typealias CanonicalReleaseMetadata = JSONValue
 
-internal typealias CanonicalReleaseOrigin = UUID
+internal typealias CanonicalReleaseOrigin = Release.OriginContext
 
 internal enum CanonicalReleaseRequestLatest: String, CaseIterable {
     case latest = "latest"
@@ -2270,13 +2270,13 @@ internal typealias CanonicalRequiredFiles = CanonicalFileRows
 internal typealias CanonicalRequiredLinks = CanonicalLinkTable
 
 internal enum CanonicalResourceState {
-    case clientState(CanonicalClientState)
+    case clientState(OpenTideConstants.LifetimeContext)
     case Release(Release)
     case streamReader(CanonicalStreamReader)
 }
 
 internal enum CanonicalResourceStateOrError {
-    case clientState(CanonicalClientState)
+    case clientState(OpenTideConstants.LifetimeContext)
     case Release(Release)
     case streamReader(CanonicalStreamReader)
 }
@@ -2313,7 +2313,10 @@ internal struct CanonicalSourceByteSpan {
     let lengthBytes: Int64
 }
 
-internal typealias CanonicalSourceBytes = Data
+internal enum CanonicalSourceBytes {
+    case bytes(Data)
+    case metadata(ClientIO.MetadataDecodeContext)
+}
 
 internal struct CanonicalSourceFiles {
     let jsonl: URL
@@ -2322,6 +2325,11 @@ internal struct CanonicalSourceFiles {
     let jsonlSize: Int64
     let metaSha256: String
     let metaSize: Int64
+    let indexPath: URL?
+    internal init(jsonl:URL,meta:URL,jsonlSha256:String,jsonlSize:Int64,metaSha256:String,metaSize:Int64,indexPath:URL?=nil) {
+        self.jsonl=jsonl;self.meta=meta;self.jsonlSha256=jsonlSha256;self.jsonlSize=jsonlSize
+        self.metaSha256=metaSha256;self.metaSize=metaSize;self.indexPath=indexPath
+    }
 }
 
 internal typealias CanonicalSourceRecord = JSONValue
@@ -2348,14 +2356,7 @@ internal enum CanonicalStationSummary {
 // Native event members have no step; series members retain their exact seconds.
 internal typealias CanonicalStep = Double
 
-internal struct CanonicalStreamReader {
-    let releaseView: Release
-    let fileDescriptor: Int64
-    let index: JSONValue
-    let indexPresence: JSONValue
-    let stationLru: JSONValue
-    let closed: Bool
-}
+internal typealias CanonicalStreamReader = Release.LazyReadContext
 
 internal enum CanonicalSummaryKind: String, CaseIterable {
     case stats = "stats"
@@ -2368,7 +2369,7 @@ internal struct CanonicalSummaryOptions {
     let includeNoConstants: Bool
 }
 
-internal typealias CanonicalSuppliedIndex = CanonicalStreamIndex?
+internal typealias CanonicalSuppliedIndex = Reader.SuppliedStationIndex?
 
 internal typealias CanonicalTideEvents = ExtremeList
 
@@ -2376,9 +2377,7 @@ internal typealias CanonicalTimeInputs = CanonicalArguments
 
 internal typealias CanonicalTrustedCache = JSONValue?
 
-internal struct CanonicalTrustedCachedPointerValue {
-    let digests: CanonicalDigestMap
-}
+internal typealias CanonicalTrustedCachedPointerValue = OpenTideConstants.TrustedVerificationPointerContext
 
 internal typealias CanonicalTrustedCachedPointer = CanonicalTrustedCachedPointerValue?
 
@@ -2410,7 +2409,7 @@ internal struct CanonicalValidatedMetadata {
     let files: CanonicalFileRows
 }
 
-internal typealias CanonicalValidatedReleaseGraph = JSONValue
+internal typealias CanonicalValidatedReleaseGraph = Reader.ValidatedReleaseDocument
 
 internal typealias CanonicalVerificationResult = Bool
 

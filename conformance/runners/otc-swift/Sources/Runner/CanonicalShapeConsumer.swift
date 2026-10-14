@@ -21,6 +21,10 @@ internal func canonicalPublicConsumer(release: Release, station: Station,
         try release.heights(stationId: $0, start: $1, stop: $2)
     }
     let metadata: () async throws -> [ReleaseInfo] = { try await client.releases() }
+    let files: [FileInfo] = release.files
+    let verification: () throws -> Bool = { try client.verify() }
+    let clientClose: () -> Void = { client.close() }
     withExtendedLifetime((held, raw, sets, stationLookup, stations, iterator,
-        stats, localized, objectHeights, idHeights, metadata)) {}
+        stats, localized, objectHeights, idHeights, metadata, files, verification,
+        clientClose)) {}
 }
