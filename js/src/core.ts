@@ -134,6 +134,11 @@ export async function httpGet(ctx: Ctx, url: string, etag: string | null = null)
     throw last ?? new NetworkError(`request failed: ${url}`, { url });
 }
 
+/** @internal Exact existing parsed file fields; parser owns admission and URL resolution. */
+export function fileInfoOf(name: string, url: string, size: number, sha: string): FileInfo {
+    return { name, url, size, sha256: sha.toLowerCase() };
+}
+
 /**
  * Check one latest-pointer or index entry from the server (spec 4.2, 5.2). A datestamp that is not one (`../x`,
  * `2026-10-08`, a counter `.01` or longer than 9 digits) is invalid_release: it names a cache directory (spec 5.4).
@@ -164,7 +169,7 @@ function parseEntry(v: unknown, url: string, what = "the pointer"): PointerEntry
             // as the schema requires (CR2 DR12): never a null that a later merge copies over the measured values
             throw new InvalidReleaseError(`${what} ${url}: the entry for ${f["name"]} of ${d} needs a string sha256 and an integer size of 0 or more`);
         }
-        files.push({ name: f["name"], url: href, size, sha256: sha.toLowerCase() });
+        files.push(fileInfoOf(f["name"], href, size, sha));
     }
     files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     const s = (k: string) => (typeof v[k] === "string" ? (v[k] as string) : null);

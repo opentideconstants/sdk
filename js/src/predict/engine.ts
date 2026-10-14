@@ -2,7 +2,7 @@ import * as X from '../errors.js';
 import {Station,type Release,type ConstantSet,predictionStation as stationFor,predictionOptions as options,predictionChosen as chosen,predictionAstroTable} from '../release.js';
 import {arr,num,obj,str,isObject,type JsonObject} from '../json.js';
 import {AstroTable,instant,utc,angle} from './astro.js';
-import {Sum,events,RAD} from './harmonic.js';
+import {Sum,events,unroundedEvents,RAD,type Event} from './harmonic.js';
 import {HeightPoint,Extreme,CurrentPoint,CurrentEvent,HeightSeries,ExtremeList,CurrentSeries,CurrentEventList} from './results.js';
 import type {ExtremeType,CurrentEventType,PredictionMethod} from '../types.js';
 import {requireHistoricalOffset} from '../historical-offsets.js';
@@ -13,7 +13,8 @@ export interface CurrentOptions {binNumber?:number|null;setId?:string|null;}
 export interface CurrentWindowOptions extends CurrentOptions {start:Date;stop:Date;stepS?:number;}
 export interface DatumOptions {setId?:string|null;allSets?:boolean;}
 export interface RangeOptions {setId?:string|null;}
-interface Context {
+/** @internal Borrowed, already selected native prediction context. */
+export interface Context {
     station:Station;constants:ConstantSet;table:AstroTable;method:PredictionMethod;
     reference:Station|null;referenceBin:number|null;binNumber:number|null;offsets:JsonObject|null;
     total:Sum;minor:Sum|null;currentBin:JsonObject|null;sigma:number;
@@ -21,11 +22,13 @@ interface Context {
 }
 const objects=(o:JsonObject|null,key:string)=>arr(o,key).filter(isObject);
 export function astroTable(release:Release,id:string|null=null):AstroTable|null {return predictionAstroTable(release,id);}
-function contextFor(station:Station,constants:ConstantSet,table:AstroTable):Context {
+/** @internal */
+export function contextFor(station:Station,constants:ConstantSet,table:AstroTable):Context {
     return {station,constants,table,method:'harmonic',reference:null,referenceBin:null,binNumber:null,offsets:null,
         total:new Sum(table,[]),minor:null,currentBin:null,sigma:1,datumName:null,datumKind:null,datumUncertainty:null,omitted:null};
 }
-function window(start:Date,stop:Date,step?:number):readonly[number,number] {
+/** @internal */
+export function window(start:Date,stop:Date,step?:number):readonly[number,number] {
     const first=instant(start),last=instant(stop);if(first>last)throw new X.InvalidArgumentError('start must not be after stop');
     if(step!==undefined&&(typeof step!=='number'||!Number.isInteger(step)||step<=0))throw new X.InvalidArgumentError('stepS must be a positive integer');return [first,last];
 }
@@ -36,7 +39,8 @@ function tableFor(release:Release,constants:ConstantSet):AstroTable {
     if(!table)throw new X.NoAstroTableError(`release ${release.datestamp} has no astro table "${id}" for convention "${convention.convention_id}". Format 1.0 requires astro_tables when a convention uses f_u_at_prediction (since the schema revision of site PR #45); this file was written before that revision or is invalid.`);return table;
 }
 function unavailable(missing:string):never {throw new X.DatumUnavailableError(`datum is missing ${missing}`,{missing});}
-function datumTerm(raw:JsonObject|null,datum:string|null|undefined,context:Context,published=false):number {
+/** @internal */
+export function datumTerm(raw:JsonObject|null,datum:string|null|undefined,context:Context,published=false):number {
     datum=datum??'mean_level';if(datum==='mean_level'&&!published){context.datumName=datum;return 0;}
     const named=obj(raw,'named'),basis=obj(raw,'basis'),mean=num(raw,'msl_offset_m');if(mean===null)unavailable('msl_offset_m');
     if(datum==='zero'&&!published){context.datumName=str(raw,'zero_name')??str(raw,'zero')??'unknown';return mean;}
@@ -56,11 +60,13 @@ function reference(release:Release,offsets:JsonObject,quantity:string,binNumber:
     if(!station||!constants)throw new X.ReferenceUnavailableError(`reference ${id} has no usable set`,{reference_station_id:id});
     if(release._commercialOnly)for(const licenceId of [str(offsets,'licence_id'),constants.licence.licence_id])if(licenceId!==null&&!release.licence(licenceId)?.commercial_use)throw new X.ReferenceUnavailableError(`commercial_only refuses reference licence ${licenceId}`,{reference_station_id:id});return [station,constants];
 }
-function bin(station:Station,bins:readonly JsonObject[],requested:number|null|undefined):JsonObject {
+/** @internal */
+export function bin(station:Station,bins:readonly JsonObject[],requested:number|null|undefined):JsonObject {
     let selected=requested??num(station.raw,'default_current_bin');if(selected===null&&bins.length)selected=Math.min(...bins.map(b=>num(b,'bin')??Infinity));
     const row=bins.find(b=>b['bin']===selected);if(!row)throw new X.BinNotFoundError(`binNumber ${selected} is not available`);return row;
 }
-function currentContext(context:Context,row:JsonObject):void {
+/** @internal */
+export function currentContext(context:Context,row:JsonObject):void {
     context.currentBin=row;const azimuth=num(row,'azimuth_deg')??0,flood=num(row,'mean_flood_dir_deg');
     context.sigma=flood===null||Math.cos((azimuth-flood)*RAD)>=0?1:-1;
     context.total=new Sum(context.table,objects(row,'constituents'),{amplitude:'major_amplitude_ms',phase:'major_phase_deg',mean:num(row,'mean_major_ms')??0});
@@ -68,8 +74,7 @@ function currentContext(context:Context,row:JsonObject):void {
 }
 function context(release:Release,input:Station|string,quantity:string,setId:string|null|undefined,datum:string|null|undefined=null,binNumber:number|null|undefined=null,series=false,offsetId:string|null|undefined=null):Context {
     const station=stationFor(release,input);options(setId,datum,binNumber);
-    if(offsetId!==null&&offsetId!==undefined&&typeof offsetId!=='string')throw new X.InvalidArgumentError('offsetId must be a string');
-    if(offsetId!=null&&setId!=null)throw new X.InvalidArgumentError('setId and offsetId are mutually exclusive');
+    validateOffsetArguments(setId,offsetId);
     let constants=chosen(release,station,setId),usable=constants!==null&&(constants.qc_status==='ok'||constants.qc_status==='flagged');
     const tideOffsets=obj(station.raw,'subordinate_offsets'),currentOffsets=objects(station.raw,'current_offsets'),historical=tideOffsets!==null&&str(tideOffsets,'offset_id')!==null;
     if(offsetId!=null){if(!historical||tideOffsets?.['offset_id']!==offsetId)throw new X.InvalidArgumentError(`offsetId ${offsetId} is not a profile of ${station.station_id}`);usable=false;}
@@ -114,8 +119,21 @@ export function heights(release:Release,station:Station|string,opts:HeightWindow
     for(let t=start;t<stop;t+=step)items.push(new HeightPoint({time:utc(t),height_m:c.total.value(t),local_time:null,utc_offset_s:null}));return new HeightSeries({...tideFields(release,c,opts.datum),items});
 }
 export function heightsAt(release:Release,station:Station|string,times:readonly Date[],opts:HeightOptions={}):HeightSeries {
-    if(!Array.isArray(times))throw new X.InvalidArgumentError('times must be a sequence of Dates');const seconds=times.map(instant),c=context(release,station,'water_level',opts.setId,opts.datum,null,true,opts.offsetId);
-    return new HeightSeries({...tideFields(release,c,opts.datum),items:seconds.map(t=>new HeightPoint({time:utc(t),height_m:c.total.value(t),local_time:null,utc_offset_s:null}))});
+    const seconds=predictionSeconds(times),c=context(release,station,'water_level',opts.setId,opts.datum,null,true,opts.offsetId);
+    return heightSeriesFromContext(release,c,seconds,opts.datum);
+}
+/** @internal Original sequence/instant guard phase; no model selection or evaluation. */
+export function predictionSeconds(times:readonly Date[]):number[] {
+    if(!Array.isArray(times))throw new X.InvalidArgumentError('times must be a sequence of Dates');return times.map(instant);
+}
+/** @internal Original offset option guards, after station and prediction options. */
+export function validateOffsetArguments(setId:string|null|undefined,offsetId:string|null|undefined):void {
+    if(offsetId!==null&&offsetId!==undefined&&typeof offsetId!=='string')throw new X.InvalidArgumentError('offsetId must be a string');
+    if(offsetId!=null&&setId!=null)throw new X.InvalidArgumentError('setId and offsetId are mutually exclusive');
+}
+/** @internal Evaluate only an already selected native context; caller owns selection/window validation. */
+export function heightSeriesFromContext(release:Release,c:Context,seconds:readonly number[],datum:string|null|undefined=null):HeightSeries {
+    return new HeightSeries({...tideFields(release,c,datum),items:seconds.map(t=>new HeightPoint({time:utc(t),height_m:c.total.value(t),local_time:null,utc_offset_s:null}))});
 }
 export function extremes(release:Release,station:Station|string,opts:Omit<HeightWindowOptions,'stepS'>):ExtremeList {
     const [start,stop]=window(opts.start,opts.stop),c=context(release,station,'water_level',opts.setId,opts.datum,null,false,opts.offsetId);let candidates;
@@ -124,11 +142,14 @@ export function extremes(release:Release,station:Station|string,opts:Omit<Height
     }else candidates=events(c.total,start,stop);
     const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,kind,value])=>new Extreme({time:utc(Math.floor(t+0.5)),type:kind as ExtremeType,height_m:value,local_time:null,utc_offset_s:null}));return new ExtremeList({...tideFields(release,c,opts.datum),items});
 }
-function currentEventsFor(c:Context,start:number,stop:number):[number,CurrentEventType,number,number|null][] {
+function currentEventCandidates(c:Context,start:number,stop:number,eventSource:(total:Sum,start:number,stop:number,slack?:boolean)=>Event[]):[number,CurrentEventType,number,number|null][] {
     const row=c.currentBin as JsonObject,total=new Sum(c.table,objects(row,'constituents'),{amplitude:'major_amplitude_ms',phase:'major_phase_deg',multiplier:c.sigma,mean:c.sigma*(num(row,'mean_major_ms')??0)}),candidates:[number,CurrentEventType,number,number|null][]=[];
-    for(const [t,kind,value] of events(total,start,stop)){if(kind==='high'&&value>0)candidates.push([t,'max_flood',value,num(row,'mean_flood_dir_deg')]);else if(kind==='low'&&value<0)candidates.push([t,'max_ebb',value,num(row,'mean_ebb_dir_deg')]);}
-    for(const [t,kind] of events(total,start,stop,true))candidates.push([t,kind as CurrentEventType,0,null]);return candidates.sort((a,b)=>a[0]-b[0]);
+    for(const [t,kind,value] of eventSource(total,start,stop)){if(kind==='high'&&value>0)candidates.push([t,'max_flood',value,num(row,'mean_flood_dir_deg')]);else if(kind==='low'&&value<0)candidates.push([t,'max_ebb',value,num(row,'mean_ebb_dir_deg')]);}
+    for(const [t,kind] of eventSource(total,start,stop,true))candidates.push([t,kind as CurrentEventType,0,null]);return candidates.sort((a,b)=>a[0]-b[0]);
 }
+function currentEventsFor(c:Context,start:number,stop:number):[number,CurrentEventType,number,number|null][] {return currentEventCandidates(c,start,stop,events);}
+/** @internal Same selected-bin peak/slack assembly, before reporting-window filtering. */
+export function unroundedCurrentEventsFor(c:Context,start:number,stop:number):[number,CurrentEventType,number,number|null][] {return currentEventCandidates(c,start,stop,unroundedEvents);}
 export function currents(release:Release,station:Station|string,opts:CurrentWindowOptions):CurrentSeries {
     const step=opts.stepS===undefined?600:opts.stepS,[start,stop]=window(opts.start,opts.stop,step),c=context(release,station,'current',opts.setId,null,opts.binNumber,true),theta=(num(c.currentBin,'azimuth_deg')??0)*RAD,items:CurrentPoint[]=[];
     for(let t=start;t<stop;t+=step){const major=c.total.value(t),minor=(c.minor as Sum).value(t),east=major*Math.sin(theta)+minor*Math.sin(theta+Math.PI/2),north=major*Math.cos(theta)+minor*Math.cos(theta+Math.PI/2),speed=Math.hypot(east,north),direction=speed<1e-9?null:angle(Math.atan2(east,north)/RAD);items.push(new CurrentPoint({time:utc(t),velocity_major_ms:c.sigma*major,velocity_minor_ms:c.sigma*minor,speed_ms:speed,direction_deg:direction,local_time:null,utc_offset_s:null}));}

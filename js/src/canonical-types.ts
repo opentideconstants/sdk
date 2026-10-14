@@ -1,5 +1,7 @@
 import type * as T from './index.js';
 import type { Json, JsonObject } from './json.js';
+import type { ReleaseHeader, IndexEntry } from './release.js';
+import type * as R from './predict/results.js';
 
 // Private construction contracts; public/reference bindings do not import this module.
 export type Client = T.OpenTideConstants;
@@ -40,8 +42,9 @@ export type Fallback = T.Fallback;
 export type SourceRecord = T.SourceRecord;
 export type HistoricalOffsetVintage = T.HistoricalOffsetVintage;
 export type HistoricalOffsetProvenance = T.HistoricalOffsetProvenance;
+export interface CanonicalStationFilters { readonly country?: string | null; readonly type?: T.StationType | null; readonly kind?: T.Kind | null; readonly source?: string | null; readonly source_type?: T.SourceType | null; readonly include_flagged?: boolean; readonly include_fallback?: boolean }
 export interface MemberArguments {
-    readonly "Client.open": { readonly release?: string; readonly file?: string | null; readonly cache_dir?: string | null; readonly offline?: boolean; readonly mode?: "eager" | "stream"; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null; readonly on_network_error?: "use_cache" | "raise"; readonly auto_update?: boolean; readonly update_interval?: number; readonly logger?: T.Logger | null; readonly verify_on_open?: boolean; readonly commercial_only?: boolean; readonly commercial_basis?: string; readonly historical_offsets_policy?: string };
+    readonly "Client.open": { readonly release?: string; readonly file?: string | null; readonly cache_dir?: string | null; readonly offline?: boolean; readonly mode?: "eager" | "stream"; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null; readonly on_network_error?: "use_cache" | "raise"; readonly auto_update?: boolean; readonly update_interval?: number; readonly logger?: T.Logger | null; readonly verify_on_open?: boolean; readonly commercial_only?: boolean; readonly commercial_basis?: 'strict' | 'as_published_upstream'; readonly historical_offsets_policy?: 'fallback' | 'exclude' };
     readonly "Client.release": {  };
     readonly "Client.loaded_from": {  };
     readonly "Client.last_error": {  };
@@ -77,11 +80,11 @@ export interface MemberArguments {
     readonly "Release.require_station": { readonly station_id: string };
     readonly "Release.tombstone": { readonly station_id: string };
     readonly "Release.station_by_alias": { readonly system: "noaa" | "gesla" | "ticon" | "xtide" | "kartverket" | "slackwater" | "webcaltides" | "linz" | "shom" | "pegelonline" | "rws" | "mi" | "dmi" | "smhi" | "fmi" | "uhslc"; readonly alias_id: string };
-    readonly "Release.stations": {  };
-    readonly "Release.iter_stations": {  };
-    readonly "Release.search": { readonly name: string; readonly limit?: number | null; readonly match?: "exact" | null };
-    readonly "Release.near": { readonly lat: number; readonly lon: number; readonly radius_km: number; readonly limit?: number | null };
-    readonly "Release.nearest": { readonly lat: number; readonly lon: number; readonly max_km?: number | null };
+    readonly "Release.stations": CanonicalStationFilters;
+    readonly "Release.iter_stations": CanonicalStationFilters;
+    readonly "Release.search": CanonicalStationFilters & { readonly name: string; readonly limit?: number | null; readonly match?: "exact" | null };
+    readonly "Release.near": CanonicalStationFilters & { readonly lat: number; readonly lon: number; readonly radius_km: number; readonly limit?: number | null };
+    readonly "Release.nearest": CanonicalStationFilters & { readonly lat: number; readonly lon: number; readonly max_km?: number | null };
     readonly "Release.reference_station": { readonly station: T.Station };
     readonly "Release.subordinates_of": { readonly station: T.Station };
     readonly "Release.attribution": { readonly stations?: ReadonlyArray<T.Station> | null };
@@ -861,6 +864,8 @@ export interface MemberValues {
     readonly "HistoricalOffsetProvenance.acceptance_report_sha256": string;
 }
 export type SelectedArguments = { [K in keyof MemberArguments]: { readonly member_id: K; readonly arguments: MemberArguments[K] } }[keyof MemberArguments];
+export type EmptyArgumentMember = { [K in keyof MemberArguments]: keyof MemberArguments[K] extends never ? K : never }[keyof MemberArguments];
+export type NoArgumentsContract = Extract<SelectedArguments, { member_id: EmptyArgumentMember }> & { readonly native_guard: 'no_arguments'; readonly native_profile: native_profile };
 export type SelectedValue = { [K in keyof MemberValues]: { readonly member_id: K; readonly value: MemberValues[K] } }[keyof MemberValues];
 export interface ModelMap {
     readonly Client: T.OpenTideConstants;
@@ -903,6 +908,7 @@ export interface ModelMap {
     readonly HistoricalOffsetProvenance: T.HistoricalOffsetProvenance;
 }
 export type SelectedModel = { [K in keyof ModelMap]: { readonly model_type: K; readonly model: ModelMap[K] } }[keyof ModelMap];
+export type NativeResultFields = { [K in 'HeightPoint' | 'Extreme' | 'CurrentPoint' | 'CurrentEvent' | 'HeightSeries' | 'ExtremeList' | 'CurrentSeries' | 'CurrentEventList' | 'DatumInfo' | 'DatumLevel' | 'Ranges']: { readonly model_type: K; readonly fields: ConstructorParameters<(typeof R)[K]>[0] } }['HeightPoint' | 'Extreme' | 'CurrentPoint' | 'CurrentEvent' | 'HeightSeries' | 'ExtremeList' | 'CurrentSeries' | 'CurrentEventList' | 'DatumInfo' | 'DatumLevel' | 'Ranges'];
 export type ModelFieldContracts = { [K in keyof ModelMap]: { readonly model_type: K; readonly fields: ReadonlyArray<Extract<keyof MemberValues, `${K}.${string}`>> } }[keyof ModelMap];
 export type FieldProjectionContract = { readonly scalar_types: string; readonly models: string; readonly subordinate_offsets: string; readonly scope: string; readonly fallback: string };
 export interface RequiredLink { readonly source: 'station' | 'constant_set' | 'offset'; readonly target: 'station' | 'convention' | 'licence'; readonly source_id: string; readonly target_id: string; }
@@ -918,10 +924,10 @@ export type OpaqueOrigin = symbol;
 export type NativeCause = (Error) | null;
 export type StationRow = MemberValues["Station.raw"];
 export type StationLookup = ({ readonly variant: "active" } & { readonly station: Station }) | ({ readonly variant: "removed" } & { readonly tombstone: Tombstone }) | ({ readonly variant: "absent" } & {  });
-export type PredictionModel = { readonly station: Station; readonly release_view: Release; readonly constant_set: ConstantSet; readonly convention: Convention; readonly astro_table: JsonValue; readonly required_constituents: ReadonlyArray<JsonValue>; readonly reference_bin: (Integer) | null; readonly mean_term: Number; readonly datum_source: (JsonValue) | null };
-export type PredictionWindow = { readonly start: UtcSecond; readonly stop: UtcSecond; readonly step: (Number) | null; readonly instants: (JsonValue) | null };
+export type PredictionModel = { readonly station: Station; readonly release_view: Release; readonly constant_set: ConstantSet; readonly convention: Convention; readonly astro_table: JsonValue; readonly required_constituents: ReadonlyArray<JsonValue>; readonly reference_bin: (Integer) | null; readonly mean_term: Number; readonly datum_source: (JsonValue) | null; readonly native_sum?: import('./predict/harmonic.js').Sum };
+export type PredictionWindow = { readonly start: UtcSecond; readonly stop: UtcSecond; readonly step: Number | null } | { readonly instants: ReadonlyArray<UtcSecond> };
 export type TransportOptions = ({ readonly member_id: "Client.open" } & { readonly offline?: boolean; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null });
-export type EffectiveOptions = ({ readonly member_id: "Client.open" } & { readonly release?: string; readonly file?: string | null; readonly cache_dir?: string | null; readonly offline?: boolean; readonly mode?: "eager" | "stream"; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null; readonly on_network_error?: "use_cache" | "raise"; readonly auto_update?: boolean; readonly update_interval?: number; readonly logger?: T.Logger | null; readonly verify_on_open?: boolean; readonly commercial_only?: boolean; readonly commercial_basis?: string; readonly historical_offsets_policy?: string });
+export type EffectiveOptions = MemberArguments['Client.open'] & { readonly member_id: 'Client.open' };
 export type FileRows = ReadonlyArray<JsonValue>;
 export type DigestMap = Readonly<Record<string, String>>;
 export type LockState = { readonly cache_root: Path; readonly owner: (JsonValue) | null; readonly held_token: (String) | null };
@@ -930,7 +936,7 @@ export type ReleaseDescriptor = { readonly datestamp: String; readonly files: Fi
 export type ReferencePath = { readonly station: Station; readonly release_view: Release; readonly constant_set: (ConstantSet) | null; readonly own_offset: (JsonValue) | null; readonly reference_bin: (Integer) | null };
 export type CandidatePath = ({ readonly variant: "direct" } & { readonly station: Station; readonly constant_set: ConstantSet; readonly release_view: Release }) | ({ readonly variant: "tide_offset" } & { readonly reference_path: ReferencePath; readonly own_offset: JsonValue }) | ({ readonly variant: "current_offset" } & { readonly reference_path: ReferencePath; readonly own_current_offset: JsonValue });
 export type SelectionOptions = ({ readonly member_id: "Release.heights" } & { readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null }) | ({ readonly member_id: "Release.extremes" } & { readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null }) | ({ readonly member_id: "Release.currents" } & { readonly bin_number?: number | null; readonly set_id?: string | null }) | ({ readonly member_id: "Release.current_events" } & { readonly bin_number?: number | null; readonly set_id?: string | null }) | ({ readonly member_id: "Client.open" } & { readonly commercial_only?: boolean });
-export type QueryOptions = ({ readonly member_id: "Release.stations" } & {  }) | ({ readonly member_id: "Release.iter_stations" } & {  }) | ({ readonly member_id: "Release.search" } & { readonly name: string; readonly limit?: number | null; readonly match?: "exact" | null }) | ({ readonly member_id: "Release.near" } & { readonly lat: number; readonly lon: number; readonly radius_km: number; readonly limit?: number | null }) | ({ readonly member_id: "Release.nearest" } & { readonly lat: number; readonly lon: number; readonly max_km?: number | null }) | ({ readonly member_id: "Client.open" } & { readonly release?: string; readonly file?: string | null; readonly cache_dir?: string | null; readonly offline?: boolean; readonly mode?: "eager" | "stream"; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null; readonly on_network_error?: "use_cache" | "raise"; readonly auto_update?: boolean; readonly update_interval?: number; readonly logger?: T.Logger | null; readonly verify_on_open?: boolean; readonly commercial_only?: boolean; readonly commercial_basis?: string; readonly historical_offsets_policy?: string });
+export type QueryOptions = ({ readonly member_id: "Release.stations" } & {  }) | ({ readonly member_id: "Release.iter_stations" } & {  }) | ({ readonly member_id: "Release.search" } & { readonly name: string; readonly limit?: number | null; readonly match?: "exact" | null }) | ({ readonly member_id: "Release.near" } & { readonly lat: number; readonly lon: number; readonly radius_km: number; readonly limit?: number | null }) | ({ readonly member_id: "Release.nearest" } & { readonly lat: number; readonly lon: number; readonly max_km?: number | null }) | ({ readonly member_id: "Client.open" } & { readonly release?: string; readonly file?: string | null; readonly cache_dir?: string | null; readonly offline?: boolean; readonly mode?: "eager" | "stream"; readonly base_url?: string; readonly timeout?: number | null; readonly proxy?: string | null; readonly ca_file?: string | null; readonly user_agent?: string | null; readonly on_network_error?: "use_cache" | "raise"; readonly auto_update?: boolean; readonly update_interval?: number; readonly logger?: T.Logger | null; readonly verify_on_open?: boolean; readonly commercial_only?: boolean; readonly commercial_basis?: 'strict' | 'as_published_upstream'; readonly historical_offsets_policy?: 'fallback' | 'exclude' });
 export type UnroundedTideEvent = { readonly root_seconds: UtcSecond; readonly event_type: "high" | "low"; readonly height_m: Number; readonly reference_order: Integer };
 export type UnroundedCurrentEvent = { readonly root_seconds: UtcSecond; readonly event_type: "max_flood" | "max_ebb" | "slack_before_flood" | "slack_before_ebb"; readonly velocity_m_s: Number; readonly direction_deg: (Number) | null; readonly reference_order: Integer };
 export type AuxiliaryValues = ({ readonly variant: "requires_model" } & { readonly station_request: (Station) | (String); readonly release_view: Release; readonly selection_options: SelectionOptions; readonly utc_instant: (UtcSecond) | null }) | ({ readonly variant: "source_access" } & { readonly raw_source_value: JsonValue; readonly arguments: JsonValue });
@@ -940,7 +946,7 @@ export type access_kind = "raw_record" | "station_object";
 export type acquisition_descriptor = ReleaseDescriptor;
 export type actual_profile_results = Readonly<Record<string, JsonValue>>;
 export type arguments = SelectedArguments;
-export type astronomical_terms = { readonly utc_year: Integer; readonly constituent_terms: ReadonlyArray<JsonValue>; readonly epoch_hours: Number };
+export type astronomical_terms = { readonly utc_year: Integer; readonly constituent_terms: ReadonlyArray<readonly [number, number, number, number]>; readonly epoch_hours: Number };
 export type attribution_text = String;
 export type authenticated_index = { readonly "index_version": 1; readonly "discovery_index_version": 1; readonly "datestamp": string; readonly "jsonl": string; readonly "jsonl_sha256": string; readonly "jsonl_size": number; readonly "by": string; readonly "stations": ReadonlyArray<{ readonly "station_id": string; readonly "status": string; readonly "name": string | null; readonly "name_folded": string | null; readonly "country": string | null; readonly "type": string | null; readonly "kind": string | null; readonly "reference_station_id": string | null; readonly "offsets_licence_id": string | null; readonly "recommended_set_id": string | null; readonly "lat": number | null; readonly "lon": number | null; readonly "offset": number; readonly "length": number; readonly "aliases": { readonly [key: string]: ReadonlyArray<string> }; readonly "sets": ReadonlyArray<{ readonly "set_id": string | null; readonly "source": string | null; readonly "source_type": string | null; readonly "quantity": string | null; readonly "qc_status": string | null; readonly "convention_id": string | null; readonly "licence_id": string | null; readonly "constituents": ReadonlyArray<string>; readonly "fallback": { readonly "reason": string; readonly "basis": string; readonly "otc_finding": string; readonly "preferred_set_id"?: string; readonly [key: string]: Json | undefined } | null; readonly "current_bins": ReadonlyArray<number> }>; readonly "subordinate_offsets":  | null; readonly "current_offsets": ReadonlyArray<{ readonly "bin": number; readonly "reference_bin": number; readonly "reference_station_id": string | null; readonly "licence_id": string | null }> }> };
 export type auxiliary_kind = "model_access" | "result_context" | "local_time";
@@ -953,7 +959,7 @@ export type cache_document = { readonly variant: "stream_index"; readonly value:
 export type cache_inventory_result = (MemberValues["Client.cached_releases"]) | (MemberValues["Client.prune"]);
 export type cache_state = CacheState;
 export type candidate_path = CandidatePath;
-export type canonical_error = { readonly code: "invalid_argument" | "network" | "release_not_found" | "offline_unavailable" | "checksum_mismatch" | "unsupported_format" | "reader_too_old" | "invalid_release" | "cache" | "io" | "unsupported" | "pinned_release" | "buffer_too_small" | "file_exists" | "not_built" | "station_not_found" | "station_removed" | "no_constants" | "quantity_mismatch" | "unsupported_convention" | "no_astro_table" | "unsupported_constituent" | "time_out_of_range" | "datum_unavailable" | "reference_unavailable" | "extremes_only" | "historical_offsets_excluded" | "bin_not_found" | "local_time_unavailable" | "unknown_time_zone"; readonly structured_fields: JsonValue; readonly cause: (NativeCause) | null };
+export type canonical_error = { readonly code: "invalid_argument" | "network" | "release_not_found" | "offline_unavailable" | "checksum_mismatch" | "unsupported_format" | "reader_too_old" | "invalid_release" | "cache" | "io" | "unsupported" | "pinned_release" | "buffer_too_small" | "file_exists" | "not_built" | "station_not_found" | "station_removed" | "no_constants" | "quantity_mismatch" | "unsupported_convention" | "no_astro_table" | "unsupported_constituent" | "time_out_of_range" | "datum_unavailable" | "reference_unavailable" | "extremes_only" | "historical_offsets_excluded" | "bin_not_found" | "local_time_unavailable" | "unknown_time_zone"; readonly structured_fields: JsonValue; readonly cause: (NativeCause) | null ; readonly native_error?: import('./errors.js').OpenTideConstantsError };
 export type canonical_result = CanonicalResultInput;
 export type cause = (NativeCause) | null;
 export type changed_behaviors = ReadonlyArray<String>;
@@ -979,10 +985,11 @@ export type environment = Readonly<Record<string, String>>;
 export type evidence_bundle = { readonly scenario: scenario; readonly expected_result: JsonValue; readonly actual_profile_results: JsonValue; readonly red_output: String; readonly green_output: String };
 export type expected_result = JsonValue;
 export type explicit_options = EffectiveOptions;
-export type field_contract = ModelFieldContracts;
+export type NativeDtoFields = { readonly model_type: 'ReleaseInfo'; readonly context: { readonly files: ReadonlyArray<T.FileInfo> } } | { readonly model_type: 'FileInfo'; readonly context: { readonly href: string } } | { readonly model_type: 'Nearby'; readonly context: { readonly station: T.Station } } | { readonly model_type: 'UpdateResult' | 'Stats'; readonly context: null };
+export type field_contract = ModelFieldContracts & { readonly native_prepared_client?: import('./client.js').PreparedClientFields; readonly native_prepared_release?: import('./release.js').PreparedReleaseFields; readonly native_owner?: { readonly release: T.Release; readonly entry: IndexEntry }; readonly native_record_span?: { readonly set_id: string }; readonly native_result_fields?: NativeResultFields; readonly native_dto_fields?: NativeDtoFields; readonly native_historical_parent?: JsonObject; readonly native_release?: T.Release; readonly native_constant_set?: { readonly recommended: boolean; readonly convention: T.Convention; readonly licence: T.Licence; readonly validation: ReadonlyArray<T.Validation> } };
 export type folded_height_values = MemberValues["Release.heights"];
 export type format_selection = { readonly formats: ReadonlyArray<String>; readonly required_files: FileRows };
-export type height_values = MemberValues["Release.heights"];
+export type height_values = ReadonlyArray<number>;
 export type held_release = Release;
 export type held_release_result = SelectedValue;
 export type historical_admission = { readonly admitted: Boolean; readonly reason: (String) | null };
@@ -1010,7 +1017,8 @@ export type lock_outcome = { readonly acquired: Boolean; readonly token: (String
 export type lock_request = { readonly directory: Path; readonly operation: "take" | "nonblocking_take" | "release" | "delete" | "heartbeat" | "ownership_check"; readonly token: (String) | null };
 export type lock_state = LockState;
 export type locked_cache_state = CacheState;
-export type member_contract = SelectedArguments;
+export type NativeArgumentReceiver = { readonly kind: 'client'; readonly owner: Client } | { readonly kind: 'release'; readonly owner: Release } | { readonly kind: 'astro_table'; readonly owner: AstroTable } | { readonly kind: 'result'; readonly owner: HeightSeries | ExtremeList | CurrentSeries | CurrentEventList };
+export type member_contract = (SelectedArguments | NoArgumentsContract) & { readonly native_receiver?: NativeArgumentReceiver; readonly native_owner_prerequisite?: import('./release.js').PreparedOwnerArguments; readonly native_prediction_prerequisite?: import('./release.js').PreparedPredictionArguments; readonly native_astronomy_prerequisite?: import('./predict/astro.js').PreparedAstronomyArguments };
 export type merged_receipt = { readonly "datestamp": string; readonly "files": { readonly [key: string]: { readonly "sha256": string; readonly "size": number; readonly "url": string | null } }; readonly "format_version": string; readonly "min_reader_version": string; readonly "zenodo_version_doi": string | null; readonly "verified_at": string; readonly "by": string };
 export type metadata_request = { readonly request_url: String; readonly document_kind: String };
 export type native_profile = "python" | "ruby" | "typescript_node" | "typescript_browser" | "c" | "swift";
@@ -1028,12 +1036,12 @@ export type own_current_offsets = (Json) | null;
 export type own_offset = MemberValues["Station.subordinate_offsets"];
 export type parsed_document = { readonly variant: "station_row"; readonly value: StationRow } | { readonly variant: "release"; readonly value: JsonValue } | { readonly variant: "pointer"; readonly value: JsonValue } | { readonly variant: "catalogue"; readonly value: JsonValue } | { readonly variant: "cache"; readonly value: JsonValue };
 export type path_request = string;
-export type platform_defaults = EffectiveOptions;
+export type platform_defaults = EffectiveOptions & { readonly native_context?: { readonly platform: Pick<import('./platform.js').Platform, 'name' | 'env'>; readonly node: Pick<import('./node-api.js').NodeMod, 'checkReadable' | 'defaultCacheRoot'> | null } };
 export type pointer_digests = DigestMap;
 export type prediction_instants = ReadonlyArray<UtcSecond>;
 export type prediction_result = (MemberValues["Release.heights"]) | (MemberValues["Release.extremes"]) | (MemberValues["Release.currents"]) | (MemberValues["Release.current_events"]);
 export type prediction_window = PredictionWindow;
-export type projection_contract = FieldProjectionContract;
+export type projection_contract = FieldProjectionContract & { readonly native_header?: ReleaseHeader };
 export type published_metadata = { readonly contributors: JsonValue; readonly year: Integer; readonly concept_doi: (String) | null; readonly zenodo_version_doi: (String) | null; readonly dataset_url: String };
 export type quality_admission = { readonly admitted: Boolean; readonly reason: (String) | null };
 export type query_arguments = SelectedArguments;
@@ -1074,7 +1082,7 @@ export type source_record = MemberValues["SourceRecord.raw"];
 export type source_values = AuxiliaryValues;
 export type station = Station;
 export type station_id = String;
-export type station_index_entry = { readonly "station_id": string; readonly "status": string; readonly "name": string | null; readonly "name_folded": string | null; readonly "country": string | null; readonly "type": string | null; readonly "kind": string | null; readonly "reference_station_id": string | null; readonly "offsets_licence_id": string | null; readonly "recommended_set_id": string | null; readonly "lat": number | null; readonly "lon": number | null; readonly "offset": number; readonly "length": number; readonly "aliases": { readonly [key: string]: ReadonlyArray<string> }; readonly "sets": ReadonlyArray<{ readonly "set_id": string | null; readonly "source": string | null; readonly "source_type": string | null; readonly "quantity": string | null; readonly "qc_status": string | null; readonly "convention_id": string | null; readonly "licence_id": string | null; readonly "constituents": ReadonlyArray<string>; readonly "fallback": { readonly "reason": string; readonly "basis": string; readonly "otc_finding": string; readonly "preferred_set_id"?: string; readonly [key: string]: Json | undefined } | null; readonly "current_bins": ReadonlyArray<number> }>; readonly "subordinate_offsets":  | null; readonly "current_offsets": ReadonlyArray<{ readonly "bin": number; readonly "reference_bin": number; readonly "reference_station_id": string | null; readonly "licence_id": string | null }> };
+export type station_index_entry = import('./release.js').StoredEntry;
 export type station_or_tombstone_or_null = StationLookup;
 export type station_request = (Station) | (String);
 export type station_sets = ReadonlyArray<ConstantSet>;

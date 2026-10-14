@@ -22,6 +22,8 @@ export class Sum {
         if (!data) {const index=this.table._index(year), origin=yearStart(year);const terms=this.#terms.map(([row,speed,amplitude,phase]):YearTerm=>[speed,row.f[index]*amplitude,row.v0u_deg[index]-phase,speed*RAD]);data=[origin,terms];this.#years.set(year,data);}
         return data;
     }
+    /** @internal Exact existing origin/year-term cache; no calculation or cache policy changes. */
+    yearData(year: number): readonly [number,YearTerm[]] { return this.#year(year); }
     value(seconds: number, year: number=utc(seconds).getUTCFullYear(), derivative=false): number {
         const [origin,terms]=this.#year(year), delta=(seconds-origin)/3600;let value=0;
         for (const [speed,amplitude,argument,omega] of terms) {const phase=angle(speed*delta+argument)*RAD;value+=derivative?-amplitude*omega*Math.sin(phase):amplitude*Math.cos(phase);}
@@ -37,7 +39,8 @@ function survivor(cluster: Event[], slack: boolean): Event | null {
     for(const c of cluster)if(c[1]===wanted && (wanted==='high'?c[2]>best[2]||c[2]===best[2]&&c[0]<best[0]:c[2]<best[2]||c[2]===best[2]&&c[0]<best[0]))best=c;
     return best;
 }
-export function events(total: Sum,start: number,stop: number,slack=false): Event[] {
+/** @internal Exact surviving root phase, before the reporting-window predicate. */
+export function unroundedEvents(total: Sum,start: number,stop: number,slack=false): Event[] {
     if(start===stop)return [];
     const first=Math.floor(start/360)*360-3600,last=Math.ceil((stop+3600-first)/360)*360+first;
     for(let point=first;point<=last;point+=360)total.table._index(utc(point).getUTCFullYear());
@@ -66,5 +69,8 @@ export function events(total: Sum,start: number,stop: number,slack=false): Event
     const kept:Event[]=[];let cluster:Event[]=[];
     for(const candidate of roots){if(cluster.length&&candidate[0]-cluster[cluster.length-1][0]>=1){const hit=survivor(cluster,slack);if(hit)kept.push(hit);cluster=[];}cluster.push(candidate);}
     if(cluster.length){const hit=survivor(cluster,slack);if(hit)kept.push(hit);}
-    return kept.filter(c=>start<=Math.floor(c[0]+0.5)&&Math.floor(c[0]+0.5)<stop);
+    return kept;
+}
+export function events(total: Sum,start: number,stop: number,slack=false): Event[] {
+    return unroundedEvents(total,start,stop,slack).filter(c=>start<=Math.floor(c[0]+0.5)&&Math.floor(c[0]+0.5)<stop);
 }

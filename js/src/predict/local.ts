@@ -3,9 +3,14 @@ import {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,HeightPoint,Extr
 
 type Result = HeightSeries | ExtremeList | CurrentSeries | CurrentEventList;
 const pad=(n:number,width=2)=>String(n).padStart(width,'0');
+/** @internal Original non-string branch only; timezone grammar/Intl remain in localize. */
+export function validateLocalTimeType(zone:unknown):asserts zone is string {
+    if(typeof zone!=='string')throw new UnknownTimeZoneError(`unknown time zone ${String(zone)}`,{zone:typeof zone==='string'?zone:null});
+}
 export function localize<T extends Result>(result: T,tz: string): T {
     const zone=tz==='station'?result.timezone:tz;
-    if(typeof zone!=='string'||zone.length>255||!/^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/.test(zone)||zone.startsWith('posix/')||zone.startsWith('right/')||['posixrules','localtime','Factory'].includes(zone)) throw new UnknownTimeZoneError(`unknown time zone ${String(zone)}`,{zone:typeof zone==='string'?zone:null});
+    validateLocalTimeType(zone);
+    if(zone.length>255||!/^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/.test(zone)||zone.startsWith('posix/')||zone.startsWith('right/')||['posixrules','localtime','Factory'].includes(zone)) throw new UnknownTimeZoneError(`unknown time zone ${String(zone)}`,{zone:typeof zone==='string'?zone:null});
     if(typeof Intl==='undefined'||typeof Intl.DateTimeFormat!=='function') throw new LocalTimeUnavailableError('this runtime needs Intl time-zone support');
     let formatter:Intl.DateTimeFormat;
     try {formatter=new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});}

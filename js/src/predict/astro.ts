@@ -1,5 +1,6 @@
 import { InvalidArgumentError, UnsupportedConstituentError, TimeOutOfRangeError } from '../errors.js';
 import { deepFreeze, isObject, num, str, type JsonObject } from '../json.js';
+import type * as C from '../canonical-types.js';
 
 /** @internal */
 export function instant(value: Date): number {
@@ -45,7 +46,7 @@ export class AstroTable {
     get _raw(): JsonObject { return this.#raw; }
     /** @internal */
     _index(year: number): number {
-        if (typeof year !== 'number' || !Number.isInteger(year)) throw new InvalidArgumentError('year must be an integer');
+        validateUtcYear(year);
         if (year < this.#first || year > this.#last) throw new TimeOutOfRangeError(`year ${year} is outside the astro table`,{first_year:this.#first,last_year:this.#last});
         return year-this.#first;
     }
@@ -59,4 +60,30 @@ export class AstroTable {
     nodeFactor(name: string, at: Date): number { const seconds=instant(at), row=this._row(name); return row.f[this._index(utc(seconds).getUTCFullYear())]; }
     equilibriumForYear(name: string, year: number): number { return this._row(name).v0u_deg[this._index(year)]; }
     nodeFactorForYear(name: string, year: number): number { return this._row(name).f[this._index(year)]; }
+}
+
+/** @internal Original integer-only phase; table range remains in _index. */
+export function validateUtcYear(year: number): void {
+    if (typeof year !== 'number' || !Number.isInteger(year)) throw new InvalidArgumentError('year must be an integer');
+}
+const ASTRONOMY_ARGUMENTS = Symbol('private authentic astronomy prerequisites');
+type AstronomyArguments = Extract<C.SelectedArguments, { member_id: 'AstroTable.equilibrium_argument' | 'AstroTable.node_factor' | 'AstroTable.equilibrium_for_year' | 'AstroTable.node_factor_for_year' }>;
+/** @internal Authentic native row prerequisite prepared outside primitive B01. */
+export interface PreparedAstronomyArguments {
+    readonly [ASTRONOMY_ARGUMENTS]: true;
+    readonly receiver: AstroTable;
+    readonly request: AstronomyArguments;
+    readonly row: AstroRow | null;
+    readonly error: Error | null;
+}
+/** @internal Existing instant/row order; no astronomical calculation or range check. */
+export function prepareAstronomyArguments(receiver: AstroTable, request: AstronomyArguments): PreparedAstronomyArguments {
+    try {
+        if (request.member_id === 'AstroTable.equilibrium_argument' || request.member_id === 'AstroTable.node_factor') instant(request.arguments.at);
+        const row = receiver._row(request.arguments.name);
+        return { [ASTRONOMY_ARGUMENTS]: true, receiver, request, row, error: null };
+    } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        return { [ASTRONOMY_ARGUMENTS]: true, receiver, request, row: null, error };
+    }
 }

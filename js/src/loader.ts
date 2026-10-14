@@ -3,8 +3,8 @@ import { formatMajor, isDatestamp, readerReads, supportedFormat, SUPPORTED_FORMA
 import { InvalidReleaseError, ReaderTooOldError, UnsupportedFormatError } from "./errors.js";
 import { deepFreeze, isObject, type Json, type JsonObject } from "./json.js";
 import {
-    Release, checkLinks, indexDoc, indexStations, lineView, parseHeader, resolveKinds,
-    type IndexEntry, type ReleaseHeader, type StationSource,
+    Release, prepareReleaseFields, releaseFromPrepared, checkLinks, indexDoc, indexStations, lineView, parseHeader, resolveKinds,
+    type IndexEntry, type ReleaseHeader, type StationSource, type PreparedReleaseFields,
 } from "./release.js";
 import type { FileInfo } from "./types.js";
 
@@ -87,9 +87,15 @@ export function readerTooOld(d: string, min: string): ReaderTooOldError {
     return new ReaderTooOldError(`release ${d} needs a reader for format ${min}; this SDK reads format ${SUPPORTED_FORMAT_VERSION} (upgrade opentideconstants)`);
 }
 
-/** @internal A release from the full `.json` document (eager). */
+/** @internal Materialize the single authentic JSON preparation. */
 export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
     warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback"): Release {
+    return releaseFromPrepared(prepareReleaseFromJson(bytes, files, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy));
+}
+
+/** @internal A release from the full `.json` document (eager). */
+export function prepareReleaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], zenodoVersionDoi: string | null = null,
+    warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback"): PreparedReleaseFields {
     const doc = parseJson(bytes, "the release file");
     checkFormat(doc);
     const header = parseHeader(doc);
@@ -98,7 +104,7 @@ export function releaseFromJson(bytes: Uint8Array, files: readonly FileInfo[], z
     const entries = indexStations(header, stations);
     const docs = stations.map((s) => deepFreeze(s)) as JsonObject[];
     const source: StationSource = { doc: (_e, i) => docs[i] as JsonObject, close: () => undefined };
-    return new Release(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy);
+    return prepareReleaseFields(header, entries, source, files, true, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy);
 }
 
 /** @internal Parse and check `.meta.json`. */
@@ -233,7 +239,13 @@ function bufferLineReader(bytes: Uint8Array): LineReader {
 }
 
 /** @internal A release from `.jsonl` + `.meta.json`. Eager keeps every document; stream reads lines on demand. */
-export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: {
+/** @internal Materialize the single authentic JSONL preparation. */
+export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: Parameters<typeof prepareReleaseFromJsonl>[2]): Release {
+    return releaseFromPrepared(prepareReleaseFromJsonl(meta, jsonl, opts));
+}
+
+/** @internal Existing authentic JSONL preparation and independently owned native fields. */
+export function prepareReleaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opts: {
     eager: boolean;
     files: readonly FileInfo[];
     index?: StreamIndex | null;
@@ -250,7 +262,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
     commercialOnly?: boolean;
     commercialBasis?: "strict" | "as_published_upstream";
     historicalOffsetsPolicy?: "fallback" | "exclude";
-}): Release {
+}): PreparedReleaseFields {
     const header = headerFromMeta(meta);
     let entries: IndexEntry[];
     let docs: JsonObject[] = [];
@@ -304,7 +316,7 @@ export function releaseFromJsonl(meta: Uint8Array, jsonl: Uint8Array | null, opt
             close: opts.close ?? (() => undefined),
         };
     }
-    return new Release(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false, opts.commercialBasis ?? "strict", opts.historicalOffsetsPolicy ?? "fallback");
+    return prepareReleaseFields(header, entries, source, opts.files, opts.eager, opts.zenodoVersionDoi ?? null, opts.warn, opts.commercialOnly ?? false, opts.commercialBasis ?? "strict", opts.historicalOffsetsPolicy ?? "fallback");
 }
 
 /**

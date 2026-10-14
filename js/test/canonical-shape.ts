@@ -1,19 +1,25 @@
 import * as native from "../src/canonical.js";
 import type * as C from "../src/canonical-types.js";
 import { releaseFromJson } from '../src/loader.js';
+import { indexDoc, parseHeader, predictionAstroTable } from '../src/release.js';
+import { InvalidArgumentError, OpenTideConstantsError } from '../src/errors.js';
 
-interface EntryObservation { readonly id: string; readonly refusal: string; readonly argument_json: string; readonly cleanup_observed: boolean }
+const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B07', 'B08.raw', 'B24', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
+interface EntryObservation { readonly id: string; readonly refusal?: string; readonly value_json?: string; readonly error_json?: string; readonly argument_json: string; readonly cleanup_observed: boolean }
 async function invoke<Result>(id: string, call: () => Result | Promise<Result>, argumentJson: string): Promise<EntryObservation> {
     try {
-        await call();
+        const value = await call();
+        if (migrated.has(id)) return { id, value_json: JSON.stringify(value) ?? 'null', argument_json: argumentJson, cleanup_observed: true };
         throw new Error(`Private seam ${id} fabricated a successful value`);
     } catch (error) {
+        if (id === 'B04' && error instanceof Error && !(error instanceof native.CanonicalUnimplementedError)) return { id, error_json: JSON.stringify({ code: error instanceof OpenTideConstantsError ? error.code : 'native_exception', structured_fields: { message: error.message }, cause: error.cause ?? null }), argument_json: argumentJson, cleanup_observed: true };
         if (!(error instanceof native.CanonicalUnimplementedError) || error.behavior !== id) throw error;
         return { id, refusal: error.message, argument_json: argumentJson, cleanup_observed: true };
     }
 }
-export async function exerciseShape(source: string, profile: 'typescript_node' | 'typescript_browser') {
+export async function exerciseShape(source: string, profile: 'typescript_node' | 'typescript_browser', predictionSource: string) {
     const release = releaseFromJson(new TextEncoder().encode(source), []);
+    const predictionRelease = releaseFromJson(new TextEncoder().encode(predictionSource), []);
     const station = release.requireStation('OTC-T-0001');
     const constants = station.constantSets()[0];
     if (!constants) throw new Error('Required real constant-set owner missing');
@@ -118,7 +124,7 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         utc_instant: 0,
         prediction_instants: [],
         requested_datum: "construction",
-        prediction_window: { start: 0, stop: 0, step: null, instants: null },
+        prediction_window: { start: 0, stop: 0, step: null },
         current_request: { member_id: "Client.close", arguments: {} },
         current_operation: "currents",
         tide_request: { member_id: "Client.close", arguments: {} },
@@ -136,6 +142,39 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         http_request: { url: "construction", conditional_etag: null },
         include_no_constants: false,
     };
+    const header = parseHeader(release._header);
+    const nativeIndex = indexDoc(station.raw, header, 0, 0,
+        new Set(header.conventions.map(row => String(row['convention_id']))), new Set(header.licences.map(row => String(row['licence_id']))));
+    values.field_contract = { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: { release, entry: nativeIndex } };
+    values.model_type = 'Station';
+    values.projection_contract = { ...fieldProjection, native_header: header };
+    const failure = new InvalidArgumentError('file cannot be combined with release, offline or onNetworkError');
+    values.ordered_failures = [{ code: failure.code, structured_fields: { message: failure.message }, cause: null }];
+    const node = profile === 'typescript_node' ? (await import('../src/node.js')).nodeApi : null;
+    const platform = node ? node.nodePlatform() : (await import('../src/browser.js')).browserPlatform();
+    values.platform_defaults = { member_id: 'Client.open', native_context: { platform, node: node ? { checkReadable: node.checkReadable, defaultCacheRoot: node.defaultCacheRoot } : null } };
+    const predictionStation = predictionRelease.requireStation('OTC-P-0001');
+    const predictionConstants = predictionStation.recommendedSet;
+    const table = predictionAstroTable(predictionRelease);
+    if (!predictionConstants || !table) throw new Error('Authentic native prediction context missing');
+    values.selected_prediction_model = { station: predictionStation, release_view: predictionRelease, constant_set: predictionConstants,
+        convention: predictionConstants.convention, astro_table: table._raw, required_constituents: predictionConstants.raw['constituents'] instanceof Array ? predictionConstants.raw['constituents'] : [], reference_bin: null, mean_term: 0, datum_source: predictionConstants.raw['datum'] ?? null };
+    values.utc_instant = 1433116800.4369507;
+    values.prediction_instants = [values.utc_instant, values.utc_instant];
+    values.requested_datum = 'mean_level';
+    values.prediction_window = { start: 1433116800, stop: 1433129714, step: null };
+    values.time_inputs = { member_id: 'Release.heights', arguments: { station: predictionStation, start: new Date(1433116800000), stop: new Date(1433203200000) } };
+    values.window_inputs = values.time_inputs;
+    values.step = 600;
+    const currentStation = predictionRelease.stations().find(row => row.kind === 'current' && Array.isArray(row.recommendedSet?.raw['current_bins']));
+    const currentConstants = currentStation?.recommendedSet;
+    if (!currentStation || !currentConstants) throw new Error('Authentic native current context missing');
+    const currentTableId = currentConstants.convention.raw['astro_table_id'];
+    const currentTable = await predictionRelease.astroTable(typeof currentTableId === 'string' ? currentTableId : null);
+    if (!currentTable) throw new Error('Authentic selected native current table missing');
+    const currentModel: C.selected_prediction_model = { ...values.selected_prediction_model, station: currentStation, constant_set: currentConstants, convention: currentConstants.convention, astro_table: currentTable._raw };
+    const currentWindow: C.prediction_window = { start: Date.parse('2020-06-01T00:00:00Z') / 1000, stop: Date.parse('2020-06-02T00:00:00Z') / 1000, step: null };
+    values.current_request = { member_id: 'Release.current_events', arguments: { station: currentStation, start: new Date(currentWindow.start * 1000), stop: new Date(currentWindow.stop * 1000) } };
     const runtime: EntryObservation[] = [];
     const call_actions: EntryObservation[] = [];
     try {
@@ -197,7 +236,7 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         runtime.push(await invoke("B48.context", () => native.construct_prediction_result(values.result_values, values.result_context), JSON.stringify({ result_values: values.result_values, result_context: values.result_context })));
         runtime.push(await invoke("B48.local", () => native.convert_result_to_local_time(values.utc_result, values.local_time_profile), JSON.stringify({ utc_result: values.utc_result, local_time_profile: values.local_time_profile })));
         runtime.push(await invoke("B43.roots", () => native.find_unrounded_tide_events(values.selected_prediction_model, values.prediction_window), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window })));
-        runtime.push(await invoke("B44.roots", () => native.find_unrounded_current_events(values.selected_prediction_model, values.prediction_window, values.current_request), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window, current_request: values.current_request })));
+        runtime.push(await invoke("B44.roots", () => native.find_unrounded_current_events(currentModel, currentWindow, values.current_request), JSON.stringify({ selected_prediction_model: currentModel, prediction_window: currentWindow, current_request: values.current_request })));
         runtime.push(await invoke("B17.sidecar", () => native.acquire_checksum_sidecar(values.acquisition_descriptor, values.effective_options), JSON.stringify({ acquisition_descriptor: values.acquisition_descriptor, effective_options: values.effective_options })));
         call_actions.push({ ...await invoke("B08.raw", () => native.retain_raw_source_record(values.source_record, values.native_profile), JSON.stringify({ source_record: values.source_record, native_profile: values.native_profile })), id: "B08.S1.A1" });
         call_actions.push({ ...await invoke("B08.origin", () => native.check_station_origin(values.station, values.release_origin), JSON.stringify({ station: values.station, release_origin: values.release_origin })), id: "B08.S1.A2" });
@@ -260,14 +299,14 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         call_actions.push({ ...await invoke("B30", () => native.select_effective_recommendation(values.station_sets, values.original_recommendation, values.commercial_only), JSON.stringify({ station_sets: values.station_sets, original_recommendation: values.original_recommendation, commercial_only: values.commercial_only })), id: "B40.S2.A4" });
         call_actions.push({ ...await invoke("B41", () => native.evaluate_astronomy(values.selected_prediction_model, values.utc_instant), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, utc_instant: values.utc_instant })), id: "B42.S1.A2" });
         call_actions.push({ ...await invoke("B43.roots", () => native.find_unrounded_tide_events(values.selected_prediction_model, values.prediction_window), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window })), id: "B43.S1.A1" });
-        call_actions.push({ ...await invoke("B44.roots", () => native.find_unrounded_current_events(values.selected_prediction_model, values.prediction_window, values.current_request), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window, current_request: values.current_request })), id: "B44.S1.A1" });
+        call_actions.push({ ...await invoke("B44.roots", () => native.find_unrounded_current_events(currentModel, currentWindow, values.current_request), JSON.stringify({ selected_prediction_model: currentModel, prediction_window: currentWindow, current_request: values.current_request })), id: "B44.S1.A1" });
         call_actions.push({ ...await invoke("B36", () => native.admit_historical_offset(values.own_offset, values.reference_path, values.historical_policy, values.selection_kind, values.reader_version), JSON.stringify({ own_offset: values.own_offset, reference_path: values.reference_path, historical_policy: values.historical_policy, selection_kind: values.selection_kind, reader_version: values.reader_version })), id: "B45.S2.A3" });
         call_actions.push({ ...await invoke("B40", () => native.select_prediction_model(values.station_request, values.release_view, values.selection_options, values.reader_version), JSON.stringify({ release_view: values.release_view, selection_options: values.selection_options, station_request: values.station_request, reader_version: values.reader_version })), id: "B45.S3.A2" });
         call_actions.push({ ...await invoke("B43.roots", () => native.find_unrounded_tide_events(values.selected_prediction_model, values.prediction_window), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window })), id: "B45.S6.A2" });
         call_actions.push({ ...await invoke("B46", () => native.fold_equal_tide_offset(values.own_offset, values.reference_model, values.prediction_instants, values.requested_datum), JSON.stringify({ own_offset: values.own_offset, reference_model: values.reference_model, prediction_instants: values.prediction_instants, requested_datum: values.requested_datum })), id: "B45.S7.A3" });
         call_actions.push({ ...await invoke("B42", () => native.evaluate_harmonic_height(values.selected_prediction_model, values.prediction_instants, values.requested_datum), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_instants: values.prediction_instants, requested_datum: values.requested_datum })), id: "B46.S3.A2" });
         call_actions.push({ ...await invoke("B40", () => native.select_prediction_model(values.station_request, values.release_view, values.selection_options, values.reader_version), JSON.stringify({ release_view: values.release_view, selection_options: values.selection_options, station_request: values.station_request, reader_version: values.reader_version })), id: "B47.S2.A2" });
-        call_actions.push({ ...await invoke("B44.roots", () => native.find_unrounded_current_events(values.selected_prediction_model, values.prediction_window, values.current_request), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, prediction_window: values.prediction_window, current_request: values.current_request })), id: "B47.S4.A3" });
+        call_actions.push({ ...await invoke("B44.roots", () => native.find_unrounded_current_events(currentModel, currentWindow, values.current_request), JSON.stringify({ selected_prediction_model: currentModel, prediction_window: currentWindow, current_request: values.current_request })), id: "B47.S4.A3" });
         call_actions.push({ ...await invoke("B48.aux", () => native.read_auxiliary_model_value(values.auxiliary_operation, values.source_values, values.selection_options, values.reader_version, values.auxiliary_member_id), JSON.stringify({ source_values: values.source_values, selection_options: values.selection_options, auxiliary_operation: values.auxiliary_operation, reader_version: values.reader_version, auxiliary_member_id: values.auxiliary_member_id })), id: "B48.S1.A1" });
         call_actions.push({ ...await invoke("B48.context", () => native.construct_prediction_result(values.result_values, values.result_context), JSON.stringify({ result_values: values.result_values, result_context: values.result_context })), id: "B48.S1.A2" });
         call_actions.push({ ...await invoke("B48.local", () => native.convert_result_to_local_time(values.utc_result, values.local_time_profile), JSON.stringify({ utc_result: values.utc_result, local_time_profile: values.local_time_profile })), id: "B48.S1.A3" });
@@ -286,6 +325,7 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         const b04_presence_controls = await Promise.all(bindingVariants.map(async (input, index) => ({ ...await invoke('B04', () => native.translate_native_binding(input), JSON.stringify(input)), id: `B04.presence.${index}` })));
         return { runtime, call_actions, b04_presence_controls, control: { station_id: station.station_id, raw_preserved: station.raw.station_id === station.station_id, public_route_unchanged: release.station(station.station_id) === station } };
     } finally {
+        predictionRelease._close();
         release._close();
     }
 }

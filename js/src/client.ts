@@ -32,16 +32,65 @@ const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
 });
 
 const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
+const PREPARED_CLIENT = Symbol('private prepared Client fields');
+type ClientExtra = {
+        lastError: OpenTideConstantsError | null; pinned: boolean; file: FileSource | null; cacheRoot: string | null;
+    autoUpdate: boolean; interval: number;
+};
+interface AcquiredClient {
+    readonly sourceOptions: OpenOptions;
+    readonly ctx: Ctx;
+    readonly node: NodeMod | null;
+    readonly release: Release;
+    readonly loadedFrom: LoadedFrom;
+    readonly extra: ClientExtra;
+}
+/** @internal Fresh native context and held owners prepared before private materialization. */
+export interface PreparedClientFields extends AcquiredClient {
+    readonly [PREPARED_CLIENT]: true;
+    readonly lastCheck: number;
+    readonly all: WeakRef<Release>[];
+    readonly closed: boolean;
+    readonly newerFormatMajor: number | null;
+}
+function isPreparedClient(input: OpenOptions | PreparedClientFields): input is PreparedClientFields { return PREPARED_CLIENT in input; }
+function clientTiming(release: Release) {
+    // a monotonic clock, as in Python and Ruby: a wall clock stepped back must not stop the checks (CR2 R2-119)
+    const lastCheck = performance.now();
+    const all = [new WeakRef(release)];
+    return { lastCheck, all };
+}
+/** @internal Existing acquisition and native held-owner preparation outside B07. */
+export async function prepareClientFields(options: OpenOptions = {}): Promise<PreparedClientFields> {
+    return OpenTideConstants[PREPARED_CLIENT](options);
+}
+/** @internal Native brand allocation with previously prepared fields only. */
+export function clientFromPrepared(fields: PreparedClientFields): OpenTideConstants {
+    return OpenTideConstants[PREPARED_CLIENT](fields);
+}
+
+const ARGUMENT_RECEIVER = Symbol('private canonical argument receiver');
+
+/** @internal Exact existing receiver guard and capability fields; no operation or acquisition. */
+export function clientArgumentReceiver(client: OpenTideConstants) {
+    return OpenTideConstants[ARGUMENT_RECEIVER](client);
+}
 /** The range of the timeout option, in every SDK (spec 5.7, CR2 DR19). */
 const TIMEOUT_MIN_S = 0.001;
 const TIMEOUT_MAX_S = 1e6;
 
-function toInfo(e: PointerEntry): ReleaseInfo {
+/** @internal Exact existing release-information field phase. */
+export function toInfo(e: PointerEntry): ReleaseInfo {
     return Object.freeze({
         datestamp: e.datestamp, format_version: e.format_version, concept_doi: e.concept_doi,
         zenodo_version_doi: e.zenodo_version_doi, content_sha256: e.content_sha256,
         files: Object.freeze(e.files.map((f) => Object.freeze({ ...f }))),
     });
+}
+
+/** @internal Exact existing returned update fields; effects remain with the caller. */
+export function updateResultOf(updated: boolean, from: string, to: string): UpdateResult {
+    return Object.freeze({ updated, from, to });
 }
 
 function optBool(v: unknown, name: string): boolean | null {
@@ -150,6 +199,79 @@ function nodeDir(node: NodeMod, dir: string): SyncDir {
     };
 }
 
+/** @internal Exact option-validation phase; no native acquisition. */
+export function validateOpenOptions(options: OpenOptions = {}) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
+    const release = options.release ?? "latest";
+    if (release !== "latest") checkDatestamp(release);
+    const mode: Mode = options.mode ?? "eager";
+    if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
+    const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
+    if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
+    const timeout = optTimeout(options.timeout);
+    const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
+    const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
+    const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
+    // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
+    const commercialBasis = options.commercialBasis ?? "strict";
+    if (!["strict", "as_published_upstream"].includes(commercialBasis) || options.commercialBasis === null) throw new InvalidArgumentError("commercialBasis must be strict or as_published_upstream");
+    const historicalOffsetsPolicy = options.historicalOffsetsPolicy ?? "fallback";
+    if (!["fallback", "exclude"].includes(historicalOffsetsPolicy) || options.historicalOffsetsPolicy === null) throw new InvalidArgumentError("historicalOffsetsPolicy must be fallback or exclude");
+    const commercialOnly: unknown = options.commercialOnly;
+    if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
+        throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
+    }
+    const file = optStr(options.file, "file");
+    // A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
+    // spec 4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+    if (file !== null && (release !== "latest" || (optBool(options.offline, "offline") ?? false) || onNetworkError !== "use_cache")) {
+        throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
+    }
+    const suffix = optStr(options.userAgent, "userAgent");
+    // the suffix goes into a header: no control character (C0, DEL, C1), and latin-1 only, the characters Node
+    // can send in a header (a raw TypeError at the first request otherwise) (spec 4.2, 5.7, CR2 DR20)
+    if (suffix !== null && /[\u0000-\u001f\u007f-\u009f]|[^\u0000-\u00ff]/u.test(suffix)) {
+        throw new InvalidArgumentError(`userAgent has a control or non-latin-1 character: ${JSON.stringify(suffix)}`);
+    }
+
+    return { release, mode, onNetworkError, timeout, autoUpdate, interval, verifyOnOpen, commercialBasis, historicalOffsetsPolicy, commercialOnly, file, suffix };
+}
+
+/** @internal Exact existing environment/default/capability phase, before cache acquisition. */
+export function resolveOpenNativeOptions(options: OpenOptions, validated: ReturnType<typeof validateOpenOptions>,
+    platform: Pick<Platform, 'name' | 'env'>, node: Pick<NodeMod, 'checkReadable' | 'defaultCacheRoot'> | null) {
+    const { file, autoUpdate } = validated;
+    if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
+    if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
+    // the environment variable forces offline with 1, true, yes or on, in any case, trimmed (spec 4.2, CR D15)
+    const envOffline = ["1", "true", "yes", "on"].includes((platform.env("OPENTIDECONSTANTS_OFFLINE") ?? "").trim().toLowerCase());
+    const offline = envOffline || (optBool(options.offline, "offline") ?? false);
+    let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
+    if (!baseUrl.endsWith("/")) baseUrl += "/";
+    // network settings are checked here, before any network access (spec 4.2, CR D19)
+    if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
+    const proxy = optStr(options.proxy, "proxy");
+    if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+    if (proxy !== null) {
+        const u = new URL(proxy);
+        try {
+            decodeURIComponent(u.username);
+            decodeURIComponent(u.password);
+        } catch (e) {
+            throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+        }
+    }
+    const caFile = optStr(options.caFile, "caFile");
+    if (caFile !== null && node) node.checkReadable(caFile);
+    // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
+    const sslCertFile = caFile === null && node ? platform.env("SSL_CERT_FILE") : null;
+    if (sslCertFile) node?.checkReadable(sslCertFile);
+    const cacheDir = optStr(options.cacheDir, "cacheDir");
+    // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
+    const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
+    return { offline, baseUrl, proxy, caFile, cacheDir, cacheRoot };
+}
+
 /**
  * The OpenTideConstants client: options, the cache, HTTP and the current Release (spec 3, 4.2).
  *
@@ -158,7 +280,13 @@ function nodeDir(node: NodeMod, dir: string): SyncDir {
  * otc.stationByAlias("noaa", "9414290")?.recommendedSet?.constituent("M2")?.amplitude_m;
  * ```
  */
+
 export class OpenTideConstants {
+    /** @internal Native argument guard bridge; symbol is private to this module. */
+    static [ARGUMENT_RECEIVER](client: OpenTideConstants) {
+        client.#check();
+        return { node: client.#node !== null, store: client.#ctx.store !== null };
+    }
     #ctx: Ctx;
     #node: NodeMod | null;
     #release: Release;
@@ -175,10 +303,26 @@ export class OpenTideConstants {
     #closed = false;
     #newerFormatMajor: number | null = null;
 
-    private constructor(ctx: Ctx, node: NodeMod | null, release: Release, loadedFrom: LoadedFrom, extra: {
-        lastError: OpenTideConstantsError | null; pinned: boolean; file: FileSource | null; cacheRoot: string | null;
-        autoUpdate: boolean; interval: number;
-    }) {
+    private constructor(...args: [PreparedClientFields] | [Ctx, NodeMod | null, Release, LoadedFrom, ClientExtra]) {
+        if (args.length === 1) {
+            const fields = args[0];
+            this.#ctx = fields.ctx;
+            this.#node = fields.node;
+            this.#release = fields.release;
+            this.#loadedFrom = fields.loadedFrom;
+            this.#lastError = fields.extra.lastError;
+            this.#pinned = fields.extra.pinned;
+            this.#file = fields.extra.file;
+            this.#cacheRoot = fields.extra.cacheRoot;
+            this.#autoUpdate = fields.extra.autoUpdate;
+            this.#interval = fields.extra.interval;
+            this.#lastCheck = fields.lastCheck;
+            this.#all = fields.all;
+            this.#closed = fields.closed;
+            this.#newerFormatMajor = fields.newerFormatMajor;
+            return;
+        }
+        const [ctx, node, release, loadedFrom, extra] = args;
         this.#ctx = ctx;
         this.#node = node;
         this.#release = release;
@@ -189,78 +333,42 @@ export class OpenTideConstants {
         this.#cacheRoot = extra.cacheRoot;
         this.#autoUpdate = extra.autoUpdate;
         this.#interval = extra.interval;
-        // a monotonic clock, as in Python and Ruby: a wall clock stepped back must not stop the checks (CR2 R2-119)
-        this.#lastCheck = performance.now();
-        this.#all = [new WeakRef(release)];
+        const timing = clientTiming(release);
+        this.#lastCheck = timing.lastCheck;
+        this.#all = timing.all;
     }
 
     /** Open a release: the latest (default), a pinned datestamp, or a local file (Node). Spec 4.2, 5.2. */
     static async open(options: OpenOptions = {}): Promise<OpenTideConstants> {
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
-        const release = options.release ?? "latest";
-        if (release !== "latest") checkDatestamp(release);
-        const mode: Mode = options.mode ?? "eager";
-        if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
-        const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
-        if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
-        const timeout = optTimeout(options.timeout);
-        const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
-        const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
-        const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
-        // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
-        const commercialBasis = options.commercialBasis ?? "strict";
-        if (!["strict", "as_published_upstream"].includes(commercialBasis) || options.commercialBasis === null) throw new InvalidArgumentError("commercialBasis must be strict or as_published_upstream");
-        const historicalOffsetsPolicy = options.historicalOffsetsPolicy ?? "fallback";
-        if (!["fallback", "exclude"].includes(historicalOffsetsPolicy) || options.historicalOffsetsPolicy === null) throw new InvalidArgumentError("historicalOffsetsPolicy must be fallback or exclude");
-        const commercialOnly: unknown = options.commercialOnly;
-        if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
-            throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
-        }
-        const file = optStr(options.file, "file");
-        // A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
-        // spec 4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
-        if (file !== null && (release !== "latest" || (optBool(options.offline, "offline") ?? false) || onNetworkError !== "use_cache")) {
-            throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
-        }
-        const suffix = optStr(options.userAgent, "userAgent");
-        // the suffix goes into a header: no control character (C0, DEL, C1), and latin-1 only, the characters Node
-        // can send in a header (a raw TypeError at the first request otherwise) (spec 4.2, 5.7, CR2 DR20)
-        if (suffix !== null && /[\u0000-\u001f\u007f-\u009f]|[^\u0000-\u00ff]/u.test(suffix)) {
-            throw new InvalidArgumentError(`userAgent has a control or non-latin-1 character: ${JSON.stringify(suffix)}`);
-        }
+        const acquired = await OpenTideConstants.#acquire(options);
+        return new OpenTideConstants(acquired.ctx, acquired.node, acquired.release, acquired.loadedFrom, acquired.extra);
+    }
+
+    /** @internal Module-private bridge; native effects run only in its preparation arm. */
+    static [PREPARED_CLIENT](input: OpenOptions): Promise<PreparedClientFields>;
+    /** @internal */
+    static [PREPARED_CLIENT](input: PreparedClientFields): OpenTideConstants;
+    /** @internal */
+    static [PREPARED_CLIENT](input: OpenOptions | PreparedClientFields): Promise<PreparedClientFields> | OpenTideConstants {
+        if (isPreparedClient(input)) return new OpenTideConstants(input);
+        return OpenTideConstants.#prepare(input);
+    }
+
+    static async #prepare(options: OpenOptions): Promise<PreparedClientFields> {
+        const acquired = await OpenTideConstants.#acquire(options);
+        const timing = clientTiming(acquired.release);
+        return { [PREPARED_CLIENT]: true, ...acquired, ...timing, closed: false, newerFormatMajor: null };
+    }
+
+    static async #acquire(options: OpenOptions): Promise<AcquiredClient> {
+        const validated = validateOpenOptions(options);
+        const { release, mode, onNetworkError, timeout, autoUpdate, interval, verifyOnOpen, commercialBasis, historicalOffsetsPolicy, commercialOnly, file, suffix } = validated;
 
         // "#node" is node.ts under the "node" condition and no-node.ts elsewhere (package.json "imports"), so browser code
         // never imports node.ts (CR T64)
         const node: NodeMod | null = isNode() ? (await import("#node")).nodeApi : null;
         const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
-        if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
-        if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
-        // the environment variable forces offline with 1, true, yes or on, in any case, trimmed (spec 4.2, CR D15)
-        const envOffline = ["1", "true", "yes", "on"].includes((platform.env("OPENTIDECONSTANTS_OFFLINE") ?? "").trim().toLowerCase());
-        const offline = envOffline || (optBool(options.offline, "offline") ?? false);
-        let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
-        if (!baseUrl.endsWith("/")) baseUrl += "/";
-        // network settings are checked here, before any network access (spec 4.2, CR D19)
-        if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
-        const proxy = optStr(options.proxy, "proxy");
-        if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
-        if (proxy !== null) {
-            const u = new URL(proxy);
-            try {
-                decodeURIComponent(u.username);
-                decodeURIComponent(u.password);
-            } catch (e) {
-                throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
-            }
-        }
-        const caFile = optStr(options.caFile, "caFile");
-        if (caFile !== null && node) node.checkReadable(caFile);
-        // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
-        const sslCertFile = caFile === null && node ? platform.env("SSL_CERT_FILE") : null;
-        if (sslCertFile) node?.checkReadable(sslCertFile);
-        const cacheDir = optStr(options.cacheDir, "cacheDir");
-        // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
-        const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
+        const { offline, baseUrl, proxy, caFile, cacheDir, cacheRoot } = resolveOpenNativeOptions(options, validated, platform, node);
         const ctx: Ctx = {
             platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
             proxy, caFile,
@@ -271,7 +379,7 @@ export class OpenTideConstants {
 
         if (file !== null && node) {
             const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly, ctx.commercialBasis ?? "strict", ctx.historicalOffsetsPolicy ?? "fallback");
-            return new OpenTideConstants(ctx, node, rel, from, { ...extra, pinned: true, file: src });
+            return { sourceOptions: options, ctx, node, release: rel, loadedFrom: from, extra: { ...extra, pinned: true, file: src } };
         }
         const store = ctx.store;
         if (!store) throw new OfflineError("no cache");
@@ -313,7 +421,7 @@ export class OpenTideConstants {
                 extra.lastError = e as NetworkError;
             }
         }
-        return new OpenTideConstants(ctx, node, rel, from, extra);
+        return { sourceOptions: options, ctx, node, release: rel, loadedFrom: from, extra };
     }
 
     /** Node cached verification hashes exact file bytes with one bounded positional reader at a time. */
@@ -766,14 +874,14 @@ get release(): Release {
         this.#reachedPointer();
         // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
         this.#check();
-        if (compareDatestamps(entry.datestamp, from) <= 0) return Object.freeze({ updated: false, from, to: from });
+        if (compareDatestamps(entry.datestamp, from) <= 0) return updateResultOf(false, from, from);
         const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false,
             entry.files);
         if (this.#closed) got.rel._close();
         this.#check();
         this.#swap(got.rel, got.from);
         log(this.#ctx, "info", `updated from ${from} to ${entry.datestamp}`);
-        return Object.freeze({ updated: true, from, to: entry.datestamp });
+        return updateResultOf(true, from, entry.datestamp);
     }
 
     /** Write a release into a folder the caller chooses (Node only; spec 4.3.2). Returns the paths written. */
@@ -781,16 +889,7 @@ get release(): Release {
         this.#check();
         const node = this.#node;
         if (!node) throw new UnsupportedError("download needs a file system (Node)");
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("download needs an options object with to");
-        const to = optStr(options.to, "to");
-        if (!to) throw new InvalidArgumentError("to is required");
-        const release = options.release ?? "latest";
-        if (release !== "latest") checkDatestamp(release);
-        const formats = options.formats ?? ["jsonl"];
-        if (!Array.isArray(formats) || formats.length === 0 || formats.some((f) => !FORMATS.includes(f))) {
-            throw new InvalidArgumentError(`formats must be a non-empty list of ${FORMATS.join(", ")}`);
-        }
-        const overwrite = optBool(options.overwrite, "overwrite") ?? false;
+        const { to, release, formats, overwrite } = validateDownloadOptions(options);
         const ctx = this.#ctx;
         const store = ctx.store;
         if (!store) throw new OfflineError("no cache");
@@ -938,10 +1037,7 @@ get release(): Release {
     prune(options: PruneOptions = {}): readonly string[] {
         this.#check();
         // a JavaScript caller can pass null or a non-object; neither is a raw TypeError
-        const o: unknown = options;
-        if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
-        const keep = (o === null || o === undefined ? undefined : options.keep) ?? 3;
-        if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 0) throw new InvalidArgumentError("keep must be a non-negative integer");
+        const keep = validatePruneOptions(options);
         const node = this.#node;
         const store = this.#ctx.store;
         if (!node || !store) throw new UnsupportedError("prune needs a file system (Node)");
@@ -1044,3 +1140,27 @@ get release(): Release {
 }
 
 export type { ConstantSet };
+
+/** @internal Exact existing validation-only phase. */
+export function validateDownloadOptions(options: DownloadOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("download needs an options object with to");
+    const to = optStr(options.to, "to");
+    if (!to) throw new InvalidArgumentError("to is required");
+    const release = options.release ?? "latest";
+    if (release !== "latest") checkDatestamp(release);
+    const formats = options.formats ?? ["jsonl"];
+    if (!Array.isArray(formats) || formats.length === 0 || formats.some((f) => !FORMATS.includes(f))) {
+        throw new InvalidArgumentError(`formats must be a non-empty list of ${FORMATS.join(", ")}`);
+    }
+    const overwrite = optBool(options.overwrite, "overwrite") ?? false;
+    return { to, release, formats, overwrite };
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validatePruneOptions(options: PruneOptions = {}) {
+    const o: unknown = options;
+    if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
+    const keep = (o === null || o === undefined ? undefined : options.keep) ?? 3;
+    if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 0) throw new InvalidArgumentError("keep must be a non-negative integer");
+    return keep;
+}

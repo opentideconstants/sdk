@@ -1,4 +1,5 @@
 import type * as prediction from './predict/engine.js';
+import type * as C from './canonical-types.js';
 import * as X from './errors.js';
 import {AstroTable} from './predict/astro.js';
 import {DatumInfo,DatumLevel,Ranges} from './predict/results.js';
@@ -624,7 +625,8 @@ export function resolveKinds(entries: IndexEntry[]): void {
 
 // ------------------------------------------------------------------------------------------ objects
 
-function constituentOf(c: JsonObject): Constituent {
+/** @internal */
+export function constituentOf(c: JsonObject): Constituent {
     return Object.freeze({
         name: str(c, "name") ?? "", source_name: str(c, "source_name"), doodson: str(c, "doodson"),
         speed_deg_per_hour: num(c, "speed_deg_per_hour"), amplitude_m: num(c, "amplitude_m"), phase_deg: num(c, "phase_deg"),
@@ -633,7 +635,8 @@ function constituentOf(c: JsonObject): Constituent {
     });
 }
 
-function timeBaseOf(t: JsonObject): TimeBase {
+/** @internal */
+export function timeBaseOf(t: JsonObject): TimeBase {
     const corr = obj(t, "correction");
     return Object.freeze({
         code: en(t["code"], ["verified", "corrected", "unverified", "disputed"] as const),
@@ -648,7 +651,8 @@ function timeBaseOf(t: JsonObject): TimeBase {
     });
 }
 
-function buildOf(b: JsonObject): ProvenanceBuild {
+/** @internal */
+export function buildOf(b: JsonObject): ProvenanceBuild {
     const tv = obj(b, "tool_versions");
     return Object.freeze({
         build_commit: str(b, "build_commit"), built_at: time(b["built_at"]), fetched_at: time(b["fetched_at"]),
@@ -662,7 +666,8 @@ function qcValues(v: Json | undefined): Readonly<Record<string, number | null>> 
         .filter((e): e is [string, number | null] => e[1] === null || typeof e[1] === "number")));
 }
 
-function validationOf(v: JsonObject): Validation {
+/** @internal */
+export function validationOf(v: JsonObject): Validation {
     const p = obj(v, "previous_release");
     return Object.freeze({
         set_id: str(v, "set_id"), reference_source: str(v, "reference_source"), reference_station: str(v, "reference_station"),
@@ -712,15 +717,9 @@ export class ConstantSet {
         this.source_record_id = str(raw, "source_record_id");
         this.source_version = str(raw, "source_version");
         const span = obj(raw, "record_span");
-        this.record_span = span === null ? null : Object.freeze({
-            start: checkedTime(span["start"], `record_span.start of set ${this.set_id}`),
-            end: checkedTime(span["end"], `record_span.end of set ${this.set_id}`), good_samples: num(span, "good_samples"),
-        });
+        this.record_span = span === null ? null : recordSpanOf(span, this.set_id);
         const datum = obj(raw, "datum");
-        this.datum = datum === null ? null : Object.freeze({
-            msl_offset_m: num(datum, "msl_offset_m"),
-            named: Object.freeze(Object.fromEntries(Object.entries(obj(datum, "named") ?? {}).filter((e): e is [string, number] => typeof e[1] === "number"))),
-        });
+        this.datum = datum === null ? null : datumOf(datum);
         this.fallback = fallbackOf(obj(raw, "fallback"));
         this.qc_status = en(raw["qc_status"], QC_STATUSES);
         this.qc_flags = Object.freeze(arr(raw, "qc_flags").filter(isObject).map((f): QcFlag => Object.freeze({
@@ -728,11 +727,7 @@ export class ConstantSet {
                 "sibling_disagreement", "carried_over", "fallback:time_base_disputed", "fallback:time_base_unresolved", "fallback:refused_fit", "fallback:short_record_uncalibrated", "fallback:short_record_long_period", "fallback:published_full_list", "fallback:reliability_withheld", "fallback:licence_reading", "fallback:datum_gate_failed", "fallback:not_in_otc_input", "fallback:historical_offsets"] as const) ?? "other",
             reason: str(f, "reason"), values: qcValues(f["values"]),
         })));
-        this.dropped_constituents = Object.freeze(arr(raw, "dropped_constituents").filter(isObject).map((d) => Object.freeze({
-            name: str(d, "name") ?? "",
-            dropped_reason: en(d["dropped_reason"], ["rayleigh", "noise", "long_period_rule", "non_tidal_rule", "convention", "other"] as const) ?? "other",
-            detail: val(d, "detail"),
-        })));
+        this.dropped_constituents = Object.freeze(arr(raw, "dropped_constituents").filter(isObject).map(droppedConstituentOf));
         const tb = obj(raw, "time_base");
         this.time_base = tb === null ? null : timeBaseOf(tb);
         this.#recommended = recommended;
@@ -758,12 +753,7 @@ export class ConstantSet {
     get provenance(): Provenance {
         if (this.#provenance === null) {
             const p = obj(this.raw, "provenance") ?? Object.freeze({});
-            const b = obj(p, "build");
-            this.#provenance = Object.freeze({
-                build: b === null ? null : buildOf(b), adapter_version: str(p, "adapter_version"),
-                input_sha256: val(p, "input_sha256"), selection_reason: str(p, "selection_reason"),
-                decision: val(p, "decision"), carried_from_release: str(p, "carried_from_release"), raw: p,
-            });
+            this.#provenance = provenanceOf(p);
         }
         return this.#provenance;
     }
@@ -841,18 +831,7 @@ export class Station {
         }));
         this.#recommended = this.#sets.find((s) => s.isRecommended) ?? null;
         const off = obj(raw, "subordinate_offsets");
-        this.#offsets = off === null ? null : Object.freeze({
-            offset_id: str(off, "offset_id"), source: str(off, "source"), source_type: en(off["source_type"], SOURCE_TYPES),
-            source_version: str(off, "source_version"), source_record_id: str(off, "source_record_id"), qc_status: en(off["qc_status"], QC_STATUSES),
-            qc_flags: Object.freeze(objects(off, "qc_flags").map(qcFlagOf)), fallback: fallbackOf(obj(off, "fallback")),
-            vintage: obj(off, "vintage") as unknown as HistoricalOffsetVintage | null,
-            provenance: obj(off, "provenance") as unknown as HistoricalOffsetProvenance | null,
-            reference_station_id: str(off, "reference_station_id"),
-            time_offset_high_min: num(off, "time_offset_high_min"), time_offset_low_min: num(off, "time_offset_low_min"),
-            height_offset_high: num(off, "height_offset_high"), height_offset_low: num(off, "height_offset_low"),
-            height_adjusted_type: en(off["height_adjusted_type"], ["R", "A"] as const) as HeightAdjustedType | Other | null,
-            licence_id: str(off, "licence_id"),
-        });
+        this.#offsets = off === null ? null : subordinateOffsetsOf(off);
         Object.freeze(this);
     }
 
@@ -887,9 +866,7 @@ export class Station {
      * constants) are left out unless includeNoConstants is true.
      */
     constantSets(options: ConstantSetsOptions = {}): readonly ConstantSet[] {
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
-        const inc = options.includeNoConstants ?? false;
-        if (typeof inc !== "boolean") throw new InvalidArgumentError("includeNoConstants must be a boolean");
+        const inc = validateConstantSetsOptions(options);
         const sets = this.#sets.filter((s) => inc || s.qc_status !== "no_constants");
         const rec = sets.filter((s) => s.isRecommended);
         const rest = sets.filter((s) => !s.isRecommended).sort((a, b) => cmp(a.set_id, b.set_id));
@@ -937,7 +914,8 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
     return 2 * EARTH_R_KM * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-function checkNumber(v: unknown, what: string, lo: number, hi: number): number {
+/** @internal */
+export function checkNumber(v: unknown, what: string, lo: number, hi: number): number {
     if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi) {
         throw new InvalidArgumentError(`${what} must be a number from ${lo} to ${hi}; got ${JSON.stringify(v)}`);
     }
@@ -945,7 +923,8 @@ function checkNumber(v: unknown, what: string, lo: number, hi: number): number {
 }
 
 /** `limit` is an integer of 1 or more, or absent / null for no limit (spec 4.4, CR D36). */
-function checkLimit(v: unknown): number | null {
+/** @internal */
+export function checkLimit(v: unknown): number | null {
     if (v === undefined || v === null) return null;
     if (typeof v !== "number" || !Number.isInteger(v) || v < 1) throw new InvalidArgumentError(`limit must be an integer of 1 or more, or null; got ${JSON.stringify(v)}`);
     return v;
@@ -961,7 +940,8 @@ interface CheckedFilters {
     includeFallback: boolean;
 }
 
-function checkFilters(f: StationFilters | undefined | null): CheckedFilters {
+/** @internal */
+export function checkFilters(f: StationFilters | undefined | null): CheckedFilters {
     if (f !== undefined && f !== null && typeof f !== "object") throw new InvalidArgumentError("filters must be an object");
     const out: CheckedFilters = { country: null, type: null, kind: null, source: null, sourceType: null, includeFlagged: false, includeFallback: false };
     for (const k of ["country", "type", "kind", "source", "sourceType"] as const) {
@@ -1007,8 +987,187 @@ const LRU_SIZE = 256;
 // The reference links a walk follows (spec 6.2 kind, 4.6 attribution).
 const MAX_LINKS = 16;
 
+const PREPARED_RELEASE = Symbol('private prepared Release fields');
+const OWNER_ARGUMENTS = Symbol('private authentic ownership prerequisites');
+type OwnerArguments = Extract<C.SelectedArguments, { member_id: 'Release.reference_station' | 'Release.subordinates_of' | 'Release.attribution' }>;
+/** @internal Authentic ordered native ownership outcomes prepared outside B01. */
+export interface PreparedOwnerArguments {
+    readonly [OWNER_ARGUMENTS]: true;
+    readonly receiver: Release;
+    readonly request: OwnerArguments;
+    readonly outcomes: ReadonlyArray<{ readonly entry: IndexEntry | null; readonly error: Error | null }>;
+    readonly error: Error | null;
+}
+/** @internal Original array branch; owner/byId phases are distinct native prerequisites. */
+export function validateAttributionList(stations: unknown): void {
+    if (stations !== null && stations !== undefined && !Array.isArray(stations)) throw new InvalidArgumentError('stations must be a list of Station objects');
+}
+/** @internal Genuine source-owner preparation, with no attribution/reference query. */
+export function prepareOwnerArguments(receiver: Release, request: OwnerArguments): PreparedOwnerArguments {
+    return Release[OWNER_ARGUMENTS](receiver, request);
+}
+/** @internal Complete independently owned graph produced before native materialization. */
+export interface PreparedReleaseFields {
+    readonly authenticHeader: ReleaseHeader;
+    readonly entries: IndexEntry[];
+    readonly eager: boolean;
+    readonly header: JsonObject;
+    readonly commercialOnly: boolean;
+    readonly commercialBasis: "strict" | "as_published_upstream";
+    readonly historicalPolicy: "fallback" | "exclude";
+    readonly source: StationSource;
+    readonly lru: number;
+    readonly datestamp: string;
+    readonly created: Date | null;
+    readonly format_version: string;
+    readonly concept_doi: string | null;
+    readonly zenodo_version_doi: string | null;
+    readonly source_versions: Readonly<Record<string, string>>;
+    readonly build_commit: string | null;
+    readonly changelog_url: string | null;
+    readonly files: readonly FileInfo[];
+    readonly pos: Map<IndexEntry, number>;
+    readonly active: IndexEntry[];
+    readonly byId: Map<string, IndexEntry>;
+    readonly tombById: Map<string, IndexEntry>;
+    readonly alias: Map<string, Map<string, IndexEntry>>;
+    readonly subs: Map<string, IndexEntry[]>;
+    readonly conventions: readonly Convention[];
+    readonly licences: readonly Licence[];
+    readonly effective: Map<string, StoredSet | null> | null;
+    readonly cache: Map<string, Station | Tombstone>;
+}
+type PreparedReleaseHeader = ReleaseHeader & { readonly [PREPARED_RELEASE]: PreparedReleaseFields };
+function preparedHeader(header: ReleaseHeader): header is PreparedReleaseHeader { return PREPARED_RELEASE in header; }
+type ReleasePolicyContext = Pick<PreparedReleaseFields, 'header' | 'source' | 'pos' | 'datestamp' | 'licences'>;
+
+/** @internal Installs genuine private brands; graph preparation is already complete. */
+export function releaseFromPrepared(fields: PreparedReleaseFields): Release {
+    const header: PreparedReleaseHeader = { ...fields.authenticHeader, [PREPARED_RELEASE]: fields };
+    return new Release(header, fields.entries, fields.source, fields.files, fields.eager, fields.zenodo_version_doi);
+}
+
+/** @internal Exact existing constructor preparation, including checked lazy policy reads. */
+export function prepareReleaseFields(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
+        zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback"): PreparedReleaseFields {
+    const cache = new Map<string, Station | Tombstone>();
+    const prepared_header = header.raw;
+    const prepared_commercialOnly = commercialOnly; const prepared_commercialBasis = commercialBasis; const prepared_historicalPolicy = historicalPolicy;
+    const prepared_source = source;
+    const prepared_lru = eager ? Infinity : LRU_SIZE;
+    const r = header.release;
+    const prepared_datestamp = str(r, "datestamp") ?? "";
+    const prepared_created = checkedTime(r["created"], "release.created");
+    const prepared_format_version = header.format_version;
+    const prepared_concept_doi = str(r, "concept_doi");
+    const prepared_zenodo_version_doi = zenodoVersionDoi;
+    const prepared_source_versions = Object.freeze(Object.fromEntries(Object.entries(obj(r, "source_versions") ?? {})
+        .filter((e): e is [string, string] => typeof e[1] === "string")));
+    const prepared_build_commit = str(r, "build_commit");
+    const prepared_changelog_url = str(r, "changelog_url");
+    const prepared_files = Object.freeze(files.map((f) => Object.freeze({ ...f })));
+    const prepared_pos = new Map(entries.map((e, i) => [e, i]));
+    const prepared_active = entries.filter((e) => e.status === "active").sort((a, b) => cmp(a.station_id, b.station_id));
+    const prepared_byId = new Map(prepared_active.map((e) => [e.station_id, e]));
+    const prepared_tombById = new Map(entries.filter((e) => e.status === "removed").map((e) => [e.station_id, e]));
+    for (const e of entries) {
+        // a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no query and no
+        // count; said once, at load (CR2 DR8)
+        if (e.status !== "active" && e.status !== "removed") {
+            warn(`station ${e.station_id} has the status ${JSON.stringify(e.status)}, which this SDK does not know: it is left out of every query`);
+        }
+    }
+    const prepared_alias = new Map<string, Map<string, IndexEntry>>();
+    for (const e of prepared_active) {
+        for (const [system, ids] of Object.entries(e.aliases)) {
+            let m = prepared_alias.get(system);
+            if (!m) prepared_alias.set(system, (m = new Map()));
+            for (const id of ids) if (!m.has(id)) m.set(id, e);
+        }
+    }
+    const prepared_subs = new Map<string, IndexEntry[]>();
+    for (const e of prepared_active) {
+        if (e.type === "subordinate" && e.reference_station_id) {
+            const l = prepared_subs.get(e.reference_station_id) ?? [];
+            l.push(e);
+            prepared_subs.set(e.reference_station_id, l);
+        }
+    }
+    const prepared_conventions = Object.freeze(header.conventions.map(conventionOf));
+    const prepared_licences = Object.freeze(header.licences.map(licenceOf));
+    const policy: ReleasePolicyContext = { header: prepared_header, source: prepared_source, pos: prepared_pos, datestamp: prepared_datestamp, licences: prepared_licences };
+    const prepared_effective = commercialOnly ? new Map(prepared_active.map((e) => [e.station_id, releaseEffectiveSet(policy, e)])) : null;
+
+    return { authenticHeader: header, entries, eager, cache, header: prepared_header, commercialOnly: prepared_commercialOnly, commercialBasis: prepared_commercialBasis, historicalPolicy: prepared_historicalPolicy, source: prepared_source, lru: prepared_lru, datestamp: prepared_datestamp, created: prepared_created, format_version: prepared_format_version, concept_doi: prepared_concept_doi, zenodo_version_doi: prepared_zenodo_version_doi, source_versions: prepared_source_versions, build_commit: prepared_build_commit, changelog_url: prepared_changelog_url, files: prepared_files, pos: prepared_pos, active: prepared_active, byId: prepared_byId, tombById: prepared_tombById, alias: prepared_alias, subs: prepared_subs, conventions: prepared_conventions, licences: prepared_licences, effective: prepared_effective };
+}
+
+function releaseDoc(context: ReleasePolicyContext, e: IndexEntry): JsonObject {
+    const i = context.pos.get(e);
+    if (i === undefined) throw new InvalidReleaseError(`station ${e.station_id} is not an entry of release ${context.datestamp}`);
+    return context.source.doc(e, i);
+}
+
+function releasePolicyEntry(context: ReleasePolicyContext, e: IndexEntry): void {
+    const presence = e.indexPresence;
+    if (!presence || e.policyHydrated || presence.own !== "base" && presence.bins && presence.fallback.every(Boolean)) return;
+    const header = parseHeader(context.header);
+    const doc = releaseDoc(context, e);
+    const actual = indexDoc(doc, header, e.offset, e.length,
+        new Set(header.conventions.map(c => String(c["convention_id"]))),
+        new Set(header.licences.map(l => String(l["licence_id"]))));
+    e.stored = { ...e.stored, subordinate_offsets: presence.own === "base" ? actual.stored.subordinate_offsets : e.stored.subordinate_offsets,
+        sets: e.stored.sets.map((cs, i) => ({ ...cs,
+            fallback: presence.fallback[i] ? cs.fallback : actual.stored.sets[i]?.fallback ?? null,
+            current_bins: presence.bins ? cs.current_bins : actual.stored.sets[i]?.current_bins ?? [],
+        })) };
+    e.policyHydrated = true;
+}
+
+function releaseCommercial(licences: readonly Licence[], licenceId: string | null): boolean {
+    return licenceId !== null && licences.find((l) => l.licence_id === licenceId)?.commercial_use === true;
+}
+
+function releaseEffectiveSet(context: ReleasePolicyContext, e: IndexEntry): StoredSet | null {
+    releasePolicyEntry(context, e);
+    const sets = e.stored.sets;
+    const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
+    if (!rec) return null;
+    if (releaseCommercial(context.licences, rec.licence_id)) return rec;
+    const q = en(rec.quantity, QUANTITIES);
+    if (q === null) return null;
+    for (const status of ["ok", "flagged"]) {
+        const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && releaseCommercial(context.licences, cs.licence_id));
+        if (hit) return hit;
+    }
+    return null;
+}
+
 /** One loaded release. It is immutable and has every query method. */
 export class Release {
+    /** @internal Module-private exact ownership preparation bridge; never called inside B01. */
+    static [OWNER_ARGUMENTS](receiver: Release, request: OwnerArguments): PreparedOwnerArguments {
+        const outcomes: Array<{ entry: IndexEntry | null; error: Error | null }> = [];
+        try {
+            receiver.#open();
+            if (request.member_id === 'Release.attribution') {
+                validateAttributionList(request.arguments.stations);
+                for (const station of request.arguments.stations ?? []) {
+                    try { outcomes.push({ entry: receiver.#attributionEntry(station), error: null }); }
+                    catch (error) {
+                        if (!(error instanceof Error)) throw error;
+                        outcomes.push({ entry: null, error });
+                        break;
+                    }
+                }
+            } else {
+                outcomes.push({ entry: receiver.#ownEntry(request.arguments.station, request.member_id === 'Release.reference_station' ? 'referenceStation' : 'subordinatesOf'), error: null });
+            }
+            return { [OWNER_ARGUMENTS]: true, receiver, request, outcomes, error: null };
+        } catch (error) {
+            if (!(error instanceof Error)) throw error;
+            return { [OWNER_ARGUMENTS]: true, receiver, request, outcomes, error };
+        }
+    }
     readonly datestamp: string;
     readonly created: Date | null;
     readonly format_version: string;
@@ -1039,69 +1198,39 @@ export class Release {
     readonly #licences: readonly Licence[];
     /** commercial_only (spec 4.2, K-NC DR106): station_id -> its effective recommended set (or null); null without it. */
     readonly #effective: Map<string, StoredSet | null> | null;
-    readonly #cache = new Map<string, Station | Tombstone>();
+    readonly #cache: Map<string, Station | Tombstone>;
     readonly #lru: number;
     #closed = false;
 
     /** @internal */
     constructor(header: ReleaseHeader, entries: IndexEntry[], source: StationSource, files: readonly FileInfo[], eager: boolean,
         zenodoVersionDoi: string | null, warn: (message: string) => void = () => undefined, commercialOnly = false, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalPolicy: "fallback" | "exclude" = "fallback") {
-        this.#header = header.raw;
-        this.#commercialOnly = commercialOnly; this.#commercialBasis = commercialBasis; this.#historicalPolicy = historicalPolicy;
-        this.#source = source;
-        this.#lru = eager ? Infinity : LRU_SIZE;
-        const r = header.release;
-        this.datestamp = str(r, "datestamp") ?? "";
-        this.created = checkedTime(r["created"], "release.created");
-        this.format_version = header.format_version;
-        this.concept_doi = str(r, "concept_doi");
-        this.zenodo_version_doi = zenodoVersionDoi;
-        this.source_versions = Object.freeze(Object.fromEntries(Object.entries(obj(r, "source_versions") ?? {})
-            .filter((e): e is [string, string] => typeof e[1] === "string")));
-        this.build_commit = str(r, "build_commit");
-        this.changelog_url = str(r, "changelog_url");
-        this.files = Object.freeze(files.map((f) => Object.freeze({ ...f })));
-        this.#pos = new Map(entries.map((e, i) => [e, i]));
-        this.#active = entries.filter((e) => e.status === "active").sort((a, b) => cmp(a.station_id, b.station_id));
-        this.#byId = new Map(this.#active.map((e) => [e.station_id, e]));
-        this.#tombById = new Map(entries.filter((e) => e.status === "removed").map((e) => [e.station_id, e]));
-        for (const e of entries) {
-            // a status this SDK does not know (a newer minor's value): not a station, not a tombstone, in no query and no
-            // count; said once, at load (CR2 DR8)
-            if (e.status !== "active" && e.status !== "removed") {
-                warn(`station ${e.station_id} has the status ${JSON.stringify(e.status)}, which this SDK does not know: it is left out of every query`);
-            }
-        }
-        this.#alias = new Map();
-        for (const e of this.#active) {
-            for (const [system, ids] of Object.entries(e.aliases)) {
-                let m = this.#alias.get(system);
-                if (!m) this.#alias.set(system, (m = new Map()));
-                for (const id of ids) if (!m.has(id)) m.set(id, e);
-            }
-        }
-        this.#subs = new Map();
-        for (const e of this.#active) {
-            if (e.type === "subordinate" && e.reference_station_id) {
-                const l = this.#subs.get(e.reference_station_id) ?? [];
-                l.push(e);
-                this.#subs.set(e.reference_station_id, l);
-            }
-        }
-        this.#conventions = Object.freeze(header.conventions.map((c) => Object.freeze({
-            convention_id: str(c, "convention_id") ?? "",
-            phase_reference: en(c["phase_reference"], ["greenwich_utc", "local"] as const),
-            utc_offset_hours: num(c, "utc_offset_hours"), v0_model: str(c, "v0_model"),
-            nodal_handling: en(c["nodal_handling"], ["f_u_at_prediction", "none"] as const),
-            nodal_formula_ids: val(c, "nodal_formula_ids"), constituent_table_version: str(c, "constituent_table_version"),
-            tables_sha256: str(c, "tables_sha256"), canary: val(c, "canary"), raw: c,
-        })));
-        this.#licences = Object.freeze(header.licences.map((l) => Object.freeze({
-            licence_id: str(l, "licence_id") ?? "", spdx: str(l, "spdx"), provider: str(l, "provider"),
-            citation: str(l, "citation"), attribution: str(l, "attribution"), url: str(l, "url"),
-            commercial_use: l["commercial_use"] === true, restriction: str(l, "restriction"), terms_url: str(l, "terms_url"), raw: l,
-        })));
-        this.#effective = commercialOnly ? new Map(this.#active.map((e) => [e.station_id, this.#effectiveSet(e)])) : null;
+        const fields = preparedHeader(header) ? header[PREPARED_RELEASE] : prepareReleaseFields(header, entries, source, files, eager, zenodoVersionDoi, warn, commercialOnly, commercialBasis, historicalPolicy);
+        this.#header = fields.header;
+        this.#commercialOnly = fields.commercialOnly;
+        this.#commercialBasis = fields.commercialBasis;
+        this.#historicalPolicy = fields.historicalPolicy;
+        this.#source = fields.source;
+        this.#lru = fields.lru;
+        this.datestamp = fields.datestamp;
+        this.created = fields.created;
+        this.format_version = fields.format_version;
+        this.concept_doi = fields.concept_doi;
+        this.zenodo_version_doi = fields.zenodo_version_doi;
+        this.source_versions = fields.source_versions;
+        this.build_commit = fields.build_commit;
+        this.changelog_url = fields.changelog_url;
+        this.files = fields.files;
+        this.#pos = fields.pos;
+        this.#active = fields.active;
+        this.#byId = fields.byId;
+        this.#tombById = fields.tombById;
+        this.#alias = fields.alias;
+        this.#subs = fields.subs;
+        this.#conventions = fields.conventions;
+        this.#licences = fields.licences;
+        this.#effective = fields.effective;
+        this.#cache = fields.cache;
         Object.freeze(this);
     }
 
@@ -1191,7 +1320,7 @@ get historicalOffsetsPolicy()
     }
 
     #commercial(licenceId: string | null): boolean {
-        return licenceId !== null && this.#licences.find((l) => l.licence_id === licenceId)?.commercial_use === true;
+        return releaseCommercial(this.#licences, licenceId);
     }
 
     /**
@@ -1200,21 +1329,6 @@ get historicalOffsetsPolicy()
      * quantity, qc_status ok, with a commercial licence; then the same with flagged; otherwise null. A set with no
      * quantity never matches.
      */
-    #effectiveSet(e: IndexEntry): StoredSet | null {
-        this.#policyEntry(e);
-        const sets = e.stored.sets;
-        const rec = e.recommended_set_id === null ? undefined : sets.find((cs) => cs.set_id === e.recommended_set_id);
-        if (!rec) return null;
-        if (this.#commercial(rec.licence_id)) return rec;
-        const q = en(rec.quantity, QUANTITIES);
-        if (q === null) return null;
-        for (const status of ["ok", "flagged"]) {
-            const hit = sets.find((cs) => cs.qc_status === status && en(cs.quantity, QUANTITIES) === q && this.#commercial(cs.licence_id));
-            if (hit) return hit;
-        }
-        return null;
-    }
-
     /** @internal The set_id a Station of this entry gives as recommended (the effective one under commercial_only). */
     _recommendedId(e: IndexEntry): string | null {
         if (this.#effective === null) return e.recommended_set_id;
@@ -1282,26 +1396,12 @@ get historicalOffsetsPolicy()
     }
 
     #doc(e: IndexEntry): JsonObject {
-        const i = this.#pos.get(e);
-        if (i === undefined) throw new InvalidReleaseError(`station ${e.station_id} is not an entry of release ${this.datestamp}`);
-        return this.#source.doc(e, i);
+        return releaseDoc({ header: this.#header, source: this.#source, pos: this.#pos, datestamp: this.datestamp, licences: this.#licences }, e);
     }
 
     /** Fill only uncached policy summaries through the existing checked lazy read; no full station is retained. */
     #policyEntry(e: IndexEntry): void {
-        const presence = e.indexPresence;
-        if (!presence || e.policyHydrated || presence.own !== "base" && presence.bins && presence.fallback.every(Boolean)) return;
-        const header = parseHeader(this.#header);
-        const doc = this.#doc(e);
-        const actual = indexDoc(doc, header, e.offset, e.length,
-            new Set(header.conventions.map(c => String(c["convention_id"]))),
-            new Set(header.licences.map(l => String(l["licence_id"]))));
-        e.stored = { ...e.stored, subordinate_offsets: presence.own === "base" ? actual.stored.subordinate_offsets : e.stored.subordinate_offsets,
-            sets: e.stored.sets.map((cs, i) => ({ ...cs,
-                fallback: presence.fallback[i] ? cs.fallback : actual.stored.sets[i]?.fallback ?? null,
-                current_bins: presence.bins ? cs.current_bins : actual.stored.sets[i]?.current_bins ?? [],
-            })) };
-        e.policyHydrated = true;
+        releasePolicyEntry({ header: this.#header, source: this.#source, pos: this.#pos, datestamp: this.datestamp, licences: this.#licences }, e);
     }
 
     #station(e: IndexEntry): Station {
@@ -1343,12 +1443,9 @@ get historicalOffsetsPolicy()
     get stats(): Stats {
         this.#open();
         const a = this.#active;
-        return Object.freeze({
-            // the typed values, as the Station reports them (CR2 DR7)
-            type: countBy(a.map((e) => en(e.type, STATION_TYPE_VALUES))), kind: countBy(a.map((e) => en(e.kind, KINDS))),
-            country: countBy(a.map((e) => e.country)),
-            source: countBy(a.flatMap((e) => e.set_sources)), qc_status: countBy(a.flatMap((e) => e.set_qc_statuses)),
-        });
+        // the typed values, as the Station reports them (CR2 DR7)
+        return statsOf(countBy(a.map((e) => en(e.type, STATION_TYPE_VALUES))), countBy(a.map((e) => en(e.kind, KINDS))),
+            countBy(a.map((e) => e.country)), countBy(a.flatMap((e) => e.set_sources)), countBy(a.flatMap((e) => e.set_qc_statuses)));
     }
 
     /** The number of active stations. */
@@ -1399,13 +1496,7 @@ get historicalOffsetsPolicy()
         const hit = this.#cached(`tomb:${stationId}`);
         if (hit && !(hit instanceof Station)) return hit;
         const raw = this.#doc(e);
-        const t: Tombstone = Object.freeze({
-            station_id: e.station_id, name: str(raw, "name"),
-            status: en(raw["status"], ["active", "removed"] as const) ?? "other",
-            removed_in: str(raw, "removed_in"),
-            removed_reason: en(raw["removed_reason"], ["merged", "duplicate"] as const),
-            merged_into: str(raw, "merged_into"), detail: str(raw, "detail"), raw,
-        });
+        const t: Tombstone = tombstoneOf(raw, e);
         this.#remember(`tomb:${stationId}`, t);
         return t;
     }
@@ -1446,14 +1537,7 @@ get historicalOffsetsPolicy()
     /** Name search, accent-insensitive and ranked (spec 4.4.1). */
     search(options: SearchOptions): readonly Station[] {
         this.#open();
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("search needs an options object with name");
-        const f = checkFilters(options);
-        const limit = checkLimit(options.limit);
-        const match = options.match ?? null;
-        if (match !== null && match !== "exact") throw new InvalidArgumentError(`match must be "exact"; got ${JSON.stringify(match)}`);
-        if (typeof options.name !== "string") throw new InvalidArgumentError("name must be a string");
-        const q = foldName(options.name);
-        if (q === "") throw new InvalidArgumentError("the query is empty");
+        const { f, limit, match, q } = validateSearchOptions(options);
         const ranked: [number, string, IndexEntry][] = [];
         for (const e of this.#active) {
             if (!this.#matches(e, f)) continue;
@@ -1487,27 +1571,19 @@ get historicalOffsetsPolicy()
     /** Stations within radiusKm (great-circle), nearest first. */
     near(options: NearOptions): readonly Nearby<Station>[] {
         this.#open();
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("near needs an options object");
-        const lat = checkNumber(options.lat, "lat", -90, 90);
-        const lon = checkNumber(options.lon, "lon", -180, 180);
-        const radius = checkNumber(options.radiusKm, "radiusKm", 0, Infinity);
-        const limit = checkLimit(options.limit);
-        const f = checkFilters(options);
+        const { lat, lon, radius, limit, f } = validateNearOptions(options);
         let hits = this.#distances(lat, lon, radius, f);
         if (limit !== null) hits = hits.slice(0, limit);
-        return Object.freeze(hits.map(([d, e]) => Object.freeze({ station: this.#station(e), distance_km: d })));
+        return Object.freeze(hits.map(([d, e]) => nearbyOf(this.#station(e), d)));
     }
 
     /** The nearest station, within maxKm if given, or null. */
     nearest(options: NearestOptions): Nearby<Station> | null {
         this.#open();
-        if (options === null || typeof options !== "object") throw new InvalidArgumentError("nearest needs an options object");
-        const lat = checkNumber(options.lat, "lat", -90, 90);
-        const lon = checkNumber(options.lon, "lon", -180, 180);
-        const max = options.maxKm === undefined || options.maxKm === null ? null : checkNumber(options.maxKm, "maxKm", 0, Infinity);
-        const hits = this.#distances(lat, lon, max, checkFilters(options));
+        const { lat, lon, max, f } = validateNearestOptions(options);
+        const hits = this.#distances(lat, lon, max, f);
         const h = hits[0];
-        return h ? Object.freeze({ station: this.#station(h[1]), distance_km: h[0] }) : null;
+        return h ? nearbyOf(this.#station(h[1]), h[0]) : null;
     }
 
     /** The entry of an active Station of this release; null, an unknown station or another release's Station is
@@ -1517,6 +1593,15 @@ get historicalOffsetsPolicy()
         if (!e) {
             throw new InvalidArgumentError(`${what} needs a Station of release ${this.datestamp}; got ${station instanceof Station ? `${station.station_id}, which is not one` : JSON.stringify(station)}`);
         }
+        return e;
+    }
+
+    #attributionEntry(s: unknown): IndexEntry {
+        if (!(s instanceof Station) || !s._from(this)) {
+            throw new InvalidArgumentError(`attribution needs Stations of release ${this.datestamp}; got ${s instanceof Station ? `${s.station_id} from another release` : JSON.stringify(s)}`);
+        }
+        const e = this.#byId.get(s.station_id);
+        if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
         return e;
     }
 
@@ -1575,14 +1660,10 @@ get historicalOffsetsPolicy()
             // with commercial_only, only the commercial licences (K-NC DR106)
             ids = new Set(this.#licences.filter((l) => !co || l.commercial_use).map((l) => l.licence_id));
         } else {
-            if (!Array.isArray(stations)) throw new InvalidArgumentError("stations must be a list of Station objects");
+            validateAttributionList(stations);
             ids = new Set();
             for (const s of stations) {
-                if (!(s instanceof Station) || !s._from(this)) {
-                    throw new InvalidArgumentError(`attribution needs Stations of release ${this.datestamp}; got ${s instanceof Station ? `${s.station_id} from another release` : JSON.stringify(s)}`);
-                }
-                const e = this.#byId.get(s.station_id);
-                if (!e) throw new InvalidArgumentError(`station ${s.station_id} is not an active station of release ${this.datestamp}`);
+                const e = this.#attributionEntry(s);
                 if (co) {
                     // the licences of the station's tide source (spec 4.2, 4.6, K-NC DR106)
                     for (const id of this.#tideSourceLicences(e)) ids.add(id);
@@ -1776,15 +1857,18 @@ const HISTORICAL_PROFILES: Readonly<Record<string, JsonObject>> = {
     }
   }
 };
-function fallbackOf(d: JsonObject | null): Fallback | null {
+/** @internal */
+export function fallbackOf(d: JsonObject | null): Fallback | null {
     if (!d) return null;
     return Object.freeze({ reason: en(d['reason'], FALLBACK_REASONS) ?? 'other', basis: str(d, 'basis') ?? '',
         otc_finding: str(d, 'otc_finding') ?? '', preferred_set_id: str(d, 'preferred_set_id'), raw: d });
 }
-function qcFlagOf(d: JsonObject): QcFlag {
+/** @internal */
+export function qcFlagOf(d: JsonObject): QcFlag {
     return Object.freeze({flag: en(d['flag'], QC_FLAGS) ?? 'other', reason: str(d, 'reason'), values: qcValues(d['values'])});
 }
-function sourceRecordOf(d: JsonObject, release: Release): SourceRecord {
+/** @internal */
+export function sourceRecordOf(d: JsonObject, release: Release): SourceRecord {
     return Object.freeze({source: str(d,'source') ?? '', source_version: str(d,'source_version') ?? '',
         source_record_id: str(d,'source_record_id') ?? '', role: en(d['role'],SOURCE_ROLES) ?? 'other',
         disposition: en(d['disposition'],SOURCE_DISPOSITIONS) ?? 'other', detail: str(d,'detail') ?? '',
@@ -1906,7 +1990,31 @@ function datumInfo(setId:string|null,d:JsonObject|null):DatumInfo {
     return new DatumInfo({set_id:setId,zero:str(d,'zero'),zero_name:str(d,'zero_name'),chart_datum:chartId,msl_offset_m:num(d,'msl_offset_m'),levels});
 }
 function predictionDatums(release:Release,input:Station|string,opts:prediction.DatumOptions={}):DatumInfo|readonly DatumInfo[]|null {
-    const station=predictionStation(release,input);predictionOptions(opts.setId);const all=opts.allSets===undefined?false:opts.allSets;if(typeof all!=='boolean')throw new X.InvalidArgumentError('allSets must be a boolean');if(all)return Object.freeze(station.constantSets({includeNoConstants:true}).map(s=>datumInfo(s.set_id,obj(s.raw,'datum'))));const constants=predictionChosen(release,station,opts.setId);if(constants)return datumInfo(constants.set_id,obj(constants.raw,'datum'));const off=obj(station.raw,'subordinate_offsets');return off?datumInfo(null,obj(off,'datum')):null;
+    const station=predictionStation(release,input);predictionOptions(opts.setId);const all=validateAllSets(opts.allSets);if(all)return Object.freeze(station.constantSets({includeNoConstants:true}).map(s=>datumInfo(s.set_id,obj(s.raw,'datum'))));const constants=predictionChosen(release,station,opts.setId);if(constants)return datumInfo(constants.set_id,obj(constants.raw,'datum'));const off=obj(station.raw,'subordinate_offsets');return off?datumInfo(null,obj(off,'datum')):null;
+}
+/** @internal Original default/boolean phase, after station and prediction options. */
+export function validateAllSets(value:boolean|undefined):boolean {
+    const all=value===undefined?false:value;if(typeof all!=='boolean')throw new X.InvalidArgumentError('allSets must be a boolean');return all;
+}
+const PREDICTION_ARGUMENTS = Symbol('private authentic prediction prerequisites');
+type PredictionArguments = Extract<C.SelectedArguments, { member_id: 'Release.heights' | 'Release.heights_at' | 'Release.extremes' | 'Release.currents' | 'Release.current_events' | 'Release.datums' | 'Release.ranges' }>;
+/** @internal Authentic native station prerequisite prepared outside primitive B01. */
+export interface PreparedPredictionArguments {
+    readonly [PREDICTION_ARGUMENTS]: true;
+    readonly receiver: Release;
+    readonly request: PredictionArguments;
+    readonly station: Station | null;
+    readonly error: X.OpenTideConstantsError | null;
+}
+/** @internal Original native station resolution; no prediction/options/evaluation. */
+export function preparePredictionArguments(receiver:Release,request:PredictionArguments):PreparedPredictionArguments {
+    try {
+        const station=predictionStation(receiver,request.arguments.station);
+        return { [PREDICTION_ARGUMENTS]:true,receiver,request,station,error:null };
+    } catch(error) {
+        if(!(error instanceof X.OpenTideConstantsError))throw error;
+        return { [PREDICTION_ARGUMENTS]:true,receiver,request,station:null,error };
+    }
 }
 function predictionRanges(release:Release,input:Station|string,opts:prediction.RangeOptions={}):Ranges {
     const info=predictionDatums(release,input,opts),levels=info instanceof DatumInfo?info.levels:[];
@@ -1917,4 +2025,148 @@ export function predictionChosen(release:Release,station:Station,setId:string|nu
     if(setId===null||setId===undefined)return station.recommendedSet;
     const constants=station.constantSet(setId);if(!constants)throw new X.InvalidArgumentError(`setId ${setId} is not a set of ${station.station_id}`);
     if(release._commercialOnly&&!constants.licence.commercial_use)throw new X.InvalidArgumentError(`commercial_only refuses set_id ${setId}`);return constants;
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validateConstantSetsOptions(options: ConstantSetsOptions = {}) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
+    const inc = options.includeNoConstants ?? false;
+    if (typeof inc !== "boolean") throw new InvalidArgumentError("includeNoConstants must be a boolean");
+    return inc;
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validateSearchOptions(options: SearchOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("search needs an options object with name");
+    const f = checkFilters(options);
+    const limit = checkLimit(options.limit);
+    const match = options.match ?? null;
+    if (match !== null && match !== "exact") throw new InvalidArgumentError(`match must be "exact"; got ${JSON.stringify(match)}`);
+    if (typeof options.name !== "string") throw new InvalidArgumentError("name must be a string");
+    const q = foldName(options.name);
+    if (q === "") throw new InvalidArgumentError("the query is empty");
+    return { f, limit, match, q };
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validateNearOptions(options: NearOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("near needs an options object");
+    const lat = checkNumber(options.lat, "lat", -90, 90);
+    const lon = checkNumber(options.lon, "lon", -180, 180);
+    const radius = checkNumber(options.radiusKm, "radiusKm", 0, Infinity);
+    const limit = checkLimit(options.limit);
+    const f = checkFilters(options);
+    return { lat, lon, radius, limit, f };
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validateNearestOptions(options: NearestOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("nearest needs an options object");
+    const lat = checkNumber(options.lat, "lat", -90, 90);
+    const lon = checkNumber(options.lon, "lon", -180, 180);
+    const max = options.maxKm === undefined || options.maxKm === null ? null : checkNumber(options.maxKm, "maxKm", 0, Infinity);
+    return { lat, lon, max, f: checkFilters(options) };
+}
+
+/** @internal Exact existing RecordSpan field phase. */
+export function recordSpanOf(span: JsonObject, setId: string): RecordSpan {
+    return Object.freeze({
+        start: checkedTime(span["start"], `record_span.start of set ${setId}`),
+        end: checkedTime(span["end"], `record_span.end of set ${setId}`), good_samples: num(span, "good_samples"),
+    });
+}
+
+/** @internal Exact existing Nearby fields; query and owner resolution remain with the caller. */
+export function nearbyOf(station: Station, distance_km: number): Nearby<Station> {
+    return Object.freeze({ station, distance_km });
+}
+
+/** @internal Exact existing Stats fields; counts remain with the caller. */
+export function statsOf(type: Stats['type'], kind: Stats['kind'], country: Stats['country'], source: Stats['source'], qc_status: Stats['qc_status']): Stats {
+    return Object.freeze({ type, kind, country, source, qc_status });
+}
+
+/** @internal Exact existing Datum field phase. */
+export function datumOf(datum: JsonObject): Datum {
+    return Object.freeze({
+        msl_offset_m: num(datum, "msl_offset_m"),
+        named: Object.freeze(Object.fromEntries(Object.entries(obj(datum, "named") ?? {}).filter((e): e is [string, number] => typeof e[1] === "number"))),
+    });
+}
+
+/** @internal Exact existing SubordinateOffsets field phase. */
+export function subordinateOffsetsOf(off: JsonObject): SubordinateOffsets {
+    return Object.freeze({
+        offset_id: str(off, "offset_id"), source: str(off, "source"), source_type: en(off["source_type"], SOURCE_TYPES),
+        source_version: str(off, "source_version"), source_record_id: str(off, "source_record_id"), qc_status: en(off["qc_status"], QC_STATUSES),
+        qc_flags: Object.freeze(objects(off, "qc_flags").map(qcFlagOf)), fallback: fallbackOf(obj(off, "fallback")),
+        vintage: historicalVintageOf(off),
+        provenance: historicalProvenanceOf(off),
+        reference_station_id: str(off, "reference_station_id"),
+        time_offset_high_min: num(off, "time_offset_high_min"), time_offset_low_min: num(off, "time_offset_low_min"),
+        height_offset_high: num(off, "height_offset_high"), height_offset_low: num(off, "height_offset_low"),
+        height_adjusted_type: en(off["height_adjusted_type"], ["R", "A"] as const) as HeightAdjustedType | Other | null,
+        licence_id: str(off, "licence_id"),
+    });
+}
+
+/** @internal Existing retained historical alias; admission belongs to the original caller. */
+export function historicalVintageOf(off: JsonObject): HistoricalOffsetVintage | null {
+    return obj(off, "vintage") as unknown as HistoricalOffsetVintage | null;
+}
+
+/** @internal Existing retained historical alias; admission belongs to the original caller. */
+export function historicalProvenanceOf(off: JsonObject): HistoricalOffsetProvenance | null {
+    return obj(off, "provenance") as unknown as HistoricalOffsetProvenance | null;
+}
+
+/** @internal Exact existing DroppedConstituent field phase. */
+export function droppedConstituentOf(d: JsonObject): DroppedConstituent {
+    return Object.freeze({
+        name: str(d, "name") ?? "",
+        dropped_reason: en(d["dropped_reason"], ["rayleigh", "noise", "long_period_rule", "non_tidal_rule", "convention", "other"] as const) ?? "other",
+        detail: val(d, "detail"),
+    });
+}
+
+/** @internal Exact existing Provenance field phase; cache remains with the owner. */
+export function provenanceOf(p: JsonObject): Provenance {
+    const b = obj(p, "build");
+    return Object.freeze({
+        build: b === null ? null : buildOf(b), adapter_version: str(p, "adapter_version"),
+        input_sha256: val(p, "input_sha256"), selection_reason: str(p, "selection_reason"),
+        decision: val(p, "decision"), carried_from_release: str(p, "carried_from_release"), raw: p,
+    });
+}
+
+/** @internal Exact existing Convention field phase. */
+export function conventionOf(c: JsonObject): Convention {
+    return Object.freeze({
+        convention_id: str(c, "convention_id") ?? "",
+        phase_reference: en(c["phase_reference"], ["greenwich_utc", "local"] as const),
+        utc_offset_hours: num(c, "utc_offset_hours"), v0_model: str(c, "v0_model"),
+        nodal_handling: en(c["nodal_handling"], ["f_u_at_prediction", "none"] as const),
+        nodal_formula_ids: val(c, "nodal_formula_ids"), constituent_table_version: str(c, "constituent_table_version"),
+        tables_sha256: str(c, "tables_sha256"), canary: val(c, "canary"), raw: c,
+    });
+}
+
+/** @internal Exact existing Licence field phase. */
+export function licenceOf(l: JsonObject): Licence {
+    return Object.freeze({
+        licence_id: str(l, "licence_id") ?? "", spdx: str(l, "spdx"), provider: str(l, "provider"),
+        citation: str(l, "citation"), attribution: str(l, "attribution"), url: str(l, "url"),
+        commercial_use: l["commercial_use"] === true, restriction: str(l, "restriction"), terms_url: str(l, "terms_url"), raw: l,
+    });
+}
+
+/** @internal Exact existing Tombstone field phase; lookup/cache remain with the owner. */
+export function tombstoneOf(raw: JsonObject, e: IndexEntry): Tombstone {
+    return Object.freeze({
+        station_id: e.station_id, name: str(raw, "name"),
+        status: en(raw["status"], ["active", "removed"] as const) ?? "other",
+        removed_in: str(raw, "removed_in"),
+        removed_reason: en(raw["removed_reason"], ["merged", "duplicate"] as const),
+        merged_into: str(raw, "merged_into"), detail: str(raw, "detail"), raw,
+    });
 }
