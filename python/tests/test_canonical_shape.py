@@ -3755,6 +3755,11 @@ def test_m1_B01_selected_argument_records(record_index: int, tmp_path: Path) -> 
         contract: types._CMemberContract = arguments
         if isinstance(arguments, types._Arguments26):
             contract = types._AstroMemberContract(arguments, table)
+        elif isinstance(arguments, types._Arguments13):
+            release.attribution((station,))
+            contract = types._B01ReleaseContract(
+                arguments, release, attribution_origin_failures=(None,)
+            )
         result = canonical._validate_operation_arguments(
             operation=operation, arguments=arguments, member_contract=contract
         )
@@ -4253,3 +4258,302 @@ def test_m1_B44_actual_current_phase() -> None:
             (r.root_seconds, r.event_type, r.velocity_m_s, r.direction_deg)
             for r in result
         ] == expected
+
+
+@pytest.fixture
+def _missing_native_client() -> Iterator[OpenTideConstants]:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def _missing_native_pair() -> Iterator[tuple[OpenTideConstants, OpenTideConstants]]:
+    fixture = ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    with (
+        OpenTideConstants(file=fixture) as left,
+        OpenTideConstants(file=fixture) as right,
+    ):
+        yield left, right
+
+
+@pytest.fixture
+def missing_cases(_missing_native_client):
+    client = _missing_native_client
+    release = client.release
+    station = release.require_station("OTC-P-0001")
+    constants = station.recommended_set
+    assert constants is not None
+    at = dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc)
+    no = types._OMITTED
+    cases = {
+        "station-id": (
+            types._Request6("Release.station", None),
+            "station",
+            lambda: release.station(None),
+        ),
+        "alias-system": (
+            types._Request7("Release.station_by_alias", None, station.station_id),
+            "station_by_alias",
+            lambda: release.station_by_alias(None, station.station_id),
+        ),
+        "alias-id": (
+            types._Request7("Release.station_by_alias", _enums.AliasSystem.NOAA, None),
+            "station_by_alias",
+            lambda: release.station_by_alias("noaa", None),
+        ),
+        "station-type": (
+            types._Request12("Release.reference_station", None),
+            "reference_station",
+            lambda: release.reference_station(None),
+        ),
+        "attribution-container": (
+            types._Request13("Release.attribution", station.station_id),
+            "attribution",
+            lambda: release.attribution(station.station_id),
+        ),
+        "attribution-item": (
+            types._Request13("Release.attribution", (station, None)),
+            "attribution",
+            lambda: release.attribution((station, None)),
+        ),
+        "datums-set": (
+            types._Request19("Release.datums", station, True, False),
+            "datums",
+            lambda: release.datums(station, set_id=True),
+        ),
+        "datums-all": (
+            types._Request19("Release.datums", station, None, 1),
+            "datums",
+            lambda: release.datums(station, all_sets=1),
+        ),
+        "ranges-set": (
+            types._Request20("Release.ranges", station, True),
+            "ranges",
+            lambda: release.ranges(station, set_id=True),
+        ),
+        "astro-id": (
+            types._Request21("Release.astro_table", 1),
+            "astro_table",
+            lambda: release.astro_table(1),
+        ),
+        "include-no-constants": (
+            types._Request22("Station.constant_sets", 1),
+            "constant_sets",
+            lambda: station.constant_sets(include_no_constants=1),
+        ),
+        "offset-type": (
+            types._Request14("Release.heights", station, at, at, 600, no, no, 1),
+            "heights",
+            lambda: release.heights(station, start=at, stop=at, offset_id=1),
+        ),
+        "offset-pair": (
+            types._Request14(
+                "Release.heights",
+                station,
+                at,
+                at,
+                600,
+                None,
+                constants.set_id,
+                constants.set_id,
+            ),
+            "heights",
+            lambda: release.heights(
+                station,
+                start=at,
+                stop=at,
+                set_id=constants.set_id,
+                offset_id=constants.set_id,
+            ),
+        ),
+    }
+    yield cases, release
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "station-id",
+        "alias-system",
+        "alias-id",
+        "station-type",
+        "attribution-container",
+        "attribution-item",
+        "datums-set",
+        "datums-all",
+        "ranges-set",
+        "astro-id",
+        "include-no-constants",
+        "offset-type",
+        "offset-pair",
+    ],
+)
+def test_missing_native_primitive_guard(missing_cases, case: str) -> None:
+    cases, release = missing_cases
+    arguments, operation, native = cases[case]
+    with pytest.raises(_errors.InvalidArgumentError) as expected:
+        native()
+    print(f"NATIVE_GUARD {case}: {expected.value.code}: {expected.value}")
+    origin_failures = []
+    if isinstance(arguments, types._Request13) and isinstance(
+        arguments.stations, tuple
+    ):
+        for station in arguments.stations:
+            if isinstance(station, _models.Station):
+                try:
+                    release.attribution((station,))
+                except _errors.InvalidArgumentError as error:
+                    origin_failures.append(error)
+                else:
+                    origin_failures.append(None)
+            else:
+                origin_failures.append(None)
+    contract = types._B01ReleaseContract(
+        arguments, release, attribution_origin_failures=tuple(origin_failures)
+    )
+    with pytest.raises(_errors.InvalidArgumentError) as actual:
+        canonical._validate_operation_arguments(
+            operation=operation, arguments=arguments, member_contract=contract
+        )
+    assert str(actual.value) == str(expected.value)
+
+
+def test_attribution_prior_owner_precedes_later_type(_missing_native_pair) -> None:
+    left, right = _missing_native_pair
+    foreign = left.release.require_station("OTC-P-0001")
+    with pytest.raises(_errors.InvalidArgumentError) as expected:
+        right.release.attribution((foreign, None))
+    with pytest.raises(_errors.InvalidArgumentError) as prior_owner:
+        right.release.attribution((foreign,))
+    arguments = types._Request13("Release.attribution", (foreign, None))
+    contract = types._B01ReleaseContract(
+        arguments, right.release, attribution_origin_failures=(prior_owner.value, None)
+    )
+    with pytest.raises(_errors.InvalidArgumentError) as actual:
+        canonical._validate_operation_arguments(
+            operation="attribution", arguments=arguments, member_contract=contract
+        )
+    assert actual.value is prior_owner.value
+    assert str(actual.value) == str(expected.value)
+
+
+def test_closed_receiver_precedes_bad_primitive(_missing_native_client) -> None:
+    client = _missing_native_client
+    release = client.release
+    client.close()
+    with pytest.raises(_errors.FileError) as expected:
+        release.station(None)
+    arguments = types._Request6("Release.station", None)
+    contract = types._B01ReleaseContract(arguments, release)
+    with pytest.raises(_errors.FileError) as actual:
+        canonical._validate_operation_arguments(
+            operation="station", arguments=arguments, member_contract=contract
+        )
+    assert str(actual.value) == str(expected.value)
+
+
+def test_station_prerequisite_precedes_bad_datum_option(_missing_native_client) -> None:
+    client = _missing_native_client
+    release = client.release
+    with pytest.raises(_errors.StationNotFoundError) as expected:
+        release.datums("missing-station", set_id=True)
+    with pytest.raises(_errors.StationNotFoundError) as prerequisite:
+        release.require_station("missing-station")
+    arguments = types._Request19("Release.datums", "missing-station", True, False)
+    contract = types._B01ReleaseContract(
+        arguments, release, station_error=prerequisite.value
+    )
+    with pytest.raises(_errors.StationNotFoundError) as actual:
+        canonical._validate_operation_arguments(
+            operation="datums", arguments=arguments, member_contract=contract
+        )
+    assert actual.value is prerequisite.value
+    assert str(actual.value) == str(expected.value)
+
+
+@pytest.mark.parametrize("record_index", [6, 7, 12, 13, 14, 15, 16, 19, 20, 21, 22])
+def test_raw_request_adapts_to_narrow_arguments(
+    _missing_native_client, record_index: int
+) -> None:
+    release = _missing_native_client.release
+    station = release.require_station("OTC-P-0001")
+    assert isinstance(station, _models.Station)
+    at = dt.datetime(2010, 3, 1, tzinfo=dt.timezone.utc)
+    no = types._OMITTED
+    cases: dict[
+        int, tuple[types._COperation, types._MemberRequests, types._CValidatedArguments]
+    ] = {
+        6: (
+            "station",
+            types._Request6("Release.station", station.station_id),
+            types._Arguments6("Release.station", station.station_id),
+        ),
+        7: (
+            "station_by_alias",
+            types._Request7(
+                "Release.station_by_alias", _enums.AliasSystem.NOAA, station.station_id
+            ),
+            types._Arguments7(
+                "Release.station_by_alias", _enums.AliasSystem.NOAA, station.station_id
+            ),
+        ),
+        12: (
+            "reference_station",
+            types._Request12("Release.reference_station", station),
+            types._Arguments12("Release.reference_station", station),
+        ),
+        13: (
+            "attribution",
+            types._Request13("Release.attribution", (station,)),
+            types._Arguments13("Release.attribution", (station,)),
+        ),
+        14: (
+            "heights",
+            types._Request14("Release.heights", station, at, at, 600, no, no, no),
+            types._Arguments14("Release.heights", station, at, at, 600, no, no, no),
+        ),
+        15: (
+            "heights_at",
+            types._Request15("Release.heights_at", station, (at,), no, no, no),
+            types._Arguments15("Release.heights_at", station, (at,), no, no, no),
+        ),
+        16: (
+            "extremes",
+            types._Request16("Release.extremes", station, at, at, no, no, no),
+            types._Arguments16("Release.extremes", station, at, at, no, no, no),
+        ),
+        19: (
+            "datums",
+            types._Request19("Release.datums", station, no, no),
+            types._Arguments19("Release.datums", station, no, no),
+        ),
+        20: (
+            "ranges",
+            types._Request20("Release.ranges", station, no),
+            types._Arguments20("Release.ranges", station, no),
+        ),
+        21: (
+            "astro_table",
+            types._Request21("Release.astro_table", no),
+            types._Arguments21("Release.astro_table", no),
+        ),
+        22: (
+            "constant_sets",
+            types._Request22("Station.constant_sets", no),
+            types._Arguments22("Station.constant_sets", no),
+        ),
+    }
+    operation, request, expected = cases[record_index]
+    release.attribution((station,))
+    context = types._B01ReleaseContract(
+        request,
+        release,
+        attribution_origin_failures=(None,) if record_index == 13 else (),
+    )
+    actual = canonical._validate_operation_arguments(
+        operation=operation, arguments=request, member_contract=context
+    )
+    assert type(actual) is type(expected) and actual == expected
+    assert release.require_station(station.station_id) is station

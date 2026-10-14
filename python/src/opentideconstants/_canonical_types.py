@@ -14,7 +14,7 @@ from ._http import Http
 from pathlib import Path
 from typing import Literal, TypeAlias, TypedDict, Protocol, runtime_checkable
 from . import _enums as E
-from ._errors import OpenTideConstantsError
+from ._errors import OpenTideConstantsError, InvalidArgumentError
 from ._client import OpenTideConstants
 from ._release import Release
 from ._models import (
@@ -3183,7 +3183,139 @@ _CAcquisitionDescriptor: TypeAlias = _ReleaseDescriptor
 _CActualProfileResults: TypeAlias = Mapping[str, _JsonValue]
 
 
-_CArguments: TypeAlias = _MemberArguments
+@dataclass(frozen=True, slots=True)
+class _Request6:
+    member_id: Literal[
+        "Release.station", "Release.require_station", "Release.tombstone"
+    ]
+    station_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Request7:
+    member_id: Literal["Release.station_by_alias"]
+    system: E.AliasSystem | None
+    alias_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Request12:
+    member_id: Literal["Release.reference_station", "Release.subordinates_of"]
+    station: Station | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Request13:
+    member_id: Literal["Release.attribution"]
+    stations: tuple[Station | None, ...] | str | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request14:
+    member_id: Literal["Release.heights"]
+    station: Station | str
+    start: datetime
+    stop: datetime
+    step_s: int | _Omitted
+    datum: str | None | _Omitted
+    set_id: str | None | _Omitted
+    offset_id: str | int | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request15:
+    member_id: Literal["Release.heights_at"]
+    station: Station | str
+    times: tuple[datetime, ...]
+    datum: str | None | _Omitted
+    set_id: str | None | _Omitted
+    offset_id: str | int | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request16:
+    member_id: Literal["Release.extremes"]
+    station: Station | str
+    start: datetime
+    stop: datetime
+    datum: str | None | _Omitted
+    set_id: str | None | _Omitted
+    offset_id: str | int | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request19:
+    member_id: Literal["Release.datums"]
+    station: Station | str
+    set_id: str | bool | None | _Omitted
+    all_sets: bool | int | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request20:
+    member_id: Literal["Release.ranges"]
+    station: Station | str
+    set_id: str | bool | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request21:
+    member_id: Literal["Release.astro_table"]
+    id: str | int | None | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
+class _Request22:
+    member_id: Literal["Station.constant_sets"]
+    include_no_constants: bool | int | _Omitted
+
+
+_MemberRequests: TypeAlias = (
+    _Request6
+    | _Request7
+    | _Request12
+    | _Request13
+    | _Request14
+    | _Request15
+    | _Request16
+    | _Request19
+    | _Request20
+    | _Request21
+    | _Request22
+)
+
+
+_RequestMemberId: TypeAlias = Literal[
+    "Release.station",
+    "Release.require_station",
+    "Release.tombstone",
+    "Release.station_by_alias",
+    "Release.reference_station",
+    "Release.subordinates_of",
+    "Release.attribution",
+    "Release.heights",
+    "Release.heights_at",
+    "Release.extremes",
+    "Release.datums",
+    "Release.ranges",
+    "Release.astro_table",
+    "Station.constant_sets",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class _B01ReleaseContract:
+    arguments: _MemberRequests | _Arguments13
+    native_release: Release
+    station_error: OpenTideConstantsError | None = None
+    attribution_origin_failures: tuple[InvalidArgumentError | None, ...] = ()
+
+    @property
+    def member_id(self) -> _RequestMemberId:
+        return self.arguments.member_id
+
+
+_CArguments: TypeAlias = _MemberArguments | _MemberRequests
 
 
 _CAstronomicalTerms: TypeAlias = _AstronomicalTerms
@@ -3867,7 +3999,9 @@ class _AstroMemberContract:
         return self.arguments.member_id
 
 
-_CMemberContract: TypeAlias = _MemberArguments | _AstroMemberContract
+_CMemberContract: TypeAlias = (
+    _MemberArguments | _MemberRequests | _AstroMemberContract | _B01ReleaseContract
+)
 
 
 _CMergedReceipt: TypeAlias = _MergedReceipt

@@ -15,6 +15,12 @@ from ._errors import InvalidReleaseError
 _EMPTY: Mapping[str, Any] = MappingProxyType({})
 
 
+def _validate_include_no_constants(include_no_constants):
+    if not isinstance(include_no_constants, bool):
+        from ._errors import InvalidArgumentError
+        raise InvalidArgumentError("include_no_constants must be a boolean")
+
+
 def freeze(v):
     """A read-only copy of parsed JSON: dicts become read-only mappings, lists become tuples."""
     if isinstance(v, dict):
@@ -668,9 +674,7 @@ class Station:
     def constant_sets(self, *, include_no_constants: bool = False) -> Tuple[ConstantSet, ...]:
         """The recommended set first, then the others by set_id. Sets with qc_status no_constants (listed, but
         with no fitted constants) only with include_no_constants=True."""
-        if not isinstance(include_no_constants, bool):
-            from ._errors import InvalidArgumentError
-            raise InvalidArgumentError("include_no_constants must be a boolean")
+        _validate_include_no_constants(include_no_constants)
         return tuple(s for s in self._sets if include_no_constants or s.qc_status != E.QcStatus.NO_CONSTANTS)
 
     def constant_set(self, set_id: str) -> Optional[ConstantSet]:

@@ -37,6 +37,21 @@ _log = logging.getLogger("opentideconstants")
 
 # --------------------------------------------------------------------------- reading files
 
+def _validate_attribution_item(st):
+    if not isinstance(st, Station):
+        raise InvalidArgumentError("stations must be a list of Station objects")
+
+
+def _validate_attribution_container(stations):
+    if stations is not None and (isinstance(stations, (str, bytes)) or not hasattr(stations, "__iter__")):
+        raise InvalidArgumentError("stations must be a list of Station objects")
+
+
+def _validate_station_argument(station, what):
+    if not isinstance(station, Station):
+        raise InvalidArgumentError(f"{what}: station must be a Station")
+
+
 def _read_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()
@@ -1120,8 +1135,7 @@ class Release:
     def _own_station(self, station, what):
         """station, checked as attribution checks it (CR D2 a): a Station that is an active station of this
         release; None, an unknown station or another release's Station is invalid_argument (CR2 DR24)."""
-        if not isinstance(station, Station):
-            raise InvalidArgumentError(f"{what}: station must be a Station")
+        _validate_station_argument(station, what)
         own = self.station(station.station_id)
         if station._origin is not self._station_origin or own is None or (own is not station and own.raw != station.raw):
             raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
@@ -1190,8 +1204,7 @@ class Release:
     def attribution(self, stations: Optional[Sequence[Station]] = None) -> str:
         """The CC BY 4.0 attribution text for what an app shows (spec §4.6)."""
         self._check_open()
-        if stations is not None and (isinstance(stations, (str, bytes)) or not hasattr(stations, "__iter__")):
-            raise InvalidArgumentError("stations must be a list of Station objects")
+        _validate_attribution_container(stations)
         stations = None if stations is None else list(stations)
         co = self._commercial_only
         if not stations:  # None or an empty list: every licence in the release (CR D2 c); with commercial_only
@@ -1200,8 +1213,7 @@ class Release:
         else:
             lic_ids = set()
             for st in stations:
-                if not isinstance(st, Station):
-                    raise InvalidArgumentError("stations must be a list of Station objects")
+                _validate_attribution_item(st)
                 own = self.station(st.station_id)
                 if st._origin is not self._station_origin or own is None or (own is not st and own.raw != st.raw):
                     # unknown, removed or from another release: never skipped silently (CR D2 a)

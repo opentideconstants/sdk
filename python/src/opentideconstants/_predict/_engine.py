@@ -13,6 +13,23 @@ from ._harmonic import Sum, events, RAD, _unrounded_events
 from ._results import HeightPoint, Extreme, CurrentPoint, CurrentEvent, HeightSeries, ExtremeList, CurrentSeries, CurrentEventList, DatumInfo, DatumLevel, Ranges
 
 
+def _validate_offset_arguments(offset_id, set_id):
+    if offset_id is not None and not isinstance(offset_id, str):
+        raise X.InvalidArgumentError('offset_id must be a string')
+    if offset_id is not None and set_id is not None:
+        raise X.InvalidArgumentError('set_id and offset_id are mutually exclusive')
+
+
+def _validate_all_sets(all_sets):
+    if not isinstance(all_sets, bool):
+        raise X.InvalidArgumentError('all_sets must be a boolean')
+
+
+def _validate_astro_table_id(id):
+    if id is not None and not isinstance(id, str):
+        raise X.InvalidArgumentError('astro table id must be a string')
+
+
 @dataclass
 class _Context:
     station: Any
@@ -35,8 +52,7 @@ class _Context:
 
 def astro_table(release, id=None) -> AstroTable | None:
     release._check_open()
-    if id is not None and not isinstance(id, str):
-        raise X.InvalidArgumentError('astro table id must be a string')
+    _validate_astro_table_id(id)
     if id is None:
         id = next((c.raw.get('astro_table_id') for c in release.conventions if c.raw.get('astro_table_id')), None)
     if id is None:
@@ -193,10 +209,7 @@ def _current(context, row):
 def _context(release, station, quantity, set_id, datum=None, bin_number=None, series=False, offset_id=None):
     station = _station(release, station)
     _options(set_id, datum, bin_number)
-    if offset_id is not None and not isinstance(offset_id, str):
-        raise X.InvalidArgumentError('offset_id must be a string')
-    if offset_id is not None and set_id is not None:
-        raise X.InvalidArgumentError('set_id and offset_id are mutually exclusive')
+    _validate_offset_arguments(offset_id, set_id)
     constants = _chosen(release, station, set_id)
     usable = constants is not None and constants.qc_status in ('ok', 'flagged')
     tide_offsets, current_offsets = station.raw.get('subordinate_offsets'), station.raw.get('current_offsets')
@@ -413,8 +426,7 @@ def _datum_info(set_id, d):
 def datums(release, station, set_id=None, all_sets=False) -> DatumInfo | tuple[DatumInfo, ...] | None:
     station = _station(release, station)
     _options(set_id)
-    if not isinstance(all_sets, bool):
-        raise X.InvalidArgumentError('all_sets must be a boolean')
+    _validate_all_sets(all_sets)
     if all_sets:
         return tuple(_datum_info(s.set_id, s.raw.get('datum')) for s in station.constant_sets(include_no_constants=True))
     constants = _chosen(release, station, set_id)

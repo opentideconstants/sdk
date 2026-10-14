@@ -119,6 +119,10 @@ def _validate_operation_arguments(
     arguments: T._CArguments,
     member_contract: T._CMemberContract,
 ) -> T._CValidatedArguments:
+    if isinstance(arguments, T._MemberRequests):
+        return _validate_request_arguments(arguments, member_contract)
+    if isinstance(arguments, T._Arguments13):
+        return _validate_request_arguments(arguments, member_contract)
     if isinstance(arguments, T._Arguments0):
         if member_contract.member_id != arguments.member_id:
             raise _errors.InvalidArgumentError(
@@ -209,11 +213,40 @@ def _validate_operation_arguments(
             else None
         )
         _engine._options(_specified(arguments.set_id, None), datum, bin_number)
+        if isinstance(arguments, (T._Arguments14, T._Arguments16)):
+            _engine._validate_offset_arguments(
+                _specified(arguments.offset_id, None),
+                _specified(arguments.set_id, None),
+            )
     elif isinstance(arguments, T._Arguments15):
         for instant in arguments.times:
             _astro.instant(instant)
         _engine._options(
             _specified(arguments.set_id, None), _specified(arguments.datum, None)
+        )
+        _engine._validate_offset_arguments(
+            _specified(arguments.offset_id, None), _specified(arguments.set_id, None)
+        )
+    elif isinstance(arguments, T._Arguments6):
+        _release._check_type(
+            "station_id", arguments.station_id, (str,), allow_none=False
+        )
+    elif isinstance(arguments, T._Arguments7):
+        _release._check_type("system", arguments.system, (str,), allow_none=False)
+        _release._check_type("alias_id", arguments.alias_id, (str,), allow_none=False)
+    elif isinstance(arguments, T._Arguments12):
+        _release._validate_station_argument(
+            arguments.station, arguments.member_id.split(".")[-1]
+        )
+    elif isinstance(arguments, (T._Arguments19, T._Arguments20)):
+        _engine._options(_specified(arguments.set_id, None))
+        if isinstance(arguments, T._Arguments19):
+            _engine._validate_all_sets(_specified(arguments.all_sets, False))
+    elif isinstance(arguments, T._Arguments21):
+        _engine._validate_astro_table_id(_specified(arguments.id, None))
+    elif isinstance(arguments, T._Arguments22):
+        _models._validate_include_no_constants(
+            _specified(arguments.include_no_constants, False)
         )
     elif isinstance(arguments, T._Arguments25):
         _astro.instant(arguments.at)
@@ -229,6 +262,132 @@ def _validate_operation_arguments(
     # genuine reference routes. Model ownership, domain and localization stay with
     # their separately named operations.
     return arguments
+
+
+def _validate_request_arguments(
+    arguments: T._MemberRequests | T._Arguments13, member_contract: T._CMemberContract
+) -> T._CValidatedArguments:
+    prepared = (
+        member_contract if isinstance(member_contract, T._B01ReleaseContract) else None
+    )
+    if prepared is not None:
+        if prepared.arguments is not arguments:
+            raise NotImplementedError("B01 prepared argument identity incomplete")
+        prepared.native_release._check_open()
+    if isinstance(arguments, T._Request6):
+        _release._check_type(
+            "station_id", arguments.station_id, (str,), allow_none=False
+        )
+        assert isinstance(arguments.station_id, str)
+        return T._Arguments6(arguments.member_id, arguments.station_id)
+    if isinstance(arguments, T._Request7):
+        _release._check_type("system", arguments.system, (str,), allow_none=False)
+        _release._check_type("alias_id", arguments.alias_id, (str,), allow_none=False)
+        assert isinstance(arguments.system, _enums.AliasSystem)
+        assert isinstance(arguments.alias_id, str)
+        return T._Arguments7(arguments.member_id, arguments.system, arguments.alias_id)
+    if isinstance(arguments, T._Request12):
+        _release._validate_station_argument(
+            arguments.station, arguments.member_id.split(".")[-1]
+        )
+        assert isinstance(arguments.station, _models.Station)
+        return T._Arguments12(arguments.member_id, arguments.station)
+    if isinstance(arguments, (T._Request13, T._Arguments13)):
+        stations = _specified(arguments.stations, None)
+        _release._validate_attribution_container(stations)
+        if stations is None:
+            original = arguments.stations
+            return T._Arguments13(
+                arguments.member_id,
+                original if isinstance(original, T._Omitted) else None,
+            )
+        assert isinstance(stations, tuple)
+        if prepared is None or len(prepared.attribution_origin_failures) != len(
+            stations
+        ):
+            raise NotImplementedError(
+                "B01 attribution ordered origin prerequisites incomplete"
+            )
+        validated = []
+        for index, station in enumerate(stations):
+            _release._validate_attribution_item(station)
+            failure = prepared.attribution_origin_failures[index]
+            if failure is not None:
+                raise failure
+            assert isinstance(station, _models.Station)
+            validated.append(station)
+        return T._Arguments13(arguments.member_id, tuple(validated))
+    if isinstance(arguments, (T._Request14, T._Request15, T._Request16)):
+        if isinstance(arguments, T._Request15):
+            for instant in arguments.times:
+                _astro.instant(instant)
+        elif isinstance(arguments, T._Request14):
+            _engine._window(
+                arguments.start, arguments.stop, _specified(arguments.step_s, 600)
+            )
+        else:
+            _engine._window(arguments.start, arguments.stop)
+        if prepared is not None and prepared.station_error is not None:
+            raise prepared.station_error
+        _engine._options(
+            _specified(arguments.set_id, None), _specified(arguments.datum, None)
+        )
+        _engine._validate_offset_arguments(
+            _specified(arguments.offset_id, None), _specified(arguments.set_id, None)
+        )
+        offset = arguments.offset_id
+        assert offset is None or isinstance(offset, (str, T._Omitted))
+        if isinstance(arguments, T._Request14):
+            return T._Arguments14(
+                arguments.member_id,
+                arguments.station,
+                arguments.start,
+                arguments.stop,
+                arguments.step_s,
+                arguments.datum,
+                arguments.set_id,
+                offset,
+            )
+        if isinstance(arguments, T._Request15):
+            return T._Arguments15(
+                arguments.member_id,
+                arguments.station,
+                arguments.times,
+                arguments.datum,
+                arguments.set_id,
+                offset,
+            )
+        return T._Arguments16(
+            arguments.member_id,
+            arguments.station,
+            arguments.start,
+            arguments.stop,
+            arguments.datum,
+            arguments.set_id,
+            offset,
+        )
+    if isinstance(arguments, (T._Request19, T._Request20)):
+        if prepared is not None and prepared.station_error is not None:
+            raise prepared.station_error
+        _engine._options(_specified(arguments.set_id, None))
+        set_id = arguments.set_id
+        assert set_id is None or isinstance(set_id, (str, T._Omitted))
+        if isinstance(arguments, T._Request19):
+            _engine._validate_all_sets(_specified(arguments.all_sets, False))
+            assert isinstance(arguments.all_sets, (bool, T._Omitted))
+            return T._Arguments19(
+                arguments.member_id, arguments.station, set_id, arguments.all_sets
+            )
+        return T._Arguments20(arguments.member_id, arguments.station, set_id)
+    if isinstance(arguments, T._Request21):
+        _engine._validate_astro_table_id(_specified(arguments.id, None))
+        assert arguments.id is None or isinstance(arguments.id, (str, T._Omitted))
+        return T._Arguments21(arguments.member_id, arguments.id)
+    _models._validate_include_no_constants(
+        _specified(arguments.include_no_constants, False)
+    )
+    assert isinstance(arguments.include_no_constants, (bool, T._Omitted))
+    return T._Arguments22(arguments.member_id, arguments.include_no_constants)
 
 
 def _resolve_effective_options(
