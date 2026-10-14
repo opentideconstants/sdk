@@ -588,10 +588,15 @@ class OpenTideConstants:
             return None
         d = self._cache.release_dir(datestamp)
         jsonl, meta, js = d / f"OTC_{datestamp}.jsonl", d / f"OTC_{datestamp}.meta.json", d / f"OTC_{datestamp}.json"
-        stream_ok = jsonl.is_file() and meta.is_file()
+
+        def cached(path):
+            row = v["files"].get(path.name) or {}
+            return path.is_file() and row.get("sha256") is not None and row.get("size") is not None
+
+        stream_ok = cached(jsonl) and cached(meta)
         if mode == "stream":
             return jsonl if stream_ok else None
-        if js.is_file():
+        if cached(js):
             return js
         return jsonl if stream_ok else None
 
