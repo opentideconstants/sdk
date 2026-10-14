@@ -153,7 +153,13 @@ public struct Validation: Sendable, Equatable {
     public var rangeErrorM: Double? { raw["range_error_m"].number }
     public var missedEvents: Int64? { raw["missed_events"].integer }
     public var extraEvents: Int64? { raw["extra_events"].integer }
-    public var previousRelease: JSONValue? { raw["previous_release"].isNull ? nil : raw["previous_release"] }
+    public var previousRelease: JSONValue? {
+        guard case .object(var previous) = raw["previous_release"] else { return nil }
+        for key in ["time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "range_error_m", "missed_events", "extra_events"] {
+            if previous[key]?.number == nil { previous[key] = .null }
+        }
+        return .object(previous)
+    }
 }
 
 public struct SubordinateOffsets: Sendable, Equatable {
