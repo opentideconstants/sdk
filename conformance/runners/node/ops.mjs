@@ -58,19 +58,22 @@ function iso(t) {
 function encStation(s) {
     if (s == null) return null;
     const rec = need(s, "recommendedSet");
-    return {
+    const out = {
         station_id: s.station_id, name: s.name, country: s.country, lat: s.lat, lon: s.lon, type: s.type,
         kind: s.kind, timezone: s.timezone, aliases: s.aliases, status: s.status,
         is_reference: s.isReference, is_subordinate: s.isSubordinate, is_tide: s.isTide, is_current: s.isCurrent,
         recommended_set_id: rec ? rec.set_id : null,
     };
+    const fallback = need(s, "recommended_is_fallback");
+    if (fallback !== null) out.recommended_is_fallback = fallback;
+    return out;
 }
 
 function encSet(cs) {
     if (cs == null) return null;
     const span = need(cs, "record_span");
     const datum = need(cs, "datum");
-    return {
+    const out = {
         set_id: cs.set_id, source: cs.source, source_type: cs.source_type, quantity: cs.quantity,
         source_record_id: cs.source_record_id, source_version: cs.source_version,
         record_span: span === null ? null : { start: iso(need(span, "start")), end: iso(need(span, "end")), good_samples: need(span, "good_samples") },
@@ -83,6 +86,9 @@ function encSet(cs) {
         convention_id: need(need(cs, "convention"), "convention_id"), licence_id: need(need(cs, "licence"), "licence_id"),
         constituent_count: cs.constituents.length,
     };
+    const fallback = need(cs, "fallback");
+    if (fallback !== null) out.fallback = pick(fallback, ["reason", "basis", "otc_finding", "preferred_set_id"]);
+    return out;
 }
 
 function encValidation(v) {
