@@ -197,7 +197,7 @@ class OpenTideConstants
         # The strict-JSON rules apply to unknown receipt extensions too (§7.3).
         # Count containers, including the root, and keep finite untyped integers.
         def verified_json_value?(value, depth = 0)
-            return value.finite? if value.is_a?(Numeric)
+            return value.to_f.finite? if value.is_a?(Numeric)
             children = value.is_a?(Hash) ? value.values : value.is_a?(Array) ? value : nil
             return true unless children
             return false if depth >= 64
