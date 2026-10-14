@@ -286,7 +286,10 @@ export function checkShape(doc: JsonObject, id: string): void {
     const off = obj(doc, "subordinate_offsets");
     if (off) checkHistoricalOffsets(off);
     checkSourceRecords(doc);
-    if (off) check(off, OFFSET_TYPES, "subordinate_offsets.");
+    if (off) {
+        check(off, OFFSET_TYPES, "subordinate_offsets.");
+        for (const flag of objects(off, "qc_flags")) check(flag, { flag: "T", reason: "T" }, "subordinate_offsets.qc_flags.");
+    }
     for (const v of objects(doc, "validation")) check(v, VALIDATION_TYPES, "validation ");
     for (const cs of objects(doc, "constant_sets")) {
         const where = `set ${typeof cs["set_id"] === "string" ? cs["set_id"] : "?"}: `;
@@ -299,6 +302,8 @@ export function checkShape(doc: JsonObject, id: string): void {
             const o = obj(cs, k);
             if (o) check(o, table, `${where}${k}.`);
         }
+        const build = obj(obj(cs, "provenance"), "build");
+        if (build) check(build, { build_commit: "T" }, `${where}provenance.build.`);
         const span = obj(cs, "record_span");
         for (const k of ["start", "end"]) checkedTime(span?.[k], `record_span.${k} of set ${typeof cs["set_id"] === "string" ? cs["set_id"] : "?"}`);
         const named = obj(obj(cs, "datum"), "named");
@@ -725,7 +730,7 @@ export class ConstantSet {
         this.qc_status = en(raw["qc_status"], QC_STATUSES);
         this.qc_flags = Object.freeze(arr(raw, "qc_flags").filter(isObject).map((f): QcFlag => Object.freeze({
             flag: en(f["flag"], ["time_base", "broken_record", "microtidal", "non_tidal_signal", "short_record",
-                "sibling_disagreement", "carried_over", "fallback:time_base_disputed", "fallback:time_base_unresolved", "fallback:refused_fit", "fallback:short_record_uncalibrated", "fallback:short_record_long_period", "fallback:published_full_list", "fallback:reliability_withheld", "fallback:licence_reading", "fallback:datum_gate_failed", "fallback:not_in_otc_input", "fallback:historical_offsets"] as const) ?? "other",
+                "sibling_disagreement", "carried_over", "fallback:time_base_disputed", "fallback:time_base_unresolved", "fallback:refused_fit", "fallback:short_record_uncalibrated", "fallback:short_record_long_period", "fallback:published_full_list", "fallback:reliability_withheld", "fallback:licence_reading", "fallback:datum_gate_failed", "fallback:not_in_otc_input", "fallback:historical_offsets"] as const),
             reason: str(f, "reason"), values: qcValues(f["values"]),
         })));
         this.dropped_constituents = Object.freeze(arr(raw, "dropped_constituents").filter(isObject).map(droppedConstituentOf));
@@ -1898,7 +1903,7 @@ export function fallbackOf(d: JsonObject | null): Fallback | null {
 }
 /** @internal */
 export function qcFlagOf(d: JsonObject): QcFlag {
-    return Object.freeze({flag: en(d['flag'], QC_FLAGS) ?? 'other', reason: str(d, 'reason'), values: qcValues(d['values'])});
+    return Object.freeze({flag: en(d['flag'], QC_FLAGS), reason: str(d, 'reason'), values: qcValues(d['values'])});
 }
 /** @internal */
 export function sourceRecordOf(d: JsonObject, release: Release): SourceRecord {
@@ -2160,8 +2165,8 @@ export function historicalProvenanceOf(off: JsonObject): HistoricalOffsetProvena
 /** @internal Exact existing DroppedConstituent field phase. */
 export function droppedConstituentOf(d: JsonObject): DroppedConstituent {
     return Object.freeze({
-        name: str(d, "name") ?? "",
-        dropped_reason: en(d["dropped_reason"], ["rayleigh", "noise", "long_period_rule", "non_tidal_rule", "convention", "other"] as const) ?? "other",
+        name: str(d, "name"),
+        dropped_reason: en(d["dropped_reason"], ["rayleigh", "noise", "long_period_rule", "non_tidal_rule", "convention", "other"] as const),
         detail: val(d, "detail"),
     });
 }

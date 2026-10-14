@@ -3548,11 +3548,11 @@
      "name": "build_commit",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "buildCommit",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var buildCommit: String { get }"
+      "var buildCommit: String? { get }"
      ]
     },
     {
@@ -3720,24 +3720,24 @@
      "name": "flag",
      "kind": "field",
      "type": "enum",
-     "nullable": false,
+     "nullable": true,
      "enum": "qc_flag",
      "swift": "flag",
-     "swift_returns": "QcFlagName",
+     "swift_returns": "QcFlagName?",
      "swift_declarations": [
-      "var flag: QcFlagName { get }"
+      "var flag: QcFlagName? { get }"
      ]
     },
     {
      "name": "reason",
      "kind": "field",
      "type": "string",
-     "nullable": false,
-     "note": "a required one-line string",
+     "nullable": true,
+     "note": "A publisher supplies a one-line reason; missing or null read metadata returns null.",
      "swift": "reason",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var reason: String { get }"
+      "var reason: String? { get }"
      ]
     },
     {
@@ -3762,23 +3762,23 @@
      "name": "name",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "name",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var name: String { get }"
+      "var name: String? { get }"
      ]
     },
     {
      "name": "dropped_reason",
      "kind": "field",
      "type": "enum",
-     "nullable": false,
+     "nullable": true,
      "enum": "dropped_reason",
      "swift": "droppedReason",
-     "swift_returns": "DroppedReason",
+     "swift_returns": "DroppedReason?",
      "swift_declarations": [
-      "var droppedReason: DroppedReason { get }"
+      "var droppedReason: DroppedReason? { get }"
      ]
     },
     {
@@ -3803,22 +3803,22 @@
      "name": "set_id",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "setId",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var setId: String { get }"
+      "var setId: String? { get }"
      ]
     },
     {
      "name": "reference_source",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "referenceSource",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var referenceSource: String { get }"
+      "var referenceSource: String? { get }"
      ]
     },
     {
@@ -3847,11 +3847,11 @@
      "name": "window",
      "kind": "field",
      "type": "string",
-     "nullable": false,
+     "nullable": true,
      "swift": "window",
-     "swift_returns": "String",
+     "swift_returns": "String?",
      "swift_declarations": [
-      "var window: String { get }"
+      "var window: String? { get }"
      ]
     },
     {

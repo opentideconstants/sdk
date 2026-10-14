@@ -150,7 +150,7 @@ export interface Provenance {
 
 /** A QC flag of a constant set. */
 export interface QcFlag {
-    readonly flag: QcFlagName | Other;
+    readonly flag: QcFlagName | Other | null;
     /** A one-line reason. */
     readonly reason: string | null;
     /** Named numbers (or null values), or null when the flag has none. */
@@ -189,8 +189,8 @@ export interface TimeBase {
 
 /** A constituent that the fit dropped, and why. */
 export interface DroppedConstituent {
-    readonly name: string;
-    readonly dropped_reason: DroppedReason | Other;
+    readonly name: string | null;
+    readonly dropped_reason: DroppedReason | Other | null;
     readonly detail: Json;
 }
 
