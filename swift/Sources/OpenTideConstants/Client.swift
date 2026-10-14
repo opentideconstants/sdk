@@ -392,7 +392,7 @@ internal struct ClientIO:@unchecked Sendable {
         guard let marker=try cache.verified(stamp) else { return nil }
         let directory=try cache.releaseDir(stamp)
         let choices=mode == .stream ? [["OTC_\(stamp).jsonl","OTC_\(stamp).meta.json"]]:[["OTC_\(stamp).json"],["OTC_\(stamp).jsonl","OTC_\(stamp).meta.json"]]
-        guard let names=choices.first(where:{ $0.allSatisfy { marker["files"][$0].object.isEmpty==false && FileManager.default.fileExists(atPath:directory.appendingPathComponent($0).path) } }) else { return nil }
+        guard let names=choices.first(where:{ $0.allSatisfy { marker["files"][$0]["sha256"].string != nil && FileManager.default.fileExists(atPath:directory.appendingPathComponent($0).path) } }) else { return nil }
         for name in names {
             let row=marker["files"][name]
             try check(directory.appendingPathComponent(name),sha:row["sha256"].string,size:row["size"].integer,hash:verifyOnOpen)
@@ -613,8 +613,8 @@ internal struct ClientIO:@unchecked Sendable {
         let names=mode == .stream ? [jsonl,meta]:[json]
         for name in names { guard rows[name] != nil else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) } }
         let previous=try cache.verified(stamp)
-        var verified:[String:JSONValue]=(previous?["files"].object ?? [:]).filter { name,_ in
-            name != "OTC_\(stamp).sha256" && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
+        var verified:[String:JSONValue]=(previous?["files"].object ?? [:]).filter { name,row in
+            name != "OTC_\(stamp).sha256" && row["sha256"].string != nil && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
         }.mapValues { row in
             .object(["sha256":.string(row["sha256"].string!.lowercased()),"size":row["size"],"url":row["url"]])
         }
