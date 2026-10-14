@@ -20,6 +20,8 @@ export interface BlockingResult {
     how?: string;
     /** The pointer entry's files, which are release.files after a download of latest (spec 4.3.1). */
     files?: FileInfo[];
+    /** The selected pointer entry's DOI, even when its cached receipt could not be refreshed. */
+    versionDoi?: string | null;
     message?: string;
     /** The SDK error code of a failure (spec 4.8), and its url, status and path when it has them. */
     code?: string;

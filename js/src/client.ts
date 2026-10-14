@@ -689,7 +689,8 @@ export class OpenTideConstants {
             const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
             const v = vb ? parseVerified(vb, res.datestamp) : null;
             if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
-            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), v, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
+            const sessionReceipt = res.versionDoi == null ? v : { ...v, zenodo_version_doi: res.versionDoi };
+            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), sessionReceipt, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
                 ctx.commercialOnly, res.how === "download" ? res.files ?? null : null, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
             this.#swap(rel, res.how === "download" ? "download" : "cache");
             log(ctx, "info", `updated from ${from} to ${res.datestamp}`);

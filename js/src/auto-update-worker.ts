@@ -30,7 +30,7 @@ try {
     if (ctx.offline) throw new Error("offline: the automatic update check does not run");
     const entry = await getPointer(ctx);
     const how = await ensureRelease(ctx, entry.datestamp, entry);
-    result = { ok: true, datestamp: entry.datestamp, how, files: entry.files };
+    result = { ok: true, datestamp: entry.datestamp, how, files: entry.files, versionDoi: entry.zenodo_version_doi };
 } catch (e) {
     result = { ok: false, message: e instanceof Error ? e.message : String(e) };
     if (e instanceof OpenTideConstantsError) {
