@@ -1244,7 +1244,7 @@ class OpenTideConstants:
         _validate_prune_arguments(keep)
         # Protect only the current release loaded by this client (spec §4.3, R13-A1).
         keep_ds = set()
-        if self._release is not None:
+        if self._release is not None and self._file is None:
             keep_ds.add(self._release.datestamp)
         removed = []
         for ds in self._cache.cached()[keep:]:
@@ -1259,6 +1259,7 @@ class OpenTideConstants:
                 removed.append(ds)
             else:
                 self._log.info("prune: %s is locked by another process; it is kept", ds)
+        self._cache.cleanup_partials(keep_ds)
         return tuple(removed)
 
     def _cached_sha256(self, datestamp: str, info: Optional[ReleaseInfo]):

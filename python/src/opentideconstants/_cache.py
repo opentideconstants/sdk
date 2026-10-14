@@ -5,6 +5,7 @@ import calendar
 import datetime
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from ._cache_json import encode_cache_json
 from ._errors import CacheError, InvalidReleaseError
-from ._release import integral
+from ._release import _VERSION_RE, integral
 
 _log = logging.getLogger("opentideconstants")
 
@@ -133,14 +134,41 @@ class Cache:
             return None
         if not isinstance(doc, dict) or not isinstance(doc.get("files"), dict):
             return None
+        stack = [(doc, 1)]
+        try:
+            while stack:
+                value, depth = stack.pop()
+                if isinstance(value, (dict, list)):
+                    if depth > 64:
+                        return None
+                    children = list(value.keys()) + list(value.values()) if isinstance(value, dict) else value
+                    stack.extend((child, depth + 1) for child in children)
+                elif isinstance(value, str):
+                    value.encode("utf-8")
+                elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if not math.isfinite(float(value)):
+                        return None
+        except (UnicodeEncodeError, OverflowError):
+            return None
         for rec in doc["files"].values():
             # a null or absent size makes .verified malformed (spec 5.4, CR3 spec review 2 B10 and 3 C4)
-            if not isinstance(rec, dict) or not _opt(rec.get("sha256"), str) or not _opt(rec.get("url"), str) \
-                    or integral(rec.get("size")) is None:
+            if not isinstance(rec, dict) or not _opt(rec.get("sha256"), str) or not _opt(rec.get("url"), str):
                 return None
-            rec["size"] = integral(rec["size"])  # 1024.0 is the integer 1024 (CR2 DR10)
-        for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp"):
+            size = integral(rec.get("size"))
+            sha = rec.get("sha256")
+            if size is None or not 0 <= size <= 9007199254740991 \
+                    or sha is not None and re.fullmatch(r"[0-9a-fA-F]{64}", sha) is None:
+                return None
+            rec["size"] = size  # 1024.0 is the integer 1024 (CR2 DR10)
+            if sha is not None:
+                rec["sha256"] = sha.lower()
+        for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp", "verified_at", "by"):
             if not _opt(doc.get(k), str):
+                return None
+        if doc.get("datestamp") is not None and doc["datestamp"] != datestamp:
+            return None
+        for key in ("format_version", "min_reader_version"):
+            if doc.get(key) is not None and _VERSION_RE.fullmatch(doc[key]) is None:
                 return None
         return doc
 
@@ -148,12 +176,43 @@ class Cache:
         """Datestamps of verified releases, newest first."""
         d = self.base / "releases"
         try:
-            names = [p.name for p in d.iterdir() if DATESTAMP_RE.match(p.name) and (p / ".verified").is_file()]
+            names = [p.name for p in d.iterdir() if DATESTAMP_RE.match(p.name)
+                     and self.read_verified(p.name) is not None]
         except (FileNotFoundError, NotADirectoryError):
             return []
         except OSError as e:
             raise CacheError(f"cannot list {d}: {e}") from e
         return sorted(names, key=datestamp_key, reverse=True)
+
+    def cleanup_partials(self, protected=()):
+        """Best-effort removal of old unverified directories; they never count toward prune's keep budget."""
+        releases = self.base / "releases"
+        try:
+            paths = list(releases.iterdir())
+        except (FileNotFoundError, NotADirectoryError):
+            return
+        except OSError as e:
+            self._log.warning("prune: cannot list partial releases in %s: %s", releases, e)
+            return
+        for path in paths:
+            if not DATESTAMP_RE.match(path.name) or path.name in protected:
+                continue
+            try:
+                if not path.is_dir() or self.read_verified(path.name) is not None:
+                    continue
+                modified = path.stat().st_mtime
+                with lock_dir(path, "opentideconstants-python", wait=False) as held:
+                    if not held:
+                        self._log.info("prune: %s is locked by another process; it is kept", path.name)
+                        continue
+                    if self.read_verified(path.name) is not None:
+                        self._log.info("prune: %s became verified; it is kept", path.name)
+                        continue
+                    if time.time() - modified > LOCK_STALE_AGE_S:
+                        shutil.rmtree(path)
+                        self._log.info("prune: removed partial release %s", path.name)
+            except (CacheError, OSError) as e:
+                self._log.warning("prune: cannot remove partial release %s: %s", path.name, e)
 
     def remove_release(self, datestamp: str) -> bool:
         """Remove a cached release; False when another process holds its lock (it is downloading). CacheError
