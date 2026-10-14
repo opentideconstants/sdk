@@ -66,8 +66,11 @@ class OpenTideConstants
             row_for(name)["f"][index_for(year)]
         end
         private
-        def index_for(year)
+        def validate_year_argument(year)
             raise InvalidArgumentError, "year must be an integer" unless Predict.integer?(year)
+        end
+        def index_for(year)
+            validate_year_argument(year)
             unless year.between?(@first, @last)
                 raise TimeOutOfRangeError.new("year #{year} outside astro table", first_year: @first, last_year: @last)
             end

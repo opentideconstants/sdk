@@ -203,17 +203,24 @@ class OpenTideConstants
     module Predict
         module_function
         def current_events(c, start, stop)
+            current_event_candidates(c, start, stop, :events)
+        end
+        def unrounded_current_events(c, start, stop)
+            current_event_candidates(c, start, stop, :unrounded_events)
+        end
+        def current_event_candidates(c, start, stop, event_source)
             total = Sum.new(c.table, c.current_bin["constituents"] || [], amplitude: "major_amplitude_ms", phase: "major_phase_deg", multiplier: c.sigma, mean: c.sigma * c.current_bin.fetch("mean_major_ms", 0.0))
-            candidates = events(total, start, stop).filter_map do |t, kind, value|
+            candidates = __send__(event_source, total, start, stop).filter_map do |t, kind, value|
                 if kind == "high" && value > 0
                     [t, "max_flood", value, c.current_bin["mean_flood_dir_deg"]]
                 elsif kind == "low" && value < 0
                     [t, "max_ebb", value, c.current_bin["mean_ebb_dir_deg"]]
                 end
             end
-            candidates.concat(events(total, start, stop, slack: true).map { |t, kind, _| [t, kind, 0.0, nil] })
+            candidates.concat(__send__(event_source, total, start, stop, slack: true).map { |t, kind, _| [t, kind, 0.0, nil] })
             candidates.sort_by(&:first)
         end
+        private_class_method :unrounded_current_events, :current_event_candidates
         def datum_info(set_id, raw)
             d = raw || {}
             named, basis = d["named"] || {}, d["basis"] || {}

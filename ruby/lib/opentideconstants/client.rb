@@ -27,6 +27,110 @@ class OpenTideConstants
     # (newer than every supported major), as check_for_update last saw it; or nil.
     attr_reader :newer_format_major
 
+    # The original constructor validation/default phase, before acquisition.
+    module ConstructorArguments
+        ResolvedOptions = Struct.new(:requested, :mode, :on_network_error, :offline, :auto_update, :verify_on_open, :commercial_only, :commercial_basis, :historical_offsets_policy, :update_interval, :base_url, :cache_dir, :logger, keyword_init: true)
+        private
+
+        def constructor_options(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil, timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache, auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, environment: ENV)
+            # A file client reads no pointer and opens no socket, so these options
+            # would be silently ignored (CR D31, spec §4.2). The variable
+            # OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+            if file && (release != :latest || offline != false || on_network_error != :use_cache)
+                raise InvalidArgumentError, "file cannot be combined with release, offline or on_network_error"
+            end
+            requested = check_release_arg(release)
+            mode = check_enum(mode, MODES, "mode").to_sym
+            on_network_error = check_enum(on_network_error, ON_NETWORK_ERROR, "on_network_error").to_sym
+            # The variable turns offline on with 1, true, yes or on, and then wins over offline: false (CR D15).
+            offline = check_bool(offline, "offline") || %w[1 true yes on].include?(environment["OPENTIDECONSTANTS_OFFLINE"].to_s.strip.downcase)
+            auto_update = check_bool(auto_update, "auto_update")
+            verify_on_open = check_bool(verify_on_open, "verify_on_open")
+            # Select only sets whose licence allows commercial use, in every
+            # release this client loads (spec §4.2, K-NC DR106).
+            commercial_only = check_bool(commercial_only, "commercial_only")
+            commercial_basis = check_enum(commercial_basis, %w[strict as_published_upstream], "commercial_basis").to_sym
+            historical_offsets_policy = check_enum(historical_offsets_policy, %w[fallback exclude], "historical_offsets_policy").to_sym
+            unless update_interval.is_a?(Numeric) && update_interval.positive?
+                raise InvalidArgumentError, "update_interval must be a number of seconds > 0"
+            end
+            update_interval = update_interval
+            # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19); a Float NaN fails the range check too
+            unless timeout.nil? || (timeout.is_a?(Numeric) && timeout.real? && timeout >= HTTP::TIMEOUT_MIN && timeout <= HTTP::TIMEOUT_MAX)
+                raise InvalidArgumentError, "timeout must be nil or a number of seconds from #{HTTP::TIMEOUT_MIN} to #{HTTP::TIMEOUT_MAX.to_i}"
+            end
+            %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
+                raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
+            end
+            # user_agent goes into a header: no control character (CR2 DR20, spec 4.2, 5.7)
+            if user_agent && (!user_agent.valid_encoding? || user_agent.match?(/[[:cntrl:]]/))
+                raise InvalidArgumentError, "user_agent must have no control characters: #{user_agent.inspect}"
+            end
+            raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
+            base_url ||= environment["OPENTIDECONSTANTS_BASE_URL"]
+            base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
+            HTTP.check_url!(base_url, "base_url")
+            base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
+            raise InvalidArgumentError, "cache_dir must be a String" unless cache_dir.nil? || cache_dir.is_a?(String)
+            cache_dir = cache_dir
+            logger = logger
+            ResolvedOptions.new(requested: requested, mode: mode, on_network_error: on_network_error, offline: offline, auto_update: auto_update, verify_on_open: verify_on_open, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy, update_interval: update_interval, base_url: base_url, cache_dir: cache_dir, logger: logger).freeze
+        end
+
+        def bind_client_option_fields(options)
+            @requested = options.requested
+            @mode = options.mode
+            @on_network_error = options.on_network_error
+            @offline = options.offline
+            @auto_update = options.auto_update
+            @verify_on_open = options.verify_on_open
+            @commercial_only = options.commercial_only
+            @commercial_basis = options.commercial_basis
+            @historical_offsets_policy = options.historical_offsets_policy
+            @update_interval = options.update_interval
+            @base_url = options.base_url
+            @cache_dir = options.cache_dir
+            @logger = options.logger
+        end
+
+        def bind_prepared_client_fields(prepared)
+            bind_client_option_fields(prepared)
+            @http = prepared.http
+            @lock = prepared.lock
+            @closed = prepared.closed
+            @last_error = prepared.last_error
+            @newer_format_major = prepared.newer_format_major
+            @file = prepared.file
+            @loaded = prepared.loaded
+            @release = prepared.release
+            @loaded_from = prepared.loaded_from
+            @last_check = prepared.last_check
+            @cache = prepared.cache
+        end
+
+        def check_release_arg(release)
+            return :latest if release == :latest || release == "latest"
+            unless release.is_a?(String) && release.match?(DATESTAMP_RE)
+                raise InvalidArgumentError, "release must be :latest or a datestamp like 20261008 or 20261008.2, not #{release.inspect}"
+            end
+            release
+        end
+
+        def check_enum(value, allowed, name)
+            v = value.is_a?(Symbol) ? value.to_s : value
+            raise InvalidArgumentError, "#{name} must be one of #{allowed.join(', ')}, not #{value.inspect}" unless allowed.include?(v)
+            v
+        end
+
+        def check_bool(value, name)
+            raise InvalidArgumentError, "#{name} must be true or false" unless value == true || value == false
+            value
+        end
+
+    end
+    include ConstructorArguments
+    private_constant :ConstructorArguments
+
     # Opens a client and yields it, closing it afterwards. Without a block it
     # is the same as new.
     def self.open(**options)
@@ -46,47 +150,8 @@ class OpenTideConstants
                    timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache,
                    auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false,
                    commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
-        # A file client reads no pointer and opens no socket, so these options
-        # would be silently ignored (CR D31, spec §4.2). The variable
-        # OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
-        if file && (release != :latest || offline != false || on_network_error != :use_cache)
-            raise InvalidArgumentError, "file cannot be combined with release, offline or on_network_error"
-        end
-        @requested = check_release_arg(release)
-        @mode = check_enum(mode, MODES, "mode").to_sym
-        @on_network_error = check_enum(on_network_error, ON_NETWORK_ERROR, "on_network_error").to_sym
-        # The variable turns offline on with 1, true, yes or on, and then wins over offline: false (CR D15).
-        @offline = check_bool(offline, "offline") || %w[1 true yes on].include?(ENV["OPENTIDECONSTANTS_OFFLINE"].to_s.strip.downcase)
-        @auto_update = check_bool(auto_update, "auto_update")
-        @verify_on_open = check_bool(verify_on_open, "verify_on_open")
-        # Select only sets whose licence allows commercial use, in every
-        # release this client loads (spec §4.2, K-NC DR106).
-        @commercial_only = check_bool(commercial_only, "commercial_only")
-        @commercial_basis = check_enum(commercial_basis, %w[strict as_published_upstream], "commercial_basis").to_sym
-        @historical_offsets_policy = check_enum(historical_offsets_policy, %w[fallback exclude], "historical_offsets_policy").to_sym
-        unless update_interval.is_a?(Numeric) && update_interval.positive?
-            raise InvalidArgumentError, "update_interval must be a number of seconds > 0"
-        end
-        @update_interval = update_interval
-        # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19); a Float NaN fails the range check too
-        unless timeout.nil? || (timeout.is_a?(Numeric) && timeout.real? && timeout >= HTTP::TIMEOUT_MIN && timeout <= HTTP::TIMEOUT_MAX)
-            raise InvalidArgumentError, "timeout must be nil or a number of seconds from #{HTTP::TIMEOUT_MIN} to #{HTTP::TIMEOUT_MAX.to_i}"
-        end
-        %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
-            raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
-        end
-        # user_agent goes into a header: no control character (CR2 DR20, spec 4.2, 5.7)
-        if user_agent && (!user_agent.valid_encoding? || user_agent.match?(/[[:cntrl:]]/))
-            raise InvalidArgumentError, "user_agent must have no control characters: #{user_agent.inspect}"
-        end
-        raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
-        base_url ||= ENV["OPENTIDECONSTANTS_BASE_URL"]
-        base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
-        HTTP.check_url!(base_url, "base_url")
-        @base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
-        raise InvalidArgumentError, "cache_dir must be a String" unless cache_dir.nil? || cache_dir.is_a?(String)
-        @cache_dir = cache_dir
-        @logger = logger
+        options = constructor_options(release: release, file: file, cache_dir: cache_dir, offline: offline, mode: mode, base_url: base_url, timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, on_network_error: on_network_error, auto_update: auto_update, update_interval: update_interval, logger: logger, verify_on_open: verify_on_open, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
+        bind_client_option_fields(options)
         @http = HTTP.new(timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, logger: logger)
         @lock = Monitor.new
         @closed = false
@@ -456,24 +521,7 @@ class OpenTideConstants
         end
     end
 
-    def check_release_arg(release)
-        return :latest if release == :latest || release == "latest"
-        unless release.is_a?(String) && release.match?(DATESTAMP_RE)
-            raise InvalidArgumentError, "release must be :latest or a datestamp like 20261008 or 20261008.2, not #{release.inspect}"
-        end
-        release
-    end
 
-    def check_enum(value, allowed, name)
-        v = value.is_a?(Symbol) ? value.to_s : value
-        raise InvalidArgumentError, "#{name} must be one of #{allowed.join(', ')}, not #{value.inspect}" unless allowed.include?(v)
-        v
-    end
-
-    def check_bool(value, name)
-        raise InvalidArgumentError, "#{name} must be true or false" unless value == true || value == false
-        value
-    end
 
     # True when this SDK reads the release of a pointer or index entry.
     def readable_entry?(entry)

@@ -1,5 +1,18 @@
+class Monitor
+end
+module ObjectSpace
+    class WeakMap
+    end
+end
+
 class OpenTideConstants
     class Release
+        class Entry
+        end
+    end
+    class HTTP
+    end
+    class Cache
     end
     class ReleaseInfo
     end
@@ -75,6 +88,26 @@ class OpenTideConstants
     end
     class Error < StandardError
     end
+    module Predict
+        class Sum
+            attr_accessor mean: Float | Integer
+            attr_reader table: AstroTable
+            def year_data: (Integer) -> [Integer, Array[[(Float | Integer), (Float | Integer), (Float | Integer), (Float | Integer)]]]
+            def value: ((Float | Integer), ?(Integer | nil), ?bool) -> (Float | Integer)
+        end
+        class Context
+            attr_accessor station: Station | nil
+            attr_accessor constants: ConstantSet | nil
+            attr_accessor table: AstroTable | nil
+            attr_accessor total: Sum | nil
+            attr_accessor minor: Sum | nil
+            attr_accessor current_bin: CanonicalTypes::json_value
+            attr_accessor sigma: Float | Integer | nil
+            attr_accessor method: String | nil
+            attr_accessor reference_bin: Integer | nil
+            attr_accessor datum_name: String | nil
+        end
+    end
     module CanonicalTypes
         interface _Logger
             def debug: (String) -> void
@@ -103,10 +136,101 @@ class OpenTideConstants
             attr_reader native_type: String
             attr_reader nullable: bool
         end
+        type argument_member_id = "Client.open" | "Release.heights" | "Release.extremes" | "Release.currents" | "Release.current_events" | "Release.stations" | "Release.iter_stations" | "Release.search" | "Release.near" | "Release.nearest" | "Client.releases" | "Client.latest" | "Client.check_for_update" | "Client.update" | "Client.download" | "Client.verify" | "Client.cached_releases" | "Client.prune" | "Client.close" | "Release.convention" | "Release.licence" | "Release.station" | "Release.require_station" | "Release.tombstone" | "Release.station_by_alias" | "Release.reference_station" | "Release.subordinates_of" | "Release.attribution" | "Release.heights_at" | "Release.datums" | "Release.ranges" | "Release.astro_table" | "Station.constant_sets" | "Station.constant_set" | "ConstantSet.constituent" | "AstroTable.equilibrium_argument" | "AstroTable.node_factor" | "AstroTable.equilibrium_for_year" | "AstroTable.node_factor_for_year" | "HeightPoint.local_datetime" | "Extreme.local_datetime" | "CurrentPoint.local_datetime" | "CurrentEvent.local_datetime" | "HeightSeries.to_local" | "ExtremeList.to_local" | "CurrentSeries.to_local" | "CurrentEventList.to_local"
+        type native_member_receiver = ::OpenTideConstants | ::OpenTideConstants::Release | ::OpenTideConstants::Station | ::OpenTideConstants::ConstantSet | ::OpenTideConstants::AstroTable | ::OpenTideConstants::HeightPoint | ::OpenTideConstants::Extreme | ::OpenTideConstants::CurrentPoint | ::OpenTideConstants::CurrentEvent | ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList
+        class MemberValidationContext
+            def self.new: (member_id: argument_member_id, native_profile: "ruby", native_receiver: native_member_receiver, ?prepared_receiver: native_member_receiver | nil, ?prepared_station: ::OpenTideConstants::Station | nil, ?prepared_station_request: ::OpenTideConstants::Station | String | AbsentValue, ?prepared_row: native_astro_row | nil, ?prepared_row_name: String | AbsentValue, ?prepared_attribution_request: Array[::OpenTideConstants::Station | nil] | AbsentValue, ?prepared_attribution_steps: Array[PreparedAttributionStep]) -> MemberValidationContext
+            attr_reader member_id: argument_member_id
+            attr_reader native_profile: "ruby"
+            attr_reader native_receiver: native_member_receiver
+            attr_reader prepared_receiver: native_member_receiver | nil
+            attr_reader prepared_station: ::OpenTideConstants::Station | nil
+            attr_reader prepared_station_request: ::OpenTideConstants::Station | String | AbsentValue
+            attr_reader prepared_row: native_astro_row | nil
+            attr_reader prepared_row_name: String | AbsentValue
+            attr_reader prepared_attribution_request: Array[::OpenTideConstants::Station | nil] | AbsentValue
+            attr_reader prepared_attribution_steps: Array[PreparedAttributionStep]
+        end
+        class PreparedAttributionStep
+            def self.new: (station: ::OpenTideConstants::Station, entry: ::OpenTideConstants::Release::Entry | nil, error: ::OpenTideConstants::Error | nil) -> PreparedAttributionStep
+            attr_reader station: ::OpenTideConstants::Station
+            attr_reader entry: ::OpenTideConstants::Release::Entry | nil
+            attr_reader error: ::OpenTideConstants::Error | nil
+        end
+        type native_astro_row = { "f" => Array[Float | Integer], "v0u_deg" => Array[Float | Integer] }
+        class PreparedClientFields
+            def self.new: (requested: String | :latest, mode: :eager | :stream, on_network_error: :use_cache | :raise, offline: bool, auto_update: bool, verify_on_open: bool, commercial_only: bool, commercial_basis: :strict | :as_published_upstream, historical_offsets_policy: :fallback | :exclude, update_interval: Float | Integer, base_url: String, cache_dir: String | nil, logger: _Logger | nil, http: ::OpenTideConstants::HTTP, lock: ::Monitor, closed: bool, last_error: ::OpenTideConstants::Error | nil, newer_format_major: Integer | nil, file: String | nil, loaded: ::ObjectSpace::WeakMap, release: ::OpenTideConstants::Release, loaded_from: :download | :cache | :cache_after_error | :file | :file_unverified, last_check: Float | Integer, ?cache: ::OpenTideConstants::Cache | nil) -> PreparedClientFields
+            attr_reader requested: String | :latest
+            attr_reader mode: :eager | :stream
+            attr_reader on_network_error: :use_cache | :raise
+            attr_reader offline: bool
+            attr_reader auto_update: bool
+            attr_reader verify_on_open: bool
+            attr_reader commercial_only: bool
+            attr_reader commercial_basis: :strict | :as_published_upstream
+            attr_reader historical_offsets_policy: :fallback | :exclude
+            attr_reader update_interval: Float | Integer
+            attr_reader base_url: String
+            attr_reader cache_dir: String | nil
+            attr_reader logger: _Logger | nil
+            attr_reader http: ::OpenTideConstants::HTTP
+            attr_reader lock: ::Monitor
+            attr_reader closed: bool
+            attr_reader last_error: ::OpenTideConstants::Error | nil
+            attr_reader newer_format_major: Integer | nil
+            attr_reader file: String | nil
+            attr_reader loaded: ::ObjectSpace::WeakMap
+            attr_reader release: ::OpenTideConstants::Release
+            attr_reader loaded_from: :download | :cache | :cache_after_error | :file | :file_unverified
+            attr_reader last_check: Float | Integer
+            attr_reader cache: ::OpenTideConstants::Cache | nil
+        end
+        class PreparedReleaseFields
+            def self.new: (mode: :eager | :stream, commercial_only: bool, commercial_basis: String, historical_offsets_policy: String, meta: Hash[String, json_value], logger: _Logger | nil, io: ::IO | nil, on_bad_index: (^(String) -> void) | nil, io_lock: ::Thread::Mutex, station_cache: Hash[String, ::OpenTideConstants::Station], station_cache_lock: ::Thread::Mutex, state: { closed: bool }, files: Array[::OpenTideConstants::FileInfo], checks: Hash[String, String], datestamp: String, created: ::Time | nil, format_version: String, concept_doi: String | nil, zenodo_version_doi: String | nil, source_versions: Hash[String, String], build_commit: String | nil, changelog_url: String | nil, conventions: Array[::OpenTideConstants::Convention], licences: Array[::OpenTideConstants::Licence], convention_by_id: Hash[String, ::OpenTideConstants::Convention], licence_by_id: Hash[String, ::OpenTideConstants::Licence], set_ids: nil, set_sources: Array[String], set_qc: Array[Symbol], aliases: Hash[String, Hash[String, String]], by_id: Hash[String, ::OpenTideConstants::Release::Entry], entries: Array[::OpenTideConstants::Release::Entry], tombstones: Array[::OpenTideConstants::Tombstone], tomb_pos: Array[[::OpenTideConstants::Tombstone, Integer | nil, Integer | nil]], tomb_by_id: Hash[String, ::OpenTideConstants::Tombstone], constituent_names: Array[String], subordinates: Hash[String, Array[::OpenTideConstants::Release::Entry]], raws: Hash[String, Hash[String, json_value]]) -> PreparedReleaseFields
+            attr_reader mode: :eager | :stream
+            attr_reader commercial_only: bool
+            attr_reader commercial_basis: String
+            attr_reader historical_offsets_policy: String
+            attr_reader meta: Hash[String, json_value]
+            attr_reader logger: _Logger | nil
+            attr_reader io: ::IO | nil
+            attr_reader on_bad_index: (^(String) -> void) | nil
+            attr_reader io_lock: ::Thread::Mutex
+            attr_reader station_cache: Hash[String, ::OpenTideConstants::Station]
+            attr_reader station_cache_lock: ::Thread::Mutex
+            attr_reader state: { closed: bool }
+            attr_reader files: Array[::OpenTideConstants::FileInfo]
+            attr_reader checks: Hash[String, String]
+            attr_reader datestamp: String
+            attr_reader created: ::Time | nil
+            attr_reader format_version: String
+            attr_reader concept_doi: String | nil
+            attr_reader zenodo_version_doi: String | nil
+            attr_reader source_versions: Hash[String, String]
+            attr_reader build_commit: String | nil
+            attr_reader changelog_url: String | nil
+            attr_reader conventions: Array[::OpenTideConstants::Convention]
+            attr_reader licences: Array[::OpenTideConstants::Licence]
+            attr_reader convention_by_id: Hash[String, ::OpenTideConstants::Convention]
+            attr_reader licence_by_id: Hash[String, ::OpenTideConstants::Licence]
+            attr_reader set_ids: nil
+            attr_reader set_sources: Array[String]
+            attr_reader set_qc: Array[Symbol]
+            attr_reader aliases: Hash[String, Hash[String, String]]
+            attr_reader by_id: Hash[String, ::OpenTideConstants::Release::Entry]
+            attr_reader entries: Array[::OpenTideConstants::Release::Entry]
+            attr_reader tombstones: Array[::OpenTideConstants::Tombstone]
+            attr_reader tomb_pos: Array[[::OpenTideConstants::Tombstone, Integer | nil, Integer | nil]]
+            attr_reader tomb_by_id: Hash[String, ::OpenTideConstants::Tombstone]
+            attr_reader constituent_names: Array[String]
+            attr_reader subordinates: Hash[String, Array[::OpenTideConstants::Release::Entry]]
+            attr_reader raws: Hash[String, Hash[String, json_value]]
+        end
         class FieldContracts
-            def self.new: (model_type: "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance", fields: Array[FieldContract]) -> FieldContracts
+            def self.new: (model_type: "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance", fields: Array[FieldContract], ?native_context: native_model_context) -> FieldContracts
             attr_reader model_type: "Client" | "Release" | "ReleaseInfo" | "FileInfo" | "Station" | "Tombstone" | "ConstantSet" | "Constituent" | "Convention" | "Licence" | "Provenance" | "ProvenanceBuild" | "TimeBase" | "QcFlag" | "DroppedConstituent" | "Validation" | "SubordinateOffsets" | "Nearby" | "UpdateResult" | "RecordSpan" | "Datum" | "Stats" | "AstroTable" | "HeightPoint" | "Extreme" | "CurrentPoint" | "CurrentEvent" | "HeightSeries" | "ExtremeList" | "CurrentSeries" | "CurrentEventList" | "DatumInfo" | "DatumLevel" | "Ranges" | "Fallback" | "SourceRecord" | "HistoricalOffsetVintage" | "HistoricalOffsetProvenance"
             attr_reader fields: Array[FieldContract]
+            attr_reader native_context: native_model_context
         end
         class StationLookupActive
             def self.new: (station: ::OpenTideConstants::Station) -> StationLookupActive
@@ -120,7 +244,7 @@ class OpenTideConstants
             def self.new: () -> StationLookupAbsent
         end
         class PredictionModel
-            def self.new: (station: ::OpenTideConstants::Station, release_view: ::OpenTideConstants::Release, constant_set: ::OpenTideConstants::ConstantSet, convention: ::OpenTideConstants::Convention, astro_table: json_value, required_constituents: Array[json_value], reference_bin: Integer | nil, mean_term: Float | Integer, datum_source: json_value | nil) -> PredictionModel
+            def self.new: (station: ::OpenTideConstants::Station, release_view: ::OpenTideConstants::Release, constant_set: ::OpenTideConstants::ConstantSet, convention: ::OpenTideConstants::Convention, astro_table: json_value, required_constituents: Array[json_value], reference_bin: Integer | nil, mean_term: Float | Integer, datum_source: json_value | nil, ?native_context: ::OpenTideConstants::Predict::Context | nil, ?selection_context: ::OpenTideConstants::Predict::Context | nil, ?prepared_datum: String | nil | AbsentValue, ?prepared_current_request: ArgsReleaseCurrents | ArgsReleaseCurrentEvents | AbsentValue) -> PredictionModel
             attr_reader station: ::OpenTideConstants::Station
             attr_reader release_view: ::OpenTideConstants::Release
             attr_reader constant_set: ::OpenTideConstants::ConstantSet
@@ -130,11 +254,15 @@ class OpenTideConstants
             attr_reader reference_bin: Integer | nil
             attr_reader mean_term: Float | Integer
             attr_reader datum_source: json_value | nil
+            attr_reader native_context: ::OpenTideConstants::Predict::Context | nil
+            attr_reader selection_context: ::OpenTideConstants::Predict::Context | nil
+            attr_reader prepared_datum: String | nil | AbsentValue
+            attr_reader prepared_current_request: ArgsReleaseCurrents | ArgsReleaseCurrentEvents | AbsentValue
         end
         class PredictionWindow
-            def self.new: (start: Float | Integer, stop: Float | Integer, step: Float | Integer | nil, instants: json_value | nil) -> PredictionWindow
-            attr_reader start: Float | Integer
-            attr_reader stop: Float | Integer
+            def self.new: (start: Float | Integer | nil, stop: Float | Integer | nil, step: Float | Integer | nil, instants: json_value | nil) -> PredictionWindow
+            attr_reader start: Float | Integer | nil
+            attr_reader stop: Float | Integer | nil
             attr_reader step: Float | Integer | nil
             attr_reader instants: json_value | nil
         end
@@ -243,34 +371,39 @@ class OpenTideConstants
             attr_reader set_id: String | nil | AbsentValue
         end
         class ArgsReleaseStations
-            def self.new: (member_id: "Release.stations") -> ArgsReleaseStations
+            def self.new: (member_id: "Release.stations", ?filters: native_filters | nil) -> ArgsReleaseStations
             attr_reader member_id: "Release.stations"
+            attr_reader filters: native_filters | nil
         end
         class ArgsReleaseIterStations
-            def self.new: (member_id: "Release.iter_stations") -> ArgsReleaseIterStations
+            def self.new: (member_id: "Release.iter_stations", ?filters: native_filters | nil) -> ArgsReleaseIterStations
             attr_reader member_id: "Release.iter_stations"
+            attr_reader filters: native_filters | nil
         end
         class ArgsReleaseSearch
-            def self.new: (member_id: "Release.search", name: String, limit: Integer | nil | AbsentValue, match: :exact | :other | nil | AbsentValue) -> ArgsReleaseSearch
+            def self.new: (member_id: "Release.search", name: String, limit: Integer | nil | AbsentValue, match: :exact | :other | nil | AbsentValue, ?filters: native_filters | nil) -> ArgsReleaseSearch
             attr_reader member_id: "Release.search"
             attr_reader name: String
             attr_reader limit: Integer | nil | AbsentValue
             attr_reader match: :exact | :other | nil | AbsentValue
+            attr_reader filters: native_filters | nil
         end
         class ArgsReleaseNear
-            def self.new: (member_id: "Release.near", lat: Float | Integer, lon: Float | Integer, radius_km: Float | Integer, limit: Integer | nil | AbsentValue) -> ArgsReleaseNear
+            def self.new: (member_id: "Release.near", lat: Float | Integer, lon: Float | Integer, radius_km: Float | Integer, limit: Integer | nil | AbsentValue, ?filters: native_filters | nil) -> ArgsReleaseNear
             attr_reader member_id: "Release.near"
             attr_reader lat: Float | Integer
             attr_reader lon: Float | Integer
             attr_reader radius_km: Float | Integer
             attr_reader limit: Integer | nil | AbsentValue
+            attr_reader filters: native_filters | nil
         end
         class ArgsReleaseNearest
-            def self.new: (member_id: "Release.nearest", lat: Float | Integer, lon: Float | Integer, max_km: Float | Integer | nil | AbsentValue) -> ArgsReleaseNearest
+            def self.new: (member_id: "Release.nearest", lat: Float | Integer, lon: Float | Integer, max_km: Float | Integer | nil | AbsentValue, ?filters: native_filters | nil) -> ArgsReleaseNearest
             attr_reader member_id: "Release.nearest"
             attr_reader lat: Float | Integer
             attr_reader lon: Float | Integer
             attr_reader max_km: Float | Integer | nil | AbsentValue
+            attr_reader filters: native_filters | nil
         end
         class UnroundedTideEvent
             def self.new: (root_seconds: Float | Integer, event_type: "high" | "low", height_m: Float | Integer, reference_order: Integer) -> UnroundedTideEvent
@@ -1573,6 +1706,11 @@ class OpenTideConstants
             attr_reader request_url: String
             attr_reader files: domain_file_rows
         end
+        type native_member_value = ::OpenTideConstants | ::OpenTideConstants::Release | :download | :cache | :cache_after_error | :file | :file_unverified | :other | ::OpenTideConstants::Error | nil | Array[::OpenTideConstants::ReleaseInfo] | ::OpenTideConstants::ReleaseInfo | ::OpenTideConstants::ReleaseInfo | nil | Integer | nil | ::OpenTideConstants::UpdateResult | Array[String] | bool | nil | String | Time | String | nil | Hash[String, String] | Array[::OpenTideConstants::FileInfo] | Array[::OpenTideConstants::Convention] | ::OpenTideConstants::Convention | nil | Array[::OpenTideConstants::Licence] | ::OpenTideConstants::Licence | nil | ::OpenTideConstants::Stats | Integer | ::OpenTideConstants::Station | nil | ::OpenTideConstants::Station | ::OpenTideConstants::Tombstone | nil | Array[::OpenTideConstants::Station] | Enumerator[::OpenTideConstants::Station, void] | Array[::OpenTideConstants::Nearby] | ::OpenTideConstants::Nearby | nil | ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList | ::OpenTideConstants::DatumInfo | Array[::OpenTideConstants::DatumInfo] | ::OpenTideConstants::Ranges | ::OpenTideConstants::AstroTable | nil | Float | Integer | :reference | :subordinate | :other | :tide | :current | :other | nil | Hash[String, Array[String]] | :active | :removed | :other | ::OpenTideConstants::ConstantSet | nil | Array[::OpenTideConstants::ConstantSet] | ::OpenTideConstants::SubordinateOffsets | nil | Array[::OpenTideConstants::Validation] | json_value | bool | nil | Array[::OpenTideConstants::SourceRecord] | :merged | :duplicate | :other | :official | :gauge | :model | :other | :water_level | :current | :other | ::OpenTideConstants::RecordSpan | nil | ::OpenTideConstants::Datum | nil | :ok | :flagged | :no_constants | :other | Array[::OpenTideConstants::QcFlag] | Array[::OpenTideConstants::DroppedConstituent] | ::OpenTideConstants::TimeBase | nil | ::OpenTideConstants::Convention | ::OpenTideConstants::Licence | ::OpenTideConstants::Provenance | Array[::OpenTideConstants::Constituent] | ::OpenTideConstants::Constituent | nil | ::OpenTideConstants::Fallback | nil | Float | Integer | nil | :greenwich_utc | :local | :other | :f_u_at_prediction | :none | :other | Hash[String, String | Integer] | nil | json_value | nil | Array[String] | nil | ::OpenTideConstants::ProvenanceBuild | nil | Time | nil | Hash[String, String] | nil | :verified | :corrected | :unverified | :disputed | :other | Array[json_value] | :time_base | :broken_record | :microtidal | :non_tidal_signal | :short_record | :sibling_disagreement | :carried_over | :"fallback:time_base_disputed" | :"fallback:time_base_unresolved" | :"fallback:refused_fit" | :"fallback:short_record_uncalibrated" | :"fallback:short_record_long_period" | :"fallback:published_full_list" | :"fallback:reliability_withheld" | :"fallback:licence_reading" | :"fallback:datum_gate_failed" | :"fallback:not_in_otc_input" | :"fallback:historical_offsets" | :other | Hash[String, Float | Integer | nil] | nil | :rayleigh | :noise | :long_period_rule | :non_tidal_rule | :convention | :other | :other | :R | :A | :other | :official | :gauge | :model | :other | nil | :ok | :flagged | :no_constants | :other | nil | ::OpenTideConstants::HistoricalOffsetVintage | nil | ::OpenTideConstants::HistoricalOffsetProvenance | nil | Hash[String, Float | Integer] | nil | Hash[String, Integer] | [Integer, Integer] | Time | String | Float | Integer | :high | :low | :other | :max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other | Array[::OpenTideConstants::HeightPoint] | :harmonic | :folded_offsets | :offsets | :other | Array[::OpenTideConstants::Extreme] | Array[::OpenTideConstants::CurrentPoint] | Array[::OpenTideConstants::CurrentEvent] | Array[:max_flood | :max_ebb | :slack_before_flood | :slack_before_ebb | :other] | nil | Array[::OpenTideConstants::DatumLevel] | :time_base_disputed | :time_base_unresolved | :refused_fit | :short_record_uncalibrated | :short_record_long_period | :published_full_list | :reliability_withheld | :licence_reading | :datum_gate_failed | :not_in_otc_input | :historical_offsets | :other | Hash[String, json_value] | :gauge_station | :published_harmonic_record | :model | :reference | :other | :metadata_only | :not_fitted | :licence_restricted | :unavailable | :retained | :other | Hash[String, json_value] | nil | Array[Hash[String, json_value]]
+        type native_model_context = ::OpenTideConstants | ::OpenTideConstants::Release | ::OpenTideConstants::ReleaseInfo | ::OpenTideConstants::FileInfo | ::OpenTideConstants::Station | ::OpenTideConstants::Tombstone | ::OpenTideConstants::ConstantSet | ::OpenTideConstants::Constituent | ::OpenTideConstants::Convention | ::OpenTideConstants::Licence | ::OpenTideConstants::Provenance | ::OpenTideConstants::ProvenanceBuild | ::OpenTideConstants::TimeBase | ::OpenTideConstants::QcFlag | ::OpenTideConstants::DroppedConstituent | ::OpenTideConstants::Validation | ::OpenTideConstants::SubordinateOffsets | ::OpenTideConstants::Nearby | ::OpenTideConstants::UpdateResult | ::OpenTideConstants::RecordSpan | ::OpenTideConstants::Datum | ::OpenTideConstants::Stats | ::OpenTideConstants::AstroTable | ::OpenTideConstants::HeightPoint | ::OpenTideConstants::Extreme | ::OpenTideConstants::CurrentPoint | ::OpenTideConstants::CurrentEvent | ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList | ::OpenTideConstants::CurrentSeries | ::OpenTideConstants::CurrentEventList | ::OpenTideConstants::DatumInfo | ::OpenTideConstants::DatumLevel | ::OpenTideConstants::Ranges | ::OpenTideConstants::Fallback | ::OpenTideConstants::SourceRecord | ::OpenTideConstants::HistoricalOffsetVintage | ::OpenTideConstants::HistoricalOffsetProvenance | nil | PreparedClientFields | PreparedReleaseFields
+        type native_filters = Hash[:country | :type | :kind | :source | :source_type | :include_flagged | :include_fallback, String | Symbol | bool | nil]
+        type native_index_set = { "set_id" => String | nil, "source" => String | nil, "source_type" => String | nil, "quantity" => String | nil, "qc_status" => String | nil, "convention_id" => String | nil, "licence_id" => String | nil, "fallback" => json_value, "current_bins" => Array[Integer], "source_record_id" => String | nil, "source_version" => String | nil, "datum" => json_value, "constituents" => Array[String] }
+        type native_index_entry = { "offset" => Integer, "length" => Integer, "station_id" => String, "status" => String, "name" => String | nil, "name_folded" => String | nil, "country" => String | nil, "type" => String | nil, "kind" => String | nil, "reference_station_id" => String | nil, "offsets_licence_id" => String | nil, "recommended_set_id" => String | nil, "lat" => Float | Integer | nil, "lon" => Float | Integer | nil, "aliases" => Hash[String, Array[String]], "sets" => Array[native_index_set], "subordinate_offsets" => json_value, "current_offsets" => json_value }
         type json_value = nil | bool | Float | Integer | String | Array[json_value] | Hash[String, json_value]
         type domain_station_row = json_value
         type domain_station_lookup = StationLookupActive | StationLookupRemoved | StationLookupAbsent
@@ -1640,7 +1778,7 @@ class OpenTideConstants
         type field_contract = FieldContracts
         type folded_height_values = ::OpenTideConstants::HeightSeries
         type format_selection = FormatSelection
-        type height_values = ::OpenTideConstants::HeightSeries
+        type height_values = Array[Float | Integer]
         type held_release = ::OpenTideConstants::Release
         type held_release_result = member_result
         type historical_admission = HistoricalAdmission
@@ -1668,18 +1806,18 @@ class OpenTideConstants
         type lock_request = LockRequest
         type lock_state = domain_lock_state
         type locked_cache_state = domain_cache_state
-        type member_contract = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal
+        type member_contract = ArgsClientOpen | ArgsClientReleases | ArgsClientLatest | ArgsClientCheckForUpdate | ArgsClientUpdate | ArgsClientDownload | ArgsClientVerify | ArgsClientCachedReleases | ArgsClientPrune | ArgsClientClose | ArgsReleaseConvention | ArgsReleaseLicence | ArgsReleaseStation | ArgsReleaseRequireStation | ArgsReleaseTombstone | ArgsReleaseStationByAlias | ArgsReleaseStations | ArgsReleaseIterStations | ArgsReleaseSearch | ArgsReleaseNear | ArgsReleaseNearest | ArgsReleaseReferenceStation | ArgsReleaseSubordinatesOf | ArgsReleaseAttribution | ArgsReleaseHeights | ArgsReleaseHeightsAt | ArgsReleaseExtremes | ArgsReleaseCurrents | ArgsReleaseCurrentEvents | ArgsReleaseDatums | ArgsReleaseRanges | ArgsReleaseAstroTable | ArgsStationConstantSets | ArgsStationConstantSet | ArgsConstantSetConstituent | ArgsAstroTableEquilibriumArgument | ArgsAstroTableNodeFactor | ArgsAstroTableEquilibriumForYear | ArgsAstroTableNodeFactorForYear | ArgsHeightPointLocalDatetime | ArgsExtremeLocalDatetime | ArgsCurrentPointLocalDatetime | ArgsCurrentEventLocalDatetime | ArgsHeightSeriesToLocal | ArgsExtremeListToLocal | ArgsCurrentSeriesToLocal | ArgsCurrentEventListToLocal | MemberValidationContext
         type merged_receipt = MergedReceipt
         type metadata_request = MetadataRequest
         type native_profile = "python" | "ruby" | "typescript_node" | "typescript_browser" | "c" | "swift"
-        type native_result = member_result
+        type native_result = native_member_value
         type offset_current_result = ::OpenTideConstants::CurrentEventList
         type offset_tide_result = ::OpenTideConstants::HeightSeries | ::OpenTideConstants::ExtremeList
         type operation = "astro_table" | "attribution" | "cached_releases" | "check_for_update" | "citation" | "close" | "constant_set" | "constant_sets" | "constituent" | "constituent_names" | "constituents" | "convention" | "conventions" | "current_events" | "currents" | "datums" | "download" | "equilibrium_argument" | "equilibrium_for_year" | "extremes" | "heights" | "heights_at" | "hold_release" | "iter_stations" | "last_error" | "latest" | "licence" | "licences" | "loaded_from" | "near" | "nearest" | "newer_format_major" | "node_factor" | "node_factor_for_year" | "open" | "provenance" | "prune" | "ranges" | "raw" | "recommended_set" | "reference_station" | "release_files" | "release_metadata" | "releases" | "require_station" | "search" | "set_validation" | "station" | "station_by_alias" | "station_count" | "station_validation" | "stations" | "stats" | "subordinate_offsets" | "subordinates_of" | "to_local" | "tombstone" | "tombstone_count" | "update" | "valid_range" | "verify"
         type ordered_constant_sets = Array[::OpenTideConstants::ConstantSet]
         type ordered_failures = Array[canonical_error]
         type ordered_station_results = Array[::OpenTideConstants::Station]
-        type origin = Origin
+        type origin = Origin | ::OpenTideConstants::Release
         type original_recommendation = ::OpenTideConstants::ConstantSet | nil
         type overwrite_policy = Array[String]
         type own_current_offsets = Hash[String, json_value] | nil
@@ -1732,13 +1870,13 @@ class OpenTideConstants
         type source_values = domain_auxiliary_values
         type station = ::OpenTideConstants::Station
         type station_id = String
-        type station_index_entry = StationIndexEntry
+        type station_index_entry = native_index_entry
         type station_or_tombstone_or_null = domain_station_lookup
         type station_request = ::OpenTideConstants::Station | String
         type station_sets = Array[::OpenTideConstants::ConstantSet]
         type station_source_row = domain_station_row
         type station_summary = release_statistics | ordered_constant_sets
-        type step = Float | Integer
+        type step = Float | Integer | nil
         type stream_reader = StreamReader
         type summary_kind = "stats" | "constant_sets"
         type summary_options = SummaryOptions
@@ -1775,6 +1913,7 @@ class OpenTideConstants
         end
         def self.new: () -> Canonical
         private
+        def prepare_member_validation_context: (arguments: CanonicalTypes::arguments, native_receiver: CanonicalTypes::native_member_receiver) -> CanonicalTypes::MemberValidationContext
         def validate_operation_arguments: (operation: CanonicalTypes::operation, arguments: CanonicalTypes::arguments, member_contract: CanonicalTypes::member_contract) -> CanonicalTypes::validated_arguments
         def resolve_effective_options: (explicit_options: CanonicalTypes::explicit_options, environment: CanonicalTypes::environment, platform_defaults: CanonicalTypes::platform_defaults) -> CanonicalTypes::effective_options
         def select_canonical_error: (operation: CanonicalTypes::operation, ordered_failures: CanonicalTypes::ordered_failures, cause: CanonicalTypes::cause) -> CanonicalTypes::canonical_error

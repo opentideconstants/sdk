@@ -40,11 +40,115 @@ class OpenTideConstants
             end
         end
 
+        class PreparedClientFields
+            attr_reader :requested, :mode, :on_network_error, :offline, :auto_update, :verify_on_open, :commercial_only, :commercial_basis, :historical_offsets_policy, :update_interval, :base_url, :cache_dir, :logger, :http, :lock, :closed, :last_error, :newer_format_major, :file, :loaded, :release, :loaded_from, :last_check, :cache
+            def initialize(requested:, mode:, on_network_error:, offline:, auto_update:, verify_on_open:, commercial_only:, commercial_basis:, historical_offsets_policy:, update_interval:, base_url:, cache_dir:, logger:, http:, lock:, closed:, last_error:, newer_format_major:, file:, loaded:, release:, loaded_from:, last_check:, cache: nil)
+                @requested = requested
+                @mode = mode
+                @on_network_error = on_network_error
+                @offline = offline
+                @auto_update = auto_update
+                @verify_on_open = verify_on_open
+                @commercial_only = commercial_only
+                @commercial_basis = commercial_basis
+                @historical_offsets_policy = historical_offsets_policy
+                @update_interval = update_interval
+                @base_url = base_url
+                @cache_dir = cache_dir
+                @logger = logger
+                @http = http
+                @lock = lock
+                @closed = closed
+                @last_error = last_error
+                @newer_format_major = newer_format_major
+                @file = file
+                @loaded = loaded
+                @release = release
+                @loaded_from = loaded_from
+                @last_check = last_check
+                @cache = cache
+                freeze
+            end
+        end
+
+        class PreparedReleaseFields
+            attr_reader :mode, :commercial_only, :commercial_basis, :historical_offsets_policy, :meta, :logger, :io, :on_bad_index, :io_lock, :station_cache, :station_cache_lock, :state, :files, :checks, :datestamp, :created, :format_version, :concept_doi, :zenodo_version_doi, :source_versions, :build_commit, :changelog_url, :conventions, :licences, :convention_by_id, :licence_by_id, :set_ids, :set_sources, :set_qc, :aliases, :by_id, :entries, :tombstones, :tomb_pos, :tomb_by_id, :constituent_names, :subordinates, :raws
+            def initialize(mode:, commercial_only:, commercial_basis:, historical_offsets_policy:, meta:, logger:, io:, on_bad_index:, io_lock:, station_cache:, station_cache_lock:, state:, files:, checks:, datestamp:, created:, format_version:, concept_doi:, zenodo_version_doi:, source_versions:, build_commit:, changelog_url:, conventions:, licences:, convention_by_id:, licence_by_id:, set_ids:, set_sources:, set_qc:, aliases:, by_id:, entries:, tombstones:, tomb_pos:, tomb_by_id:, constituent_names:, subordinates:, raws:)
+                @mode = mode
+                @commercial_only = commercial_only
+                @commercial_basis = commercial_basis
+                @historical_offsets_policy = historical_offsets_policy
+                @meta = meta
+                @logger = logger
+                @io = io
+                @on_bad_index = on_bad_index
+                @io_lock = io_lock
+                @station_cache = station_cache
+                @station_cache_lock = station_cache_lock
+                @state = state
+                @files = files
+                @checks = checks
+                @datestamp = datestamp
+                @created = created
+                @format_version = format_version
+                @concept_doi = concept_doi
+                @zenodo_version_doi = zenodo_version_doi
+                @source_versions = source_versions
+                @build_commit = build_commit
+                @changelog_url = changelog_url
+                @conventions = conventions
+                @licences = licences
+                @convention_by_id = convention_by_id
+                @licence_by_id = licence_by_id
+                @set_ids = set_ids
+                @set_sources = set_sources
+                @set_qc = set_qc
+                @aliases = aliases
+                @by_id = by_id
+                @entries = entries
+                @tombstones = tombstones
+                @tomb_pos = tomb_pos
+                @tomb_by_id = tomb_by_id
+                @constituent_names = constituent_names
+                @subordinates = subordinates
+                @raws = raws
+                freeze
+            end
+        end
+
         class FieldContracts
-            attr_reader :model_type, :fields
-            def initialize(model_type:, fields:)
+            attr_reader :model_type, :fields, :native_context
+            def initialize(model_type:, fields:, native_context: nil)
                 @model_type = model_type
                 @fields = fields
+                @native_context = native_context
+                freeze
+            end
+        end
+
+        class MemberValidationContext
+            attr_reader :member_id, :native_profile, :native_receiver, :prepared_receiver, :prepared_station, :prepared_station_request, :prepared_row, :prepared_row_name, :prepared_attribution_request, :prepared_attribution_steps
+            def initialize(member_id:, native_profile:, native_receiver:, prepared_receiver: nil, prepared_station: nil, prepared_station_request: ABSENT, prepared_row: nil, prepared_row_name: ABSENT, prepared_attribution_request: ABSENT, prepared_attribution_steps: [])
+                @member_id = member_id
+                @native_profile = native_profile
+                @native_receiver = native_receiver
+                @prepared_receiver = prepared_receiver
+                @prepared_station = prepared_station
+                @prepared_station_request = prepared_station_request
+                @prepared_row = prepared_row
+                @prepared_row_name = prepared_row_name
+                @prepared_attribution_request = prepared_attribution_request
+                @prepared_attribution_steps = prepared_attribution_steps.freeze
+                freeze
+            end
+        end
+
+        class PreparedAttributionStep
+            attr_reader :station, :entry, :error
+            def initialize(station:, entry:, error:)
+                @station = station
+                @entry = entry
+                @error = error
                 freeze
             end
         end
@@ -72,8 +176,8 @@ class OpenTideConstants
         end
 
         class PredictionModel
-            attr_reader :station, :release_view, :constant_set, :convention, :astro_table, :required_constituents, :reference_bin, :mean_term, :datum_source
-            def initialize(station:, release_view:, constant_set:, convention:, astro_table:, required_constituents:, reference_bin:, mean_term:, datum_source:)
+            attr_reader :station, :release_view, :constant_set, :convention, :astro_table, :required_constituents, :reference_bin, :mean_term, :datum_source, :native_context, :selection_context, :prepared_datum, :prepared_current_request
+            def initialize(station:, release_view:, constant_set:, convention:, astro_table:, required_constituents:, reference_bin:, mean_term:, datum_source:, native_context: nil, selection_context: nil, prepared_datum: ABSENT, prepared_current_request: ABSENT)
                 @station = station
                 @release_view = release_view
                 @constant_set = constant_set
@@ -83,6 +187,10 @@ class OpenTideConstants
                 @reference_bin = reference_bin
                 @mean_term = mean_term
                 @datum_source = datum_source
+                @native_context = native_context
+                @selection_context = selection_context
+                @prepared_datum = prepared_datum
+                @prepared_current_request = prepared_current_request
                 freeze
             end
         end
@@ -255,51 +363,56 @@ class OpenTideConstants
         end
 
         class ArgsReleaseStations
-            attr_reader :member_id
-            def initialize(member_id:)
+            attr_reader :member_id, :filters
+            def initialize(member_id:, filters: nil)
                 @member_id = member_id
+                @filters = filters
                 freeze
             end
         end
 
         class ArgsReleaseIterStations
-            attr_reader :member_id
-            def initialize(member_id:)
+            attr_reader :member_id, :filters
+            def initialize(member_id:, filters: nil)
                 @member_id = member_id
+                @filters = filters
                 freeze
             end
         end
 
         class ArgsReleaseSearch
-            attr_reader :member_id, :name, :limit, :match
-            def initialize(member_id:, name:, limit:, match:)
+            attr_reader :member_id, :name, :limit, :match, :filters
+            def initialize(member_id:, name:, limit:, match:, filters: nil)
                 @member_id = member_id
                 @name = name
                 @limit = limit
                 @match = match
+                @filters = filters
                 freeze
             end
         end
 
         class ArgsReleaseNear
-            attr_reader :member_id, :lat, :lon, :radius_km, :limit
-            def initialize(member_id:, lat:, lon:, radius_km:, limit:)
+            attr_reader :member_id, :lat, :lon, :radius_km, :limit, :filters
+            def initialize(member_id:, lat:, lon:, radius_km:, limit:, filters: nil)
                 @member_id = member_id
                 @lat = lat
                 @lon = lon
                 @radius_km = radius_km
                 @limit = limit
+                @filters = filters
                 freeze
             end
         end
 
         class ArgsReleaseNearest
-            attr_reader :member_id, :lat, :lon, :max_km
-            def initialize(member_id:, lat:, lon:, max_km:)
+            attr_reader :member_id, :lat, :lon, :max_km, :filters
+            def initialize(member_id:, lat:, lon:, max_km:, filters: nil)
                 @member_id = member_id
                 @lat = lat
                 @lon = lon
                 @max_km = max_km
+                @filters = filters
                 freeze
             end
         end

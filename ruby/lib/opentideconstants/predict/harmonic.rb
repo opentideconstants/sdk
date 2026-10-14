@@ -45,6 +45,9 @@ class OpenTideConstants
             wanted == "high" ? candidates.max_by { |c| [c[2], -c[0]] } : candidates.min_by { |c| [c[2], c[0]] }
         end
         def events(total, start, stop, slack: false)
+            unrounded_events(total, start, stop, slack: slack).select { |c| start <= (c[0] + 0.5).floor && (c[0] + 0.5).floor < stop }
+        end
+        def unrounded_events(total, start, stop, slack: false)
             return [] if start == stop
             first = (start / 360.0).floor * 360 - 3600
             last = ((stop + 3600 - first) / 360.0).ceil * 360 + first
@@ -112,7 +115,8 @@ class OpenTideConstants
             end
             found = survivor(cluster, slack)
             kept << found if found
-            kept.select { |c| start <= (c[0] + 0.5).floor && (c[0] + 0.5).floor < stop }
+            kept
         end
+        private_class_method :unrounded_events
     end
 end

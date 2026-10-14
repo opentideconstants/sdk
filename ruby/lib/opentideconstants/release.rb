@@ -224,11 +224,7 @@ class OpenTideConstants
                   else
                       out = Set.new
                       stations.each do |st|
-                          raise InvalidArgumentError, "stations must be an Array of Station" unless st.is_a?(Station)
-                          e = @by_id[st.station_id]
-                          unless e && st.instance_variable_get(:@origin).equal?(self)
-                              raise InvalidArgumentError, "station #{st.station_id} is not a station of release #{@datestamp}"
-                          end
+                          e = validate_attribution_station_owner(st)
                           if co # the licences of the station's tide source (spec §4.2, §4.6, K-NC DR106)
                               out.merge(tide_source_licences(e))
                               next
@@ -283,6 +279,90 @@ class OpenTideConstants
         end
         private :tide_source_licences
 
+        # Original pure argument phases; query/discovery bodies stay on Release.
+        module QueryArguments
+            private
+
+            def validate_alias_arguments(system, alias_id)
+                unless (system.is_a?(String) || system.is_a?(Symbol)) && alias_id.is_a?(String)
+                    raise InvalidArgumentError, "system must be a String or Symbol and alias_id a String"
+                end
+            end
+
+            def validate_search_arguments(name, limit, match)
+                raise InvalidArgumentError, "name must be a String" unless name.is_a?(String)
+                check_limit!(limit)
+                unless match.nil? || match.to_s == "exact"
+                    raise InvalidArgumentError, "match must be nil or :exact"
+                end
+                q = Fold.fold(utf8_query(name))
+                raise InvalidArgumentError, "the query is empty" if q.empty?
+                q
+            end
+
+            def validate_near_arguments(lat, lon, radius_km, limit)
+                check_point!(lat, lon)
+                unless real?(radius_km) && radius_km >= 0
+                    raise InvalidArgumentError, "radius_km must be a number >= 0"
+                end
+                check_limit!(limit)
+            end
+
+            def validate_nearest_arguments(lat, lon, max_km)
+                check_point!(lat, lon)
+                unless max_km.nil? || (real?(max_km) && max_km >= 0)
+                    raise InvalidArgumentError, "max_km must be nil or a number >= 0"
+                end
+            end
+
+            def validate_filter_arguments(filters)
+                unknown = filters.keys - FILTER_KEYS
+                raise InvalidArgumentError, "unknown filter #{unknown.first}" unless unknown.empty?
+                f = {}
+                filters.each do |k, v|
+                    if %i[include_flagged include_fallback].include?(k)
+                        raise InvalidArgumentError, "#{k} must be true or false" unless v == true || v == false
+                        f[k] = v
+                        next
+                    end
+                    next if v.nil?
+                    raise InvalidArgumentError, "filter #{k} must be a String or Symbol" unless v.is_a?(String) || v.is_a?(Symbol)
+                    f[k] = v.to_s
+                end
+
+                f
+            end
+
+            def check_id!(id)
+                raise InvalidArgumentError, "station_id must be a String" unless id.is_a?(String)
+            end
+
+            def check_limit!(limit)
+                return if limit.nil?
+                raise InvalidArgumentError, "limit must be nil or an Integer >= 1" unless limit.is_a?(Integer) && limit >= 1
+            end
+
+            def real?(v)
+                Release.real?(v)
+            end
+
+            def check_point!(lat, lon)
+                raise InvalidArgumentError, "lat must be a number in [-90, 90]" unless real?(lat) && lat >= -90 && lat <= 90
+                raise InvalidArgumentError, "lon must be a number in [-180, 180]" unless real?(lon) && lon >= -180 && lon <= 180
+            end
+
+            def utf8_query(name)
+                q = name.encoding == Encoding::UTF_8 ? name : name.encode(Encoding::UTF_8)
+                raise InvalidArgumentError, "name is not valid UTF-8" unless q.valid_encoding?
+                q
+            rescue EncodingError
+                raise InvalidArgumentError, "name cannot be converted to UTF-8"
+            end
+
+        end
+        include QueryArguments
+        private_constant :QueryArguments
+
         # ---- station queries (spec §4.4)
 
         def station(station_id)
@@ -310,9 +390,7 @@ class OpenTideConstants
 
         def station_by_alias(system, alias_id)
             check_open!
-            unless (system.is_a?(String) || system.is_a?(Symbol)) && alias_id.is_a?(String)
-                raise InvalidArgumentError, "system must be a String or Symbol and alias_id a String"
-            end
+            validate_alias_arguments(system, alias_id)
             sid = @aliases.dig(system.to_s, alias_id)
             sid && station(sid)
         end
@@ -339,13 +417,7 @@ class OpenTideConstants
 
         def search(name: nil, limit: nil, match: nil, **filters)
             check_open!
-            raise InvalidArgumentError, "name must be a String" unless name.is_a?(String)
-            check_limit!(limit)
-            unless match.nil? || match.to_s == "exact"
-                raise InvalidArgumentError, "match must be nil or :exact"
-            end
-            q = Fold.fold(utf8_query(name))
-            raise InvalidArgumentError, "the query is empty" if q.empty?
+            q = validate_search_arguments(name, limit, match)
             exact = !match.nil?
             ranked = []
             filter(filters).each do |e|
@@ -365,11 +437,7 @@ class OpenTideConstants
 
         def near(lat: nil, lon: nil, radius_km: nil, limit: nil, **filters)
             check_open!
-            check_point!(lat, lon)
-            unless real?(radius_km) && radius_km >= 0
-                raise InvalidArgumentError, "radius_km must be a number >= 0"
-            end
-            check_limit!(limit)
+            validate_near_arguments(lat, lon, radius_km, limit)
             hits = distances(lat, lon, filters).select { |d, _| d <= radius_km }
             hits = hits.first(limit) if limit
             hits.map { |d, e| Nearby.new(materialize(e), d) }.freeze
@@ -377,10 +445,7 @@ class OpenTideConstants
 
         def nearest(lat: nil, lon: nil, max_km: nil, **filters)
             check_open!
-            check_point!(lat, lon)
-            unless max_km.nil? || (real?(max_km) && max_km >= 0)
-                raise InvalidArgumentError, "max_km must be nil or a number >= 0"
-            end
+            validate_nearest_arguments(lat, lon, max_km)
             d, e = distances(lat, lon, filters).first
             return nil if e.nil? || (max_km && d > max_km)
             Nearby.new(materialize(e), d)
@@ -472,20 +537,19 @@ class OpenTideConstants
             raise InvalidArgumentError, "#{what}: station #{station.station_id} is not a station of release #{@datestamp}"
         end
 
-        def check_id!(id)
-            raise InvalidArgumentError, "station_id must be a String" unless id.is_a?(String)
+        def validate_attribution_station_owner(station)
+            raise InvalidArgumentError, "stations must be an Array of Station" unless station.is_a?(Station)
+            entry = @by_id[station.station_id]
+            unless entry && station.instance_variable_get(:@origin).equal?(self)
+                raise InvalidArgumentError, "station #{station.station_id} is not a station of release #{@datestamp}"
+            end
+            entry
         end
+
 
         # limit: nil for no limit, else an Integer of 1 or more (spec §4.4, CR D36).
-        def check_limit!(limit)
-            return if limit.nil?
-            raise InvalidArgumentError, "limit must be nil or an Integer >= 1" unless limit.is_a?(Integer) && limit >= 1
-        end
 
         # A finite real number (not a Complex, NaN or infinity).
-        def real?(v)
-            Release.real?(v)
-        end
 
         # A real number that is finite as a double: an Integer too large for a
         # double (400 digits) is not.
@@ -493,19 +557,8 @@ class OpenTideConstants
             v.is_a?(Numeric) && v.real? && v.to_f.finite?
         end
 
-        def check_point!(lat, lon)
-            raise InvalidArgumentError, "lat must be a number in [-90, 90]" unless real?(lat) && lat >= -90 && lat <= 90
-            raise InvalidArgumentError, "lon must be a number in [-180, 180]" unless real?(lon) && lon >= -180 && lon <= 180
-        end
 
         # The query as a valid UTF-8 String; invalid_argument when it is not one.
-        def utf8_query(name)
-            q = name.encoding == Encoding::UTF_8 ? name : name.encode(Encoding::UTF_8)
-            raise InvalidArgumentError, "name is not valid UTF-8" unless q.valid_encoding?
-            q
-        rescue EncodingError
-            raise InvalidArgumentError, "name cannot be converted to UTF-8"
-        end
 
         def word_start?(n, q)
             i = n.index(q)
@@ -532,19 +585,7 @@ class OpenTideConstants
         end
 
         def filter(filters)
-            unknown = filters.keys - FILTER_KEYS
-            raise InvalidArgumentError, "unknown filter #{unknown.first}" unless unknown.empty?
-            f = {}
-            filters.each do |k, v|
-                if %i[include_flagged include_fallback].include?(k)
-                    raise InvalidArgumentError, "#{k} must be true or false" unless v == true || v == false
-                    f[k] = v
-                    next
-                end
-                next if v.nil?
-                raise InvalidArgumentError, "filter #{k} must be a String or Symbol" unless v.is_a?(String) || v.is_a?(Symbol)
-                f[k] = v.to_s
-            end
+            f = validate_filter_arguments(filters)
 
             # A field that is null matches no filter value, also not "".
             same = ->(value, want) { !value.nil? && value.to_s == want }
@@ -653,6 +694,53 @@ class OpenTideConstants
 
         # Checks every station and builds the indexes. In stream mode no
         # Station is kept.
+        def bind_eager_station_owners(entries, raws)
+            if @mode == :eager
+                entries.each { |e| e.station = build_station(raws[e.station_id], e.kind, e.eff_id) }
+            end
+            entries.each(&:freeze)
+        end
+
+        def bind_prepared_release_fields(prepared)
+            @mode = prepared.mode
+            @commercial_only = prepared.commercial_only
+            @commercial_basis = prepared.commercial_basis
+            @historical_offsets_policy = prepared.historical_offsets_policy
+            @meta = prepared.meta
+            @logger = prepared.logger
+            @io = prepared.io
+            @on_bad_index = prepared.on_bad_index
+            @io_lock = prepared.io_lock
+            @station_cache = prepared.station_cache
+            @station_cache_lock = prepared.station_cache_lock
+            @state = prepared.state
+            @files = prepared.files
+            @checks = prepared.checks
+            @datestamp = prepared.datestamp
+            @created = prepared.created
+            @format_version = prepared.format_version
+            @concept_doi = prepared.concept_doi
+            @zenodo_version_doi = prepared.zenodo_version_doi
+            @source_versions = prepared.source_versions
+            @build_commit = prepared.build_commit
+            @changelog_url = prepared.changelog_url
+            @conventions = prepared.conventions
+            @licences = prepared.licences
+            @convention_by_id = prepared.convention_by_id
+            @licence_by_id = prepared.licence_by_id
+            @set_ids = prepared.set_ids
+            @set_sources = prepared.set_sources
+            @set_qc = prepared.set_qc
+            @aliases = prepared.aliases
+            @by_id = prepared.by_id
+            @entries = prepared.entries
+            @tombstones = prepared.tombstones
+            @tomb_pos = prepared.tomb_pos
+            @tomb_by_id = prepared.tomb_by_id
+            @constituent_names = prepared.constituent_names
+            @subordinates = prepared.subordinates
+        end
+
         def load_stations(stations)
             entries = []
             tombs = []
@@ -706,10 +794,7 @@ class OpenTideConstants
                 next unless e.view && e.view["kind"] != e.kind&.to_s
                 raise InvalidReleaseError, "index-v1.json: station #{e.station_id} has the wrong derived kind"
             end
-            if @mode == :eager
-                entries.each { |e| e.station = build_station(raws[e.station_id], e.kind, e.eff_id) }
-            end
-            entries.each(&:freeze)
+            bind_eager_station_owners(entries, raws)
             @entries = entries.freeze
             @by_id.freeze
             @tombstones = tombs.sort_by(&:station_id).freeze

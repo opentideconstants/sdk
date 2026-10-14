@@ -3,10 +3,12 @@ require "json"
 require "digest"
 require "fileutils"
 require "logger"
+require "time"
 require "rbs"
 require "rbs/test"
 require "opentideconstants"
 require "opentideconstants/canonical"
+require_relative "support"
 
 class CanonicalShapeTest < Minitest::Test
     ROOT = File.expand_path("../..", __dir__)
@@ -16,6 +18,8 @@ class CanonicalShapeTest < Minitest::Test
     LEDGER_PATH = File.join(ROOT, "conformance/canonical/native-ruby-shape.json")
     LEDGER = JSON.parse(File.read(LEDGER_PATH)) if File.file?(LEDGER_PATH)
     EVENTS = []
+    PREDICT = OpenTideConstants.const_get(:Predict, false)
+    M1 = %w[B01 B02 B03 B04 B07 B08.raw B24 B39 B41 B42 B43.roots B44.roots].freeze
 
     def setup
         @subject = C.new
@@ -30,22 +34,181 @@ class CanonicalShapeTest < Minitest::Test
         klass.allocate.freeze
     end
 
-    def describe(value)
+    def describe(value, seen = {})
+        return { "native_reference" => value.class.name } if seen[value.object_id]
+        seen[value.object_id] = true unless value.nil? || value == true || value == false || value.is_a?(Numeric) || value.is_a?(String)
         case value
         when nil, true, false, String, Integer, Float then value
-        when Array then value.map { |item| describe(item) }
-        when Hash then value.transform_values { |item| describe(item) }
+        when Array then value.map { |item| describe(item, seen) }
+        when Hash then value.transform_values { |item| describe(item, seen) }
         when Time then { "native_class" => "Time", "utc_seconds" => value.to_f }
         when Exception then { "native_class" => value.class.name, "message" => value.message }
         else
             fields = value.instance_variables.to_h do |variable|
-                [variable.to_s.delete_prefix("@"), describe(value.instance_variable_get(variable))]
+                [variable.to_s.delete_prefix("@"), describe(value.instance_variable_get(variable), seen)]
             end
             { "native_class" => value.class.name, "construction_fields" => fields, "frozen" => value.frozen? }
         end
     end
 
+    def open_arguments(**overrides)
+        values = { member_id: "Client.open", release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil, timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache, auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false, commercial_only: false, commercial_basis: "strict", historical_offsets_policy: "fallback" }
+        T::ArgsClientOpen.new(**values.merge(overrides))
+    end
+
+    def prediction_model(context, release, datum: nil, current_request: T::ABSENT)
+        fields = { station: context.station, release_view: release, constant_set: context.constants, convention: context.constants.convention, astro_table: context.table.instance_variable_get(:@raw), required_constituents: context.constants.raw.fetch("constituents", []), reference_bin: context.reference_bin, mean_term: context.total.mean, datum_source: context.constants.raw["datum"] }
+        fields[:native_context] = context if T::PredictionModel.instance_method(:initialize).parameters.any? { |_kind, name| name == :native_context }
+        fields.merge!(selection_context: context, prepared_datum: datum, prepared_current_request: current_request)
+        T::PredictionModel.new(**fields)
+    end
+
+    def native_arguments
+        return @native_leafs if @native_leafs
+        good_file = File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json")
+        client = OpenTideConstants.new(file: good_file)
+        release = client.release
+        station = release.require_station("OTC-T-0001")
+        predict_file = File.join(ROOT, "conformance/fixtures/predict/OTC_20991231.7.json")
+        predict = OpenTideConstants.new(file: predict_file)
+        context = PREDICT.context(predict.release, "OTC-P-0001", "water_level", nil)
+        vector_doc = JSON.parse(File.read(File.join(ROOT, "conformance/vectors/1.0/vectors-release.json")))
+        vectors = OpenTideConstants::Reader.eager_from_doc(vector_doc, files: [], checks: {})
+        vector_context = PREDICT.context(vectors, "OTC-V-NOAA-1820000", "water_level", nil)
+
+        bad_open = open_arguments(file: good_file, offline: true)
+        native_error = begin
+            OpenTideConstants.new(file: good_file, offline: true)
+        rescue OpenTideConstants::InvalidArgumentError => error
+            error
+        end
+        raise "Missing genuine invalid_argument control" unless native_error
+        failure = T::CanonicalError.new(code: native_error.code, structured_fields: { "message" => native_error.message }, cause: native_error)
+        contracts = T::FieldContracts.new(model_type: "Station", fields: [])
+        if contracts.respond_to?(:native_context)
+            contracts = T::FieldContracts.new(model_type: "Station", fields: [], native_context: station)
+        end
+        offset = 0
+        span = nil
+        source_row = nil
+        File.open(File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.jsonl"), "rb") do |file|
+            file.each_line do |line|
+                body = line.delete_suffix("\n").delete_suffix("\r")
+                raw = JSON.parse(body)
+                if raw["station_id"] == station.station_id
+                    source_row = raw
+                    span = T::SourceByteSpan.new(offset_bytes: offset, length_bytes: body.bytesize)
+                    break
+                end
+                offset += line.bytesize
+            end
+        end
+        raise "Actual station JSONL span absent" unless source_row && span
+        projection = T::ProjectionContract.new(
+            scalar_types: "Exact original canonical field table attached per member; known wrong type is invalid_release, absent nullable is null, missing arrays use each attached contract default. Raw fields preserve source JSON without computed fields.",
+            models: "Model IDs refer to B07, source/ownership objects also B08, historical fields B36, prediction/local/datum results B48. These are value projection behaviors, not an assertion that every getter has an independent algorithm.",
+            subordinate_offsets: "Complete source object, including all unknown nested fields, represented by tolerant cache-specific definitions derived from accepted schema33a760ad. Known primitive types, required historical fields, source binding conditions and raw values remain unchanged.",
+            scope: "25 scenario families enumerate required shared branches. They are not 25 executed passes or exhaustive binary-branch verification. Each family expands to its incorporated original case table and required additional guard-reaching witnesses.",
+            fallback: "Complete actual fallback object, including unknown nested fields. String reasons remain source strings in cache/raw and become typed other when unknown. Cache-source comparison includes every preserved field, not only current known keys."
+        )
+        window_args = T::ArgsReleaseExtremes.new(member_id: "Release.extremes", station: context.station, start: Time.utc(2010, 3, 1), stop: Time.utc(2010, 3, 1), datum: nil, set_id: nil, offset_id: nil)
+        local = T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: "station")
+        vector = JSON.parse(File.read(File.join(ROOT, "conformance/vectors/1.0/vectors.json"))).fetch("vectors").find { |entry| entry.fetch("id") == "OTC-V-NOAA-1820000/heights" }
+        instants = vector.fetch("args").fetch("times").first(3).map { |text| Time.iso8601(text).to_i }
+        leafs = {
+            "B01" => [:validate_operation_arguments, { operation: "open", arguments: bad_open, member_contract: bad_open }],
+            "B02" => [:resolve_effective_options, { explicit_options: open_arguments, environment: { "OPENTIDECONSTANTS_OFFLINE" => "On" }, platform_defaults: open_arguments }],
+            "B03" => [:select_canonical_error, { operation: "open", ordered_failures: [failure], cause: native_error }],
+            "B04" => [:translate_native_binding, { canonical_result: T::SelectedResult0.new(member_id: "Client.open", value: client), canonical_error: T::ABSENT, native_profile: "ruby" }],
+            "B07" => [:materialize_typed_model, { raw_fields: station.raw, field_contract: contracts, origin: release, model_type: "Station" }],
+            "B08.raw" => [:retain_raw_source_record, { source_record: station.raw, native_profile: "ruby" }],
+            "B24" => [:project_station_index, { station_source_row: source_row, source_byte_span: span, projection_contract: projection }],
+            "B39" => [:parse_prediction_window, { time_inputs: window_args, window_inputs: window_args, step: nil, local_time_profile: local }],
+            "B41" => [:evaluate_astronomy, { selected_prediction_model: prediction_model(context, predict.release), utc_instant: Time.utc(2015, 6, 1, 12, 34, 56).to_i }],
+            "B42" => [:evaluate_harmonic_height, { selected_prediction_model: prediction_model(vector_context, vectors), prediction_instants: instants, requested_datum: "mean_level" }],
+            "B43.roots" => [:find_unrounded_tide_events, { selected_prediction_model: prediction_model(vector_context, vectors), prediction_window: T::PredictionWindow.new(start: Time.utc(2010, 6, 15).to_i, stop: Time.utc(2010, 6, 16).to_i, step: nil, instants: nil) }]
+        }
+        current_context = PREDICT.context(vectors, "OTC-V-NOAA-ACT1591", "current", nil, nil, 1)
+        current_args = T::ArgsReleaseCurrentEvents.new(member_id: "Release.current_events", station: current_context.station, start: Time.utc(2010, 6, 15), stop: Time.utc(2010, 6, 16), bin_number: 1, set_id: nil)
+        leafs["B44.roots"] = [:find_unrounded_current_events, { selected_prediction_model: prediction_model(current_context, vectors, current_request: current_args), prediction_window: T::PredictionWindow.new(start: Time.utc(2010, 6, 15).to_i, stop: Time.utc(2010, 6, 16).to_i, step: nil, instants: nil), current_request: current_args }]
+        @native_error = native_error
+        @native_client = client
+        @native_predict = predict
+        @native_vectors = vectors
+        @native_leafs = leafs.transform_values(&:last)
+    end
+
+    def teardown
+        @native_client&.close
+        @native_predict&.close
+        @native_vectors&.__send__(:close)
+    end
+
+    def assert_native_value(callee, result, arguments)
+        case callee
+        when "B02"
+            assert result.offline
+            assert_equal :eager, result.mode
+            assert_equal "https://data.opentideconstants.org/", result.base_url
+        when "B03"
+            assert_same arguments.fetch(:ordered_failures).first, result
+            assert_same @native_error, result.cause
+        when "B04"
+            assert_same @native_client, result
+        when "B07"
+            original = arguments.fetch(:field_contract).native_context
+            assert_equal original.station_id, result.station_id
+            assert_equal original.raw, result.raw
+            assert_same arguments.fetch(:origin), result.instance_variable_get(:@origin)
+            assert_same original.instance_variable_get(:@sets), result.instance_variable_get(:@sets)
+            assert_equal original.constant_sets.map(&:set_id), result.constant_sets.map(&:set_id)
+        when "B08.raw"
+            assert_same arguments.fetch(:source_record), result
+            assert result.frozen?
+        when "B24"
+            source = arguments.fetch(:station_source_row)
+            span = arguments.fetch(:source_byte_span)
+            assert_equal source.fetch("station_id"), result.fetch("station_id")
+            assert_equal span.offset_bytes, result.fetch("offset")
+            assert_equal span.length_bytes, result.fetch("length")
+            assert_equal OpenTideConstants::Reader.index_entry(source, span.offset_bytes, span.length_bytes), result
+        when "B39"
+            assert_equal arguments.fetch(:window_inputs).start.to_i, result.start
+            assert_equal result.start, result.stop
+            assert_nil result.step
+            assert_nil result.instants
+        when "B41"
+            instant = arguments.fetch(:utc_instant)
+            context = arguments.fetch(:selected_prediction_model).native_context
+            origin, terms = context.total.year_data(Time.at(instant).utc.year)
+            assert_equal Time.at(instant).utc.year, result.utc_year
+            assert_equal origin / 3600.0, result.epoch_hours
+            assert_equal terms, result.constituent_terms
+            assert result.constituent_terms.frozen?
+        when "B42"
+            vector = JSON.parse(File.read(File.join(ROOT, "conformance/vectors/1.0/vectors.json"))).fetch("vectors").find { |row| row.fetch("id") == "OTC-V-NOAA-1820000/heights" }
+            expected = vector.fetch("expect").fetch("prediction").fetch("items").first(3)
+            assert_equal 3, result.length
+            expected.zip(result).each { |row, height| assert_in_delta row.fetch("height_m"), height, 0.00001 }
+        when "B43.roots", "B44.roots"
+            window = arguments.fetch(:prediction_window)
+            context = arguments.fetch(:selected_prediction_model).native_context
+            tuples = result.select { |event| window.start <= (event.root_seconds + 0.5).floor && (event.root_seconds + 0.5).floor < window.stop }.map do |event|
+                if callee == "B43.roots"
+                    [event.root_seconds, event.event_type, event.height_m]
+                else
+                    [event.root_seconds, event.event_type, event.velocity_m_s, event.direction_deg]
+                end
+            end
+            expected = callee == "B43.roots" ? PREDICT.events(context.total, window.start, window.stop) : PREDICT.current_events(context, window.start, window.stop)
+            assert_equal expected, tuples
+            assert_equal (0...result.length).to_a, result.map(&:reference_order)
+            refute_empty result
+        end
+    end
+
     def observe(id, callee, arguments)
+        arguments.replace(native_arguments.fetch(callee)) if M1.include?(callee)
         row = LEDGER.fetch("runtime").find { |entry| entry.fetch("id") == callee }
         declaration = row.fetch("declaration")
         method = callee == "B28" ? OpenTideConstants::Cache.method(:encode_cache_json) : @subject.method(row.fetch("name"))
@@ -57,12 +220,27 @@ class CanonicalShapeTest < Minitest::Test
         declaration.fetch("parameters").each do |parameter|
             native = "::OpenTideConstants::CanonicalTypes::#{parameter.fetch('concept_ref')}"
             value = arguments.fetch(parameter.fetch("canonical_name").to_sym)
-            assert @checker.value(value, RBS::Parser.parse_type(native)), "#{id} #{parameter.fetch('canonical_name')}: #{value.class} is not #{native}"
+            optional = row.fetch("inputs").find { |input| input.fetch("name") == parameter.fetch("canonical_name") }["required"] == false
+            assert optional || !value.equal?(T::ABSENT)
+            assert @checker.value(value, RBS::Parser.parse_type(native)), "#{id} #{parameter.fetch('canonical_name')}: #{value.class} is not #{native}" unless optional && value.equal?(T::ABSENT)
         end
         if callee == "B28"
             result = yield
             assert_instance_of String, result
             assert_equal "{}", result
+            refusal = nil
+        elsif M1.include?(callee)
+            if callee == "B01"
+                error = assert_raises(OpenTideConstants::InvalidArgumentError) { yield }
+                assert_equal @native_error.code, error.code
+                assert_equal @native_error.message, error.message
+                result = error
+            else
+                result = yield
+                assert_native_value(callee, result, arguments)
+                native = "::OpenTideConstants::CanonicalTypes::#{row.fetch('output').fetch('concept_ref')}"
+                assert @checker.value(result, RBS::Parser.parse_type(native)), "#{id} #{result.class} is not #{native}"
+            end
             refusal = nil
         else
             assert @subject.private_methods.include?(row.fetch("name").to_sym)
@@ -71,7 +249,7 @@ class CanonicalShapeTest < Minitest::Test
             assert_equal callee, error.behavior_id
             refusal = error.message
         end
-        EVENTS << { "id" => id, "callee_id" => callee, "method_owner" => method.owner.name, "parameters" => method.parameters, "actual_argument_classes" => arguments.transform_values { |value| value.class.name }, "actual_argument_values" => arguments.transform_values { |value| describe(value) }, "native_refusal" => refusal, "source_location" => method.source_location, "cleanup_observed" => true }
+        EVENTS << { "id" => id, "callee_id" => callee, "method_owner" => method.owner.name, "parameters" => method.parameters, "actual_argument_classes" => arguments.transform_values { |value| value.class.name }, "actual_argument_values" => arguments.transform_values { |value| describe(value) }, "actual_native_result" => describe(result), "native_refusal" => refusal, "source_location" => method.source_location, "cleanup_observed" => true }
     end
 
     def test_b01
@@ -1049,9 +1227,356 @@ class CanonicalShapeTest < Minitest::Test
         refute_equal T::ABSENT, nullable
         refute_equal T::ABSENT, no_value
         assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, native_profile: "ruby") }
-        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_result: nullable, native_profile: "ruby") }
-        assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_result: no_value, native_profile: "ruby") }
+        assert_nil @subject.__send__(:translate_native_binding, canonical_result: nullable, native_profile: "ruby")
+        assert_nil @subject.__send__(:translate_native_binding, canonical_result: no_value, native_profile: "ruby")
         assert_raises(C::Unimplemented) { @subject.__send__(:translate_native_binding, canonical_error: T::CanonicalError.new(code: "invalid_argument", structured_fields: {}, cause: ArgumentError.new("source")), native_profile: "ruby") }
+        native_arguments
+        failure = T::CanonicalError.new(code: @native_error.code, structured_fields: { "message" => @native_error.message }, cause: @native_error)
+        assert_same @native_error, assert_raises(OpenTideConstants::InvalidArgumentError) { @subject.__send__(:translate_native_binding, canonical_error: failure, native_profile: "ruby") }
+    end
+
+    def test_b43_retains_real_survivor_discarded_by_public_rounding_window
+        model = native_arguments.fetch("B43.roots").fetch(:selected_prediction_model)
+        window = T::PredictionWindow.new(start: 1267419336, stop: 1267419337, step: nil, instants: nil)
+        public_roots = PREDICT.events(model.native_context.total, window.start, window.stop)
+        roots = @subject.__send__(:find_unrounded_tide_events, selected_prediction_model: model, prediction_window: window)
+        assert_empty public_roots
+        assert_equal 1, roots.length
+        assert_equal "41d2e2d2323a7100", [roots.first.root_seconds].pack("G").unpack1("H*")
+        assert_equal "high", roots.first.event_type
+        assert_equal 1.0260600148575794, roots.first.height_m
+        assert_equal 0, roots.first.reference_order
+    end
+
+    def test_b04_genuine_cached_client_retains_its_error_channel
+        overrides = {}
+        server = TestSupport.file_server(File.join(ROOT, "conformance/fixtures/good"), overrides)
+        Dir.mktmpdir("otc-canonical-cache") do |cache|
+            OpenTideConstants.new(base_url: server.url, cache_dir: cache).close
+            overrides["OTC_latest-f1.json"] = [200, { "ETag" => '"portal"', "Content-Type" => "text/html" }, "<html>captive portal</html>"]
+            client = OpenTideConstants.new(base_url: server.url, cache_dir: cache)
+            begin
+                assert_equal :cache_after_error, client.loaded_from
+                error = client.last_error
+                assert_kind_of OpenTideConstants::NetworkError, error
+                failure = T::CanonicalError.new(code: error.code, structured_fields: { "message" => error.message, "url" => error.url, "status" => error.status }, cause: error)
+                result = T::SelectedResult0.new(member_id: "Client.open", value: client)
+                assert_same client, @subject.__send__(:translate_native_binding, canonical_result: result, canonical_error: failure, native_profile: "ruby")
+                assert_same error, client.last_error
+                assert_equal "20991231.2", client.release.datestamp
+                assert_equal "OTC-T-0001", client.release.require_station("OTC-T-0001").station_id
+                fields = CLIENT_FIELDS.to_h { |name| [name.to_sym, client.instance_variable_get("@#{name}")] }
+                native_cache = client.__send__(:cache)
+                context = T::PreparedClientFields.new(**fields, cache: native_cache)
+                check_record(context)
+                contract = T::FieldContracts.new(model_type: "Client", fields: [], native_context: context)
+                different_error = assert_raises(OpenTideConstants::InvalidArgumentError) { OpenTideConstants.new(file: File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json"), offline: true) }
+                assert_raises(C::Unimplemented) do
+                    @subject.__send__(:materialize_typed_model, raw_fields: { "loaded_from" => client.loaded_from.to_s, "last_error" => { "code" => different_error.code, "message" => different_error.message }, "newer_format_major" => nil }, field_contract: contract, origin: client.release, model_type: "Client")
+                end
+                materialized = @subject.__send__(:materialize_typed_model, raw_fields: { "loaded_from" => client.loaded_from.to_s, "last_error" => { "code" => error.code, "message" => error.message }, "newer_format_major" => nil }, field_contract: contract, origin: client.release, model_type: "Client")
+                refute_same client, materialized
+                assert_same native_cache, materialized.__send__(:cache)
+                assert_same error, materialized.last_error
+                assert_equal client.cached_releases, materialized.cached_releases
+            ensure
+                materialized&.close
+                client.close
+            end
+        end
+    ensure
+        server&.stop
+        assert server.errors.empty? if server
+    end
+
+    def test_b07_result_raw_nullable_scalars_and_borrowed_native_dependencies
+        native_arguments
+        release = @native_vectors
+        types = T
+        subject = @subject
+        first, last = Time.utc(2010, 3, 1), Time.utc(2010, 3, 2)
+        heights = release.heights_at("OTC-V-NOAA-1820000", [first, first + 3600])
+        extremes = release.extremes("OTC-V-NOAA-1820000", start: first, stop: last)
+        currents = release.currents("OTC-V-NOAA-ACT1616", start: first, stop: first + 600, bin_number: 1)
+        events = release.current_events("OTC-V-NOAA-ACT1591", start: first, stop: last, bin_number: 1)
+        datums = release.datums("OTC-V-NOAA-1820000")
+        ranges = release.ranges("OTC-V-NOAA-1820000")
+        raise "Authentic datum fixture absent" unless datums && !datums.levels.empty?
+        contexts = [extremes.items.first, currents.items.first, events.items.first, heights, extremes, currents, events, datums, datums.levels.first, ranges]
+        contexts.each do |context|
+            klass = context.class
+            tag = klass.name.split("::").last
+            fields = klass.instance_method(:initialize).parameters.filter_map { |kind, name| name if %i[key keyreq].include?(kind) && name != :_local }
+            raw = fields.to_h do |field|
+                value = context.public_send(field)
+                value = value.iso8601 if value.is_a?(Time)
+                value = value.map { |item| item.class.instance_method(:initialize).parameters.filter_map { |kind, name| [name.to_s, item.public_send(name).is_a?(Time) ? item.public_send(name).iso8601 : item.public_send(name)] if %i[key keyreq].include?(kind) && name != :_local }.to_h } if %i[items levels].include?(field)
+                [field.to_s, value]
+            end
+            raw = JSON.parse(JSON.generate(raw))
+            field = fields.find { |name| !%i[time items levels _local].include?(name) && !context.public_send(name).nil? }
+            raise "No genuine nonnull scalar #{tag}" unless field
+            raw[field.to_s] = nil
+            contract = types::FieldContracts.new(model_type: tag, fields: [], native_context: context)
+            value = subject.__send__(:materialize_typed_model, raw_fields: raw, field_contract: contract, origin: release, model_type: tag)
+            reference_keywords = fields.to_h { |name| [name, %i[time items levels].include?(name) ? context.public_send(name) : raw[name.to_s]] }
+            reference_keywords[:method] = OpenTideConstants::Util.enum(reference_keywords[:method], OpenTideConstants::ENUMS[:prediction_method]) if %w[HeightSeries ExtremeList CurrentSeries CurrentEventList].include?(tag)
+            reference = klass.new(**reference_keywords, _local: context.instance_variable_get(:@_local))
+            fields.each do |name|
+                expected = reference.public_send(name)
+                expected.nil? ? assert_nil(value.public_send(name), "#{tag}.#{name}") : assert_equal(expected, value.public_send(name), "#{tag}.#{name}")
+            end
+            %i[time items levels].select { |name| fields.include?(name) }.each { |name| assert_same context.public_send(name), value.public_send(name), "#{tag}.#{name} ownership" }
+        end
+    end
+
+    def test_b01_closed_native_receiver_contract_preserves_validated_arguments
+        arguments = native_arguments.fetch("B39").fetch(:window_inputs)
+        contract = @subject.__send__(:prepare_member_validation_context, arguments: arguments, native_receiver: @native_predict.release)
+        check_record(contract)
+        assert @checker.value(contract, RBS::Parser.parse_type("::OpenTideConstants::CanonicalTypes::member_contract"))
+        assert_same arguments, @subject.__send__(:validate_operation_arguments, operation: "extremes", arguments: arguments, member_contract: contract)
+        assert_same @native_predict.release, contract.native_receiver
+    end
+
+    def test_b01_prepared_station_row_and_attribution_guard_order
+        native_arguments
+        release = @native_predict.release
+        station = release.require_station("OTC-P-0001")
+        instant = Time.utc(2015, 6, 1)
+        arguments = T::ArgsReleaseHeights.new(member_id: "Release.heights", station: station, start: instant, stop: instant, step_s: 600, datum: "chart", set_id: nil, offset_id: nil)
+        contract = @subject.__send__(:prepare_member_validation_context, arguments: arguments, native_receiver: release)
+        check_record(contract)
+        assert_same arguments, @subject.__send__(:validate_operation_arguments, operation: "heights", arguments: arguments, member_contract: contract)
+        assert_same station, contract.prepared_station
+        assert_same station, contract.prepared_station_request
+        missing = T::MemberValidationContext.new(member_id: arguments.member_id, native_profile: "ruby", native_receiver: release)
+        assert_raises(C::Unimplemented) { @subject.__send__(:validate_operation_arguments, operation: "heights", arguments: arguments, member_contract: missing) }
+        earlier = T::ArgsReleaseHeights.new(member_id: "Release.heights", station: station, start: 7, stop: instant, step_s: 600, datum: nil, set_id: nil, offset_id: nil)
+        assert_raises(OpenTideConstants::InvalidArgumentError) { @subject.__send__(:validate_operation_arguments, operation: "heights", arguments: earlier, member_contract: missing) }
+        table = release.astro_table("otc-test-predict-a")
+        year_args = T::ArgsAstroTableNodeFactorForYear.new(member_id: "AstroTable.node_factor_for_year", name: "M2", year: 2015)
+        row_contract = @subject.__send__(:prepare_member_validation_context, arguments: year_args, native_receiver: table)
+        check_record(row_contract)
+        assert_same table.__send__(:row_for, "M2"), row_contract.prepared_row
+        assert_same year_args, @subject.__send__(:validate_operation_arguments, operation: "node_factor_for_year", arguments: year_args, member_contract: row_contract)
+        assert_raises(OpenTideConstants::TimeOutOfRangeError) { table.node_factor_for_year("M2", 1900) }
+        foreign = @native_client.release.require_station("OTC-T-0001")
+        [[foreign, nil], [station, nil], [nil, foreign]].each do |items|
+            attribution = T::ArgsReleaseAttribution.new(member_id: "Release.attribution", stations: items)
+            prepared = @subject.__send__(:prepare_member_validation_context, arguments: attribution, native_receiver: release)
+            check_record(prepared)
+            expected = assert_raises(OpenTideConstants::InvalidArgumentError) { release.attribution(items) }
+            actual = assert_raises(OpenTideConstants::InvalidArgumentError) { @subject.__send__(:validate_operation_arguments, operation: "attribution", arguments: attribution, member_contract: prepared) }
+            assert_equal expected.message, actual.message
+            assert_same prepared.prepared_attribution_steps.first.error, actual if prepared.prepared_attribution_steps.first&.error
+        end
+        valid = T::ArgsReleaseAttribution.new(member_id: "Release.attribution", stations: [station])
+        expected_attribution = release.attribution([station])
+        valid_context = @subject.__send__(:prepare_member_validation_context, arguments: valid, native_receiver: release)
+        check_record(valid_context)
+        assert_same release.instance_variable_get(:@by_id).fetch(station.station_id), valid_context.prepared_attribution_steps.first.entry
+        assert_same valid, @subject.__send__(:validate_operation_arguments, operation: "attribution", arguments: valid, member_contract: valid_context)
+        assert_equal expected_attribution, release.attribution([station])
+    end
+
+    def test_b01_native_proxy_guard_precedes_unchanged_ca_file_io
+        file = File.join(ROOT, "conformance/fixtures/good/OTC_20991231.2.json")
+        ["local", "https://127.0.0.1:1/"].each do |proxy|
+            args = open_arguments(file: file, proxy: proxy, ca_file: File.join(ROOT, "missing-ca-control"))
+            expected = assert_raises(OpenTideConstants::InvalidArgumentError) { OpenTideConstants.new(file: file, proxy: proxy, ca_file: args.ca_file) }
+            actual = assert_raises(OpenTideConstants::InvalidArgumentError) { @subject.__send__(:validate_operation_arguments, operation: "open", arguments: args, member_contract: args) }
+            assert_equal expected.message, actual.message
+        end
+        [nil, "http://127.0.0.1:1/"].each do |proxy|
+            args = open_arguments(file: file, proxy: proxy)
+            assert_same args, @subject.__send__(:validate_operation_arguments, operation: "open", arguments: args, member_contract: args)
+            client = OpenTideConstants.new(file: file, proxy: proxy)
+            assert_equal "20991231.2", client.release.datestamp
+            client.close
+        end
+        error = assert_raises(OpenTideConstants::FileError) { OpenTideConstants.new(file: file, ca_file: File.join(ROOT, "missing-ca-control")) }
+        assert_equal File.join(ROOT, "missing-ca-control"), error.path
+    end
+
+    def test_b39_actual_ruby_time_floor_order_duplicates_and_empty_window
+        station = native_arguments.fetch("B39").fetch(:window_inputs).station
+        times = [Time.at(1267419336.75).utc, Time.at(1267419336.25).utc, Time.at(1267419336.75).utc]
+        arguments = T::ArgsReleaseHeightsAt.new(member_id: "Release.heights_at", station: station, times: times, datum: nil, set_id: nil, offset_id: nil)
+        result = @subject.__send__(:parse_prediction_window, time_inputs: arguments, window_inputs: arguments, step: nil, local_time_profile: T::ArgsHeightSeriesToLocal.new(member_id: "HeightSeries.to_local", tz: "station"))
+        assert_equal times.map { |time| PREDICT.instant(time) }, result.instants
+        assert_equal [1267419336, 1267419336, 1267419336], result.instants
+        assert_nil result.start
+        assert_nil result.stop
+        assert_nil result.step
+        empty = native_arguments.fetch("B39")
+        result = @subject.__send__(:parse_prediction_window, **empty)
+        assert_equal result.start, result.stop
+        assert_equal [result.start, result.stop], PREDICT.window(empty.fetch(:window_inputs).start, empty.fetch(:window_inputs).stop)
+    end
+
+    CLIENT_FIELDS = %w[requested mode on_network_error offline auto_update verify_on_open commercial_only commercial_basis historical_offsets_policy update_interval base_url cache_dir logger http lock closed last_error newer_format_major file loaded release loaded_from last_check].freeze
+
+    def prepare_release(source)
+        fields = %w[mode commercial_only commercial_basis historical_offsets_policy meta logger io on_bad_index io_lock station_cache station_cache_lock state files checks datestamp created format_version concept_doi zenodo_version_doi source_versions build_commit changelog_url conventions licences convention_by_id licence_by_id set_ids set_sources set_qc aliases by_id entries tombstones tomb_pos tomb_by_id constituent_names subordinates].to_h { |name| [name.to_sym, source.instance_variable_get("@#{name}")] }
+        entries = fields.fetch(:entries).map { |entry| entry.dup.tap { |copy| copy.station = nil } }
+        nodes = entries.to_h { |entry| [entry.station_id, entry] }
+        fields[:entries] = entries
+        fields[:by_id] = nodes
+        fields[:subordinates] = fields.fetch(:subordinates).transform_values { |values| values.map { |entry| nodes.fetch(entry.station_id) }.freeze }.freeze
+        fields[:state] = { closed: false }
+        fields[:io_lock] = Mutex.new
+        fields[:station_cache_lock] = Mutex.new
+        fields[:station_cache] = {}
+        old_io = fields.fetch(:io)
+        fields[:io] = old_io ? File.open(old_io.path, "rb") : nil
+        fields[:raws] = source.instance_variable_get(:@entries).to_h { |entry| [entry.station_id, source.require_station(entry.station_id).raw] }
+        T::PreparedReleaseFields.new(**fields)
+    end
+
+    def test_b07_prepared_native_owner_fields_origin_and_close
+        native_arguments
+        original = @native_client.release
+        held = original.require_station("OTC-T-0001")
+        before = JSON.generate(held.raw)
+        prepared = prepare_release(original)
+        check_record(prepared)
+        contract = T::FieldContracts.new(model_type: "Release", fields: [], native_context: prepared)
+        receiver = @subject.__send__(:materialize_typed_model, raw_fields: original.instance_variable_get(:@meta), field_contract: contract, origin: original, model_type: "Release")
+        refute_same original, receiver
+        assert receiver.frozen?
+        assert_equal original.station_count, receiver.station_count
+        assert_equal original.stations.map(&:station_id), receiver.stations.map(&:station_id)
+        station = receiver.require_station(held.station_id)
+        assert_same receiver, station.instance_variable_get(:@origin)
+        assert_same original, held.instance_variable_get(:@origin)
+        assert_equal before, JSON.generate(station.raw)
+        assert_equal original.attribution([held]), receiver.attribution([station])
+        assert_raises(OpenTideConstants::InvalidArgumentError) { receiver.attribution([held]) }
+        assert_raises(OpenTideConstants::InvalidArgumentError) { original.attribution([station]) }
+        assert_same prepared.by_id.fetch(station.station_id), prepared.entries.find { |entry| entry.station_id == station.station_id }
+        receiver.__send__(:close)
+        assert_raises(OpenTideConstants::FileError) { receiver.station(station.station_id) }
+        assert_same held, original.require_station(held.station_id)
+        assert_equal before, JSON.generate(held.raw)
+        client_values = CLIENT_FIELDS.to_h { |name| [name.to_sym, @native_client.instance_variable_get("@#{name}")] }
+        client_context = T::PreparedClientFields.new(**client_values)
+        check_record(client_context)
+        client_contract = T::FieldContracts.new(model_type: "Client", fields: [], native_context: client_context)
+        client = @subject.__send__(:materialize_typed_model, raw_fields: { "loaded_from" => @native_client.loaded_from.to_s, "last_error" => nil, "newer_format_major" => nil }, field_contract: client_contract, origin: original, model_type: "Client")
+        refute_same @native_client, client
+        assert_same original, client.release
+        assert_equal @native_client.loaded_from, client.loaded_from
+        assert_same client_context.http, client.instance_variable_get(:@http)
+        assert_same client_context.lock, client.instance_variable_get(:@lock)
+        assert_same client_context.loaded, client.instance_variable_get(:@loaded)
+        assert_nil client.close
+        assert_raises(OpenTideConstants::FileError) { client.station(held.station_id) }
+        assert_equal before, JSON.generate(held.raw)
+        assert_equal original.datestamp, client.release.datestamp
+    ensure
+        receiver&.__send__(:close)
+        client&.close
+    end
+
+    def test_b07_stats_json_enum_keys_preserve_native_counts_and_domains
+        native_arguments
+        expected = @native_client.release.stats
+        fields = %i[type kind country source qc_status]
+        raw = JSON.parse(JSON.generate(fields.to_h { |field| [field, expected.public_send(field)] }))
+        contract = T::FieldContracts.new(model_type: "Stats", fields: [], native_context: expected)
+        actual = @subject.__send__(:materialize_typed_model, raw_fields: raw, field_contract: contract, origin: @native_client.release, model_type: "Stats")
+        fields.each do |field|
+            assert_equal expected.public_send(field), actual.public_send(field)
+            assert_equal expected.public_send(field).keys, actual.public_send(field).keys
+            assert actual.public_send(field).frozen?
+        end
+        assert actual.frozen?
+    end
+
+    def test_b07_station_and_constant_set_closed_dependencies_match_source_fields
+        native_arguments
+        release = @native_client.release
+        station = release.require_station("OTC-T-0001")
+        other = release.require_station("OTC-T-0002")
+        sets = station.constant_sets(include_no_constants: true)
+        [["Station", other, station], ["ConstantSet", sets[1], sets[0]]].each do |tag, expected, wrong|
+            contract = T::FieldContracts.new(model_type: tag, fields: [], native_context: wrong)
+            assert_raises(C::Unimplemented) { @subject.__send__(:materialize_typed_model, raw_fields: expected.raw, field_contract: contract, origin: release, model_type: tag) }
+            matched = T::FieldContracts.new(model_type: tag, fields: [], native_context: expected)
+            actual = @subject.__send__(:materialize_typed_model, raw_fields: expected.raw, field_contract: matched, origin: release, model_type: tag)
+            assert_same expected.raw, actual.raw
+            assert actual.raw.frozen?
+            assert actual.frozen?
+            if tag == "Station"
+                assert_same expected.instance_variable_get(:@sets), actual.instance_variable_get(:@sets)
+                assert_same expected.validation, actual.validation
+                assert_same release, actual.instance_variable_get(:@origin)
+                assert_equal expected.station_id, actual.station_id
+            else
+                assert_same expected.convention, actual.convention
+                assert_same expected.licence, actual.licence
+                assert_same expected.validation, actual.validation
+                assert_equal expected.constituents.map(&:raw), actual.constituents.map(&:raw)
+                assert_equal expected.set_id, actual.set_id
+            end
+        end
+    end
+
+    def test_b07_genuine_omitted_current_event_types_preserve_domains_and_items
+        native_arguments
+        context = @native_predict.current_events("OTC-P-0051", start: Time.utc(2015, 6, 1), stop: Time.utc(2015, 6, 2), bin_number: 1)
+        fields = context.class.instance_method(:initialize).parameters.filter_map { |kind, name| name if %i[key keyreq].include?(kind) && name != :_local }
+        raw = fields.to_h do |field|
+            value = context.public_send(field)
+            if field == :items
+                value = value.map do |item|
+                    { "time" => item.time.iso8601, "type" => item.type, "velocity_ms" => item.velocity_ms, "direction_deg" => item.direction_deg, "local_time" => item.local_time, "utc_offset_s" => item.utc_offset_s }
+                end
+            end
+            [field.to_s, value]
+        end
+        raw = JSON.parse(JSON.generate(raw))
+        contract = T::FieldContracts.new(model_type: "CurrentEventList", fields: [], native_context: context)
+        actual = @subject.__send__(:materialize_typed_model, raw_fields: raw, field_contract: contract, origin: @native_predict.release, model_type: "CurrentEventList")
+        fields.each { |field| assert_equal context.public_send(field), actual.public_send(field) unless context.public_send(field).nil? }
+        assert_equal [:max_ebb, :slack_before_ebb], actual.omitted_event_types
+        assert_same context.items, actual.items
+        assert actual.omitted_event_types.frozen?
+        [nil, []].each do |omitted|
+            value = @subject.__send__(:materialize_typed_model, raw_fields: raw.merge("omitted_event_types" => omitted), field_contract: contract, origin: @native_predict.release, model_type: "CurrentEventList")
+            omitted.nil? ? assert_nil(value.omitted_event_types) : assert_empty(value.omitted_event_types)
+        end
+    end
+
+    def test_prepared_prediction_binding_preserves_requested_datum_and_current_station
+        native_arguments
+        release = @native_vectors
+        first, last = Time.utc(2010, 3, 1), Time.utc(2010, 3, 2)
+        instants = [first.to_i, first.to_i + 3600, first.to_i + 7200]
+        mean = PREDICT.context(release, "OTC-V-NOAA-1820000", "water_level", nil, nil)
+        assert_raises(C::Unimplemented) do
+            @subject.__send__(:evaluate_harmonic_height, selected_prediction_model: prediction_model(mean, release), prediction_instants: instants, requested_datum: "chart")
+        end
+        %w[mean_level chart zero].each do |datum|
+            context = PREDICT.context(release, "OTC-V-NOAA-1820000", "water_level", nil, datum)
+            model = prediction_model(context, release, datum: datum)
+            check_record(model)
+            values = @subject.__send__(:evaluate_harmonic_height, selected_prediction_model: model, prediction_instants: instants, requested_datum: datum)
+            expected = release.heights_at(context.station, instants.map { |instant| Time.at(instant).utc }, datum: datum).items.map(&:height_m)
+            assert_equal expected, values
+            assert_same context, model.selection_context
+        end
+        current = PREDICT.context(release, "OTC-V-NOAA-ACT1591", "current", nil, nil, 1)
+        bound = T::ArgsReleaseCurrentEvents.new(member_id: "Release.current_events", station: current.station, start: first, stop: last, bin_number: 1, set_id: nil)
+        foreign = T::ArgsReleaseCurrentEvents.new(member_id: "Release.current_events", station: release.require_station("OTC-V-NOAA-ACT1616"), start: first, stop: last, bin_number: 1, set_id: nil)
+        model = prediction_model(current, release, current_request: bound)
+        check_record(model)
+        window = T::PredictionWindow.new(start: first.to_i, stop: last.to_i, step: nil, instants: nil)
+        assert_raises(C::Unimplemented) { @subject.__send__(:find_unrounded_current_events, selected_prediction_model: model, prediction_window: window, current_request: foreign) }
+        roots = @subject.__send__(:find_unrounded_current_events, selected_prediction_model: model, prediction_window: window, current_request: bound)
+        assert_equal 9, roots.length
+        assert_same bound, model.prepared_current_request
     end
 
     def check_record(value)
@@ -1305,7 +1830,7 @@ class CanonicalShapeTest < Minitest::Test
     end
 
     Minitest.after_run do
-        directory = File.join(ROOT, "ruby/build/canonical-shape")
+        directory = File.join(ROOT, "ruby/dist/canonical-shape")
         FileUtils.mkdir_p(directory)
         File.write(File.join(directory, "invocations.json"), JSON.pretty_generate(EVENTS.sort_by { |event| event.fetch("id") }) + "\n")
         puts "ACTUAL_NATIVE_INVOCATIONS runtime=#{EVENTS.count { |event| !event.fetch('id').include?('.S') }} actions=#{EVENTS.count { |event| event.fetch('id').include?('.S') }}"
