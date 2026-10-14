@@ -644,7 +644,11 @@ class OpenTideConstants:
         """Load a cached release. One that fails its size or SHA-256 check or does not parse is healed (spec §5.2
         step 6), and, online, downloaded again. Returns (Release, loaded_from)."""
         try:
-            return self._load_cached(datestamp, mode), "cache"
+            rel = self._load_cached(datestamp, mode)
+            # Session metadata follows the entry even when its best-effort receipt note was skipped.
+            if info is not None and info.zenodo_version_doi is not None:
+                rel._zenodo_version_doi = info.zenodo_version_doi
+            return rel, "cache"
         except (ChecksumError, InvalidReleaseError) as e:
             self._heal(datestamp, mode, e)
             if self._offline:
