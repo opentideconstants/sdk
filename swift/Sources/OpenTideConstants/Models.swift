@@ -290,9 +290,9 @@ public struct Station: Sendable, Equatable {
     public var isTide: Bool { kind == .tide }
     public var isCurrent: Bool { kind == .current }
     public var subordinateOffsets: SubordinateOffsets? { raw["subordinate_offsets"].isNull ? nil : SubordinateOffsets(raw["subordinate_offsets"]) }
-    public var validation: [Validation] { raw["validation"].array.map(Validation.init).sorted { $0.window < $1.window } }
+    public var validation: [Validation] { raw["validation"].array.map(Validation.init) }
     public var recommendedIsFallback: Bool? { raw["recommended_is_fallback"].bool }
-    public func constantSets(includeNoConstants: Bool = false) -> [ConstantSet] { sets.filter { includeNoConstants || [.ok,.flagged].contains($0.qcStatus) } }
+    public func constantSets(includeNoConstants: Bool = false) -> [ConstantSet] { sets.filter { includeNoConstants || $0.qcStatus != .noConstants } }
     public func constantSet(setId: String) -> ConstantSet? { sets.first { $0.setId == setId } }
 }
 public struct Nearby: Sendable, Equatable { public let station: Station; public let distanceKm: Double }
