@@ -179,7 +179,7 @@ function finite(v) {
         if (![Object.prototype, null].includes(Object.getPrototypeOf(v))) {
             throw new TypeError(`the runner cannot encode a ${v.constructor ? v.constructor.name : "object"} as JSON`);
         }
-        const out = {};
+        const out = Object.create(null);
         for (const [k, x] of Object.entries(v)) {
             try {
                 out[k] = finite(x);

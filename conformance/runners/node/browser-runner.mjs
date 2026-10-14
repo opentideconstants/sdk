@@ -151,7 +151,7 @@ for await (const line of rl) {
     }
     let reply;
     try {
-        reply = await page.evaluate((m) => window.__otc.runner.handle(m), msg);
+        reply = JSON.parse(await page.evaluate(async (m) => JSON.stringify(await window.__otc.runner.handle(m)), msg));
         // let the page run what the op left pending (timers, rejected promises), then look for escaped errors
         await settle();
     } catch (e) {   // the page crashed or navigated, or the reply could not be passed back: the step fails
