@@ -311,6 +311,7 @@ class OpenTideConstants
             dir = release_dir(datestamp)
             return true unless File.directory?(dir)
             mtime = File.mtime(dir) if partial
+            return false if partial && Time.now - mtime <= 120
             removed = false
             taken = try_lock(dir) do
                 if partial
