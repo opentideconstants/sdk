@@ -180,8 +180,8 @@ public struct SubordinateOffsets: Sendable, Equatable {
     public var qcStatus: QcStatus? { raw["qc_status"].isNull ? nil : QcStatus(value: raw["qc_status"]) }
     public var qcFlags: [QcFlag] { raw["qc_flags"].array.map { QcFlag($0) } }
     public var fallback: Fallback? { raw["fallback"].isNull ? nil : Fallback(raw["fallback"]) }
-    public var vintage: HistoricalOffsetVintage? { raw["vintage"].isNull ? nil : HistoricalOffsetVintage(raw["vintage"]) }
-    public var provenance: HistoricalOffsetProvenance? { raw["provenance"].isNull ? nil : HistoricalOffsetProvenance(raw["provenance"]) }
+    public var vintage: HistoricalOffsetVintage? { !raw.object.keys.contains("offset_id") || raw["vintage"].isNull ? nil : HistoricalOffsetVintage(raw["vintage"]) }
+    public var provenance: HistoricalOffsetProvenance? { !raw.object.keys.contains("offset_id") || raw["provenance"].isNull ? nil : HistoricalOffsetProvenance(raw["provenance"]) }
 }
 
 public struct RecordSpan: Sendable, Equatable {
