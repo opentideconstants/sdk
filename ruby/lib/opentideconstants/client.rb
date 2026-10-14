@@ -434,6 +434,7 @@ class OpenTideConstants
     # when a release of a supported major exists, else unsupported_format.
     def resolve_latest
         entry, url = fetch_latest_pointer
+        note_version_doi(entry)
         # A check that reaches the pointer clears last_error; loaded_from does
         # not change (spec §4.3, CR2 DR4).
         @last_error = nil
@@ -441,6 +442,7 @@ class OpenTideConstants
         index_url = @base_url + "OTC_index.json"
         doc = fetch_pointer_doc("OTC_index.json", missing: :nil)
         list = doc ? index_entries(doc) : []
+        list.each { |e| note_version_doi(e) }
         pick = list.select { |e| readable_entry?(e) }.max_by { |e| Cache.datestamp_key(e["datestamp"]) }
         return [pick, index_url] if pick
         too_new = ([entry] + list).find { |e| Release.supported_major?(e["format_version"]) }
@@ -650,6 +652,13 @@ class OpenTideConstants
         d = entry["datestamp"]
         return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && !entry["zenodo_version_doi"].nil?
         cache.note_version_doi(d, entry["zenodo_version_doi"])
+        @lock.synchronize do
+            next if @closed || !@release || @release.datestamp != d || @release.zenodo_version_doi == entry["zenodo_version_doi"]
+            refreshed = @release.dup
+            refreshed.instance_variable_set(:@zenodo_version_doi, entry["zenodo_version_doi"])
+            @release = refreshed.freeze
+            @loaded[@release] = true
+        end
     end
 
     def newer?(a, b)
