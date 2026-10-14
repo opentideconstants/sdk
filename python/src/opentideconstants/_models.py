@@ -334,7 +334,8 @@ class TimeBase:
             corr = MappingProxyType({"from": corr.get("from"), "to": corr.get("to")})
         else:
             corr = None
-        evidence = tuple(MappingProxyType({k: freeze(e.get(k)) for k in _EVIDENCE})
+        evidence = tuple(MappingProxyType({k: (float(e[k]) if k in ("distance_km", "lag_min")
+                                              and e.get(k) is not None else freeze(e.get(k))) for k in _EVIDENCE})
                          for e in d.get("evidence") or () if isinstance(e, dict))
         months = d.get("months_dropped") or []
         if not isinstance(months, list) or not all(isinstance(x, str) for x in months):
