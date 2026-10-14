@@ -224,7 +224,7 @@ class Constituent:
 
 @dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class QcFlag:
-    flag: E.QcFlagName
+    flag: Optional[E.QcFlagName]
     reason: Optional[str]
     values: Optional[Mapping[str, Optional[float]]]
 
@@ -252,8 +252,8 @@ class Fallback:
 
 @dataclass(frozen=True, slots=True)
 class DroppedConstituent:
-    name: str
-    dropped_reason: E.DroppedReason
+    name: Optional[str]
+    dropped_reason: Optional[E.DroppedReason]
     detail: Optional[str]
 
     @classmethod
@@ -351,7 +351,7 @@ _PREVIOUS = ("time_mae_min", "time_p95_min", "time_bias_min", "height_mae_m", "r
 
 @dataclass(frozen=True, slots=True, eq=False)  # holds a mapping: identity equality and hash (CR D16)
 class Validation:
-    set_id: str
+    set_id: Optional[str]
     reference_source: Optional[str]
     reference_station: Optional[str]
     reference_distance_km: Optional[float]
@@ -816,7 +816,10 @@ def check_station_types(d) -> None:
             for annotation in harmonics.get('annotations') or ():
                 _check_types(annotation, {'row': 'I', 'reason': 'T', 'detail': 'T'}, f"{what}: annotation")
     if d.get("subordinate_offsets") is not None:
-        _check_types(d["subordinate_offsets"], _OFFSET_TYPES, f"station {sid}: subordinate_offsets")
+        off = d["subordinate_offsets"]
+        _check_types(off, _OFFSET_TYPES, f"station {sid}: subordinate_offsets")
+        for flag in off.get("qc_flags") or ():
+            _check_types(flag, {"flag": "T", "reason": "T"}, f"station {sid}: subordinate_offsets.qc_flags")
     for v in d.get("validation") or ():
         _check_types(v, _VALIDATION_TYPES, f"station {sid}: validation")
     for cs in d.get("constant_sets") or ():
@@ -829,6 +832,9 @@ def check_station_types(d) -> None:
                          ("provenance", _PROVENANCE_TYPES), ("fallback", _FALLBACK_TYPES)):
             if cs.get(k) is not None:
                 _check_types(cs[k], table, f"{what}: {k}")
+        build = (cs.get("provenance") or {}).get("build")
+        if isinstance(build, dict):
+            _check_types(build, {"build_commit": "T"}, f"{what}: provenance.build")
         named = (cs.get("datum") or {}).get("named") or {}
         if not all(_is_finite(x) for x in named.values()):
             raise InvalidReleaseError(f"{what}: datum.named has a value that is not a number")
