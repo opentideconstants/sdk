@@ -146,7 +146,12 @@ private enum HeldPrediction {
         let datum = value.datum.map { .object(["msl_offset_m": plain($0.mslOffsetM), "named": plain($0.named)]) as JSONValue } ?? .null
         var fields: [String: JSONValue] = ["set_id": plain(value.setId), "source": plain(value.source), "source_type": plain(value.sourceType), "quantity": plain(value.quantity), "source_record_id": plain(value.sourceRecordId), "source_version": plain(value.sourceVersion), "record_span": span, "datum": datum, "qc_status": plain(value.qcStatus), "qc_flags": .array(value.qcFlags.map { .object(["flag": plain($0.flag), "reason": plain($0.reason), "values": plain($0.values)]) }), "dropped_constituents": .array(value.droppedConstituents.map { .object(["name": plain($0.name), "dropped_reason": plain($0.droppedReason), "detail": plain($0.detail)]) }), "time_base": value.timeBase.map(timeBase) ?? .null, "is_recommended": plain(value.isRecommended), "convention_id": plain(value.convention.conventionId), "licence_id": plain(value.licence.licenceId), "constituent_count": plain(value.constituents.count)]
         if let fallback = value.fallback {
-            fields["fallback"] = .object(["reason": plain(fallback.reason), "basis": plain(fallback.basis), "otc_finding": plain(fallback.otcFinding), "preferred_set_id": plain(fallback.preferredSetId)])
+            fields["fallback"] = .object([
+                "reason": fallback.raw["reason"].isNull ? .null : plain(fallback.reason),
+                "basis": fallback.raw["basis"].isNull ? .null : plain(fallback.basis),
+                "otc_finding": fallback.raw["otc_finding"].isNull ? .null : plain(fallback.otcFinding),
+                "preferred_set_id": plain(fallback.preferredSetId)
+            ])
         }
         return .object(fields)
     }
