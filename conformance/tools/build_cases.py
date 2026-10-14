@@ -2289,16 +2289,16 @@ def group_cross(R2):
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="eager"))]
                     + queries + [no_requests],
                     roles={"writer": fs_stream, "reader": ["fs", "fetch", "eager"]}))
-    # The reader must use a fresh index that another SDK wrote, not rebuild it: a change to one entry (still
-    # fresh: the .jsonl digest and size match) shows in the reader's answers, and the file is not rewritten.
+    # The reader must use the authentic index another SDK wrote without rewriting it. Represented
+    # source fields must still agree with the .jsonl; changing country would test a corrupt index.
     pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
     country = R2.by_id["OTC-T-0011"]["country"]
     out.append(case("cross/index-shared", "the reader uses the stream index the writer built (a fresh index is read, not rebuilt)", "6.2",
-                    fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
-                            drv("assert_json", path=idx, match={f"/stations/{pos}/country": "ZZ"}),
+                    fill + [drv("assert_json", path=idx, match={f"/stations/{pos}/country": country}),
                             drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
                         as_("reader", step("open", {"loaded_from": "cache", "datestamp": d}, release=d, cache_dir="${cache}", offline=True, mode="stream")),
-                        as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
+                        as_("reader", step("stations", {"station_ids": [s["station_id"] for s in R2.doc["stations"]
+                                                                      if s.get("country") == country]}, country=country)),
                         as_("reader", step("close")),
                         drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"),
                         no_requests],

@@ -530,16 +530,10 @@
      "datestamp": "20991231.2"
     },
     {
-     "driver": "json_set",
-     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
-     "pointer": "/stations/10/country",
-     "value": "ZZ"
-    },
-    {
      "driver": "assert_json",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "match": {
-      "/stations/10/country": "ZZ"
+      "/stations/10/country": "NOR"
      }
     },
     {
@@ -573,10 +567,11 @@
      "as": "reader",
      "op": "stations",
      "args": {
-      "country": "ZZ"
+      "country": "NOR"
      },
      "expect": {
       "station_ids": [
+       "OTC-T-0006",
        "OTC-T-0011"
       ]
      }
