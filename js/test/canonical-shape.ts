@@ -316,6 +316,9 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
         call_actions.push({ ...await invoke("B41", () => native.evaluate_astronomy(values.selected_prediction_model, values.utc_instant), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, utc_instant: values.utc_instant })), id: "B43.roots.S1.A2" });
         call_actions.push({ ...await invoke("B41", () => native.evaluate_astronomy(values.selected_prediction_model, values.utc_instant), JSON.stringify({ selected_prediction_model: values.selected_prediction_model, utc_instant: values.utc_instant })), id: "B44.roots.S2.A2" });
         call_actions.push({ ...await invoke("B23.http", () => native.request_http_resource(values.http_request, values.transport_options), JSON.stringify({ http_request: values.http_request, transport_options: values.transport_options })), id: "B17.sidecar.S1.A3" });
+        const removedTombstone = release.tombstone('OTC-T-0005');
+        if (!removedTombstone) throw new Error('Authentic native removed Tombstone is required');
+        const removedReason = typeof removedTombstone.raw['removed_reason'] === 'string' ? removedTombstone.raw['removed_reason'] : null;
         const bindingVariants: readonly C.NativeBindingInputs[] = [
             { native_profile: profile, canonical_result: { presence: 'successful_no_value', member_id: 'Client.close' } },
             { native_profile: profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: null } } },
@@ -324,6 +327,10 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
             { native_profile: profile, canonical_error: { code: 'network', structured_fields: { message: 'transport fixture failed', url: 'https://native.invalid/release', status: 503 }, cause: new Error('original native cause') } },
             { native_profile: profile, canonical_error: { code: 'checksum_mismatch', structured_fields: { message: 'injected digest disagreement', file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64) }, cause: new Error('original native cause') } },
             { native_profile: profile, canonical_error: { code: 'cache', structured_fields: { message: 'injected prune failure', removed: ['20991231.2', '20991231'] }, cause: new Error('original native cause') } },
+            { native_profile: profile, canonical_error: { code: 'station_not_found', structured_fields: {}, cause: null }, native_constructor_context: { code: 'station_not_found', stationId: 'OTC-native-missing-context' } },
+            { native_profile: profile, canonical_error: { code: 'station_removed', structured_fields: {}, cause: null }, native_constructor_context: { code: 'station_removed', stationId: removedTombstone.station_id, tombstone: removedTombstone, reason: removedReason } },
+            { native_profile: profile, canonical_error: { code: 'file_exists', structured_fields: {}, cause: null }, native_constructor_context: { code: 'file_exists', path: '/native/typed-constructor-control' } },
+            { native_profile: profile, canonical_error: { code: 'release_not_found', structured_fields: { message: '' }, cause: null }, native_cause_option: { presence: 'present', value: null } },
         ];
         const b04_presence_controls = await Promise.all(bindingVariants.map(async (input, index) => ({ ...await invoke('B04', () => native.translate_native_binding(input), JSON.stringify(input)), id: `B04.presence.${index}` })));
         return { runtime, call_actions, b04_presence_controls, control: { station_id: station.station_id, raw_preserved: station.raw.station_id === station.station_id, public_route_unchanged: release.station(station.station_id) === station } };

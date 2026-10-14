@@ -175,6 +175,36 @@ export function translate_native_binding(inputs: C.NativeBindingInputs): C.nativ
     if (failure.native_error) throw failure.native_error;
     const fields = isObject(failure.structured_fields) ? failure.structured_fields : null;
     const message = str(fields, 'message') ?? failure.code;
+    const context = inputs.native_constructor_context;
+    if (failure.code === 'station_not_found' || failure.code === 'station_removed' || failure.code === 'file_exists') {
+        if (!context || context.code !== failure.code || failure.cause !== null || inputs.native_cause_option?.presence === 'present') throw new CanonicalUnimplementedError('B04 requires its genuine native constructor context');
+        switch (context.code) {
+            case 'station_not_found': throw new X.StationNotFoundError(context.stationId);
+            case 'station_removed': throw new X.StationRemovedError(context.stationId, context.tombstone, context.reason);
+            case 'file_exists': throw new X.FileExistsError(context.path);
+        }
+    }
+    const nativeCause = inputs.native_cause_option;
+    if (nativeCause?.presence === 'present' && nativeCause.value !== null && !(nativeCause.value instanceof Error)) throw new CanonicalUnimplementedError('B04 requires its bounded native cause option');
+    if (nativeCause?.presence === 'present' && nativeCause.value instanceof Error && nativeCause.value !== failure.cause) throw new CanonicalUnimplementedError('B04 requires its original logical cause identity');
+    const cause = nativeCause ? nativeCause.presence === 'present' ? { cause: nativeCause.value } : {} : { cause: failure.cause ?? undefined };
+    switch (failure.code) {
+        case 'release_not_found': throw new X.ReleaseNotFoundError(message, cause);
+        case 'offline_unavailable': throw new X.OfflineError(message, cause);
+        case 'unsupported_format': throw new X.UnsupportedFormatError(message, cause);
+        case 'reader_too_old': throw new X.ReaderTooOldError(message, cause);
+        case 'invalid_release': throw new X.InvalidReleaseError(message, cause);
+        case 'no_constants': throw new X.NoConstantsError(message, cause);
+        case 'quantity_mismatch': throw new X.QuantityMismatchError(message, cause);
+        case 'unsupported_convention': throw new X.UnsupportedConventionError(message, cause);
+        case 'no_astro_table': throw new X.NoAstroTableError(message, cause);
+        case 'bin_not_found': throw new X.BinNotFoundError(message, cause);
+        case 'extremes_only': throw new X.ExtremesOnlyError(message, cause);
+        case 'local_time_unavailable': throw new X.LocalTimeUnavailableError(message, cause);
+        case 'historical_offsets_excluded': throw new X.HistoricalOffsetsExcludedError(message, cause);
+        case 'pinned_release': throw new X.PinnedReleaseError(message);
+        case 'unsupported': throw new X.UnsupportedError(message);
+    }
     if (failure.code === 'invalid_argument') throw new X.InvalidArgumentError(message);
     if (failure.code === 'io') throw new X.FileError(message, { path: str(fields, 'path') ?? '', cause: failure.cause ?? undefined });
     if (failure.code === 'network') throw new X.NetworkError(message, { url: str(fields, 'url'), status: num(fields, 'status'), cause: failure.cause ?? undefined });

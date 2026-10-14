@@ -1122,9 +1122,16 @@ export type PresentMemberValue = { [K in keyof MemberValues]: MemberValues[K] ex
 export type CanonicalResultInput =
     | { readonly presence: 'present_value'; readonly binding: PresentMemberValue }
     | { readonly presence: 'successful_no_value'; readonly member_id: 'Client.close' };
+/** Private physical inputs retained from the original native error-producing branch. */
+export type NativeErrorConstructorContext =
+    | { readonly code: 'station_not_found'; readonly stationId: string }
+    | { readonly code: 'station_removed'; readonly stationId: string; readonly tombstone: T.Tombstone; readonly reason: string | null }
+    | { readonly code: 'file_exists'; readonly path: string };
+/** Original native own-property presence, separate from canonical null absence. */
+export type NativeCauseOption = { readonly presence: 'absent' } | { readonly presence: 'present'; readonly value: NativeCause };
 export type NativeBindingInputs =
     | { readonly native_profile: native_profile; readonly canonical_result: canonical_result; readonly canonical_error?: undefined }
-    | { readonly native_profile: native_profile; readonly canonical_result?: undefined; readonly canonical_error: canonical_error }
+    | { readonly native_profile: native_profile; readonly canonical_result?: undefined; readonly canonical_error: canonical_error; readonly native_constructor_context?: NativeErrorConstructorContext; readonly native_cause_option?: NativeCauseOption }
     | { readonly native_profile: native_profile; readonly canonical_result?: undefined; readonly canonical_error?: undefined; readonly native_exception: Error; readonly member_id: keyof MemberValues }
     | { readonly native_profile: 'c'; readonly canonical_result: { readonly presence: 'present_value'; readonly binding: Extract<PresentMemberValue, { member_id: 'Client.releases' }> }; readonly canonical_error: canonical_error & { readonly code: 'buffer_too_small' }; readonly qualified_branch: 'c.fetch_releases.partial_buffer' }
     | { readonly native_profile: 'python'; readonly canonical_result: { readonly presence: 'present_value'; readonly binding: Extract<PresentMemberValue, { member_id: 'Client.open' }> }; readonly canonical_error: canonical_error & { readonly code: 'network' }; readonly qualified_branch: 'python.open.cached_network_error' };

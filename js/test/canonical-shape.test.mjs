@@ -42,13 +42,13 @@ function verifyInvocations(observations) {
     assert.deepEqual(observations.call_actions.map(row => row.id), protocol.call_actions.map(row => row.action.action_id));
     const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B07', 'B08.raw', 'B24', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
     assert.ok(observations.runtime.every(row => migrated.has(row.id) ? row.refusal === undefined && typeof row.value_json === 'string' : row.refusal === `Private canonical seam ${row.id} is unimplemented`));
-    assert.equal(observations.b04_presence_controls.length, 7);
+    assert.equal(observations.b04_presence_controls.length, 11);
     assert.ok(observations.b04_presence_controls.every(row => row.refusal === undefined && (typeof row.value_json === 'string' || typeof row.error_json === 'string')));
     assert.equal(JSON.parse(observations.b04_presence_controls[0].value_json).member_id, 'Client.close');
     assert.deepEqual(JSON.parse(observations.b04_presence_controls[1].value_json), { member_id: 'Release.station', value: null });
     assert.equal(JSON.parse(observations.b04_presence_controls[2].error_json).code, 'io');
     assert.equal(JSON.parse(observations.b04_presence_controls[3].error_json).structured_fields.message, 'native exception');
-    assert.deepEqual(observations.b04_presence_controls.slice(4).map(row => JSON.parse(row.error_json).code), ['network', 'checksum_mismatch', 'cache']);
+    assert.deepEqual(observations.b04_presence_controls.slice(4).map(row => JSON.parse(row.error_json).code), ['network', 'checksum_mismatch', 'cache', 'station_not_found', 'station_removed', 'file_exists', 'release_not_found']);
     assert.equal(observations.control.raw_preserved, true);
     assert.equal(observations.control.public_route_unchanged, true);
 }
@@ -113,7 +113,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -173,8 +173,151 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
             }
         }
         await observation('B02', () => canonical.resolve_effective_options({ member_id: 'Client.open', offline: false }, environment, { member_id: 'Client.open', native_context: { platform, node } }), value => value.offline === Boolean(node));
+        if (requiredOptionOrder) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const names = ['OPENTIDECONSTANTS_OFFLINE', 'OPENTIDECONSTANTS_BASE_URL', 'OPENTIDECONSTANTS_CACHE_DIR'];
+            const saved = node ? Object.fromEntries(names.map(name => [name, process.env[name]])) : {};
+            const optionsCases = [
+                ['defaults', {}, {}],
+                ['nullable_defaults', { timeout: null, offline: null, cacheDir: null, proxy: null, caFile: null, autoUpdate: null, verifyOnOpen: null, updateInterval: null, mode: null, onNetworkError: null }, {}],
+                ['explicit_all', { mode: 'stream', timeout: 20, updateInterval: 120, offline: true, verifyOnOpen: true, commercialOnly: true, commercialBasis: 'as_published_upstream', historicalOffsetsPolicy: 'exclude', onNetworkError: 'raise', baseUrl: 'https://explicit.native.invalid/root', cacheDir: 'explicit-native-cache' }, {}],
+                ['capability_before_url', { file: '/native/fixture.json', baseUrl: 'bad-url' }, {}],
+            ];
+            if (node) optionsCases.push(
+                ['offline_forces_false', { offline: false }, { OPENTIDECONSTANTS_OFFLINE: ' On ' }],
+                ['offline_unrecognized', { offline: true }, { OPENTIDECONSTANTS_OFFLINE: 'false' }],
+                ['environment_defaults', {}, { OPENTIDECONSTANTS_BASE_URL: 'https://env.native.invalid/root', OPENTIDECONSTANTS_CACHE_DIR: 'env-native-cache' }],
+                ['explicit_over_environment', { baseUrl: 'https://explicit.native.invalid/root', cacheDir: 'explicit-native-cache' }, { OPENTIDECONSTANTS_BASE_URL: 'https://env.native.invalid/root', OPENTIDECONSTANTS_CACHE_DIR: 'env-native-cache' }],
+            );
+            const nativeKeys = { cacheDir: 'cache_dir', baseUrl: 'base_url', caFile: 'ca_file', userAgent: 'user_agent', onNetworkError: 'on_network_error', autoUpdate: 'auto_update', updateInterval: 'update_interval', verifyOnOpen: 'verify_on_open', commercialOnly: 'commercial_only', commercialBasis: 'commercial_basis', historicalOffsetsPolicy: 'historical_offsets_policy' };
+            try {
+                for (const [label, options, env] of optionsCases) {
+                    if (node) for (const name of names) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name]; }
+                    const sourceEnvironment = Object.fromEntries(names.map(name => [name, platform.env(name)]).filter(([, value]) => typeof value === 'string'));
+                    const explicit = { member_id: 'Client.open', ...Object.fromEntries(Object.entries(options).map(([name, value]) => [nativeKeys[name] ?? name, value])) };
+                    let expected, expectedError;
+                    try {
+                        const validated = clientModule.validateOpenOptions(options);
+                        const settings = clientModule.resolveOpenNativeOptions(options, validated, platform, node);
+                        expected = { release: validated.release, mode: validated.mode, on_network_error: validated.onNetworkError,
+                            timeout: validated.timeout, auto_update: validated.autoUpdate, update_interval: validated.interval,
+                            verify_on_open: validated.verifyOnOpen, commercial_only: validated.commercialOnly === true,
+                            commercial_basis: validated.commercialBasis, historical_offsets_policy: validated.historicalOffsetsPolicy,
+                            offline: settings.offline, base_url: settings.baseUrl, proxy: settings.proxy, ca_file: settings.caFile, cache_dir: settings.cacheRoot ?? settings.cacheDir };
+                    } catch (error) { expectedError = { name: error.name, code: error.code, message: error.message }; }
+                    await observation(`B02.native.${label}`, () => {
+                        try {
+                            const value = canonical.resolve_effective_options(explicit, sourceEnvironment, { member_id: 'Client.open', native_context: { platform, node } });
+                            return { value: Object.fromEntries(Object.keys(expected ?? {}).map(name => [name, value[name]])) };
+                        } catch (error) { return { error: { name: error.name, code: error.code, message: error.message } }; }
+                    }, actual => expectedError ? JSON.stringify(actual.error) === JSON.stringify(expectedError) : JSON.stringify(actual.value) === JSON.stringify(expected));
+                }
+                if (!node) await observation('B02.applicability.native_browser_environment', () => names.map(name => platform.env(name)), values => values.every(value => value === null));
+            } finally { if (node) for (const name of names) { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; } }
+            const sourceFailure = options => {
+                try { clientModule.validateOpenOptions(options); throw new Error('Expected original native option failure'); }
+                catch (error) { if (!(error instanceof errors.OpenTideConstantsError)) throw error; return error; }
+            };
+            for (const [label, together, later] of [
+                ['release_before_mode', { release: 'bad-date', mode: 'bad-mode' }, { mode: 'bad-mode' }],
+                ['mode_before_timeout', { mode: 'bad-mode', timeout: -1 }, { timeout: -1 }],
+                ['timeout_before_interval', { timeout: -1, updateInterval: -1 }, { updateInterval: -1 }],
+            ]) {
+                const first = sourceFailure(together), second = sourceFailure(later);
+                const selected = { code: first.code, structured_fields: { message: first.message }, cause: null, native_error: first };
+                const competing = { code: second.code, structured_fields: { message: second.message }, cause: null, native_error: second };
+                await observation(`B03.native.${label}`, () => canonical.select_canonical_error('open', [selected, competing], null), value => value === selected && value.native_error === first && value.structured_fields === selected.structured_fields);
+                const cause = new Error('supplemental native cause');
+                await observation(`B03.cause.${label}`, () => canonical.select_canonical_error('open', [selected, competing], cause), value => value.cause === cause && value.native_error === first && selected.cause === null && Object.isFrozen(value));
+                const heldCause = { ...selected, cause };
+                await observation(`B03.cause.preserve_${label}`, () => canonical.select_canonical_error('open', [heldCause, competing], new Error('later cause')), value => value === heldCause && value.cause === cause);
+            }
+        }
         await observation('B03', () => canonical.select_canonical_error('open', [canonicalFailure], null), value => value.code === 'invalid_argument' && value.structured_fields.message === failure.message);
         await observation('B04', () => canonical.translate_native_binding({ native_profile: typeof process === 'object' ? 'typescript_node' : 'typescript_browser', canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: release.station('missing') } } }), value => value.member_id === 'Release.station' && value.value === null);
+        if (requiredErrorContexts) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const sourceError = async call => {
+                try { await call(); throw new Error('Expected genuine native source failure'); }
+                catch (error) { if (!(error instanceof errors.OpenTideConstantsError)) throw error; return error; }
+            };
+            const missingId = 'OTC-native-missing-context';
+            const missing = await sourceError(() => good.requireStation(missingId));
+            const removedRow = JSON.parse(goodSource).stations.find(row => row.status === 'removed');
+            if (!removedRow) throw new Error('Authentic removed native row is required');
+            const removed = await sourceError(() => good.requireStation(removedRow.station_id));
+            const tombstone = good.tombstone(removedRow.station_id);
+            if (!tombstone || removed.tombstone !== tombstone) throw new Error('Genuine native Tombstone identity is required');
+            const reason = typeof tombstone.raw.removed_reason === 'string' ? tombstone.raw.removed_reason : null;
+            let collision, preparedPath, collisionClient;
+            try {
+                if (node) {
+                    const clientModule = await import(`${moduleRoot}/client.js`);
+                    collisionClient = await clientModule.OpenTideConstants.open({ baseUrl, cacheDir: cacheDir + '-context-source', offline: false, format: 'json', autoUpdate: false });
+                    const destination = cacheDir + '-context-destination';
+                    node.mkdirp(destination);
+                    preparedPath = node.nodePath.join(destination, 'OTC_20991231.2.json');
+                    node.writeAtomicSync(preparedPath, new TextEncoder().encode('deliberate existing-file digest disagreement'));
+                    collision = await sourceError(() => collisionClient.download({ release: '20991231.2', to: destination, formats: ['json'], overwrite: false }));
+                    if (collision.path !== preparedPath || !(collision instanceof errors.FileExistsError)) throw new Error('Genuine native download collision is required');
+                } else {
+                    preparedPath = '/native/browser-constructor-control';
+                    collision = new errors.FileExistsError(preparedPath);
+                }
+                for (const [label, expected, context] of [
+                    ['unknown_station', missing, { code: missing.code, stationId: missingId }],
+                    ['removed_station', removed, { code: removed.code, stationId: removedRow.station_id, tombstone, reason }],
+                    [node ? 'node_download_collision' : 'browser_file_constructor_control', collision, { code: collision.code, path: preparedPath }],
+                ]) {
+                    const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message }, cause: null }, native_constructor_context: context };
+                    const fileBefore = node && context.code === 'file_exists' ? Array.from(node.readFileOrIo(preparedPath)) : null;
+                    await observation(`B04.context.${label}`, () => {
+                        try { canonical.translate_native_binding(input); return { threw: false }; }
+                        catch (actual) { return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof expected.constructor, cause_absent: !Object.hasOwn(actual, 'cause'),
+                            tombstone_identity: context.code === 'station_removed' ? actual.tombstone === tombstone : undefined,
+                            raw_identity: context.code === 'station_removed' ? actual.tombstone?.raw === tombstone.raw : undefined,
+                            path: actual.path, file_unchanged: fileBefore ? JSON.stringify(Array.from(node.readFileOrIo(preparedPath))) === JSON.stringify(fileBefore) : undefined }; }
+                    }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message && actual.cause_absent
+                        && (context.code !== 'station_removed' || actual.tombstone_identity && actual.raw_identity)
+                        && (context.code !== 'file_exists' || actual.path === preparedPath && (!node || actual.file_unchanged)));
+                    await observation(`B04.context.mismatch.${label}`, () => {
+                        try { canonical.translate_native_binding({ ...input, native_constructor_context: { code: 'network' } }); return false; }
+                        catch (actual) { return actual instanceof canonical.CanonicalUnimplementedError; }
+                    }, value => value === true);
+                }
+            } finally { collisionClient?.close(); }
+        }
+        if (requiredErrorDefaults) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            // Source-native constructor qualification, distinct from authentic acquisition/data failure proof.
+            for (const Constructor of [errors.ReleaseNotFoundError, errors.OfflineError, errors.UnsupportedFormatError,
+                errors.ReaderTooOldError, errors.InvalidReleaseError, errors.NoConstantsError, errors.QuantityMismatchError,
+                errors.UnsupportedConventionError, errors.NoAstroTableError, errors.BinNotFoundError, errors.ExtremesOnlyError,
+                errors.LocalTimeUnavailableError, errors.HistoricalOffsetsExcludedError, errors.PinnedReleaseError, errors.UnsupportedError]) {
+                for (const [variant, message, detail] of [['default', '', undefined],
+                    ['cause', 'native fixture https://user:password@native.invalid/a', { cause: new Error('original native constructor cause') }],
+                    ['explicit_null', 'native explicit-null cause', { cause: null }]]) {
+                    const expected = new Constructor(message, detail);
+                    const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message }, cause: expected.cause ?? null },
+                        native_cause_option: Object.hasOwn(expected, 'cause') ? { presence: 'present', value: expected.cause } : { presence: 'absent' } };
+                    await observation(`B04.defaults.${expected.code}.${variant}`, () => {
+                        try { canonical.translate_native_binding(input); return { threw: false }; }
+                        catch (actual) { return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof Constructor, cause_identity: actual.cause === expected.cause,
+                            cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(expected, 'cause') }; }
+                    }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message && actual.cause_identity && actual.cause_presence);
+                    await observation(`B04.defaults.identity.${expected.code}.${variant}`, () => {
+                        try { canonical.translate_native_binding({ native_profile, canonical_error: { ...input.canonical_error, native_error: expected } }); return false; }
+                        catch (actual) { return actual === expected; }
+                    }, value => value === true);
+                    if (expected.cause instanceof Error) await observation(`B04.cause_context.mismatch.${expected.code}`, () => {
+                        try { canonical.translate_native_binding({ ...input, canonical_error: { ...input.canonical_error, cause: new Error('foreign logical cause') } }); return false; }
+                        catch (actual) { return actual instanceof canonical.CanonicalUnimplementedError; }
+                    }, value => value === true);
+                }
+            }
+        }
         if (requiredBindings) {
             const native_profile = node ? 'typescript_node' : 'typescript_browser';
             const cause = new Error('original native cause');
@@ -514,6 +657,9 @@ const m1Inputs = {
     receiverGuards: process.env.OTC_M1_RECEIVER_GUARDS === 'qualified',
     requiredBindings: process.env.OTC_M1_REQUIRED_BINDINGS === 'qualified',
     requiredTimes: process.env.OTC_M1_REQUIRED_TIMES === 'qualified',
+    requiredErrorDefaults: process.env.OTC_M1_REQUIRED_ERROR_DEFAULTS === 'qualified',
+    requiredOptionOrder: process.env.OTC_M1_REQUIRED_OPTION_ORDER === 'qualified',
+    requiredErrorContexts: process.env.OTC_M1_REQUIRED_ERROR_CONTEXTS === 'qualified',
     foreignTables: process.env.OTC_M1_FOREIGN_TABLES === 'qualified',
     dtoModels: process.env.OTC_M1_DTO === 'qualified',
     pointerSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_latest.json'), 'utf8'),
