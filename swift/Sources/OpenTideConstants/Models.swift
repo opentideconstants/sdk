@@ -111,7 +111,13 @@ public struct TimeBase: Sendable, Equatable {
     public var decidedBuildCommit: String? { raw["decided_build_commit"].string }
     public var evidence: JSONValue {
         .array(raw["evidence"].array.map { item in
-            .object(Dictionary(uniqueKeysWithValues: ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"].map { ($0, item[$0]) }))
+            .object(Dictionary(uniqueKeysWithValues: ["comparator_kind", "comparator_id", "distance_km", "lag_min", "detail"].map { key in
+                let value = item[key]
+                if key == "distance_km" || key == "lag_min" {
+                    return (key, value.number.map(JSONValue.number) ?? .null)
+                }
+                return (key, value)
+            }))
         })
     }
 }
