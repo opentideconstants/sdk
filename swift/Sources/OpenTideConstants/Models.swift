@@ -258,7 +258,7 @@ public struct ConstantSet: Sendable, Equatable {
     public var fallback: Fallback? { raw["fallback"].isNull ? nil : Fallback(raw["fallback"]) }
 }
 public struct Station: Sendable, Equatable {
-    private var originToken: UUID?
+    internal private(set) var originToken: UUID?
     public let raw: JSONValue
     public let kind: Kind?
     public let recommendedSet: ConstantSet?

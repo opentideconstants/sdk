@@ -869,6 +869,17 @@ internal enum CanonicalTypedModel {
 internal struct CanonicalFieldContract {
     let modelType: CanonicalModelType
     let members: [CanonicalMemberID]
+    // Native receiver projection; not a field in the serialized model contract.
+    var materialization: CanonicalMaterializationContext? = nil
+}
+
+internal struct CanonicalMaterializationContext {
+    let release: Release
+    let kind: Kind?
+    let recommendation: String?
+    // Already-resolved constructor fields; absence is not an empty/fake owner.
+    var setValidation: [Validation]? = nil
+    var station: Station? = nil
 }
 
 internal enum CanonicalStationRequest {
@@ -1364,13 +1375,13 @@ internal struct CanonicalPredictionModel {
     let referenceBin: Int64?
     let meanTerm: Double
     let datumSource: JSONValue?
+    // Exact already-selected native receiver. No selection/acquisition is run here.
+    var nativeContext: PredictionContext? = nil
 }
 
-internal struct CanonicalPredictionWindow {
-    let start: Double
-    let stop: Double
-    let step: Double?
-    let instants: JSONValue?
+internal enum CanonicalPredictionWindow: Equatable {
+    case span(start: Double, stop: Double, step: Double?)
+    case instants([Double])
 }
 
 internal typealias CanonicalFileRows = [JSONValue]
@@ -1802,7 +1813,57 @@ internal struct CanonicalLockRequest {
 
 internal typealias CanonicalLockedCacheState = CanonicalCacheState
 
-internal typealias CanonicalMemberContract = CanonicalMemberID
+internal enum CanonicalArgumentReceiver {
+    case client(OpenTideConstants)
+    case release(Release)
+}
+
+internal enum CanonicalStationArgumentOutcome {
+    case resolved(Station)
+    case failed(OpenTideConstantsError)
+}
+
+internal struct CanonicalStationArgumentStage {
+    let member: CanonicalMemberID
+    let release: Release
+    let request: CanonicalStationRequest
+    let outcome: CanonicalStationArgumentOutcome
+
+    private init(member: CanonicalMemberID, release: Release, request: CanonicalStationRequest,
+        outcome: CanonicalStationArgumentOutcome) {
+        self.member = member
+        self.release = release
+        self.request = request
+        self.outcome = outcome
+    }
+
+    internal static func prepare(member: CanonicalMemberID, release: Release,
+        request: CanonicalStationRequest) throws -> CanonicalStationArgumentStage {
+        switch member {
+        case .ReleaseHeights, .ReleaseHeightsAt, .ReleaseExtremes, .ReleaseCurrents, .ReleaseCurrentEvents: break
+        default: throw CanonicalUnimplemented.behavior("B08.origin/B29")
+        }
+        do {
+            try release.checkOpen()
+            let supplied: Station
+            switch request {
+            case .object(let station): supplied = station
+            case .id(let id): supplied = try release.requireStation(stationId: id)
+            }
+            try release.own(supplied)
+            let resolved = try release.requireStation(stationId: supplied.stationId)
+            return CanonicalStationArgumentStage(member: member, release: release, request: request, outcome: .resolved(resolved))
+        } catch let error as OpenTideConstantsError {
+            return CanonicalStationArgumentStage(member: member, release: release, request: request, outcome: .failed(error))
+        }
+    }
+}
+
+internal struct CanonicalMemberContract {
+    let member: CanonicalMemberID
+    var receiver: CanonicalArgumentReceiver? = nil
+    var stationStage: CanonicalStationArgumentStage? = nil
+}
 
 internal typealias CanonicalMergedReceipt = CanonicalVerifiedReceipt
 
@@ -1957,7 +2018,215 @@ internal enum CanonicalQueryKind: String, CaseIterable {
     case nearest = "nearest"
 }
 
-internal typealias CanonicalRawFields = JSONValue
+internal enum CanonicalRawFields {
+    case sourceJSON(JSONValue)
+    case Client(OpenTideConstants.PreparedFields)
+    case Release(Release.PreparedFields)
+    case HeightPoint(CanonicalHeightPointFields)
+    case Extreme(CanonicalExtremeFields)
+    case CurrentPoint(CanonicalCurrentPointFields)
+    case CurrentEvent(CanonicalCurrentEventFields)
+    case HeightSeries(CanonicalHeightSeriesFields)
+    case ExtremeList(CanonicalExtremeListFields)
+    case CurrentSeries(CanonicalCurrentSeriesFields)
+    case CurrentEventList(CanonicalCurrentEventListFields)
+    case DatumInfo(CanonicalDatumInfoFields)
+    case DatumLevel(CanonicalDatumLevelFields)
+    case Ranges(CanonicalRangesFields)
+    case Nearby(CanonicalNearbyFields)
+    case Stats(CanonicalStatsFields)
+    case UpdateResult(CanonicalUpdateResultFields)
+}
+
+internal struct CanonicalHeightPointFields {
+    let time: Date
+    let heightM: Double
+    let localTime: String?
+    let utcOffsetS: Int64?
+}
+
+internal struct CanonicalExtremeFields {
+    let time: Date
+    let type: ExtremeType
+    let heightM: Double
+    let localTime: String?
+    let utcOffsetS: Int64?
+}
+
+internal struct CanonicalCurrentPointFields {
+    let time: Date
+    let velocityMajorMs: Double
+    let velocityMinorMs: Double
+    let speedMs: Double
+    let directionDeg: Double?
+    let localTime: String?
+    let utcOffsetS: Int64?
+}
+
+internal struct CanonicalCurrentEventFields {
+    let time: Date
+    let type: CurrentEventType
+    let velocityMs: Double
+    let directionDeg: Double?
+    let localTime: String?
+    let utcOffsetS: Int64?
+}
+
+internal struct CanonicalHeightSeriesFields {
+    let items: [HeightPoint]
+    let stationId: String?
+    let timezone: String?
+    let method: PredictionMethod?
+    let setId: String?
+    let conventionId: String?
+    let astroTableId: String?
+    let referenceStationId: String?
+    let referenceBin: Int64?
+    let datum: String?
+    let datumName: String?
+    let datumKind: String?
+    let datumUncertaintyM: Double?
+    let tz: String?
+    let tzVersion: String?
+    let release: String?
+    let algorithm: String?
+    let offsetId: String?
+    let offsetSource: String?
+    let offsetSourceVersion: String?
+    let historicalOffsets: Bool
+    let currentValidity: String?
+    let currentAccuracy: String?
+    let referenceSetId: String?
+    let referenceSourceVersion: String?
+    let reference2020Equivalence: String?
+    let sourceNote: String?
+}
+
+internal struct CanonicalExtremeListFields {
+    let items: [Extreme]
+    let stationId: String?
+    let timezone: String?
+    let method: PredictionMethod?
+    let setId: String?
+    let conventionId: String?
+    let astroTableId: String?
+    let referenceStationId: String?
+    let referenceBin: Int64?
+    let datum: String?
+    let datumName: String?
+    let datumKind: String?
+    let datumUncertaintyM: Double?
+    let tz: String?
+    let tzVersion: String?
+    let release: String?
+    let algorithm: String?
+    let offsetId: String?
+    let offsetSource: String?
+    let offsetSourceVersion: String?
+    let historicalOffsets: Bool
+    let currentValidity: String?
+    let currentAccuracy: String?
+    let referenceSetId: String?
+    let referenceSourceVersion: String?
+    let reference2020Equivalence: String?
+    let sourceNote: String?
+}
+
+internal struct CanonicalCurrentSeriesFields {
+    let items: [CurrentPoint]
+    let stationId: String?
+    let timezone: String?
+    let method: PredictionMethod?
+    let setId: String?
+    let conventionId: String?
+    let astroTableId: String?
+    let referenceStationId: String?
+    let referenceBin: Int64?
+    let datum: String?
+    let datumName: String?
+    let datumKind: String?
+    let datumUncertaintyM: Double?
+    let tz: String?
+    let tzVersion: String?
+    let release: String?
+    let algorithm: String?
+    let binNumber: Int64?
+}
+
+internal struct CanonicalCurrentEventListFields {
+    let items: [CurrentEvent]
+    let stationId: String?
+    let timezone: String?
+    let method: PredictionMethod?
+    let setId: String?
+    let conventionId: String?
+    let astroTableId: String?
+    let referenceStationId: String?
+    let referenceBin: Int64?
+    let datum: String?
+    let datumName: String?
+    let datumKind: String?
+    let datumUncertaintyM: Double?
+    let tz: String?
+    let tzVersion: String?
+    let release: String?
+    let algorithm: String?
+    let binNumber: Int64?
+    let omittedEventTypes: [CurrentEventType]?
+}
+
+internal struct CanonicalDatumInfoFields {
+    let setId: String?
+    let zero: String?
+    let zeroName: String?
+    let chartDatum: String?
+    let mslOffsetM: Double?
+    let levels: [DatumLevel]
+}
+
+internal struct CanonicalDatumLevelFields {
+    let key: String?
+    let valueM: Double
+    let aboveChartM: Double?
+    let kind: String?
+    let method: String?
+    let sourceName: String?
+    let epoch: JSONValue
+    let dataSpan: JSONValue
+    let controlStationId: String?
+    let controlSetId: String?
+    let controlSourceId: String?
+    let uncertaintyM: Double?
+    let uncertaintyBasis: String?
+    let flags: [String]
+}
+
+internal struct CanonicalRangesFields {
+    let mn: Double?
+    let gt: Double?
+    let dhq: Double?
+    let dlq: Double?
+}
+
+internal struct CanonicalNearbyFields {
+    let station: Station
+    let distanceKm: Double
+}
+
+internal struct CanonicalStatsFields {
+    let type: [String: Int64]
+    let kind: [String: Int64]
+    let country: [String: Int64]
+    let source: [String: Int64]
+    let qcStatus: [String: Int64]
+}
+
+internal struct CanonicalUpdateResultFields {
+    let updated: Bool
+    let from: String?
+    let to: String?
+}
+
 
 internal typealias CanonicalRawRecord = JSONValue
 
@@ -2076,6 +2345,7 @@ internal enum CanonicalStationSummary {
     case orderedConstantSets(CanonicalOrderedConstantSets)
 }
 
+// Native event members have no step; series members retain their exact seconds.
 internal typealias CanonicalStep = Double
 
 internal struct CanonicalStreamReader {

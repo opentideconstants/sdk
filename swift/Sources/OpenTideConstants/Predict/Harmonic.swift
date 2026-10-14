@@ -32,7 +32,7 @@ internal final class HarmonicSum {
         }
         self.terms = terms
     }
-    private func yearData(_ year: Int64) throws -> (Double, [YearTerm]) {
+    internal func yearData(_ year: Int64) throws -> (Double, [YearTerm]) {
         if let data = years[year] { return data }
         let index = try table.index(year)
         let origin = yearStart(year)
@@ -88,6 +88,10 @@ internal func eventSurvivor(_ cluster: [HarmonicEvent], slack: Bool) -> Harmonic
 }
 
 internal func harmonicEvents(_ total: HarmonicSum, start: Double, stop: Double, slack: Bool = false) throws -> [HarmonicEvent] {
+    try unroundedHarmonicEvents(total, start: start, stop: stop, slack: slack).filter { start <= floor($0.time + 0.5) && floor($0.time + 0.5) < stop }
+}
+
+internal func unroundedHarmonicEvents(_ total: HarmonicSum, start: Double, stop: Double, slack: Bool = false) throws -> [HarmonicEvent] {
     if start == stop { return [] }
     let first = floor(start / 360.0) * 360.0 - 3600.0
     let last = ceil((stop + 3600.0 - first) / 360.0) * 360.0 + first
@@ -160,5 +164,5 @@ internal func harmonicEvents(_ total: HarmonicSum, start: Double, stop: Double, 
         cluster.append(candidate)
     }
     if !cluster.isEmpty, let survivor = eventSurvivor(cluster, slack: slack) { kept.append(survivor) }
-    return kept.filter { start <= floor($0.time + 0.5) && floor($0.time + 0.5) < stop }
+    return kept
 }

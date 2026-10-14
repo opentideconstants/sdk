@@ -6,24 +6,238 @@ internal enum CanonicalUnimplemented: Error, Equatable {
 
 // These isolated entries refuse before effects. They are inactive from public routes.
 internal enum Canonical {
-    // B01 validate_operation_arguments — body INCOMPLETE.
+    private static func projectIndexSummary(_ row: JSONValue) throws -> CanonicalStreamIndexStation {
+        guard let id = row["station_id"].string, let offset = row["offset"].integer, let length = row["length"].integer else {
+            throw OpenTideConstantsError.invalidRelease("stale index span")
+        }
+        return CanonicalStreamIndexStation(stationId: id, status: row["status"].string ?? "active",
+            name: row["name"].string, nameFolded: row["name_folded"].string, country: row["country"].string,
+            type: row["type"].string, kind: row["kind"].string, referenceStationId: row["reference_station_id"].string,
+            offsetsLicenceId: row["offsets_licence_id"].string, recommendedSetId: row["recommended_set_id"].string,
+            lat: row["lat"].number, lon: row["lon"].number, offset: offset, length: length,
+            aliases: row["aliases"].object.mapValues { $0.array.compactMap(\.string) },
+            sets: row["sets"].array.map { set in
+                CanonicalStreamIndexSet(setId: set["set_id"].string, source: set["source"].string,
+                    sourceType: set["source_type"].string, quantity: set["quantity"].string,
+                    qcStatus: set["qc_status"].string, conventionId: set["convention_id"].string,
+                    licenceId: set["licence_id"].string, constituents: set["constituents"].array.compactMap(\.string),
+                    fallback: set["fallback"].isNull ? nil:Fallback(set["fallback"]),
+                    currentBins: set["current_bins"].array.compactMap(\.integer))
+            }, subordinateOffsets: row["subordinate_offsets"].isNull ? nil:SubordinateOffsets(row["subordinate_offsets"]),
+            currentOffsets: row["current_offsets"].array.map { value in
+                CanonicalStreamIndexCurrentOffset(bin: value["bin"].integer!, referenceBin: value["reference_bin"].integer!,
+                    referenceStationId: value["reference_station_id"].string, licenceId: value["licence_id"].string)
+            })
+    }
+
+    private static func cacheIndexStation(_ station: CanonicalStreamIndexStation) -> JSONValue {
+        func text(_ value: String?) -> JSONValue { value.map(JSONValue.string) ?? .null }
+        func number(_ value: Double?) -> JSONValue { value.map(JSONValue.number) ?? .null }
+        return .object(["station_id": .string(station.stationId), "status": .string(station.status),
+            "name": text(station.name), "name_folded": text(station.nameFolded), "country": text(station.country),
+            "type": text(station.type), "kind": text(station.kind), "reference_station_id": text(station.referenceStationId),
+            "offsets_licence_id": text(station.offsetsLicenceId), "recommended_set_id": text(station.recommendedSetId),
+            "lat": number(station.lat), "lon": number(station.lon), "offset": .integer(station.offset), "length": .integer(station.length),
+            "aliases": .object(station.aliases.mapValues { .array($0.map(JSONValue.string)) }),
+            "sets": .array(station.sets.map { set in
+                .object(["set_id": text(set.setId), "source": text(set.source), "source_type": text(set.sourceType),
+                    "quantity": text(set.quantity), "qc_status": text(set.qcStatus), "convention_id": text(set.conventionId),
+                    "licence_id": text(set.licenceId), "constituents": .array(set.constituents.map(JSONValue.string)),
+                    "fallback": set.fallback?.raw ?? .null, "current_bins": .array(set.currentBins.map(JSONValue.integer))])
+            }), "subordinate_offsets": station.subordinateOffsets?.raw ?? .null,
+            "current_offsets": .array(station.currentOffsets.map { offset in
+                .object(["bin": .integer(offset.bin), "reference_bin": .integer(offset.referenceBin),
+                    "reference_station_id": text(offset.referenceStationId), "licence_id": text(offset.licenceId)])
+            })])
+    }
+
+    private static func cacheIndexDocument(_ index: CanonicalStreamIndex) -> JSONValue {
+        .object(["index_version": .integer(index.indexVersion), "discovery_index_version": .integer(index.discoveryIndexVersion),
+            "datestamp": .string(index.datestamp), "jsonl": .string(index.jsonl), "jsonl_sha256": .string(index.jsonlSha256),
+            "jsonl_size": .integer(index.jsonlSize), "by": .string(index.by), "stations": .array(index.stations.map(cacheIndexStation))])
+    }
+
+    // B01 validate_operation_arguments — native typed member guards.
     internal static func validateOperationArguments(operation: CanonicalOperation, arguments: CanonicalArguments, memberContract: CanonicalMemberContract) throws -> CanonicalValidatedArguments {
-        throw CanonicalUnimplemented.behavior("B01")
+        // Closed typed records enforce required, nullable and primitive parameter shapes.
+        // Only the selected member pair is valid; owners and derived values are later leaves.
+        func client() throws -> OpenTideConstants {
+            guard case .client(let receiver) = memberContract.receiver else { throw CanonicalUnimplemented.behavior("B01") }
+            return receiver
+        }
+        func release() throws -> Release {
+            guard case .release(let receiver) = memberContract.receiver else { throw CanonicalUnimplemented.behavior("B01") }
+            return receiver
+        }
+        func stationPhase(_ request: CanonicalStationRequest) throws {
+            let receiver = try release()
+            guard let stage = memberContract.stationStage, stage.member == memberContract.member,
+                stage.release === receiver else { throw CanonicalUnimplemented.behavior("B08.origin/B29") }
+            switch (request, stage.request) {
+            case (.id(let requested), .id(let prepared)) where requested == prepared: break
+            case (.object(let requested), .object(let prepared))
+                where requested.originToken == prepared.originToken && requested.raw == prepared.raw: break
+            default: throw CanonicalUnimplemented.behavior("B08.origin/B29")
+            }
+            switch stage.outcome {
+            case .failed(let error): throw error
+            case .resolved(let station):
+                let id: String
+                switch request { case .id(let value): id = value; case .object(let value): id = value.stationId }
+                guard station.stationId == id else {
+                    throw CanonicalUnimplemented.behavior("B08.origin/B29")
+                }
+            }
+        }
+        switch (operation, memberContract.member, arguments) {
+        case (.open, .ClientOpen, .ClientOpen(let request)):
+            _ = try OpenTideConstants.validatedOpenOptions(request, environment: ProcessInfo.processInfo.environment)
+        case (.releases, .ClientReleases, .ClientReleases(_)):
+            try client().checkOpen()
+        case (.latest, .ClientLatest, .ClientLatest(_)):
+            try client().checkOpen()
+        case (.checkForUpdate, .ClientCheckForUpdate, .ClientCheckForUpdate(_)):
+            try client().checkOpen()
+        case (.update, .ClientUpdate, .ClientUpdate(_)):
+            try client().checkOpen()
+        case (.download, .ClientDownload, .ClientDownload(let request)):
+            try client().checkOpen()
+            try OpenTideConstants.validateDownloadArguments(release: request.release, to: request.to, formats: request.formats)
+        case (.verify, .ClientVerify, .ClientVerify(_)):
+            try client().checkOpen()
+        case (.cachedReleases, .ClientCachedReleases, .ClientCachedReleases(_)):
+            try client().release.checkOpen()
+        case (.prune, .ClientPrune, .ClientPrune(let request)):
+            try client().checkOpen()
+            try OpenTideConstants.validatePruneArguments(keep: request.keep)
+        case (.close, .ClientClose, .ClientClose(_)):
+            break
+        case (.convention, .ReleaseConvention, .ReleaseConvention(_)):
+            try release().checkOpen()
+        case (.licence, .ReleaseLicence, .ReleaseLicence(_)):
+            try release().checkOpen()
+        case (.station, .ReleaseStation, .ReleaseStation(_)):
+            try release().checkOpen()
+        case (.requireStation, .ReleaseRequireStation, .ReleaseRequireStation(_)):
+            try release().checkOpen()
+        case (.tombstone, .ReleaseTombstone, .ReleaseTombstone(_)):
+            try release().checkOpen()
+        case (.stationByAlias, .ReleaseStationByAlias, .ReleaseStationByAlias(_)):
+            try release().checkOpen()
+        case (.stations, .ReleaseStations, .ReleaseStations(_)):
+            try release().checkOpen()
+        case (.iterStations, .ReleaseIterStations, .ReleaseIterStations(_)):
+            try release().checkOpen()
+        case (.search, .ReleaseSearch, .ReleaseSearch(let request)):
+            _ = try Release.validatedSearchQuery(name: request.name, limit: request.limit, match: request.match)
+            try release().checkOpen()
+        case (.near, .ReleaseNear, .ReleaseNear(let request)):
+            try Release.validateNearArguments(lat: request.lat, lon: request.lon, radiusKm: request.radiusKm, limit: request.limit)
+            try release().checkOpen()
+        case (.nearest, .ReleaseNearest, .ReleaseNearest(let request)):
+            try Release.validateNearArguments(lat: request.lat, lon: request.lon, radiusKm: request.maxKm ?? .infinity, limit: 1)
+            try release().checkOpen()
+        case (.referenceStation, .ReleaseReferenceStation, .ReleaseReferenceStation(_)):
+            try release().checkOpen()
+        case (.subordinatesOf, .ReleaseSubordinatesOf, .ReleaseSubordinatesOf(_)):
+            try release().checkOpen()
+        case (.attribution, .ReleaseAttribution, .ReleaseAttribution(_)):
+            try release().checkOpen()
+        case (.heights, .ReleaseHeights, .ReleaseHeights(let request)):
+            try release().checkOpen()
+            _ = try Predict.window(request.start, request.stop, stepS: request.stepS)
+            try stationPhase(request.station)
+            try Predict.options(nil)
+            try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
+        case (.heightsAt, .ReleaseHeightsAt, .ReleaseHeightsAt(let request)):
+            try release().checkOpen()
+            _ = try request.times.map(predictionInstant)
+            try stationPhase(request.station)
+            try Predict.options(nil)
+            try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
+        case (.extremes, .ReleaseExtremes, .ReleaseExtremes(let request)):
+            try release().checkOpen()
+            _ = try Predict.window(request.start, request.stop)
+            try stationPhase(request.station)
+            try Predict.options(nil)
+            try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
+        case (.currents, .ReleaseCurrents, .ReleaseCurrents(let request)):
+            try release().checkOpen()
+            _ = try Predict.window(request.start, request.stop, stepS: request.stepS)
+            try stationPhase(request.station)
+            try Predict.options(request.binNumber)
+        case (.currentEvents, .ReleaseCurrentEvents, .ReleaseCurrentEvents(let request)):
+            try release().checkOpen()
+            _ = try Predict.window(request.start, request.stop)
+            try stationPhase(request.station)
+            try Predict.options(request.binNumber)
+        case (.datums, .ReleaseDatums, .ReleaseDatums(_)):
+            try release().checkOpen()
+        case (.ranges, .ReleaseRanges, .ReleaseRanges(_)):
+            try release().checkOpen()
+        case (.astroTable, .ReleaseAstroTable, .ReleaseAstroTable(_)):
+            try release().checkOpen()
+        case (.constantSets, .StationConstantSets, .StationConstantSets(_)):
+            break
+        case (.constantSet, .StationConstantSet, .StationConstantSet(_)):
+            break
+        case (.constituent, .ConstantSetConstituent, .ConstantSetConstituent(_)):
+            break
+        case (.equilibriumArgument, .AstroTableEquilibriumArgument, .AstroTableEquilibriumArgument(let request)):
+            _ = try predictionInstant(request.at)
+        case (.nodeFactor, .AstroTableNodeFactor, .AstroTableNodeFactor(let request)):
+            _ = try predictionInstant(request.at)
+        case (.equilibriumForYear, .AstroTableEquilibriumForYear, .AstroTableEquilibriumForYear(_)):
+            break
+        case (.nodeFactorForYear, .AstroTableNodeFactorForYear, .AstroTableNodeFactorForYear(_)):
+            break
+        case (.toLocal, .HeightPointLocalDatetime, .HeightPointLocalDatetime(_)):
+            break
+        case (.toLocal, .ExtremeLocalDatetime, .ExtremeLocalDatetime(_)):
+            break
+        case (.toLocal, .CurrentPointLocalDatetime, .CurrentPointLocalDatetime(_)):
+            break
+        case (.toLocal, .CurrentEventLocalDatetime, .CurrentEventLocalDatetime(_)):
+            break
+        case (.toLocal, .HeightSeriesToLocal, .HeightSeriesToLocal(_)):
+            break
+        case (.toLocal, .ExtremeListToLocal, .ExtremeListToLocal(_)):
+            break
+        case (.toLocal, .CurrentSeriesToLocal, .CurrentSeriesToLocal(_)):
+            break
+        case (.toLocal, .CurrentEventListToLocal, .CurrentEventListToLocal(_)):
+            break
+        default: throw CanonicalUnimplemented.behavior("B01")
+        }
+        return arguments
     }
 
     // B02 resolve_effective_options — body INCOMPLETE.
     internal static func resolveEffectiveOptions(explicitOptions: CanonicalExplicitOptions, environment: CanonicalEnvironment, platformDefaults: CanonicalPlatformDefaults) throws -> CanonicalEffectiveOptions {
-        throw CanonicalUnimplemented.behavior("B02")
+        OpenTideConstants.effectiveOpenOptions(explicitOptions, environment: environment, platformDefaults: platformDefaults)
     }
 
     // B03 select_canonical_error — body INCOMPLETE.
     internal static func selectCanonicalError(operation: CanonicalOperation, orderedFailures: CanonicalOrderedFailures, cause: CanonicalCause) throws -> CanonicalCanonicalError {
-        throw CanonicalUnimplemented.behavior("B03")
+        guard let failure = orderedFailures.first else { throw CanonicalUnimplemented.behavior("B03") }
+        return CanonicalCanonicalError(code: failure.code, structuredFields: failure.structuredFields, cause: failure.cause ?? cause)
     }
 
     // B04 translate_native_binding — body INCOMPLETE.
     internal static func translateNativeBinding(canonicalResult: CanonicalCanonicalResult?, canonicalError: CanonicalCanonicalError?, nativeProfile: CanonicalNativeProfile) throws -> CanonicalNativeResult {
-        throw CanonicalUnimplemented.behavior("B04")
+        guard nativeProfile == .swift else { throw CanonicalUnimplemented.behavior("B04") }
+        if let error = canonicalError {
+            // A usable client retains its own acquisition diagnostic; it is not an exception return.
+            if case .ClientOpen(let client) = canonicalResult,
+                client.lastError?.code == error.code.rawValue,
+                .object(client.lastError?.fields ?? [:]) == error.structuredFields {
+                return .ClientOpen(client)
+            }
+            guard let cause = error.cause else { throw CanonicalUnimplemented.behavior("B04") }
+            throw cause
+        }
+        guard let result = canonicalResult else { throw CanonicalUnimplemented.behavior("B04") }
+        return result
     }
 
     // B05 decode_release_document — body INCOMPLETE.
@@ -38,6 +252,92 @@ internal enum Canonical {
 
     // B07 materialize_typed_model — body INCOMPLETE.
     internal static func materializeTypedModel(rawFields: CanonicalRawFields, fieldContract: CanonicalFieldContract, origin: CanonicalOrigin, modelType: CanonicalModelType) throws -> CanonicalTypedModel {
+        guard fieldContract.modelType == modelType,
+            fieldContract.members.allSatisfy({ $0.rawValue.hasPrefix(modelType.rawValue + ".") }) else {
+            throw CanonicalUnimplemented.behavior("B07")
+        }
+        switch (modelType, rawFields) {
+        case (.Client, .Client(let fields)):
+            return .Client(OpenTideConstants(prepared: fields))
+        case (.Release, .Release(let fields)):
+            return .Release(Release(prepared: fields))
+        case (.UpdateResult, .UpdateResult(let fields)):
+            return .UpdateResult(UpdateResult(updated: fields.updated, from: fields.from, to: fields.to))
+        case (.HeightPoint, .HeightPoint(let fields)):
+            return .HeightPoint(HeightPoint(time: fields.time, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+        case (.Extreme, .Extreme(let fields)):
+            return .Extreme(Extreme(time: fields.time, type: fields.type, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+        case (.CurrentPoint, .CurrentPoint(let fields)):
+            return .CurrentPoint(CurrentPoint(time: fields.time, velocityMajorMs: fields.velocityMajorMs, velocityMinorMs: fields.velocityMinorMs, speedMs: fields.speedMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+        case (.CurrentEvent, .CurrentEvent(let fields)):
+            return .CurrentEvent(CurrentEvent(time: fields.time, type: fields.type, velocityMs: fields.velocityMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+        case (.HeightSeries, .HeightSeries(let fields)):
+            return .HeightSeries(HeightSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote))
+        case (.ExtremeList, .ExtremeList(let fields)):
+            return .ExtremeList(ExtremeList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote))
+        case (.CurrentSeries, .CurrentSeries(let fields)):
+            return .CurrentSeries(CurrentSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber))
+        case (.CurrentEventList, .CurrentEventList(let fields)):
+            return .CurrentEventList(CurrentEventList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber, omittedEventTypes: fields.omittedEventTypes))
+        case (.DatumInfo, .DatumInfo(let fields)):
+            return .DatumInfo(DatumInfo(setId: fields.setId, zero: fields.zero, zeroName: fields.zeroName, chartDatum: fields.chartDatum, mslOffsetM: fields.mslOffsetM, levels: fields.levels))
+        case (.DatumLevel, .DatumLevel(let fields)):
+            return .DatumLevel(DatumLevel(key: fields.key, valueM: fields.valueM, aboveChartM: fields.aboveChartM, kind: fields.kind, method: fields.method, sourceName: fields.sourceName, epoch: fields.epoch, dataSpan: fields.dataSpan, controlStationId: fields.controlStationId, controlSetId: fields.controlSetId, controlSourceId: fields.controlSourceId, uncertaintyM: fields.uncertaintyM, uncertaintyBasis: fields.uncertaintyBasis, flags: fields.flags))
+        case (.Ranges, .Ranges(let fields)):
+            return .Ranges(Ranges(mn: fields.mn, gt: fields.gt, dhq: fields.dhq, dlq: fields.dlq))
+        case (.Nearby, .Nearby(let fields)):
+            return .Nearby(Nearby(station: fields.station, distanceKm: fields.distanceKm))
+        case (.Stats, .Stats(let fields)):
+            return .Stats(Stats(type: fields.type, kind: fields.kind, country: fields.country, source: fields.source, qcStatus: fields.qcStatus))
+        default: break
+        }
+        guard case .sourceJSON(let rawFields) = rawFields else {
+            throw CanonicalUnimplemented.behavior("B07")
+        }
+        switch modelType {
+        case .ReleaseInfo: return .ReleaseInfo(ReleaseInfo(rawFields))
+        case .FileInfo: return .FileInfo(FileInfo(rawFields))
+        case .Tombstone: return .Tombstone(Tombstone(rawFields))
+        case .SubordinateOffsets: return .SubordinateOffsets(SubordinateOffsets(rawFields))
+        case .Constituent: return .Constituent(Constituent(rawFields))
+        case .Convention: return .Convention(Convention(rawFields))
+        case .Licence: return .Licence(try Reader.licence(rawFields))
+        case .Provenance: return .Provenance(Provenance(rawFields))
+        case .TimeBase: return .TimeBase(TimeBase(rawFields))
+        case .RecordSpan: return .RecordSpan(RecordSpan(rawFields))
+        case .Datum: return .Datum(Datum(rawFields))
+        case .Validation: return .Validation(Validation(rawFields))
+        case .DroppedConstituent: return .DroppedConstituent(DroppedConstituent(rawFields))
+        case .QcFlag: return .QcFlag(QcFlag(rawFields))
+        case .ProvenanceBuild: return .ProvenanceBuild(ProvenanceBuild(rawFields))
+        case .Fallback: return .Fallback(Fallback(rawFields))
+        case .HistoricalOffsetVintage: return .HistoricalOffsetVintage(HistoricalOffsetVintage(rawFields))
+        case .HistoricalOffsetProvenance: return .HistoricalOffsetProvenance(HistoricalOffsetProvenance(rawFields))
+        case .AstroTable: return .AstroTable(try AstroTable(rawFields))
+        case .ConstantSet:
+            guard let context = fieldContract.materialization, let validation = context.setValidation else {
+                throw CanonicalUnimplemented.behavior("B07")
+            }
+            guard let id = rawFields["set_id"].string,
+                let convention = context.release.convById[rawFields["convention_id"].string ?? ""],
+                let licence = context.release.licById[rawFields["licence_id"].string ?? ""] else {
+                throw OpenTideConstantsError.invalidRelease("set identity/reference unresolved")
+            }
+            return .ConstantSet(ConstantSet(raw: rawFields, convention: convention, licence: licence,
+                isRecommended: id == context.recommendation, validation: validation))
+        case .SourceRecord:
+            guard let context = fieldContract.materialization else { throw CanonicalUnimplemented.behavior("B07") }
+            return .SourceRecord(SourceRecord(raw: rawFields,
+                licence: rawFields["licence_id"].string.flatMap { context.release.licById[$0] },
+                upstreamLicence: rawFields["upstream_licence_id"].string.flatMap { context.release.licById[$0] }))
+        default: break
+        }
+        if modelType == .Station, fieldContract.modelType == .Station, let context = fieldContract.materialization {
+            let station = try Reader.station(rawFields, conventions: context.release.convById,
+                licences: context.release.licById, kind: context.kind, recommended: context.recommendation).withOrigin(origin)
+            try context.release.own(station)
+            return .Station(station)
+        }
         throw CanonicalUnimplemented.behavior("B07")
     }
 
@@ -123,7 +423,9 @@ internal enum Canonical {
 
     // B24 project_station_index — body INCOMPLETE.
     internal static func projectStationIndex(stationSourceRow: CanonicalStationSourceRow, sourceByteSpan: CanonicalSourceByteSpan, projectionContract: CanonicalProjectionContract) throws -> CanonicalStationIndexEntry {
-        throw CanonicalUnimplemented.behavior("B24")
+        let entry = IndexEntry.make(stationSourceRow, offset: UInt64(exactly: sourceByteSpan.offsetBytes),
+            length: Int(exactly: sourceByteSpan.lengthBytes))
+        return try projectIndexSummary(entry.summary)
     }
 
     // B25 authenticate_station_index — body INCOMPLETE.
@@ -143,7 +445,20 @@ internal enum Canonical {
 
     // B28 encode_cache_json — body INCOMPLETE.
     internal static func encodeCacheJson(cacheDocument: CanonicalCacheDocument) throws -> CanonicalCacheBytes {
-        throw CanonicalUnimplemented.behavior("B28")
+        switch cacheDocument {
+        case .pointerOrCatalogue(let document): return try encode_cache_json(document)
+        case .streamIndex(let index): return try encode_cache_json(cacheIndexDocument(index))
+        case .verifiedReceipt(let receipt):
+            var document: [String: JSONValue] = ["datestamp": .string(receipt.datestamp),
+                "files": .object(receipt.files.mapValues { file in
+                    let fields: [String: JSONValue] = ["sha256": .string(file.sha256), "size": .integer(file.size),
+                        "url": file.url.map(JSONValue.string) ?? .null]
+                    return .object(fields)
+                }), "format_version": .string(receipt.formatVersion), "min_reader_version": .string(receipt.minReaderVersion),
+                "verified_at": .string(receipt.verifiedAt), "by": .string(receipt.by)]
+            document["zenodo_version_doi"] = receipt.zenodoVersionDoi.map(JSONValue.string) ?? .null
+            return try encode_cache_json(.object(document))
+        }
     }
 
     // B29 lookup_station_identity — body INCOMPLETE.
@@ -197,8 +512,21 @@ internal enum Canonical {
     }
 
     // B39 parse_prediction_window — body INCOMPLETE.
-    internal static func parsePredictionWindow(timeInputs: CanonicalTimeInputs, windowInputs: CanonicalWindowInputs, step: CanonicalStep, localTimeProfile: CanonicalLocalTimeProfile) throws -> CanonicalPredictionWindow {
-        throw CanonicalUnimplemented.behavior("B39")
+    internal static func parsePredictionWindow(timeInputs: CanonicalTimeInputs, windowInputs: CanonicalWindowInputs, step: CanonicalStep?, localTimeProfile: CanonicalLocalTimeProfile) throws -> CanonicalPredictionWindow {
+        let start: Date, stop: Date, series: Bool
+        switch windowInputs {
+        case .ReleaseHeights(let request): start = request.start; stop = request.stop; series = true
+        case .ReleaseCurrents(let request): start = request.start; stop = request.stop; series = true
+        case .ReleaseExtremes(let request): start = request.start; stop = request.stop; series = false
+        case .ReleaseCurrentEvents(let request): start = request.start; stop = request.stop; series = false
+        case .ReleaseHeightsAt(let request):
+            return .instants(try request.times.map(predictionInstant))
+        default: throw CanonicalUnimplemented.behavior("B39")
+        }
+        let stepS = series ? step.flatMap { Int64(exactly: $0) } : nil
+        let window = try Predict.window(start, stop, stepS: stepS)
+        if series && stepS == nil { throw OpenTideConstantsError.invalidArgument("step_s must be a positive integer") }
+        return .span(start: window.0, stop: window.1, step: stepS.map(Double.init))
     }
 
     // B40 select_prediction_model — body INCOMPLETE.
@@ -208,12 +536,27 @@ internal enum Canonical {
 
     // B41 evaluate_astronomy — body INCOMPLETE.
     internal static func evaluateAstronomy(selectedPredictionModel: CanonicalSelectedPredictionModel, utcInstant: CanonicalUtcInstant) throws -> CanonicalAstronomicalTerms {
-        throw CanonicalUnimplemented.behavior("B41")
+        guard let total = selectedPredictionModel.nativeContext?.total else { throw CanonicalUnimplemented.behavior("B41") }
+        let year = utcYear(utcInstant)
+        let (origin, terms) = try total.yearData(year)
+        return CanonicalAstronomicalTerms(utcYear: year, constituentTerms: terms.map { term in
+            .object(["speed": .number(term.speed), "amplitude": .number(term.amplitude),
+                "argument": .number(term.argument), "omega": .number(term.omega)])
+        }, epochHours: (utcInstant - origin) / 3600.0)
     }
 
     // B42 evaluate_harmonic_height — body INCOMPLETE.
     internal static func evaluateHarmonicHeight(selectedPredictionModel: CanonicalSelectedPredictionModel, predictionInstants: CanonicalPredictionInstants, requestedDatum: CanonicalRequestedDatum) throws -> CanonicalHeightValues {
-        throw CanonicalUnimplemented.behavior("B42")
+        guard var context = selectedPredictionModel.nativeContext, let total = context.total else { throw CanonicalUnimplemented.behavior("B42") }
+        let datum = try Predict.datum(selectedPredictionModel.datumSource ?? .null, requested: requestedDatum, context: &context)
+        let evaluation = total.mean == datum ? total:try HarmonicSum(context.table,
+            context.constants.raw["constituents"].array, mean: datum)
+        let items = try predictionInstants.map { instant -> HeightPoint in
+            let terms = try evaluateAstronomy(selectedPredictionModel: selectedPredictionModel, utcInstant: instant)
+            let value = try evaluation.value(instant, year: terms.utcYear)
+            return HeightPoint(time: Date(timeIntervalSince1970: instant), heightM: value)
+        }
+        return HeightSeries(items: items)
     }
 
     // B43 find_tide_events — body INCOMPLETE.
@@ -248,7 +591,7 @@ internal enum Canonical {
 
     // B08.raw retain_raw_source_record — body INCOMPLETE.
     internal static func retainRawSourceRecord(sourceRecord: CanonicalSourceRecord, nativeProfile: CanonicalNativeProfile) throws -> CanonicalRawRecord {
-        throw CanonicalUnimplemented.behavior("B08.raw")
+        sourceRecord
     }
 
     // B08.origin check_station_origin — body INCOMPLETE.
@@ -293,12 +636,20 @@ internal enum Canonical {
 
     // B43.roots find_unrounded_tide_events — body INCOMPLETE.
     internal static func findUnroundedTideEvents(selectedPredictionModel: CanonicalSelectedPredictionModel, predictionWindow: CanonicalPredictionWindow) throws -> CanonicalUnroundedTideEvents {
-        throw CanonicalUnimplemented.behavior("B43.roots")
+        guard let total = selectedPredictionModel.nativeContext?.total else { throw CanonicalUnimplemented.behavior("B43.roots") }
+        guard case .span(let start, let stop, _) = predictionWindow else { throw CanonicalUnimplemented.behavior("B43.roots") }
+        return try unroundedHarmonicEvents(total, start: start, stop: stop).enumerated().map { index, event in
+            CanonicalUnroundedTideEvent(rootSeconds: event.time, eventType: CanonicalUnroundedTideEventEventType(rawValue: event.kind)!, heightM: event.value, referenceOrder: Int64(index))
+        }
     }
 
     // B44.roots find_unrounded_current_events — body INCOMPLETE.
     internal static func findUnroundedCurrentEvents(selectedPredictionModel: CanonicalSelectedPredictionModel, predictionWindow: CanonicalPredictionWindow, currentRequest: CanonicalCurrentRequest) throws -> CanonicalUnroundedCurrentEvents {
-        throw CanonicalUnimplemented.behavior("B44.roots")
+        guard let context = selectedPredictionModel.nativeContext else { throw CanonicalUnimplemented.behavior("B44.roots") }
+        guard case .span(let start, let stop, _) = predictionWindow else { throw CanonicalUnimplemented.behavior("B44.roots") }
+        return try Predict.unroundedCurrentCandidates(context, start: start, stop: stop).enumerated().map { index, event in
+            CanonicalUnroundedCurrentEvent(rootSeconds: event.time, eventType: CanonicalUnroundedCurrentEventEventType(rawValue: event.kind)!, velocityMS: event.value, directionDeg: event.direction, referenceOrder: Int64(index))
+        }
     }
 
     // B17.sidecar acquire_checksum_sidecar — body INCOMPLETE.

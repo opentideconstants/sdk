@@ -31,6 +31,9 @@ internal enum Predict {
             throw OpenTideConstantsError.invalidArgument("bin_number must be an integer from 1 to 2^53 - 1")
         }
     }
+    static func optionExclusion(setId: String?, offsetId: String?) throws {
+        if offsetId != nil && setId != nil { throw OpenTideConstantsError.invalidArgument("set_id and offset_id are mutually exclusive") }
+    }
     static func chosen(_ release: Release, station: Station, setId: String?) throws -> ConstantSet? {
         guard let setId else { return station.recommendedSet }
         guard let constants = station.constantSet(setId: setId) else {
@@ -133,7 +136,7 @@ internal enum Predict {
         try release.own(supplied)
         let station = try release.requireStation(stationId: supplied.stationId)
         try options(binNumber)
-        if offsetId != nil && setId != nil { throw OpenTideConstantsError.invalidArgument("set_id and offset_id are mutually exclusive") }
+        try optionExclusion(setId: setId, offsetId: offsetId)
         let selected = try chosen(release, station: station, setId: setId)
         var usable = selected.map { [.ok, .flagged].contains($0.qcStatus) } ?? false
         let tideOffsets = station.raw["subordinate_offsets"], currentOffsets = station.raw["current_offsets"].array
@@ -238,17 +241,23 @@ internal extension Predict {
         let direction: Double?
     }
     static func currentCandidates(_ context: PredictionContext, start: Double, stop: Double) throws -> [CurrentCandidate] {
+        try currentCandidates(context, start: start, stop: stop, events: harmonicEvents)
+    }
+    static func unroundedCurrentCandidates(_ context: PredictionContext, start: Double, stop: Double) throws -> [CurrentCandidate] {
+        try currentCandidates(context, start: start, stop: stop, events: unroundedHarmonicEvents)
+    }
+    private static func currentCandidates(_ context: PredictionContext, start: Double, stop: Double, events: (HarmonicSum, Double, Double, Bool) throws -> [HarmonicEvent]) throws -> [CurrentCandidate] {
         let row = context.currentBin
         let total = try HarmonicSum(context.table, row["constituents"].array, amplitude: "major_amplitude_ms", phase: "major_phase_deg", mean: context.sigma * (row["mean_major_ms"].number ?? 0.0), multiplier: context.sigma)
         var candidates: [CurrentCandidate] = []
-        for event in try harmonicEvents(total, start: start, stop: stop) {
+        for event in try events(total, start, stop, false) {
             if event.kind == "high" && event.value > 0 {
                 candidates.append(CurrentCandidate(time: event.time, kind: "max_flood", value: event.value, direction: row["mean_flood_dir_deg"].number))
             } else if event.kind == "low" && event.value < 0 {
                 candidates.append(CurrentCandidate(time: event.time, kind: "max_ebb", value: event.value, direction: row["mean_ebb_dir_deg"].number))
             }
         }
-        for event in try harmonicEvents(total, start: start, stop: stop, slack: true) {
+        for event in try events(total, start, stop, true) {
             candidates.append(CurrentCandidate(time: event.time, kind: event.kind, value: 0.0, direction: nil))
         }
         return candidates.enumerated().sorted { a, b in

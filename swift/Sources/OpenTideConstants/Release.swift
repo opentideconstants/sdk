@@ -1,7 +1,7 @@
 import Foundation
 
 public final class Release {
-    private let originToken=UUID()
+    private let originToken:UUID
     internal let meta:JSONValue
     internal let commercialOnly:Bool
     internal let commercialBasis:String
@@ -32,7 +32,41 @@ public final class Release {
         let version=zenodoVersionDoi.flatMap { $0.isEmpty ? nil : " (version DOI: https://doi.org/\($0))" } ?? ""
         return "OpenTideConstants contributors (\(datestamp.prefix(4))). OpenTideConstants, release \(datestamp) [Data set]. \(link)\(version)"
     }
+    internal struct PreparedFields {
+        let originToken:UUID
+        let meta:JSONValue
+        let commercialOnly:Bool
+        let commercialBasis:String
+        let historicalOffsetsPolicy:String
+        let convById:[String:Convention]
+        let licById:[String:Licence]
+        let entries:[IndexEntry]
+        let byId:[String:IndexEntry]
+        let documents:[String:JSONValue]
+        let jsonl:URL?
+        let indexPath:URL?
+        let files:[FileInfo]
+        fileprivate let reader:FileHandle?
+        let astroCache:[String:AstroTable]
+        let closed:Bool
+        let lru:[String:Station]
+        let lruOrder:[String]
+        let zenodoVersionDoi:String?
+    }
+    // Validation/index producers remain the original constructor, before this phase.
+    // The new state owns its token, caches and independently opened native reader.
+    internal static func prepareMaterialization(from source:Release)throws->PreparedFields {
+        try source.checkOpen()
+        let originToken=UUID()
+        let reader=try source.jsonl.map { try FileHandle(forReadingFrom:$0) }
+        return PreparedFields(originToken:originToken,meta:source.meta,commercialOnly:source.commercialOnly,
+            commercialBasis:source.commercialBasis,historicalOffsetsPolicy:source.historicalOffsetsPolicy,
+            convById:source.convById,licById:source.licById,entries:source.entries,byId:source.byId,
+            documents:source.documents,jsonl:source.jsonl,indexPath:source.indexPath,files:source.files,
+            reader:reader,astroCache:[:],closed:false,lru:[:],lruOrder:[],zenodoVersionDoi:source.zenodoVersionDoi)
+    }
     internal init(meta:JSONValue,entries:[IndexEntry],documents:[String:JSONValue],jsonl:URL?,indexPath:URL?,files:[FileInfo],commercialOnly:Bool,commercialBasis:String,historicalOffsetsPolicy:String)throws {
+        originToken=UUID()
         self.meta=meta;self.entries=entries;self.documents=documents;self.jsonl=jsonl;self.indexPath=indexPath;self.files=files;self.commercialOnly=commercialOnly;self.commercialBasis=commercialBasis;self.historicalOffsetsPolicy=historicalOffsetsPolicy
         guard ["strict","as_published_upstream"].contains(commercialBasis),["fallback","exclude"].contains(historicalOffsetsPolicy) else { throw OpenTideConstantsError.invalidArgument("invalid policy") }
         guard let stamp=meta["release"]["datestamp"].string,Cache.validStamp(stamp) else { throw OpenTideConstantsError.invalidRelease("invalid datestamp") }
@@ -59,6 +93,13 @@ public final class Release {
         self.entries=entries.map { e in var e=e;var s=e.summary.object;s["kind"]=resolve(e,[],0).map { .string($0.rawValue) } ?? .null;e.summary = .object(s);return e }.sorted { $0.id<$1.id }
         byId=Dictionary(uniqueKeysWithValues:self.entries.map { ($0.id,$0) })
         if let jsonl { reader=try FileHandle(forReadingFrom:jsonl) }
+    }
+    internal init(prepared fields:PreparedFields) {
+        originToken=fields.originToken;meta=fields.meta;commercialOnly=fields.commercialOnly;commercialBasis=fields.commercialBasis
+        historicalOffsetsPolicy=fields.historicalOffsetsPolicy;convById=fields.convById;licById=fields.licById
+        entries=fields.entries;byId=fields.byId;documents=fields.documents;jsonl=fields.jsonl;indexPath=fields.indexPath
+        files=fields.files;reader=fields.reader;astroCache=fields.astroCache;closed=fields.closed;lru=fields.lru;lruOrder=fields.lruOrder
+        zenodoVersionDoi=fields.zenodoVersionDoi
     }
     internal func checkOpen()throws { if closed { throw OpenTideConstantsError.io("the release is closed") } }
     public var conventions:[Convention] { get throws { try checkOpen();return meta["conventions"].array.map(Convention.init) } }
@@ -217,12 +258,16 @@ public func iterStations(country:String?=nil,type:String?=nil,kind:String?=nil,s
     }
 }
 public func search(name:String,limit:Int64?=nil,match:String?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[Station] {
-    let q=NameFold.fold(name)
-    guard !q.isEmpty,(limit==nil || limit!>0),(match==nil || match=="exact") else { throw OpenTideConstantsError.invalidArgument("invalid query/limit/match") }
+    let q=try Self.validatedSearchQuery(name:name,limit:limit,match:match)
     func rank(_ e:IndexEntry)->Int { let n=e.summary["name_folded"].string ?? "";if n==q{return 0};if match != nil{return 4};if n.hasPrefix(q){return 1};if n.contains(" "+q){return 2};return n.contains(q) ? 3:4 }
     let selected=try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback).filter { rank($0)<4 }.sorted { (rank($0),$0.summary["name_folded"].string ?? "",$0.id)<(rank($1),$1.summary["name_folded"].string ?? "",$1.id) }
     let limited=limit.map { Array(selected.prefix(Int($0))) } ?? selected
     return try limited.map { try requireStation(stationId:$0.id) }
+}
+internal static func validatedSearchQuery(name:String,limit:Int64?,match:String?)throws->String {
+    let q=NameFold.fold(name)
+    guard !q.isEmpty,(limit==nil || limit!>0),(match==nil || match=="exact") else { throw OpenTideConstantsError.invalidArgument("invalid query/limit/match") }
+    return q
 }
 internal func distances(lat:Double,lon:Double,radiusKm:Double,country:String?,type:String?,kind:String?,source:String?,sourceType:String?,includeFlagged:Bool,includeFallback:Bool)throws->[(Double,IndexEntry)] {
     let selected=try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback)
@@ -235,10 +280,13 @@ internal func distances(lat:Double,lon:Double,radiusKm:Double,country:String?,ty
     }.sorted { ($0.0,$0.1.id)<($1.0,$1.1.id) }
 }
 public func near(lat:Double,lon:Double,radiusKm:Double,limit:Int64?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[Nearby] {
-    guard lat.isFinite,lon.isFinite,abs(lat)<=90,abs(lon)<=180,radiusKm>=0,!radiusKm.isNaN,(limit==nil || limit!>0) else { throw OpenTideConstantsError.invalidArgument("invalid geometry/limit") }
+    try Self.validateNearArguments(lat:lat,lon:lon,radiusKm:radiusKm,limit:limit)
     let selected=try distances(lat:lat,lon:lon,radiusKm:radiusKm,country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback)
     let limited=limit.map { Array(selected.prefix(Int($0))) } ?? selected
     return try limited.map { Nearby(station:try requireStation(stationId:$0.1.id),distanceKm:$0.0) }
+}
+internal static func validateNearArguments(lat:Double,lon:Double,radiusKm:Double,limit:Int64?)throws {
+    guard lat.isFinite,lon.isFinite,abs(lat)<=90,abs(lon)<=180,radiusKm>=0,!radiusKm.isNaN,(limit==nil || limit!>0) else { throw OpenTideConstantsError.invalidArgument("invalid geometry/limit") }
 }
 public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->Nearby? {
     try near(lat:lat,lon:lon,radiusKm:maxKm ?? .infinity,limit:1,country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback).first

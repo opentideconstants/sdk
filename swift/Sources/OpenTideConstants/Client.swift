@@ -18,34 +18,99 @@ public final class OpenTideConstants {
     private let io:ClientIO
     private let autoUpdate:Bool
     private let updateInterval:Double
-    private let lock=NSRecursiveLock()
-    private var lastCheck=ProcessInfo.processInfo.systemUptime
+    private let lock:NSRecursiveLock
+    private var lastCheck:Double
     private var closed=false
     private var updating=false
-    private final class Held { weak var release:Release?;init(_ release:Release) { self.release=release } }
+    fileprivate final class Held { weak var release:Release?;init(_ release:Release) { self.release=release } }
+    internal struct PreparedFields {
+        let release:Release
+        let loadedFrom:LoadedFrom
+        let lastError:OpenTideConstantsError?
+        let newerFormatMajor:Int64?
+        let cache:Cache
+        let offline:Bool
+        let pinned:Bool
+        let baseUrl:URL
+        let timeout:Double
+        let userAgent:String?
+        let opened:[URL]
+        let io:ClientIO
+        let autoUpdate:Bool
+        let updateInterval:Double
+        let lock:NSRecursiveLock
+        let lastCheck:Double
+        let closed:Bool
+        let updating:Bool
+        fileprivate let held:[Held]
+    }
+    // Preparation owns the existing lock/clock/weak-cell producers outside B07.
+    internal static func prepareMaterialization(loaded:ClientIO.Loaded,io:ClientIO,pinned:Bool,autoUpdate:Bool,updateInterval:Double)->PreparedFields {
+        let lock=NSRecursiveLock(),lastCheck=ProcessInfo.processInfo.systemUptime
+        let held=[Held(loaded.release)]
+        return PreparedFields(release:loaded.release,loadedFrom:loaded.from,lastError:loaded.error,newerFormatMajor:nil,
+            cache:io.cache,offline:io.offline,pinned:pinned,baseUrl:io.baseUrl,timeout:io.timeout,userAgent:io.userAgent,
+            opened:loaded.paths,io:io,autoUpdate:autoUpdate,updateInterval:updateInterval,lock:lock,lastCheck:lastCheck,
+            closed:false,updating:false,held:held)
+    }
     private var held:[Held]
     private init(loaded:ClientIO.Loaded,io:ClientIO,pinned:Bool,autoUpdate:Bool,updateInterval:Double) {
+        lock=NSRecursiveLock();lastCheck=ProcessInfo.processInfo.systemUptime
         release=loaded.release;loadedFrom=loaded.from;lastError=loaded.error;opened=loaded.paths
         self.io=io;cache=io.cache;offline=io.offline;self.pinned=pinned;baseUrl=io.baseUrl;timeout=io.timeout;userAgent=io.userAgent
         self.autoUpdate=autoUpdate;self.updateInterval=updateInterval;held=[Held(loaded.release)]
     }
+    internal init(prepared fields:PreparedFields) {
+        release=fields.release;loadedFrom=fields.loadedFrom;lastError=fields.lastError;newerFormatMajor=fields.newerFormatMajor
+        cache=fields.cache;offline=fields.offline;pinned=fields.pinned;baseUrl=fields.baseUrl;timeout=fields.timeout
+        userAgent=fields.userAgent;opened=fields.opened;io=fields.io;autoUpdate=fields.autoUpdate;updateInterval=fields.updateInterval
+        lock=fields.lock;lastCheck=fields.lastCheck;closed=fields.closed;updating=fields.updating;held=fields.held
+    }
     public static func open(release:String?=nil,file:String?=nil,cacheDir:String?=nil,offline:Bool?=nil,mode:Mode = .eager,baseUrl:String?=nil,timeout:Double?=nil,proxy:String?=nil,caFile:String?=nil,userAgent:String?=nil,onNetworkError:OnNetworkError?=nil,autoUpdate:Bool=false,updateInterval:Double=86400,logger:((String)->Void)?=nil,verifyOnOpen:Bool=false,commercialOnly:Bool=false,commercialBasis:String="strict",historicalOffsetsPolicy:String="fallback")async throws->OpenTideConstants {
-        let env=ProcessInfo.processInfo.environment
-        let requestedOffline=offline ?? false
-        let offline=(offline ?? false) || ["1","true","yes","on"].contains((env["OPENTIDECONSTANTS_OFFLINE"] ?? "").trimmingCharacters(in:.whitespacesAndNewlines).lowercased())
-        let base=baseUrl ?? env["OPENTIDECONSTANTS_BASE_URL"] ?? "https://data.opentideconstants.org/"
-        guard let url=URL(string:base),["http","https"].contains(url.scheme ?? ""),url.host != nil,mode != .other,["strict","as_published_upstream"].contains(commercialBasis),["fallback","exclude"].contains(historicalOffsetsPolicy),timeout==nil || timeout!.isFinite && (0.001...1e6).contains(timeout!),updateInterval.isFinite,updateInterval>0 else { throw OpenTideConstantsError.invalidArgument("invalid option") }
-        if let userAgent,userAgent.unicodeScalars.contains(where: { $0.value<32 || $0.value==127 }) { throw OpenTideConstantsError.invalidArgument("user_agent control character") }
-        if let proxy { guard let p=URL(string:proxy),p.scheme=="http",p.host != nil,p.port==nil || (1...65535).contains(p.port!) else { throw OpenTideConstantsError.invalidArgument("invalid proxy") } }
-        guard onNetworkError != .other else { throw OpenTideConstantsError.invalidArgument("invalid on_network_error") }
-        if let ca=caFile ?? env["SSL_CERT_FILE"],!FileManager.default.isReadableFile(atPath:ca) { throw OpenTideConstantsError.io("cannot read CA file",["path":.string(ca)]) }
-        let cache=Cache(root:cacheDir.map { URL(fileURLWithPath:$0) } ?? Cache.defaultRoot)
-        let selected=release ?? "latest"
-        guard selected=="latest" || Cache.validStamp(selected) else { throw OpenTideConstantsError.invalidArgument("bad datestamp") }
-        if file != nil { guard release==nil,!requestedOffline,onNetworkError==nil else { throw OpenTideConstantsError.invalidArgument("file with release/offline/on_network_error") } }
-        let normalized=URL(string:url.absoluteString.hasSuffix("/") ? url.absoluteString:url.absoluteString+"/")!
-        let io=ClientIO(cache:cache,offline:offline,mode:mode,baseUrl:normalized,timeout:timeout ?? 60,proxy:proxy,caFile:caFile ?? env["SSL_CERT_FILE"],userAgent:userAgent,onNetworkError:onNetworkError ?? .useCache,verifyOnOpen:verifyOnOpen,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy,logger:logger)
+        let arguments=CanonicalClientOpenArguments(release:release,file:file,cacheDir:cacheDir,offline:offline,mode:mode,baseUrl:baseUrl,timeout:timeout,proxy:proxy,caFile:caFile,userAgent:userAgent,onNetworkError:onNetworkError,autoUpdate:autoUpdate,updateInterval:updateInterval,logger:logger,verifyOnOpen:verifyOnOpen,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
+        let options=try validatedOpenOptions(arguments,environment:ProcessInfo.processInfo.environment)
+        let cache=Cache(root:URL(fileURLWithPath:options.cacheDir!))
+        let selected=options.release!
+        let offline=options.offline!
+        let normalized=URL(string:options.baseUrl!)!
+        let io=ClientIO(cache:cache,offline:offline,mode:mode,baseUrl:normalized,timeout:timeout ?? 60,proxy:proxy,caFile:options.caFile,userAgent:userAgent,onNetworkError:onNetworkError ?? .useCache,verifyOnOpen:verifyOnOpen,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy,logger:logger)
         return OpenTideConstants(loaded:try await io.open(selected,file:file),io:io,pinned:file != nil || selected != "latest",autoUpdate:autoUpdate,updateInterval:updateInterval)
+    }
+    internal static func effectiveOpenOptions(_ options:CanonicalEffectiveOptions,environment:[String:String],platformDefaults:CanonicalEffectiveOptions?=nil)->CanonicalEffectiveOptions {
+        CanonicalEffectiveOptions(release:options.release ?? "latest",
+                file:options.file,
+                cacheDir:options.cacheDir ?? environment["OPENTIDECONSTANTS_CACHE_DIR"].flatMap { $0.isEmpty ? nil:$0 } ?? platformDefaults?.cacheDir ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/opentideconstants").path,
+                offline:(options.offline ?? false) || ["1","true","yes","on"].contains((environment["OPENTIDECONSTANTS_OFFLINE"] ?? "").trimmingCharacters(in:.whitespacesAndNewlines).lowercased()),
+                mode:options.mode,
+                baseUrl:options.baseUrl ?? environment["OPENTIDECONSTANTS_BASE_URL"] ?? platformDefaults?.baseUrl ?? "https://data.opentideconstants.org/",
+                timeout:options.timeout ?? platformDefaults?.timeout ?? 60,
+                proxy:options.proxy,
+                caFile:options.caFile ?? environment["SSL_CERT_FILE"],
+                userAgent:options.userAgent,
+                onNetworkError:options.onNetworkError ?? .useCache,
+                autoUpdate:options.autoUpdate,
+                updateInterval:options.updateInterval,
+                logger:options.logger,
+                verifyOnOpen:options.verifyOnOpen,
+                commercialOnly:options.commercialOnly,
+                commercialBasis:options.commercialBasis,
+                historicalOffsetsPolicy:options.historicalOffsetsPolicy)
+    }
+    internal static func validatedOpenOptions(_ arguments:CanonicalClientOpenArguments,environment:[String:String])throws->CanonicalEffectiveOptions {
+            let options=effectiveOpenOptions(CanonicalEffectiveOptions(release:arguments.release,file:arguments.file,cacheDir:arguments.cacheDir,offline:arguments.offline,mode:arguments.mode,baseUrl:arguments.baseUrl,timeout:arguments.timeout,proxy:arguments.proxy,caFile:arguments.caFile,userAgent:arguments.userAgent,onNetworkError:arguments.onNetworkError,autoUpdate:arguments.autoUpdate,updateInterval:arguments.updateInterval,logger:arguments.logger,verifyOnOpen:arguments.verifyOnOpen,commercialOnly:arguments.commercialOnly,commercialBasis:arguments.commercialBasis,historicalOffsetsPolicy:arguments.historicalOffsetsPolicy),environment:environment)
+            let requestedOffline=arguments.offline ?? false
+            let mode=arguments.mode,commercialBasis=arguments.commercialBasis,historicalOffsetsPolicy=arguments.historicalOffsetsPolicy
+            let timeout=arguments.timeout,updateInterval=arguments.updateInterval
+            guard let url=URL(string:options.baseUrl!),["http","https"].contains(url.scheme ?? ""),url.host != nil,mode != .other,["strict","as_published_upstream"].contains(commercialBasis),["fallback","exclude"].contains(historicalOffsetsPolicy),timeout==nil || timeout!.isFinite && (0.001...1e6).contains(timeout!),updateInterval.isFinite,updateInterval>0 else { throw OpenTideConstantsError.invalidArgument("invalid option") }
+            if let userAgent=arguments.userAgent,userAgent.unicodeScalars.contains(where: { $0.value<32 || $0.value==127 }) { throw OpenTideConstantsError.invalidArgument("user_agent control character") }
+            if let proxy=arguments.proxy { guard let p=URL(string:proxy),p.scheme=="http",p.host != nil,p.port==nil || (1...65535).contains(p.port!) else { throw OpenTideConstantsError.invalidArgument("invalid proxy") } }
+            guard arguments.onNetworkError != .other else { throw OpenTideConstantsError.invalidArgument("invalid on_network_error") }
+            if let ca=options.caFile,!FileManager.default.isReadableFile(atPath:ca) { throw OpenTideConstantsError.io("cannot read CA file",["path":.string(ca)]) }
+            let selected=arguments.release ?? "latest"
+            guard selected=="latest" || Cache.validStamp(selected) else { throw OpenTideConstantsError.invalidArgument("bad datestamp") }
+            if arguments.file != nil { guard arguments.release==nil,!requestedOffline,arguments.onNetworkError==nil else { throw OpenTideConstantsError.invalidArgument("file with release/offline/on_network_error") } }
+            let normalized=URL(string:url.absoluteString.hasSuffix("/") ? url.absoluteString:url.absoluteString+"/")!
+            return CanonicalEffectiveOptions(release:options.release,file:options.file,cacheDir:options.cacheDir,offline:options.offline,mode:options.mode,baseUrl:normalized.absoluteString,timeout:options.timeout,proxy:options.proxy,caFile:options.caFile,userAgent:options.userAgent,onNetworkError:options.onNetworkError,autoUpdate:options.autoUpdate,updateInterval:options.updateInterval,logger:options.logger,verifyOnOpen:options.verifyOnOpen,commercialOnly:options.commercialOnly,commercialBasis:options.commercialBasis,historicalOffsetsPolicy:options.historicalOffsetsPolicy)
     }
     public func verify()throws->Bool {
         try state {
@@ -72,7 +137,7 @@ public final class OpenTideConstants {
     }
     public func cachedReleases()throws->[String] { try release.checkOpen();return try cache.cached() }
     private func state<Value>(_ body:()throws->Value)rethrows->Value { lock.lock();defer { lock.unlock() };return try body() }
-    private func checkOpen()throws { try state { guard !closed else { throw OpenTideConstantsError.io("the release is closed") };try release.checkOpen() } }
+    internal func checkOpen()throws { try state { guard !closed else { throw OpenTideConstantsError.io("the release is closed") };try release.checkOpen() } }
     public func releases()async throws->[ReleaseInfo] {
         try checkOpen()
         do { return try await io.index().map(ReleaseInfo.init) }
@@ -123,13 +188,19 @@ public final class OpenTideConstants {
             return UpdateResult(updated:true,from:from,to:to)
         }
     }
+    internal static func validateDownloadArguments(release:String,to:String,formats:[Format])throws {
+        guard release=="latest" || Cache.validStamp(release),!to.isEmpty,!formats.isEmpty,!formats.contains(.other) else { throw OpenTideConstantsError.invalidArgument("invalid download option") }
+    }
+    internal static func validatePruneArguments(keep:Int64)throws {
+        guard keep>=0 else { throw OpenTideConstantsError.invalidArgument("invalid keep") }
+    }
     public func download(release:String="latest",to:String,formats:[Format]=[.jsonl],overwrite:Bool=false)async throws->[String] {
         try checkOpen()
-        guard release=="latest" || Cache.validStamp(release),!to.isEmpty,!formats.isEmpty,!formats.contains(.other) else { throw OpenTideConstantsError.invalidArgument("invalid download option") }
+        try Self.validateDownloadArguments(release:release,to:to,formats:formats)
         return try await io.download(release,to:URL(fileURLWithPath:to),formats:formats,overwrite:overwrite)
     }
     public func prune(keep:Int64=3)async throws->[String] {
-        try checkOpen();guard keep>=0 else { throw OpenTideConstantsError.invalidArgument("invalid keep") }
+        try checkOpen();try Self.validatePruneArguments(keep:keep)
         let protected=state { pinned && loadedFrom == .file || loadedFrom == .fileUnverified ? Set<String>():Set(held.compactMap { $0.release?.datestamp }) }
         let directory=cache.base.appendingPathComponent("releases")
         guard FileManager.default.fileExists(atPath:directory.path) else { return [] }
@@ -207,7 +278,7 @@ public final class OpenTideConstants {
     public func astroTable(id:String?=nil)throws->AstroTable? { try queryRelease().astroTable(id:id) }
 }
 
-private struct ClientIO:@unchecked Sendable {
+internal struct ClientIO:@unchecked Sendable {
     struct Loaded { let release:Release;let from:LoadedFrom;let paths:[URL];var error:OpenTideConstantsError?=nil }
     let cache:Cache
     let offline:Bool
