@@ -117,7 +117,7 @@ public final class OpenTideConstants {
             if let ca=options.caFile,!FileManager.default.isReadableFile(atPath:ca) { throw OpenTideConstantsError.io("cannot read CA file",["path":.string(ca)]) }
             let selected=arguments.release ?? "latest"
             guard selected=="latest" || Cache.validStamp(selected) else { throw OpenTideConstantsError.invalidArgument("bad datestamp") }
-            if arguments.file != nil { guard arguments.release==nil,!requestedOffline,arguments.onNetworkError==nil else { throw OpenTideConstantsError.invalidArgument("file with release/offline/on_network_error") } }
+            if arguments.file != nil { guard selected=="latest",!requestedOffline,options.onNetworkError == .useCache else { throw OpenTideConstantsError.invalidArgument("file with release/offline/on_network_error") } }
             let normalized=URL(string:url.absoluteString.hasSuffix("/") ? url.absoluteString:url.absoluteString+"/")!
             return CanonicalEffectiveOptions(release:options.release,file:options.file,cacheDir:options.cacheDir,offline:options.offline,mode:options.mode,baseUrl:normalized.absoluteString,timeout:options.timeout,proxy:options.proxy,caFile:options.caFile,userAgent:options.userAgent,onNetworkError:options.onNetworkError,autoUpdate:options.autoUpdate,updateInterval:options.updateInterval,logger:options.logger,verifyOnOpen:options.verifyOnOpen,commercialOnly:options.commercialOnly,commercialBasis:options.commercialBasis,historicalOffsetsPolicy:options.historicalOffsetsPolicy)
     }
