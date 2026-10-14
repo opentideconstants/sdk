@@ -413,8 +413,8 @@ class OpenTideConstants
             @qc_status = Util.enum(raw["qc_status"], ENUMS[:qc_status])
             @qc_flags = Array(raw["qc_flags"]).map { |f| QcFlag.new(f) }.freeze
             @fallback = raw["fallback"] && Fallback.new(raw["fallback"])
-            @vintage = raw["vintage"] && HistoricalOffsetVintage.new(raw["vintage"])
-            @provenance = raw["provenance"] && HistoricalOffsetProvenance.new(raw["provenance"])
+            @vintage = raw["offset_id"] && raw["vintage"] ? HistoricalOffsetVintage.new(raw["vintage"]) : nil
+            @provenance = raw["offset_id"] && raw["provenance"] ? HistoricalOffsetProvenance.new(raw["provenance"]) : nil
             freeze
         end
     end
