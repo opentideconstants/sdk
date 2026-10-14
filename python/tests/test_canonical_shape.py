@@ -13,6 +13,8 @@ from types import MappingProxyType
 from collections.abc import MutableMapping
 from dataclasses import replace
 from types import FrameType
+from test_unit import _Server
+from typing import Protocol, runtime_checkable
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "src"))
@@ -4557,3 +4559,250 @@ def test_raw_request_adapts_to_narrow_arguments(
     )
     assert type(actual) is type(expected) and actual == expected
     assert release.require_station(station.station_id) is station
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        types._Arguments1("Client.releases"),
+        types._Arguments1("Client.latest"),
+        types._Arguments1("Client.check_for_update"),
+        types._Arguments1("Client.update"),
+        types._Arguments1("Client.verify"),
+        types._Arguments1("Client.cached_releases"),
+    ],
+)
+def test_args1_closed_client_guard(arguments: types._Arguments1) -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        client.close()
+        with pytest.raises(_errors.FileError) as expected:
+            getattr(client, arguments.member_id.split(".")[-1])()
+        context = types._B01ClientReceiver(arguments, client)
+        with pytest.raises(_errors.FileError) as actual:
+            canonical._validate_operation_arguments(
+                operation="release_metadata",
+                arguments=arguments,
+                member_contract=context,
+            )
+        assert (
+            type(actual.value) is type(expected.value)
+            and actual.value.code == expected.value.code
+        )
+        assert str(actual.value) == str(expected.value)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        types._Arguments1("Release.conventions"),
+        types._Arguments1("Release.licences"),
+        types._Arguments1("Release.constituent_names"),
+        types._Arguments1("Release.stats"),
+        types._Arguments1("Release.station_count"),
+        types._Arguments1("Release.tombstone_count"),
+        types._Arguments1("Release.historical_offsets_policy"),
+    ],
+)
+def test_args1_closed_release_guard(arguments: types._Arguments1) -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        release = client.release
+        client.close()
+        with pytest.raises(_errors.FileError) as expected:
+            getattr(release, arguments.member_id.split(".")[-1])
+        context = types._B01ReleaseReceiver(arguments, release)
+        with pytest.raises(_errors.FileError) as actual:
+            canonical._validate_operation_arguments(
+                operation="release_metadata",
+                arguments=arguments,
+                member_contract=context,
+            )
+        assert (
+            type(actual.value) is type(expected.value)
+            and actual.value.code == expected.value.code
+        )
+        assert str(actual.value) == str(expected.value)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [types._Arguments1("Client.latest"), types._Arguments1("Client.check_for_update")],
+)
+def test_args1_live_offline_policy(
+    arguments: types._Arguments1, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENTIDECONSTANTS_OFFLINE", "1")
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        assert client._offline and not client._closed
+        with pytest.raises(_errors.OfflineError) as expected:
+            getattr(client, arguments.member_id.split(".")[-1])()
+        with pytest.raises(_errors.OfflineError) as actual:
+            canonical._validate_operation_arguments(
+                operation="latest",
+                arguments=arguments,
+                member_contract=types._B01ClientReceiver(arguments, client),
+            )
+        assert (
+            type(actual.value) is type(expected.value)
+            and actual.value.code == expected.value.code
+        )
+        assert str(actual.value) == str(expected.value)
+
+
+def test_args1_live_pinned_policy() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        with pytest.raises(_errors.PinnedReleaseError) as expected:
+            client.update()
+        arguments = types._Arguments1("Client.update")
+        with pytest.raises(_errors.PinnedReleaseError) as actual:
+            canonical._validate_operation_arguments(
+                operation="update",
+                arguments=arguments,
+                member_contract=types._B01ClientReceiver(arguments, client),
+            )
+        assert (
+            type(actual.value) is type(expected.value)
+            and actual.value.code == expected.value.code
+        )
+        assert str(actual.value) == str(expected.value)
+
+
+def test_args1_open_client_guards_have_no_query_effect(tmp_path: Path) -> None:
+    server = _Server()
+    try:
+        with OpenTideConstants(base_url=server.url, cache_dir=tmp_path) as client:
+            before = list(server.requests)
+            for arguments in (
+                types._Arguments1("Client.releases"),
+                types._Arguments1("Client.latest"),
+                types._Arguments1("Client.check_for_update"),
+                types._Arguments1("Client.update"),
+                types._Arguments1("Client.verify"),
+                types._Arguments1("Client.cached_releases"),
+            ):
+                result = canonical._validate_operation_arguments(
+                    operation="release_metadata",
+                    arguments=arguments,
+                    member_contract=types._B01ClientReceiver(arguments, client),
+                )
+                assert result is arguments
+            assert server.requests == before
+            assert client.last_error is None and not client._closed
+    finally:
+        server.close()
+
+
+def test_args1_plain_metadata_remains_readable_after_close() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        release = client.release
+        client.close()
+        for arguments in (
+            types._Arguments1("Client.release"),
+            types._Arguments1("Client.loaded_from"),
+            types._Arguments1("Client.last_error"),
+            types._Arguments1("Client.newer_format_major"),
+            types._Arguments1("Release.datestamp"),
+            types._Arguments1("Release.created"),
+            types._Arguments1("Release.format_version"),
+            types._Arguments1("Release.concept_doi"),
+            types._Arguments1("Release.zenodo_version_doi"),
+            types._Arguments1("Release.source_versions"),
+            types._Arguments1("Release.build_commit"),
+            types._Arguments1("Release.changelog_url"),
+            types._Arguments1("Release.files"),
+            types._Arguments1("Release.citation"),
+        ):
+            receiver = client if arguments.member_id.startswith("Client.") else release
+            before = getattr(receiver, arguments.member_id.split(".")[-1])
+            result = canonical._validate_operation_arguments(
+                operation="release_metadata",
+                arguments=arguments,
+                member_contract=arguments,
+            )
+            assert result is arguments
+            assert getattr(receiver, arguments.member_id.split(".")[-1]) == before
+        args = types._Arguments1("Client.close")
+        assert client.close() is None
+        assert (
+            canonical._validate_operation_arguments(
+                operation="close", arguments=args, member_contract=args
+            )
+            is args
+        )
+
+
+@runtime_checkable
+class _NativeLockOwnership(Protocol):
+    def _is_owned(self) -> bool: ...
+
+
+def test_args1_pinned_guard_keeps_original_public_lock_position() -> None:
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        observed = []
+        previous = sys.getprofile()
+        lock = client._lock
+        assert isinstance(lock, _NativeLockOwnership)
+
+        def capture(frame: FrameType, event: str, value):
+            if (
+                event == "call"
+                and frame.f_code.co_name == "_validate_update_capability"
+            ):
+                assert frame.f_locals["self"] is client
+                assert frame.f_back is not None
+                observed.append((frame.f_back.f_code.co_name, lock._is_owned()))
+
+        try:
+            sys.setprofile(capture)
+            with pytest.raises(_errors.PinnedReleaseError):
+                client.update()
+            args = types._Arguments1("Client.update")
+            with pytest.raises(_errors.PinnedReleaseError):
+                canonical._validate_operation_arguments(
+                    operation="update",
+                    arguments=args,
+                    member_contract=types._B01ClientReceiver(args, client),
+                )
+        finally:
+            sys.setprofile(previous)
+        assert observed == [("update", True), ("_validate_operation_arguments", False)]
+        assert not lock._is_owned()
+
+
+def test_args1_native_policy_error_identity_survives_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENTIDECONSTANTS_OFFLINE", "1")
+    with OpenTideConstants(
+        file=ROOT / "conformance/fixtures/predict/OTC_20991231.7.json"
+    ) as client:
+        args = types._Arguments1("Client.latest")
+        with pytest.raises(_errors.OfflineError) as actual:
+            canonical._validate_operation_arguments(
+                operation="latest",
+                arguments=args,
+                member_contract=types._B01ClientReceiver(args, client),
+            )
+        native = actual.value
+        assert native.__cause__ is None
+        failure = _NativeFailure(
+            "offline_unavailable", {"message": str(native)}, None, native
+        )
+        with pytest.raises(_errors.OfflineError) as bound:
+            canonical._translate_native_binding(
+                canonical_result=types._Absent(),
+                canonical_error=types._PresentError("Client.latest", failure),
+                native_profile="python",
+            )
+        assert bound.value is native

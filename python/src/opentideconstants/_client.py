@@ -39,6 +39,16 @@ _MODES = ("eager", "stream")
 _ON_ERR = ("use_cache", "raise")
 
 
+def _validate_offline_pointer(self: "OpenTideConstants"):
+    if self._offline:
+        raise OfflineError("offline: the latest pointer cannot be read")
+
+
+def _validate_update_capability(self: "OpenTideConstants"):
+    if self._pinned is not None or self._file is not None:
+        raise PinnedReleaseError("this client was opened on a pinned release or a file")
+
+
 def _major(fv) -> Optional[int]:
     k = version_key(fv)
     return None if k is None else k[0]
@@ -1063,16 +1073,14 @@ class OpenTideConstants:
         OTC_latest.json when that is a 404) with a conditional GET, and OTC_index.json too when the pointer's
         release is not readable by this SDK (spec §5.2 steps 2 and 2a, CR D23). It does not switch releases."""
         self._check_open()
-        if self._offline:
-            raise OfflineError("offline: the latest pointer cannot be read")
+        _validate_offline_pointer(self)
         return self._latest_info()
 
     def check_for_update(self) -> Optional[ReleaseInfo]:
         """A release newer than the loaded one that this SDK reads, or None. Also sets newer_format_major from
         a conditional GET of OTC_latest.json (spec §7.4)."""
         self._check_open()
-        if self._offline:
-            raise OfflineError("offline: the latest pointer cannot be read")
+        _validate_offline_pointer(self)
         try:
             info = self._latest_info()
         except (UnsupportedFormatError, ReaderTooOldError):
@@ -1104,8 +1112,7 @@ class OpenTideConstants:
         """Download a newer release, verify it and swap it in. A Release held from before stays valid."""
         self._check_open()
         with self._lock:
-            if self._pinned is not None or self._file is not None:
-                raise PinnedReleaseError("this client was opened on a pinned release or a file")
+            _validate_update_capability(self)
             return self._update()
 
     def _update(self) -> UpdateResult:

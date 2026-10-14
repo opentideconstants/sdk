@@ -3999,8 +3999,33 @@ class _AstroMemberContract:
         return self.arguments.member_id
 
 
+@dataclass(frozen=True, slots=True)
+class _B01ClientReceiver:
+    arguments: _Arguments1
+    native_client: OpenTideConstants
+
+    @property
+    def member_id(self) -> _AuxiliaryMemberId | Literal["Client.close"]:
+        return self.arguments.member_id
+
+
+@dataclass(frozen=True, slots=True)
+class _B01ReleaseReceiver:
+    arguments: _Arguments1
+    native_release: Release
+
+    @property
+    def member_id(self) -> _AuxiliaryMemberId | Literal["Client.close"]:
+        return self.arguments.member_id
+
+
 _CMemberContract: TypeAlias = (
-    _MemberArguments | _MemberRequests | _AstroMemberContract | _B01ReleaseContract
+    _MemberArguments
+    | _MemberRequests
+    | _AstroMemberContract
+    | _B01ReleaseContract
+    | _B01ClientReceiver
+    | _B01ReleaseReceiver
 )
 
 

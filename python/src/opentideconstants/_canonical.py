@@ -123,6 +123,42 @@ def _validate_operation_arguments(
         return _validate_request_arguments(arguments, member_contract)
     if isinstance(arguments, T._Arguments13):
         return _validate_request_arguments(arguments, member_contract)
+    if isinstance(arguments, T._Arguments1):
+        if arguments.member_id in (
+            "Client.releases",
+            "Client.latest",
+            "Client.check_for_update",
+            "Client.update",
+            "Client.verify",
+            "Client.cached_releases",
+        ):
+            if (
+                not isinstance(member_contract, T._B01ClientReceiver)
+                or member_contract.arguments is not arguments
+            ):
+                raise NotImplementedError("B01 selected Client receiver incomplete")
+            client = member_contract.native_client
+            client._check_open()
+            if arguments.member_id in ("Client.latest", "Client.check_for_update"):
+                _client._validate_offline_pointer(client)
+            elif arguments.member_id == "Client.update":
+                _client._validate_update_capability(client)
+        elif arguments.member_id in (
+            "Release.conventions",
+            "Release.licences",
+            "Release.constituent_names",
+            "Release.stats",
+            "Release.station_count",
+            "Release.tombstone_count",
+            "Release.historical_offsets_policy",
+        ):
+            if (
+                not isinstance(member_contract, T._B01ReleaseReceiver)
+                or member_contract.arguments is not arguments
+            ):
+                raise NotImplementedError("B01 selected Release receiver incomplete")
+            member_contract.native_release._check_open()
+        return arguments
     if isinstance(arguments, T._Arguments0):
         if member_contract.member_id != arguments.member_id:
             raise _errors.InvalidArgumentError(
