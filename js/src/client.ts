@@ -553,7 +553,6 @@ export class OpenTideConstants {
         commercialOnly: boolean, commercialBasis: "strict" | "as_published_upstream", historicalOffsetsPolicy: "fallback" | "exclude"): { rel: Release; from: LoadedFrom; src: FileSource } {
         const path = node.nodePath;
         const full = path.resolve(file);
-        if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
         const dir = path.dirname(full);
         const name = path.basename(full);
         // the name must be OTC_<D><ext> with a valid datestamp (spec 4.2, CR D18)
@@ -562,6 +561,7 @@ export class OpenTideConstants {
         if (!parts || !kind) throw new InvalidArgumentError(`file must be named OTC_<datestamp>.json, .json.gz or .jsonl; got ${name}`);
         // a .json or .json.gz file has no lines to seek to: never load it eagerly in silence (CR T94, spec 4.2)
         if (mode === "stream" && kind !== "jsonl") throw new InvalidArgumentError("stream mode needs .jsonl and .meta.json");
+        if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
         const stem = `OTC_${parts.datestamp}`;
         const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
         const shaPath = path.join(dir, `${stem}.sha256`);
