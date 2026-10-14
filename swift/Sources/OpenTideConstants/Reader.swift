@@ -273,6 +273,9 @@ internal extension Reader {
             do {
                 let doc=try JSONValue.parse(supplied?.bytes ?? read(indexPath!))
                 let admitted=try authenticate_station_index(doc,url:url,meta:meta,digest:digest!,size:size!)
+                try eachLine(url) { line,_ in
+                    try validateSourceStation(JSONValue.parse(line),conventions:conventions,licences:licences)
+                }
                 let release=try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
                 return AuthenticatedStationIndex(release:release,document:doc)
             } catch {
