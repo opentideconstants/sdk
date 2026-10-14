@@ -178,7 +178,14 @@ public final class OpenTideConstants {
     }
     public func latest()async throws->ReleaseInfo {
         try checkOpen()
-        do { let entry=try await io.resolveLatest();state { lastError=nil };return ReleaseInfo(entry) }
+        do {
+            let entry=try await io.resolveLatest()
+            state {
+                lastError=nil
+                if entry["datestamp"].string==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
+            }
+            return ReleaseInfo(entry)
+        }
         catch let error as OpenTideConstantsError { if ["unsupported_format","reader_too_old"].contains(error.code) { state { lastError=nil } };throw error }
     }
     public func checkForUpdate()async throws->ReleaseInfo? {
@@ -207,7 +214,10 @@ public final class OpenTideConstants {
         while try !takeUpdate() { try await Task.sleep(nanoseconds:10_000_000) }
         defer { state { updating=false } }
         let from=release.datestamp,entry=try await io.resolveLatest(),to=entry["datestamp"].string!
-        state { lastError=nil }
+        state {
+            lastError=nil
+            if to==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
+        }
         guard Cache.newer(to,from) else { state { lastCheck=ProcessInfo.processInfo.systemUptime };return UpdateResult(updated:false,from:from,to:from) }
         await io.noteVersionDoi(entry)
         let loaded:ClientIO.Loaded
@@ -558,9 +568,9 @@ internal struct ClientIO:@unchecked Sendable {
             if let doc=try await pointer(name) { latest=try entry(doc,source:baseUrl.appendingPathComponent(name));break }
         }
         guard let latest else { throw OpenTideConstantsError.releaseNotFound("latest pointer missing") }
-        if readable(latest) { return latest }
+        if readable(latest) { await noteVersionDoi(latest);return latest }
         let values=try await index()
-        if let supported=values.first(where:readable) { return supported }
+        if let supported=values.first(where:readable) { await noteVersionDoi(supported);return supported }
         if ([latest]+values).contains(where:{ ($0["format_version"].string ?? "").split(separator:".").first=="1" }) { throw OpenTideConstantsError.readerTooOld("no readable release") }
         throw OpenTideConstantsError.unsupportedFormat("no supported format")
     }
