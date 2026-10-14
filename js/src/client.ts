@@ -1024,7 +1024,19 @@ get release(): Release {
         if (!node || !store) throw new UnsupportedError("cachedReleases needs a file system (Node)");
         const dir = store.describe("releases");
         return Object.freeze(node.listDir(dir)
-            .filter((d) => isDatestamp(d) && node.exists(node.nodePath.join(dir, d, ".verified")))
+            .filter((d) => {
+                if (!isDatestamp(d)) return false;
+                const path = node.nodePath.join(dir, d, ".verified");
+                let bytes: Uint8Array | null;
+                try { bytes = node.readIfExists(path); }
+                catch (e) { throw new CacheError(`cannot read ${path}`, { path, cause: e }); }
+                if (bytes === null) return false;
+                try { return parseVerified(bytes, d) !== null; }
+                catch (e) {
+                    if (e instanceof InvalidReleaseError) return false;
+                    throw e;
+                }
+            })
             .sort((a, b) => compareDatestamps(b, a)));
     }
 
