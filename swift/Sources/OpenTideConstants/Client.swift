@@ -210,7 +210,7 @@ public final class OpenTideConstants {
         state { lastError=nil }
         guard Cache.newer(to,from) else { state { lastCheck=ProcessInfo.processInfo.systemUptime };return UpdateResult(updated:false,from:from,to:from) }
         let loaded:ClientIO.Loaded
-        if let cached=try io.usableCached(to) { loaded=cached } else { loaded=try await io.fetch(to,entry:entry) }
+        if let cached=try io.usableCached(to,doi:entry["zenodo_version_doi"].string) { loaded=cached } else { loaded=try await io.fetch(to,entry:entry) }
         return try state {
             guard !closed else { loaded.release.close();throw OpenTideConstantsError.io("the release is closed") }
             held=held.filter { $0.release != nil };held.append(Held(loaded.release))
@@ -413,8 +413,12 @@ internal struct ClientIO:@unchecked Sendable {
             throw error
         }
     }
-    func usableCached(_ stamp:String)throws->Loaded? {
-        do { return try cached(stamp) }
+    func usableCached(_ stamp:String,doi:String?=nil)throws->Loaded? {
+        do {
+            let loaded=try cached(stamp)
+            if let doi { loaded?.release.zenodoVersionDoi=doi }
+            return loaded
+        }
         catch let error as OpenTideConstantsError {
             if ["checksum_mismatch","invalid_release"].contains(error.code) { try cache.heal(stamp,error);if !offline { return nil } }
             throw error
@@ -441,7 +445,7 @@ internal struct ClientIO:@unchecked Sendable {
         do {
             let entry=try await resolveLatest()
             await noteVersionDoi(entry)
-            if let loaded=try usableCached(entry["datestamp"].string!) { return loaded }
+            if let loaded=try usableCached(entry["datestamp"].string!,doi:entry["zenodo_version_doi"].string) { return loaded }
             return try await fetch(entry["datestamp"].string!,entry:entry)
         } catch let error as OpenTideConstantsError {
             guard error.code=="network",onNetworkError == .useCache,let loaded=try newestCached() else { throw error }
@@ -609,7 +613,7 @@ internal struct ClientIO:@unchecked Sendable {
     func fetch(_ stamp:String,entry:JSONValue?)async throws->Loaded {
         let directory=try cache.releaseDir(stamp),token=try await cache.takeLock(directory)
         defer { cache.releaseLock(directory,token) }
-        if let loaded=try usableCached(stamp) { return loaded }
+        if let loaded=try usableCached(stamp,doi:entry?["zenodo_version_doi"].string) { return loaded }
         let (rows,shaBytes)=try await sha(stamp,entry:entry)
         let json="OTC_\(stamp).json",gz=json+".gz",jsonl="OTC_\(stamp).jsonl",meta="OTC_\(stamp).meta.json"
         let names=mode == .stream ? [jsonl,meta]:[json]
