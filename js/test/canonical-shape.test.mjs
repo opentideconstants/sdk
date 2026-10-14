@@ -42,12 +42,13 @@ function verifyInvocations(observations) {
     assert.deepEqual(observations.call_actions.map(row => row.id), protocol.call_actions.map(row => row.action.action_id));
     const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B07', 'B08.raw', 'B24', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
     assert.ok(observations.runtime.every(row => migrated.has(row.id) ? row.refusal === undefined && typeof row.value_json === 'string' : row.refusal === `Private canonical seam ${row.id} is unimplemented`));
-    assert.equal(observations.b04_presence_controls.length, 4);
+    assert.equal(observations.b04_presence_controls.length, 7);
     assert.ok(observations.b04_presence_controls.every(row => row.refusal === undefined && (typeof row.value_json === 'string' || typeof row.error_json === 'string')));
     assert.equal(JSON.parse(observations.b04_presence_controls[0].value_json).member_id, 'Client.close');
     assert.deepEqual(JSON.parse(observations.b04_presence_controls[1].value_json), { member_id: 'Release.station', value: null });
     assert.equal(JSON.parse(observations.b04_presence_controls[2].error_json).code, 'io');
     assert.equal(JSON.parse(observations.b04_presence_controls[3].error_json).structured_fields.message, 'native exception');
+    assert.deepEqual(observations.b04_presence_controls.slice(4).map(row => JSON.parse(row.error_json).code), ['network', 'checksum_mismatch', 'cache']);
     assert.equal(observations.control.raw_preserved, true);
     assert.equal(observations.control.public_route_unchanged, true);
 }
@@ -112,7 +113,7 @@ test('private canonical TypeScript browser entries load and invoke in Chromium',
 });
 
 // Real native leaf values from accepted CC0 documents and original finite oracles.
-async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false }) {
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false }) {
     const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
         import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
         import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
@@ -174,6 +175,62 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
         await observation('B02', () => canonical.resolve_effective_options({ member_id: 'Client.open', offline: false }, environment, { member_id: 'Client.open', native_context: { platform, node } }), value => value.offline === Boolean(node));
         await observation('B03', () => canonical.select_canonical_error('open', [canonicalFailure], null), value => value.code === 'invalid_argument' && value.structured_fields.message === failure.message);
         await observation('B04', () => canonical.translate_native_binding({ native_profile: typeof process === 'object' ? 'typescript_node' : 'typescript_browser', canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: release.station('missing') } } }), value => value.member_id === 'Release.station' && value.value === null);
+        if (requiredBindings) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const cause = new Error('original native cause');
+            // Injected canonical failures exercise real source-native constructors, not acquisition failures.
+            const network = new errors.NetworkError('transport fixture failed', { url: 'https://native.invalid/release', status: 503, cause });
+            const checksum = new errors.ChecksumError('injected digest disagreement', { file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64), cause });
+            const cache = new errors.CacheError('injected prune failure', { removed: ['20991231.2', '20991231'], cause });
+            for (const [expected, structured_fields] of [
+                [network, { message: network.message, url: network.url, status: network.status }],
+                [checksum, { message: checksum.message, file: checksum.file, expected: checksum.expected, actual: checksum.actual }],
+                [cache, { message: cache.message, removed: cache.removed }],
+            ]) {
+                const input = { native_profile, canonical_error: { code: expected.code, structured_fields, cause } };
+                await observation(`B04.required.${expected.code}`, () => {
+                    try { canonical.translate_native_binding(input); return { threw: false }; }
+                    catch (actual) {
+                        return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof expected.constructor, cause_identity: actual.cause === cause,
+                            url: actual.url, status: actual.status, file: actual.file, expected: actual.expected, actual: actual.actual,
+                            removed: actual.removed, removed_frozen: actual.removed ? Object.isFrozen(actual.removed) : undefined };
+                    }
+                }, actual => actual.native_class && actual.cause_identity && actual.message === expected.message && actual.code === expected.code
+                    && actual.url === expected.url && actual.status === expected.status && actual.file === expected.file
+                    && actual.expected === expected.expected && actual.actual === expected.actual
+                    && JSON.stringify(actual.removed) === JSON.stringify(expected.removed)
+                    && (!expected.removed || actual.removed_frozen));
+                await observation(`B04.identity.${expected.code}`, () => {
+                    try { canonical.translate_native_binding({ native_profile, canonical_error: { ...input.canonical_error, native_error: expected } }); return false; }
+                    catch (actual) { return actual === expected && actual.cause === cause; }
+                }, value => value === true);
+            }
+            const binding = { member_id: 'Release.station', value: station };
+            await observation('B04.identity.present_owner', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding } }), value => value === binding && value.value === station && value.value._from(release));
+            await observation('B04.presence.void', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'successful_no_value', member_id: 'Client.close' } }), value => value.member_id === 'Client.close' && Object.hasOwn(value, 'value') && value.value === undefined);
+            await observation('B04.presence.null', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: null } } }), value => value.value === null);
+        }
+        if (requiredTimes) {
+            for (const [label, times] of [['null', null], ['object', {}], ['omitted', undefined]]) {
+                const selected = { member_id: 'Release.heights_at', arguments: { station, times } };
+                const expected = await nativeFailure(() => release.heightsAt(station, times));
+                await observation(`B39.required.times_${label}`, () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
+            }
+            const engine = await import(`${moduleRoot}/predict/engine.js`);
+            for (const [label, times] of [
+                ['empty', []],
+                ['fractional_duplicate', [new Date('2000-01-01T00:00:00.499Z'), new Date('2000-01-01T00:00:00.499Z')]],
+                ['unordered', [new Date('2000-01-01T00:10:00.999Z'), new Date('2000-01-01T00:00:00.499Z')]],
+            ]) {
+                const selected = { member_id: 'Release.heights_at', arguments: { station, times } };
+                const expected = engine.predictionSeconds(times);
+                await observation(`B39.control.times_${label}`, () => canonical.parse_prediction_window(selected, selected, null, 'utc'), value => JSON.stringify(value) === JSON.stringify({ instants: expected }));
+            }
+            const selected = { member_id: 'Release.heights_at', arguments: { station: null, times: null } };
+            const expected = await nativeFailure(() => release.heightsAt(null, null));
+            await observation('B39.order.times_before_station', () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
+        }
         await observation('B07', () => canonical.materialize_typed_model(station.raw, { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: nativeOwner }, origin, 'Station'), value => value.model_type === 'Station' && value.model.station_id === station.station_id && value.model.raw === station.raw);
         if (primitiveGuards) {
             const start = new Date('2000-01-01T00:00:00Z'), stop = new Date('2000-01-02T00:00:00Z');
@@ -455,6 +512,8 @@ const m1Inputs = {
     streamMetadata: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.meta.json'), 'utf8'),
     streamSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.jsonl'), 'utf8'),
     receiverGuards: process.env.OTC_M1_RECEIVER_GUARDS === 'qualified',
+    requiredBindings: process.env.OTC_M1_REQUIRED_BINDINGS === 'qualified',
+    requiredTimes: process.env.OTC_M1_REQUIRED_TIMES === 'qualified',
     foreignTables: process.env.OTC_M1_FOREIGN_TABLES === 'qualified',
     dtoModels: process.env.OTC_M1_DTO === 'qualified',
     pointerSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_latest.json'), 'utf8'),

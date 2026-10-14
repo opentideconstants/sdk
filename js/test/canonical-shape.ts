@@ -321,6 +321,9 @@ export async function exerciseShape(source: string, profile: 'typescript_node' |
             { native_profile: profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: null } } },
             { native_profile: profile, canonical_error: { code: 'io', structured_fields: {}, cause: new Error('original cause') } },
             { native_profile: profile, native_exception: new Error('native exception'), member_id: 'Release.station' },
+            { native_profile: profile, canonical_error: { code: 'network', structured_fields: { message: 'transport fixture failed', url: 'https://native.invalid/release', status: 503 }, cause: new Error('original native cause') } },
+            { native_profile: profile, canonical_error: { code: 'checksum_mismatch', structured_fields: { message: 'injected digest disagreement', file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64) }, cause: new Error('original native cause') } },
+            { native_profile: profile, canonical_error: { code: 'cache', structured_fields: { message: 'injected prune failure', removed: ['20991231.2', '20991231'] }, cause: new Error('original native cause') } },
         ];
         const b04_presence_controls = await Promise.all(bindingVariants.map(async (input, index) => ({ ...await invoke('B04', () => native.translate_native_binding(input), JSON.stringify(input)), id: `B04.presence.${index}` })));
         return { runtime, call_actions, b04_presence_controls, control: { station_id: station.station_id, raw_preserved: station.raw.station_id === station.station_id, public_route_unchanged: release.station(station.station_id) === station } };
