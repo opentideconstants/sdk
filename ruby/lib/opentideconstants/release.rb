@@ -1161,7 +1161,12 @@ class OpenTideConstants
             unless real?(raw["lon"]) && raw["lon"].between?(-180, 180)
                 raise InvalidReleaseError, "#{what}: lon is not a number in [-180, 180]"
             end
-            check_types!(raw["subordinate_offsets"], OFFSET_TYPES, "#{what}: subordinate_offsets") if raw["subordinate_offsets"]
+            if raw["subordinate_offsets"]
+                check_types!(raw["subordinate_offsets"], OFFSET_TYPES, "#{what}: subordinate_offsets")
+                Array(raw["subordinate_offsets"]["qc_flags"]).each do |flag|
+                    check_types!(flag, { "flag" => :t, "reason" => :t }, "#{what}: subordinate_offsets.qc_flags")
+                end
+            end
             Array(raw["validation"]).each { |v| check_types!(v, VALIDATION_TYPES, "#{what}: validation") }
             Array(raw["constant_sets"]).each { |cs| check_set!(cs, what) }
         end
@@ -1175,6 +1180,8 @@ class OpenTideConstants
               "provenance" => PROVENANCE_TYPES }.each do |k, table|
                 check_types!(cs[k], table, "#{what}: #{k}") if cs[k]
             end
+            build = cs.dig("provenance", "build")
+            check_types!(build, { "build_commit" => :t }, "#{what}: provenance.build") if build
             names = Set.new
             Array(cs["constituents"]).each do |c|
                 raise InvalidReleaseError, "#{what}: a constituent has no name" unless c["name"].is_a?(String)
