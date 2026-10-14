@@ -81,7 +81,7 @@ public struct Provenance: Sendable, Equatable {
     public var inputSha256: [String]? { raw["input_sha256"].isNull ? nil : raw["input_sha256"].array.compactMap(\.string) }
     public var selectionReason: String? { raw["selection_reason"].string }
     public var decision: JSONValue? { raw["decision"].isNull ? nil : raw["decision"] }
-    public var build: ProvenanceBuild? { raw["build"].isNull ? nil : ProvenanceBuild(raw["build"]) }
+    public var build: ProvenanceBuild? { guard case .object = raw["build"] else { return nil }; return ProvenanceBuild(raw["build"]) }
     public var carriedFromRelease: String? { raw["carried_from_release"].string }
 }
 
