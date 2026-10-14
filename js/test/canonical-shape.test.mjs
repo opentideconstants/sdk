@@ -532,11 +532,42 @@ async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cac
                 ['TimeBase', 'timeBaseOf', [['absent', {}], ['nullable', { code: null, correction: null, months_dropped: null, evidence: null }], ['filtered_arrays', { code: 'unknown', correction: { from: 1, to: null }, months_dropped: ['a', 1, null], evidence: [null, 1, { distance_km: '1' }] }]]],
                 ['Validation', 'validationOf', [['absent', {}], ['nullable', { previous_release: null, missed_events: null }], ['wrong_scalar', { set_id: 1, time_mae_min: '1', previous_release: { extra_events: '1' } }]]],
                 ['QcFlag', 'qcFlagOf', [['absent', {}], ['nullable', { flag: null, values: null }], ['filtered_values', { flag: 'future_flag', values: { okay: 1, nullable: null, ignored: '1' } }]]],
+                ['ProvenanceBuild', 'buildOf', [['absent', {}], ['nullable', { built_at: null, tool_versions: null }], ['wrong_scalar', { built_at: 1, tool_versions: 'tools', build_commit: 1 }]]],
+                ['Fallback', 'fallbackOf', [['absent', {}], ['nullable', { reason: null, basis: null }], ['wrong_scalar', { reason: 'future', basis: 1, preferred_set_id: 1 }]]],
+                ['Datum', 'datumOf', [['absent', {}], ['nullable', { msl_offset_m: null, named: null }], ['filtered_values', { msl_offset_m: '1', named: { retained: 1, rejected: '1', nullable: null } }]]],
+                ['DroppedConstituent', 'droppedConstituentOf', [['absent', {}], ['nullable', { name: null, dropped_reason: null, detail: null }], ['wrong_scalar', { name: 1, dropped_reason: 'future', detail: { retained: true } }]]],
+                ['Provenance', 'provenanceOf', [['absent', {}], ['nullable', { build: null, decision: null }], ['wrong_scalar', { build: 1, adapter_version: 1, input_sha256: ['retained'], decision: { retained: true } }]]],
+                ['Convention', 'conventionOf', [['absent', {}], ['nullable', { phase_reference: null, utc_offset_hours: null }], ['wrong_scalar', { convention_id: 1, phase_reference: 'future', nodal_formula_ids: { retained: true } }]]],
+                ['Licence', 'licenceOf', [['absent', {}], ['nullable', { commercial_use: null, spdx: null }], ['wrong_scalar', { licence_id: 1, commercial_use: 1, terms_url: 1 }]]],
+                ['SubordinateOffsets', 'subordinateOffsetsOf', [['absent', {}], ['nullable', { qc_flags: null, fallback: null, vintage: null, provenance: null }], ['filtered_arrays', { source_type: 'future', qc_flags: [null, 1, {}], time_offset_high_min: '1', vintage: { retained: true }, provenance: { retained: true } }]]],
             ]) {
                 for (const [label, raw] of variants) {
                     const native = releaseModule[mapper](raw);
                     await observation(`B07.required.${model_type}.${label}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type), value => value.model !== native && Object.isFrozen(value.model) && JSON.stringify(value.model) === JSON.stringify(native) && (!('raw' in native) || value.model.raw === raw));
                 }
+            }
+            for (const [label, raw] of [['absent', {}], ['nullable', { name: null, country: null, timezone: null, validation: null, constant_sets: null }], ['filtered_arrays', { name: 1, validation: [null, 1, {}], constant_sets: [null, 1] }]]) {
+                const native = new releaseModule.Station(raw, index, release);
+                await observation(`B07.required.Station.${label}`, () => canonical.materialize_typed_model(raw, { model_type: 'Station', fields: [], native_owner: nativeOwner }, origin, 'Station'), value => JSON.stringify(value.model) === JSON.stringify(native) && value.model.raw === raw && value.model._from(release) && !value.model._from(good));
+            }
+            for (const [label, raw] of [['absent', {}], ['nullable', { constituents: null, time_base: null, qc_flags: null, record_span: null }], ['filtered_arrays', { source: 1, constituents: [null, 1, {}], qc_flags: [null, 1, {}], dropped_constituents: [null, {}] }]]) {
+                const owner = { recommended: true, convention: constants.convention, licence: constants.licence, validation: constants.validation };
+                const native = new releaseModule.ConstantSet(raw, owner.recommended, owner.convention, owner.licence, owner.validation);
+                await observation(`B07.required.ConstantSet.${label}`, () => canonical.materialize_typed_model(raw, { model_type: 'ConstantSet', fields: [], native_constant_set: owner }, origin, 'ConstantSet'), value => JSON.stringify(value.model) === JSON.stringify(native) && JSON.stringify(value.model.constituents) === JSON.stringify(native.constituents) && value.model.raw === raw && value.model.convention === owner.convention && value.model.licence === owner.licence && value.model.validation === owner.validation);
+            }
+            for (const [model_type, variants] of [
+                ['SourceRecord', [['absent', {}], ['nullable', { licence_id: null, provenance: null, original_harmonics: null }], ['filtered_arrays', { source: 1, role: 'future', published_set_ids: ['retained', null, 1] }]]],
+                ['Tombstone', [['absent', {}], ['nullable', { name: null, removed_reason: null }], ['unknown_enum', { status: 'future', removed_reason: 'future', detail: 1 }]]],
+                ['RecordSpan', [['nullable', { start: null, end: null }], ['dates', { start: '2000-01-01T00:00:00Z', end: '2000-01-02T00:00:00Z', good_samples: 0 }], ['invalid_date', { start: 'not-a-date', end: null }]]],
+            ]) for (const [label, raw] of variants) {
+                const contract = { model_type, fields: [], native_release: release, native_owner: nativeOwner, native_record_span: { set_id: constants.set_id } };
+                const nativeCall = () => model_type === 'SourceRecord' ? releaseModule.sourceRecordOf(raw, release) : model_type === 'Tombstone' ? releaseModule.tombstoneOf(raw, index) : releaseModule.recordSpanOf(raw, constants.set_id);
+                const expectedError = await nativeFailure(nativeCall);
+                await observation(`B07.required.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, contract, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model(raw, contract, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && (!('raw' in value.native) || value.actual.raw === raw));
+            }
+            for (const [label, raw] of [['years_missing', {}], ['years_reversed', { first_year: 2001, last_year: 2000, constituents: {} }], ['empty_rows', { first_year: 2000, last_year: 2000, constituents: {} }], ['row_scalar', { first_year: 2000, last_year: 2000, constituents: { M2: 1 } }]]) {
+                const expectedError = await nativeFailure(() => new astro.AstroTable(raw));
+                await observation(`B07.required.AstroTable.${label}`, async () => ({ expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, { model_type: 'AstroTable', fields: [] }, origin, 'AstroTable')) }), value => JSON.stringify(value.actual) === JSON.stringify(value.expected));
             }
         }
         if (primitiveGuards) {
