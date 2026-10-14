@@ -127,6 +127,7 @@ internal extension Reader {
             guard let id=cs["set_id"].string,let conv=conventions[cs["convention_id"].string ?? ""],let lic=licences[cs["licence_id"].string ?? ""] else { throw OpenTideConstantsError.invalidRelease("set identity/reference unresolved") }
             for (k,table) in [("record_span",_span_types),("datum",_datum_types),("time_base",_time_base_types),("provenance",_provenance_types),("fallback",_fallback_types)] where !cs[k].isNull { try check(cs[k],table,k) }
             if !cs["time_base"]["correction"].isNull { try check(cs["time_base"]["correction"],_correction_types,"time_base correction") }
+            for row in cs["time_base"]["evidence"].array { try check(row,_evidence_types,"time_base evidence") }
             for (k,table) in [("constituents",_constituent_types),("qc_flags",_qc_flag_types),("dropped_constituents",_dropped_types)] { for row in cs[k].array { try check(row,table,k) } }
             let names=cs["constituents"].array.compactMap { $0["name"].string }
             guard names.count == cs["constituents"].array.count,Set(names).count==names.count else { throw OpenTideConstantsError.invalidRelease("constituent names absent/duplicate") }
