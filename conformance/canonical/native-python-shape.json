@@ -33,7 +33,7 @@
       "declaration": "_CAcceptanceDecision: TypeAlias = _AcceptanceDecision",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -52,7 +52,7 @@
       "declaration": "_CAccessKind: TypeAlias = Literal[\"raw_record\", \"station_object\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -67,7 +67,7 @@
       "declaration": "_CAcquisitionDescriptor: TypeAlias = _ReleaseDescriptor",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -84,7 +84,7 @@
       "declaration": "_CActualProfileResults: TypeAlias = Mapping[str, _JsonValue]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -103,7 +103,7 @@
       "declaration": "_CArguments: TypeAlias = _MemberArguments | _MemberRequests",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -137,7 +137,7 @@
       "declaration": "_CAstronomicalTerms: TypeAlias = _AstronomicalTerms",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -152,7 +152,7 @@
       "declaration": "_CAttributionText: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -171,7 +171,7 @@
       "declaration": "_CAuthenticatedIndex: TypeAlias = _AuthenticatedIndex",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -191,7 +191,7 @@
       "declaration": "_CAuxiliaryKind: TypeAlias = Literal[\"model_access\", \"result_context\", \"local_time\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -220,7 +220,7 @@
       "declaration": "_CAuxiliaryModelValue: TypeAlias = _MemberValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -261,7 +261,7 @@
       "declaration": "_CAuxiliaryOperation: TypeAlias = Literal[\n    \"astro_table\",\n    \"datums\",\n    \"ranges\",\n    \"constituent\",\n    \"constituents\",\n    \"constituent_names\",\n    \"convention\",\n    \"conventions\",\n    \"licence\",\n    \"licences\",\n    \"provenance\",\n    \"set_validation\",\n    \"station_validation\",\n    \"valid_range\",\n    \"equilibrium_argument\",\n    \"equilibrium_for_year\",\n    \"node_factor\",\n    \"node_factor_for_year\",\n    \"raw\",\n    \"release_files\",\n    \"release_metadata\",\n    \"station_count\",\n    \"tombstone_count\",\n    \"subordinate_offsets\",\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -305,7 +305,7 @@
       "declaration": "_CAuxiliaryResult: TypeAlias = (\n    _MemberValue | HeightSeries | ExtremeList | CurrentSeries | CurrentEventList\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -320,7 +320,7 @@
       "declaration": "_CBoundChecksums: TypeAlias = Mapping[str, str]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -335,7 +335,7 @@
       "declaration": "_CCacheBytes: TypeAlias = bytes",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -373,7 +373,7 @@
       "declaration": "_CCacheDocument: TypeAlias = (\n    _CacheDocumentVariant0 | _CacheDocumentVariant1 | _JsonValue\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -410,7 +410,7 @@
       "declaration": "_CCacheInventoryResult: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -425,7 +425,7 @@
       "declaration": "_CCacheState: TypeAlias = _CacheState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -440,7 +440,7 @@
       "declaration": "_CCandidatePath: TypeAlias = (\n    _CandidatePathVariant0 | _CandidatePathVariant1 | _CandidatePathVariant2\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -501,7 +501,7 @@
       "declaration": "_CCanonicalError: TypeAlias = _CanonicalError | _ErrorChannel",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -520,7 +520,7 @@
       "declaration": "_CCanonicalResult: TypeAlias = _ResultChannel",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -535,7 +535,7 @@
       "declaration": "_CCause: TypeAlias = Exception | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -555,7 +555,7 @@
       "declaration": "_CChangedBehaviors: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -567,10 +567,10 @@
         "nullable": false
       },
       "native_type": "T._CChecksumBytes",
-      "declaration": "_CChecksumBytes: TypeAlias = bytes",
+      "declaration": "_CChecksumBytes: TypeAlias = bytes | _ChecksumSource",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -587,7 +587,7 @@
       "declaration": "_CCitationStyle: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -602,7 +602,7 @@
       "declaration": "_CCitationText: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -627,7 +627,7 @@
       "declaration": "_CClientAndRelease: TypeAlias = _ClientAndRelease",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -668,7 +668,7 @@
       "declaration": "_CClientState: TypeAlias = _ClientState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -684,7 +684,7 @@
       "declaration": "_CClock: TypeAlias = float",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -709,7 +709,7 @@
       "declaration": "_CCommercialAdmission: TypeAlias = _CommercialAdmission",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -728,7 +728,7 @@
       "declaration": "_CCommercialBasis: TypeAlias = Literal[\"strict\", \"as_published_upstream\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -743,7 +743,7 @@
       "declaration": "_CCommercialOnly: TypeAlias = bool",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -758,7 +758,7 @@
       "declaration": "_CComparedStationRow: TypeAlias = Mapping[str, _JsonValue]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -773,7 +773,7 @@
       "declaration": "_CCurrentCacheDirectory: TypeAlias = Path",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -792,7 +792,7 @@
       "declaration": "_CCurrentRequest: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -807,7 +807,7 @@
       "declaration": "_CDestination: TypeAlias = Path",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -844,7 +844,7 @@
       "declaration": "_CDirectCurrentResult: TypeAlias = CurrentSeries | CurrentEventList",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -866,7 +866,7 @@
       "declaration": "_CDocumentKind: TypeAlias = Literal[\n    \"release\", \"station_row\", \"pointer\", \"catalogue\", \"cache\"\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -887,7 +887,7 @@
       "declaration": "_CDownloadResult: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -902,7 +902,7 @@
       "declaration": "_CEffectiveOptions: TypeAlias = _EffectiveOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -917,7 +917,7 @@
       "declaration": "_CEffectiveRecommendation: TypeAlias = ConstantSet | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -934,7 +934,7 @@
       "declaration": "_CEnvironment: TypeAlias = Mapping[str, str]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -971,7 +971,7 @@
       "declaration": "_CEvidenceBundle: TypeAlias = _EvidenceBundle",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -986,7 +986,7 @@
       "declaration": "_CExpectedResult: TypeAlias = _JsonValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1001,7 +1001,7 @@
       "declaration": "_CExplicitOptions: TypeAlias = _EffectiveOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1019,7 +1019,7 @@
       "declaration": "_CFieldContract: TypeAlias = (\n    tuple[_FieldContract, ...]\n    | _StationFieldsOwner\n    | _ConstantSetFieldsOwner\n    | _SourceFieldsOwner\n    | _FileInfoModelFields\n    | _ReleaseInfoModelFields\n    | _UpdateResultModelFields\n    | _NearbyModelFields\n    | _StatsModelFields\n    | _HeightPointModelFields\n    | _ExtremeModelFields\n    | _CurrentPointModelFields\n    | _CurrentEventModelFields\n    | _HeightSeriesModelFields\n    | _ExtremeListModelFields\n    | _CurrentSeriesModelFields\n    | _CurrentEventListModelFields\n    | _DatumInfoModelFields\n    | _DatumLevelModelFields\n    | _RangesModelFields\n    | _ClientModelFields\n    | _ReleaseModelFields\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1040,7 +1040,7 @@
       "declaration": "_CFoldedHeightValues: TypeAlias = HeightSeries",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1070,7 +1070,7 @@
       "declaration": "_CFormatSelection: TypeAlias = _FormatSelection",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1091,7 +1091,7 @@
       "declaration": "_CHeightValues: TypeAlias = tuple[float, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1106,7 +1106,7 @@
       "declaration": "_CHeldRelease: TypeAlias = Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1125,7 +1125,7 @@
       "declaration": "_CHeldReleaseResult: TypeAlias = _MemberValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1150,7 +1150,7 @@
       "declaration": "_CHistoricalAdmission: TypeAlias = _HistoricalAdmission",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1169,7 +1169,7 @@
       "declaration": "_CHistoricalPolicy: TypeAlias = Literal[\"fallback\", \"exclude\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1194,7 +1194,7 @@
       "declaration": "_CHttpRequest: TypeAlias = _HttpRequest",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1227,7 +1227,7 @@
       "declaration": "_CHttpResponse: TypeAlias = _HttpResponse",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1262,7 +1262,7 @@
       "declaration": "_CIdentityQuery: TypeAlias = str | _IdentityQueryVariant1",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1277,7 +1277,7 @@
       "declaration": "_CIncludeFallback: TypeAlias = bool",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1292,7 +1292,7 @@
       "declaration": "_CIncludeFlagged: TypeAlias = bool",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1307,7 +1307,7 @@
       "declaration": "_CIncludeNoConstants: TypeAlias = bool",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1329,7 +1329,7 @@
       "declaration": "_CIndexEntry: TypeAlias = _IndexEntry",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1343,10 +1343,10 @@
         "nullable": false
       },
       "native_type": "T._CIndexPresence",
-      "declaration": "_CIndexPresence: TypeAlias = Mapping[str, bool]",
+      "declaration": "_CIndexPresence: TypeAlias = Mapping[str, bool] | Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1365,7 +1365,7 @@
       "declaration": "_CInventoryAction: TypeAlias = Literal[\"list\", \"prune\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1384,7 +1384,7 @@
       "declaration": "_CIoKind: TypeAlias = Literal[\"lock\", \"http\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1410,7 +1410,7 @@
       "declaration": "_CIoOptions: TypeAlias = _LockState | _TransportOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1436,7 +1436,7 @@
       "declaration": "_CIoRequest: TypeAlias = _LockRequest | _HttpRequest",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1461,7 +1461,7 @@
       "declaration": "_CIoResult: TypeAlias = _LockOutcome | _HttpResponse",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1477,7 +1477,7 @@
       "declaration": "_CKeep: TypeAlias = int",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1494,7 +1494,7 @@
       "declaration": "_CLifetimeAction: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1513,7 +1513,7 @@
       "declaration": "_CLoadMode: TypeAlias = Literal[\"eager\", \"stream\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1528,7 +1528,7 @@
       "declaration": "_CLoadedRelease: TypeAlias = Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1546,7 +1546,7 @@
       "declaration": "_CLocalTimeProfile: TypeAlias = _LocalTimeProfile",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1565,7 +1565,7 @@
       "declaration": "_CLocalTimeResult: TypeAlias = _MemberValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1594,7 +1594,7 @@
       "declaration": "_CLockOutcome: TypeAlias = _LockOutcome",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1631,7 +1631,7 @@
       "declaration": "_CLockRequest: TypeAlias = _LockRequest",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1646,7 +1646,7 @@
       "declaration": "_CLockState: TypeAlias = _LockState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1661,7 +1661,7 @@
       "declaration": "_CLockedCacheState: TypeAlias = _CacheState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1680,7 +1680,7 @@
       "declaration": "_CMemberContract: TypeAlias = (\n    _MemberArguments\n    | _MemberRequests\n    | _AstroMemberContract\n    | _B01ReleaseContract\n    | _B01ClientReceiver\n    | _B01ReleaseReceiver\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1699,7 +1699,7 @@
       "declaration": "_CMergedReceipt: TypeAlias = _MergedReceipt",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1724,7 +1724,7 @@
       "declaration": "_CMetadataRequest: TypeAlias = _MetadataRequest",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1747,7 +1747,7 @@
       "declaration": "_CNativeProfile: TypeAlias = Literal[\n    \"python\", \"ruby\", \"typescript_node\", \"typescript_browser\", \"c\", \"swift\"\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1766,7 +1766,7 @@
       "declaration": "_CNativeResult: TypeAlias = (\n    OpenTideConstants\n    | Release\n    | E.LoadedFrom\n    | OpenTideConstantsError\n    | None\n    | tuple[ReleaseInfo, ...]\n    | ReleaseInfo\n    | ReleaseInfo\n    | None\n    | int\n    | None\n    | UpdateResult\n    | tuple[str, ...]\n    | bool\n    | str\n    | datetime\n    | str\n    | None\n    | Mapping[str, str]\n    | tuple[FileInfo, ...]\n    | tuple[Convention, ...]\n    | Convention\n    | None\n    | tuple[Licence, ...]\n    | Licence\n    | None\n    | Stats\n    | int\n    | Station\n    | None\n    | Station\n    | Tombstone\n    | None\n    | tuple[Station, ...]\n    | Iterator[Station]\n    | tuple[Nearby, ...]\n    | Nearby\n    | None\n    | HeightSeries\n    | ExtremeList\n    | CurrentSeries\n    | CurrentEventList\n    | DatumInfo\n    | tuple[DatumInfo, ...]\n    | Ranges\n    | AstroTable\n    | None\n    | float\n    | E.StationType\n    | E.Kind\n    | None\n    | Mapping[str, tuple[str, ...]]\n    | E.StationStatus\n    | ConstantSet\n    | None\n    | tuple[ConstantSet, ...]\n    | SubordinateOffsets\n    | None\n    | tuple[Validation, ...]\n    | Mapping[str, _JsonValue]\n    | bool\n    | None\n    | tuple[SourceRecord, ...]\n    | E.RemovedReason\n    | E.SourceType\n    | E.Quantity\n    | RecordSpan\n    | None\n    | Datum\n    | None\n    | E.QcStatus\n    | tuple[QcFlag, ...]\n    | tuple[DroppedConstituent, ...]\n    | TimeBase\n    | None\n    | Convention\n    | Licence\n    | Provenance\n    | tuple[Constituent, ...]\n    | Constituent\n    | None\n    | Fallback\n    | None\n    | float\n    | None\n    | E.PhaseReference\n    | E.NodalHandling\n    | Mapping[str, str | int]\n    | None\n    | Mapping[str, _JsonValue]\n    | None\n    | tuple[str, ...]\n    | None\n    | ProvenanceBuild\n    | None\n    | datetime\n    | None\n    | Mapping[str, str]\n    | None\n    | E.TimeBaseCode\n    | tuple[Mapping[str, _JsonValue], ...]\n    | E.QcFlagName\n    | Mapping[str, float | None]\n    | None\n    | E.DroppedReason\n    | E.HeightAdjustedType\n    | E.SourceType\n    | None\n    | E.QcStatus\n    | None\n    | HistoricalOffsetVintage\n    | None\n    | HistoricalOffsetProvenance\n    | None\n    | Mapping[str, float]\n    | None\n    | Mapping[str, int]\n    | tuple[int, int]\n    | E.ExtremeType\n    | E.CurrentEventType\n    | tuple[HeightPoint, ...]\n    | E.PredictionMethod\n    | tuple[Extreme, ...]\n    | tuple[CurrentPoint, ...]\n    | tuple[CurrentEvent, ...]\n    | tuple[E.CurrentEventType, ...]\n    | None\n    | tuple[DatumLevel, ...]\n    | E.FallbackReason\n    | E.SourceRole\n    | E.SourceDisposition\n    | None\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1787,7 +1787,7 @@
       "declaration": "_COffsetCurrentResult: TypeAlias = CurrentEventList",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1824,7 +1824,7 @@
       "declaration": "_COffsetTideResult: TypeAlias = HeightSeries | ExtremeList",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1902,7 +1902,7 @@
       "declaration": "_COperation: TypeAlias = Literal[\n    \"astro_table\",\n    \"attribution\",\n    \"cached_releases\",\n    \"check_for_update\",\n    \"citation\",\n    \"close\",\n    \"constant_set\",\n    \"constant_sets\",\n    \"constituent\",\n    \"constituent_names\",\n    \"constituents\",\n    \"convention\",\n    \"conventions\",\n    \"current_events\",\n    \"currents\",\n    \"datums\",\n    \"download\",\n    \"equilibrium_argument\",\n    \"equilibrium_for_year\",\n    \"extremes\",\n    \"heights\",\n    \"heights_at\",\n    \"hold_release\",\n    \"iter_stations\",\n    \"last_error\",\n    \"latest\",\n    \"licence\",\n    \"licences\",\n    \"loaded_from\",\n    \"near\",\n    \"nearest\",\n    \"newer_format_major\",\n    \"node_factor\",\n    \"node_factor_for_year\",\n    \"open\",\n    \"provenance\",\n    \"prune\",\n    \"ranges\",\n    \"raw\",\n    \"recommended_set\",\n    \"reference_station\",\n    \"release_files\",\n    \"release_metadata\",\n    \"releases\",\n    \"require_station\",\n    \"search\",\n    \"set_validation\",\n    \"station\",\n    \"station_by_alias\",\n    \"station_count\",\n    \"station_validation\",\n    \"stations\",\n    \"stats\",\n    \"subordinate_offsets\",\n    \"subordinates_of\",\n    \"to_local\",\n    \"tombstone\",\n    \"tombstone_count\",\n    \"update\",\n    \"valid_range\",\n    \"verify\",\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1922,7 +1922,7 @@
       "declaration": "_COrderedConstantSets: TypeAlias = tuple[ConstantSet, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1942,7 +1942,7 @@
       "declaration": "_COrderedFailures: TypeAlias = tuple[_CanonicalError, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1962,7 +1962,7 @@
       "declaration": "_COrderedStationResults: TypeAlias = tuple[Station, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1977,7 +1977,7 @@
       "declaration": "_COrigin: TypeAlias = _OpaqueOrigin | _OriginIdentity",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -1992,7 +1992,7 @@
       "declaration": "_COriginalRecommendation: TypeAlias = ConstantSet | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2013,7 +2013,7 @@
       "declaration": "_COverwritePolicy: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2038,7 +2038,7 @@
       "declaration": "_COwnCurrentOffsets: TypeAlias = _JsonValue | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2059,7 +2059,7 @@
       "declaration": "_COwnOffset: TypeAlias = SubordinateOffsets | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2097,7 +2097,7 @@
       "declaration": "_CParsedDocument: TypeAlias = Mapping[str, _JsonValue] | _JsonValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2114,7 +2114,7 @@
       "declaration": "_CPathRequest: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2129,7 +2129,7 @@
       "declaration": "_CPlatformDefaults: TypeAlias = _EffectiveOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2144,7 +2144,7 @@
       "declaration": "_CPointerDigests: TypeAlias = Mapping[str, str]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2164,7 +2164,7 @@
       "declaration": "_CPredictionInstants: TypeAlias = tuple[float, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2221,7 +2221,7 @@
       "declaration": "_CPredictionResult: TypeAlias = (\n    HeightSeries | ExtremeList | CurrentSeries | CurrentEventList\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2236,7 +2236,7 @@
       "declaration": "_CPredictionWindow: TypeAlias = _PredictionWindow | _InstantPredictionWindow",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2254,7 +2254,7 @@
       "declaration": "_CProjectionContract: TypeAlias = _ProjectionContract",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2292,7 +2292,7 @@
       "declaration": "_CPublishedMetadata: TypeAlias = _PublishedMetadata",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2317,7 +2317,7 @@
       "declaration": "_CQualityAdmission: TypeAlias = _QualityAdmission",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2336,7 +2336,7 @@
       "declaration": "_CQueryArguments: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2351,7 +2351,7 @@
       "declaration": "_CQueryClientState: TypeAlias = _ClientState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2373,7 +2373,7 @@
       "declaration": "_CQueryKind: TypeAlias = Literal[\n    \"stations\", \"iter_stations\", \"search\", \"near\", \"nearest\"\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2388,7 +2388,7 @@
       "declaration": "_CQueryOptions: TypeAlias = _QueryOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2413,7 +2413,7 @@
       "declaration": "_CRawFields: TypeAlias = (\n    Mapping[str, _JsonValue]\n    | _FileInfoRawFields\n    | _ReleaseInfoRawFields\n    | _UpdateResultRawFields\n    | _NearbyRawFields\n    | _StatsRawFields\n    | _HeightPointRawFields\n    | _ExtremeRawFields\n    | _CurrentPointRawFields\n    | _CurrentEventRawFields\n    | _HeightSeriesRawFields\n    | _ExtremeListRawFields\n    | _CurrentSeriesRawFields\n    | _CurrentEventListRawFields\n    | _DatumInfoRawFields\n    | _DatumLevelRawFields\n    | _RangesRawFields\n    | _ClientRawFields\n    | _ReleaseRawFields\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2438,7 +2438,7 @@
       "declaration": "_CRawRecord: TypeAlias = Mapping[str, _JsonValue]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2463,7 +2463,7 @@
       "declaration": "_CRawRecordOrValidStation: TypeAlias = _JsonValue | Station",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2488,7 +2488,7 @@
       "declaration": "_CReaderVersion: TypeAlias = _ReaderVersion",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2503,7 +2503,7 @@
       "declaration": "_CReferenceModel: TypeAlias = _PredictionModel",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2518,7 +2518,7 @@
       "declaration": "_CReferencePath: TypeAlias = _ReferencePath",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2538,7 +2538,7 @@
       "declaration": "_CReleaseCandidates: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2560,10 +2560,10 @@
         ]
       },
       "native_type": "T._CReleaseFiles",
-      "declaration": "_CReleaseFiles: TypeAlias = tuple[FileInfo, ...]",
+      "declaration": "_CReleaseFiles: TypeAlias = tuple[FileInfo, ...] | OpenTideConstants",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2578,7 +2578,7 @@
       "declaration": "_CReleaseMetadata: TypeAlias = _JsonValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2590,10 +2590,10 @@
         "nullable": false
       },
       "native_type": "T._CReleaseOrigin",
-      "declaration": "_CReleaseOrigin: TypeAlias = _OpaqueOrigin",
+      "declaration": "_CReleaseOrigin: TypeAlias = _OpaqueOrigin | Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2619,7 +2619,7 @@
       "declaration": "_CReleaseRequest: TypeAlias = Literal[\"latest\"] | str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2640,7 +2640,7 @@
       "declaration": "_CReleaseStatistics: TypeAlias = Stats",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2655,7 +2655,7 @@
       "declaration": "_CReleaseView: TypeAlias = Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2670,7 +2670,7 @@
       "declaration": "_CRequestedDatum: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2685,7 +2685,7 @@
       "declaration": "_CRequiredFiles: TypeAlias = tuple[_JsonValue, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2701,7 +2701,7 @@
       "declaration": "_CRequiredLinks: TypeAlias = _RequiredLinks",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2727,10 +2727,10 @@
         "nullable": false
       },
       "native_type": "T._CResourceState",
-      "declaration": "_CResourceState: TypeAlias = _ClientState | Release | _StreamReader",
+      "declaration": "_CResourceState: TypeAlias = _ClientState | Release | _StreamReader | OpenTideConstants",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2756,10 +2756,10 @@
         "nullable": false
       },
       "native_type": "T._CResourceStateOrError",
-      "declaration": "_CResourceStateOrError: TypeAlias = _ClientState | Release | _StreamReader",
+      "declaration": "_CResourceStateOrError: TypeAlias = _ClientState | Release | _StreamReader | OpenTideConstants",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2774,7 +2774,7 @@
       "declaration": "_CResultContext: TypeAlias = _ResultContext",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2793,7 +2793,7 @@
       "declaration": "_CResultValues: TypeAlias = _MemberValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2813,7 +2813,7 @@
       "declaration": "_CReviewReports: TypeAlias = tuple[str, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2855,7 +2855,7 @@
       "declaration": "_CScenario: TypeAlias = _Scenario",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2885,7 +2885,7 @@
       "declaration": "_CScenarioComparison: TypeAlias = _ScenarioComparison",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2900,7 +2900,7 @@
       "declaration": "_CSelectedPredictionModel: TypeAlias = _PredictionModel",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2915,7 +2915,7 @@
       "declaration": "_CSelectedReferencePath: TypeAlias = _ReferencePath",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2935,7 +2935,7 @@
       "declaration": "_CSelectionKind: TypeAlias = Literal[\n    \"discovery\", \"explicit_prediction\", \"default_prediction\"\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2950,7 +2950,7 @@
       "declaration": "_CSelectionOptions: TypeAlias = _SelectionOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2975,7 +2975,7 @@
       "declaration": "_CSourceByteSpan: TypeAlias = _SourceByteSpan",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -2987,10 +2987,10 @@
         "nullable": false
       },
       "native_type": "T._CSourceBytes",
-      "declaration": "_CSourceBytes: TypeAlias = bytes",
+      "declaration": "_CSourceBytes: TypeAlias = bytes | _DocumentSource",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3031,7 +3031,7 @@
       "declaration": "_CSourceFiles: TypeAlias = _SourceFiles",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3056,7 +3056,7 @@
       "declaration": "_CSourceRecord: TypeAlias = Mapping[str, _JsonValue]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3071,7 +3071,7 @@
       "declaration": "_CSourceValues: TypeAlias = _AuxiliaryValuesVariant0 | _AuxiliaryValuesVariant1",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3086,7 +3086,7 @@
       "declaration": "_CStation: TypeAlias = Station",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3101,7 +3101,7 @@
       "declaration": "_CStationId: TypeAlias = str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3123,7 +3123,7 @@
       "declaration": "_CStationIndexEntry: TypeAlias = _StationIndexEntry",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3138,7 +3138,7 @@
       "declaration": "_CStationOrTombstoneOrNull: TypeAlias = (\n    _StationLookupVariant0 | _StationLookupVariant1 | _StationLookupVariant2\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3168,7 +3168,7 @@
       "declaration": "_CStationRequest: TypeAlias = Station | str",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3188,7 +3188,7 @@
       "declaration": "_CStationSets: TypeAlias = tuple[ConstantSet, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3203,7 +3203,7 @@
       "declaration": "_CStationSourceRow: TypeAlias = Mapping[str, _JsonValue]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3228,7 +3228,7 @@
       "declaration": "_CStationSummary: TypeAlias = Stats | tuple[ConstantSet, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3244,7 +3244,7 @@
       "declaration": "_CStep: TypeAlias = float | _Omitted",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3282,10 +3282,10 @@
         "additional_fields": false
       },
       "native_type": "T._CStreamReader",
-      "declaration": "_CStreamReader: TypeAlias = _StreamReader",
+      "declaration": "_CStreamReader: TypeAlias = _StreamReader | Release",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3304,7 +3304,7 @@
       "declaration": "_CSummaryKind: TypeAlias = Literal[\"stats\", \"constant_sets\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3334,7 +3334,7 @@
       "declaration": "_CSummaryOptions: TypeAlias = _SummaryOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3353,7 +3353,7 @@
       "declaration": "_CSuppliedIndex: TypeAlias = _SuppliedIndex | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3374,7 +3374,7 @@
       "declaration": "_CTideEvents: TypeAlias = ExtremeList",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3393,7 +3393,7 @@
       "declaration": "_CTideRequest: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3412,7 +3412,7 @@
       "declaration": "_CTimeInputs: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3427,7 +3427,7 @@
       "declaration": "_CTransportOptions: TypeAlias = _TransportOptions",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3442,7 +3442,7 @@
       "declaration": "_CTrustedCache: TypeAlias = _JsonValue | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3464,7 +3464,7 @@
       "declaration": "_CTrustedCachedPointer: TypeAlias = _TrustedCachedPointer | None",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3484,7 +3484,7 @@
       "declaration": "_CTypedModel: TypeAlias = (\n    OpenTideConstants\n    | Release\n    | ReleaseInfo\n    | FileInfo\n    | Station\n    | Tombstone\n    | ConstantSet\n    | Constituent\n    | Convention\n    | Licence\n    | Provenance\n    | ProvenanceBuild\n    | TimeBase\n    | QcFlag\n    | DroppedConstituent\n    | Validation\n    | SubordinateOffsets\n    | Nearby\n    | UpdateResult\n    | RecordSpan\n    | Datum\n    | Stats\n    | AstroTable\n    | HeightPoint\n    | Extreme\n    | CurrentPoint\n    | CurrentEvent\n    | HeightSeries\n    | ExtremeList\n    | CurrentSeries\n    | CurrentEventList\n    | DatumInfo\n    | DatumLevel\n    | Ranges\n    | Fallback\n    | SourceRecord\n    | HistoricalOffsetVintage\n    | HistoricalOffsetProvenance\n)",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3504,7 +3504,7 @@
       "declaration": "_CUnroundedCurrentEvents: TypeAlias = tuple[_UnroundedCurrentEvent, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3524,7 +3524,7 @@
       "declaration": "_CUnroundedTideEvents: TypeAlias = tuple[_UnroundedTideEvent, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3539,7 +3539,7 @@
       "declaration": "_CUpdateRequest: TypeAlias = _MetadataRequest",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3554,7 +3554,7 @@
       "declaration": "_CUpdatedClientState: TypeAlias = _ClientState",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3579,7 +3579,7 @@
       "declaration": "_CUsableCachedReleaseOrError: TypeAlias = Release | _CanonicalError",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3595,7 +3595,7 @@
       "declaration": "_CUtcInstant: TypeAlias = float",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3614,7 +3614,7 @@
       "declaration": "_CUtcResult: TypeAlias = _MemberValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3629,7 +3629,7 @@
       "declaration": "_CValidStation: TypeAlias = Station",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3648,7 +3648,7 @@
       "declaration": "_CValidatedArguments: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3681,7 +3681,7 @@
       "declaration": "_CValidatedMetadata: TypeAlias = _ValidatedMetadata",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3696,7 +3696,7 @@
       "declaration": "_CValidatedReleaseGraph: TypeAlias = _JsonValue",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3717,7 +3717,7 @@
       "declaration": "_CVerificationResult: TypeAlias = bool",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3732,7 +3732,7 @@
       "declaration": "_CVerifiedFileRows: TypeAlias = tuple[_JsonValue, ...]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -3751,7 +3751,7 @@
       "declaration": "_CWindowInputs: TypeAlias = _MemberArguments",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -4175,7 +4175,7 @@
       "declaration": "_CAuxiliaryMemberId: TypeAlias = Literal[\n    \"Client.open\",\n    \"Client.release\",\n    \"Client.loaded_from\",\n    \"Client.last_error\",\n    \"Client.releases\",\n    \"Client.latest\",\n    \"Client.check_for_update\",\n    \"Client.newer_format_major\",\n    \"Client.update\",\n    \"Client.download\",\n    \"Client.verify\",\n    \"Client.cached_releases\",\n    \"Client.prune\",\n    \"Release.datestamp\",\n    \"Release.created\",\n    \"Release.format_version\",\n    \"Release.zenodo_version_doi\",\n    \"Release.concept_doi\",\n    \"Release.source_versions\",\n    \"Release.build_commit\",\n    \"Release.changelog_url\",\n    \"Release.files\",\n    \"Release.conventions\",\n    \"Release.convention\",\n    \"Release.licences\",\n    \"Release.licence\",\n    \"Release.constituent_names\",\n    \"Release.stats\",\n    \"Release.station_count\",\n    \"Release.tombstone_count\",\n    \"Release.citation\",\n    \"Release.station\",\n    \"Release.require_station\",\n    \"Release.tombstone\",\n    \"Release.station_by_alias\",\n    \"Release.stations\",\n    \"Release.iter_stations\",\n    \"Release.search\",\n    \"Release.near\",\n    \"Release.nearest\",\n    \"Release.reference_station\",\n    \"Release.subordinates_of\",\n    \"Release.attribution\",\n    \"Release.heights\",\n    \"Release.heights_at\",\n    \"Release.extremes\",\n    \"Release.currents\",\n    \"Release.current_events\",\n    \"Release.datums\",\n    \"Release.ranges\",\n    \"Release.astro_table\",\n    \"Release.historical_offsets_policy\",\n    \"ReleaseInfo.datestamp\",\n    \"ReleaseInfo.format_version\",\n    \"ReleaseInfo.concept_doi\",\n    \"ReleaseInfo.zenodo_version_doi\",\n    \"ReleaseInfo.content_sha256\",\n    \"ReleaseInfo.files\",\n    \"FileInfo.name\",\n    \"FileInfo.url\",\n    \"FileInfo.size\",\n    \"FileInfo.sha256\",\n    \"Station.station_id\",\n    \"Station.name\",\n    \"Station.country\",\n    \"Station.lat\",\n    \"Station.lon\",\n    \"Station.type\",\n    \"Station.kind\",\n    \"Station.timezone\",\n    \"Station.aliases\",\n    \"Station.status\",\n    \"Station.is_reference\",\n    \"Station.is_subordinate\",\n    \"Station.is_tide\",\n    \"Station.is_current\",\n    \"Station.recommended_set\",\n    \"Station.constant_sets\",\n    \"Station.constant_set\",\n    \"Station.subordinate_offsets\",\n    \"Station.validation\",\n    \"Station.raw\",\n    \"Station.recommended_is_fallback\",\n    \"Station.source_records\",\n    \"Tombstone.station_id\",\n    \"Tombstone.name\",\n    \"Tombstone.status\",\n    \"Tombstone.removed_in\",\n    \"Tombstone.removed_reason\",\n    \"Tombstone.merged_into\",\n    \"Tombstone.detail\",\n    \"Tombstone.raw\",\n    \"ConstantSet.set_id\",\n    \"ConstantSet.source\",\n    \"ConstantSet.source_type\",\n    \"ConstantSet.quantity\",\n    \"ConstantSet.source_record_id\",\n    \"ConstantSet.source_version\",\n    \"ConstantSet.record_span\",\n    \"ConstantSet.datum\",\n    \"ConstantSet.qc_status\",\n    \"ConstantSet.qc_flags\",\n    \"ConstantSet.dropped_constituents\",\n    \"ConstantSet.time_base\",\n    \"ConstantSet.is_recommended\",\n    \"ConstantSet.convention\",\n    \"ConstantSet.licence\",\n    \"ConstantSet.provenance\",\n    \"ConstantSet.validation\",\n    \"ConstantSet.constituents\",\n    \"ConstantSet.constituent\",\n    \"ConstantSet.raw\",\n    \"ConstantSet.fallback\",\n    \"Constituent.name\",\n    \"Constituent.source_name\",\n    \"Constituent.doodson\",\n    \"Constituent.speed_deg_per_hour\",\n    \"Constituent.amplitude_m\",\n    \"Constituent.phase_deg\",\n    \"Constituent.amp_uncertainty_m\",\n    \"Constituent.phase_uncertainty_deg\",\n    \"Constituent.kept_reason\",\n    \"Constituent.raw\",\n    \"Convention.convention_id\",\n    \"Convention.phase_reference\",\n    \"Convention.utc_offset_hours\",\n    \"Convention.v0_model\",\n    \"Convention.nodal_handling\",\n    \"Convention.nodal_formula_ids\",\n    \"Convention.constituent_table_version\",\n    \"Convention.tables_sha256\",\n    \"Convention.canary\",\n    \"Convention.raw\",\n    \"Licence.licence_id\",\n    \"Licence.spdx\",\n    \"Licence.provider\",\n    \"Licence.citation\",\n    \"Licence.attribution\",\n    \"Licence.url\",\n    \"Licence.commercial_use\",\n    \"Licence.restriction\",\n    \"Licence.terms_url\",\n    \"Licence.raw\",\n    \"Provenance.adapter_version\",\n    \"Provenance.input_sha256\",\n    \"Provenance.selection_reason\",\n    \"Provenance.decision\",\n    \"Provenance.build\",\n    \"Provenance.carried_from_release\",\n    \"Provenance.raw\",\n    \"ProvenanceBuild.build_commit\",\n    \"ProvenanceBuild.built_at\",\n    \"ProvenanceBuild.fetched_at\",\n    \"ProvenanceBuild.run_id\",\n    \"ProvenanceBuild.tool_versions\",\n    \"TimeBase.code\",\n    \"TimeBase.reason\",\n    \"TimeBase.declared\",\n    \"TimeBase.published\",\n    \"TimeBase.correction\",\n    \"TimeBase.months_dropped\",\n    \"TimeBase.decided_in\",\n    \"TimeBase.decided_build_commit\",\n    \"TimeBase.evidence\",\n    \"QcFlag.flag\",\n    \"QcFlag.reason\",\n    \"QcFlag.values\",\n    \"DroppedConstituent.name\",\n    \"DroppedConstituent.dropped_reason\",\n    \"DroppedConstituent.detail\",\n    \"Validation.set_id\",\n    \"Validation.reference_source\",\n    \"Validation.reference_station\",\n    \"Validation.reference_distance_km\",\n    \"Validation.window\",\n    \"Validation.time_mae_min\",\n    \"Validation.time_p95_min\",\n    \"Validation.time_bias_min\",\n    \"Validation.height_mae_m\",\n    \"Validation.range_error_m\",\n    \"Validation.missed_events\",\n    \"Validation.extra_events\",\n    \"Validation.previous_release\",\n    \"SubordinateOffsets.reference_station_id\",\n    \"SubordinateOffsets.time_offset_high_min\",\n    \"SubordinateOffsets.time_offset_low_min\",\n    \"SubordinateOffsets.height_offset_high\",\n    \"SubordinateOffsets.height_offset_low\",\n    \"SubordinateOffsets.height_adjusted_type\",\n    \"SubordinateOffsets.licence_id\",\n    \"SubordinateOffsets.offset_id\",\n    \"SubordinateOffsets.source\",\n    \"SubordinateOffsets.source_type\",\n    \"SubordinateOffsets.source_version\",\n    \"SubordinateOffsets.source_record_id\",\n    \"SubordinateOffsets.qc_status\",\n    \"SubordinateOffsets.qc_flags\",\n    \"SubordinateOffsets.fallback\",\n    \"SubordinateOffsets.vintage\",\n    \"SubordinateOffsets.provenance\",\n    \"Nearby.station\",\n    \"Nearby.distance_km\",\n    \"UpdateResult.updated\",\n    \"UpdateResult.from\",\n    \"UpdateResult.to\",\n    \"RecordSpan.start\",\n    \"RecordSpan.end\",\n    \"RecordSpan.good_samples\",\n    \"Datum.msl_offset_m\",\n    \"Datum.named\",\n    \"Stats.type\",\n    \"Stats.kind\",\n    \"Stats.country\",\n    \"Stats.source\",\n    \"Stats.qc_status\",\n    \"AstroTable.equilibrium_argument\",\n    \"AstroTable.node_factor\",\n    \"AstroTable.equilibrium_for_year\",\n    \"AstroTable.node_factor_for_year\",\n    \"AstroTable.valid_range\",\n    \"HeightPoint.time\",\n    \"HeightPoint.height_m\",\n    \"HeightPoint.local_time\",\n    \"HeightPoint.utc_offset_s\",\n    \"HeightPoint.local_datetime\",\n    \"HeightPoint.local_time_object\",\n    \"Extreme.time\",\n    \"Extreme.type\",\n    \"Extreme.height_m\",\n    \"Extreme.local_time\",\n    \"Extreme.utc_offset_s\",\n    \"Extreme.local_datetime\",\n    \"Extreme.local_time_object\",\n    \"CurrentPoint.time\",\n    \"CurrentPoint.velocity_major_ms\",\n    \"CurrentPoint.velocity_minor_ms\",\n    \"CurrentPoint.speed_ms\",\n    \"CurrentPoint.direction_deg\",\n    \"CurrentPoint.local_time\",\n    \"CurrentPoint.utc_offset_s\",\n    \"CurrentPoint.local_datetime\",\n    \"CurrentPoint.local_time_object\",\n    \"CurrentEvent.time\",\n    \"CurrentEvent.type\",\n    \"CurrentEvent.velocity_ms\",\n    \"CurrentEvent.direction_deg\",\n    \"CurrentEvent.local_time\",\n    \"CurrentEvent.utc_offset_s\",\n    \"CurrentEvent.local_datetime\",\n    \"CurrentEvent.local_time_object\",\n    \"HeightSeries.items\",\n    \"HeightSeries.station_id\",\n    \"HeightSeries.timezone\",\n    \"HeightSeries.method\",\n    \"HeightSeries.set_id\",\n    \"HeightSeries.convention_id\",\n    \"HeightSeries.astro_table_id\",\n    \"HeightSeries.reference_station_id\",\n    \"HeightSeries.reference_bin\",\n    \"HeightSeries.datum\",\n    \"HeightSeries.datum_name\",\n    \"HeightSeries.datum_kind\",\n    \"HeightSeries.datum_uncertainty_m\",\n    \"HeightSeries.tz\",\n    \"HeightSeries.tz_version\",\n    \"HeightSeries.release\",\n    \"HeightSeries.algorithm\",\n    \"HeightSeries.to_local\",\n    \"HeightSeries.offset_id\",\n    \"HeightSeries.offset_source\",\n    \"HeightSeries.offset_source_version\",\n    \"HeightSeries.historical_offsets\",\n    \"HeightSeries.current_validity\",\n    \"HeightSeries.current_accuracy\",\n    \"HeightSeries.reference_set_id\",\n    \"HeightSeries.reference_source_version\",\n    \"HeightSeries.reference_2020_equivalence\",\n    \"HeightSeries.source_note\",\n    \"ExtremeList.items\",\n    \"ExtremeList.station_id\",\n    \"ExtremeList.timezone\",\n    \"ExtremeList.method\",\n    \"ExtremeList.set_id\",\n    \"ExtremeList.convention_id\",\n    \"ExtremeList.astro_table_id\",\n    \"ExtremeList.reference_station_id\",\n    \"ExtremeList.reference_bin\",\n    \"ExtremeList.datum\",\n    \"ExtremeList.datum_name\",\n    \"ExtremeList.datum_kind\",\n    \"ExtremeList.datum_uncertainty_m\",\n    \"ExtremeList.tz\",\n    \"ExtremeList.tz_version\",\n    \"ExtremeList.release\",\n    \"ExtremeList.algorithm\",\n    \"ExtremeList.to_local\",\n    \"ExtremeList.offset_id\",\n    \"ExtremeList.offset_source\",\n    \"ExtremeList.offset_source_version\",\n    \"ExtremeList.historical_offsets\",\n    \"ExtremeList.current_validity\",\n    \"ExtremeList.current_accuracy\",\n    \"ExtremeList.reference_set_id\",\n    \"ExtremeList.reference_source_version\",\n    \"ExtremeList.reference_2020_equivalence\",\n    \"ExtremeList.source_note\",\n    \"CurrentSeries.items\",\n    \"CurrentSeries.station_id\",\n    \"CurrentSeries.timezone\",\n    \"CurrentSeries.method\",\n    \"CurrentSeries.set_id\",\n    \"CurrentSeries.convention_id\",\n    \"CurrentSeries.astro_table_id\",\n    \"CurrentSeries.reference_station_id\",\n    \"CurrentSeries.reference_bin\",\n    \"CurrentSeries.datum\",\n    \"CurrentSeries.datum_name\",\n    \"CurrentSeries.datum_kind\",\n    \"CurrentSeries.datum_uncertainty_m\",\n    \"CurrentSeries.bin_number\",\n    \"CurrentSeries.tz\",\n    \"CurrentSeries.tz_version\",\n    \"CurrentSeries.release\",\n    \"CurrentSeries.algorithm\",\n    \"CurrentSeries.to_local\",\n    \"CurrentEventList.items\",\n    \"CurrentEventList.station_id\",\n    \"CurrentEventList.timezone\",\n    \"CurrentEventList.method\",\n    \"CurrentEventList.set_id\",\n    \"CurrentEventList.convention_id\",\n    \"CurrentEventList.astro_table_id\",\n    \"CurrentEventList.reference_station_id\",\n    \"CurrentEventList.reference_bin\",\n    \"CurrentEventList.datum\",\n    \"CurrentEventList.datum_name\",\n    \"CurrentEventList.datum_kind\",\n    \"CurrentEventList.datum_uncertainty_m\",\n    \"CurrentEventList.bin_number\",\n    \"CurrentEventList.omitted_event_types\",\n    \"CurrentEventList.tz\",\n    \"CurrentEventList.tz_version\",\n    \"CurrentEventList.release\",\n    \"CurrentEventList.algorithm\",\n    \"CurrentEventList.to_local\",\n    \"DatumInfo.set_id\",\n    \"DatumInfo.zero\",\n    \"DatumInfo.zero_name\",\n    \"DatumInfo.chart_datum\",\n    \"DatumInfo.msl_offset_m\",\n    \"DatumInfo.levels\",\n    \"DatumLevel.key\",\n    \"DatumLevel.value_m\",\n    \"DatumLevel.above_chart_m\",\n    \"DatumLevel.kind\",\n    \"DatumLevel.method\",\n    \"DatumLevel.source_name\",\n    \"DatumLevel.epoch\",\n    \"DatumLevel.data_span\",\n    \"DatumLevel.control_station_id\",\n    \"DatumLevel.control_set_id\",\n    \"DatumLevel.control_source_id\",\n    \"DatumLevel.uncertainty_m\",\n    \"DatumLevel.uncertainty_basis\",\n    \"DatumLevel.flags\",\n    \"Ranges.mn\",\n    \"Ranges.gt\",\n    \"Ranges.dhq\",\n    \"Ranges.dlq\",\n    \"Fallback.reason\",\n    \"Fallback.basis\",\n    \"Fallback.otc_finding\",\n    \"Fallback.preferred_set_id\",\n    \"Fallback.raw\",\n    \"SourceRecord.source\",\n    \"SourceRecord.source_version\",\n    \"SourceRecord.source_record_id\",\n    \"SourceRecord.role\",\n    \"SourceRecord.disposition\",\n    \"SourceRecord.detail\",\n    \"SourceRecord.licence_id\",\n    \"SourceRecord.upstream_licence_id\",\n    \"SourceRecord.published_set_ids\",\n    \"SourceRecord.provenance\",\n    \"SourceRecord.original_metadata\",\n    \"SourceRecord.original_harmonics\",\n    \"SourceRecord.licence\",\n    \"SourceRecord.upstream_licence\",\n    \"SourceRecord.raw\",\n    \"HistoricalOffsetVintage.publication_year\",\n    \"HistoricalOffsetVintage.source_lifecycle\",\n    \"HistoricalOffsetVintage.removal_events\",\n    \"HistoricalOffsetVintage.current_validity\",\n    \"HistoricalOffsetVintage.current_accuracy\",\n    \"HistoricalOffsetVintage.reference_2020_equivalence\",\n    \"HistoricalOffsetVintage.reference_2020_equivalence_sha256\",\n    \"HistoricalOffsetProvenance.source_manifest_sha256\",\n    \"HistoricalOffsetProvenance.input_sha256\",\n    \"HistoricalOffsetProvenance.book\",\n    \"HistoricalOffsetProvenance.annual_table_row\",\n    \"HistoricalOffsetProvenance.printed_page\",\n    \"HistoricalOffsetProvenance.pdf_page\",\n    \"HistoricalOffsetProvenance.raw_row_text\",\n    \"HistoricalOffsetProvenance.raw_values_json\",\n    \"HistoricalOffsetProvenance.id_crosswalk\",\n    \"HistoricalOffsetProvenance.reference_binding\",\n    \"HistoricalOffsetProvenance.acceptance_report_sha256\",\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -4230,7 +4230,7 @@
       "declaration": "_CModelType: TypeAlias = Literal[\n    \"Client\",\n    \"Release\",\n    \"ReleaseInfo\",\n    \"FileInfo\",\n    \"Station\",\n    \"Tombstone\",\n    \"ConstantSet\",\n    \"Constituent\",\n    \"Convention\",\n    \"Licence\",\n    \"Provenance\",\n    \"ProvenanceBuild\",\n    \"TimeBase\",\n    \"QcFlag\",\n    \"DroppedConstituent\",\n    \"Validation\",\n    \"SubordinateOffsets\",\n    \"Nearby\",\n    \"UpdateResult\",\n    \"RecordSpan\",\n    \"Datum\",\n    \"Stats\",\n    \"AstroTable\",\n    \"HeightPoint\",\n    \"Extreme\",\n    \"CurrentPoint\",\n    \"CurrentEvent\",\n    \"HeightSeries\",\n    \"ExtremeList\",\n    \"CurrentSeries\",\n    \"CurrentEventList\",\n    \"DatumInfo\",\n    \"DatumLevel\",\n    \"Ranges\",\n    \"Fallback\",\n    \"SourceRecord\",\n    \"HistoricalOffsetVintage\",\n    \"HistoricalOffsetProvenance\",\n]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -4249,7 +4249,7 @@
       "declaration": "_CCurrentOperation: TypeAlias = Literal[\"currents\", \"current_events\"]",
       "source": {
         "path": "python/src/opentideconstants/_canonical_types.py",
-        "sha256": "9159e4424b59db5d8cb6d0a528903b3c92d88ed1d3328af2f8e2db48185866e5"
+        "sha256": "deff7d6e3f9bf970bc717079c4e0c914a4cd2bf272c8c96cf7541456857234f1"
       },
       "ownership": "typed native fixture retains the actual candidate Release and model dependencies for the synchronous call",
       "cleanup": "Python-managed private values retain their genuine native dependencies"
@@ -4291,7 +4291,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -4362,7 +4362,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -4433,7 +4433,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -4508,7 +4508,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -4579,11 +4579,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B05 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "source_bytes",
@@ -4612,7 +4611,7 @@
           "concept_ref": "parsed_document",
           "native_type": "T._CParsedDocument",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -4646,11 +4645,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B06 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "parsed_document",
@@ -4672,7 +4670,7 @@
           "concept_ref": "validated_release_graph",
           "native_type": "T._CValidatedReleaseGraph",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -4716,7 +4714,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -4804,11 +4802,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B08 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "access_kind",
@@ -4851,7 +4848,7 @@
           "concept_ref": "raw_record_or_valid_station",
           "native_type": "T._CRawRecordOrValidStation",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -4911,7 +4908,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5021,7 +5018,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5122,7 +5119,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5220,7 +5217,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5304,7 +5301,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5378,7 +5375,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5438,11 +5435,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B15 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "resource_state",
@@ -5464,7 +5460,7 @@
           "concept_ref": "resource_state_or_error",
           "native_type": "T._CResourceStateOrError",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -5503,11 +5499,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B16 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "checksum_bytes",
@@ -5536,7 +5531,7 @@
           "concept_ref": "bound_checksums",
           "native_type": "T._CBoundChecksums",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -5590,7 +5585,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5683,7 +5678,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5760,7 +5755,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -5834,11 +5829,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B20 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "release_files",
@@ -5860,7 +5854,7 @@
           "concept_ref": "verification_result",
           "native_type": "T._CVerificationResult",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -5914,7 +5908,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6017,7 +6011,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6108,7 +6102,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6187,7 +6181,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -6263,11 +6257,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B25 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "source_files",
@@ -6303,7 +6296,7 @@
           "concept_ref": "authenticated_index",
           "native_type": "T._CAuthenticatedIndex",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -6342,11 +6335,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B26 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "index_entry",
@@ -6375,7 +6367,7 @@
           "concept_ref": "compared_station_row",
           "native_type": "T._CComparedStationRow",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -6419,11 +6411,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B27 construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "stream_reader",
@@ -6459,7 +6450,7 @@
           "concept_ref": "station_source_row",
           "native_type": "T._CStationSourceRow",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -6488,7 +6479,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -6545,7 +6536,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6617,7 +6608,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6689,7 +6680,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6761,7 +6752,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6833,7 +6824,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6911,7 +6902,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -6995,7 +6986,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7085,7 +7076,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7171,7 +7162,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7238,7 +7229,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7308,7 +7299,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -7391,7 +7382,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7465,7 +7456,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -7529,7 +7520,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -7595,7 +7586,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7665,7 +7656,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7754,7 +7745,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7845,7 +7836,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -7934,7 +7925,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8056,7 +8047,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8172,7 +8163,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -8231,11 +8222,10 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
-        "status": "private_unimplemented_refusal",
+        "status": "reused_callable",
         "visibility": "private",
-        "refusal": "B08.origin construction-only; body incomplete",
         "parameters": [
           {
             "canonical_name": "station",
@@ -8257,7 +8247,7 @@
           "concept_ref": "valid_station",
           "native_type": "T._CValidStation",
           "ownership": "Python-managed native result; no result fabricated by the construction stub",
-          "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+          "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
         }
       }
     },
@@ -8296,7 +8286,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8363,7 +8353,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8418,7 +8408,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8481,7 +8471,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8570,7 +8560,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8651,7 +8641,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8711,7 +8701,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -8771,7 +8761,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -8835,7 +8825,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "reused_callable",
         "visibility": "private",
@@ -8901,7 +8891,7 @@
         "lifetime": "Python-managed call-bounded borrow; producing Release owned by fixture",
         "source": {
           "path": "python/src/opentideconstants/_canonical.py",
-          "sha256": "4dc5dd28a3422f9d7e808ad434edc3900d63a6196b66df43f955a30aa31fb525"
+          "sha256": "39cc860f416af44eeaa70736c5c83b481529bdfac0b95f0524086731c282eee2"
         },
         "status": "private_unimplemented_refusal",
         "visibility": "private",
@@ -9025,7 +9015,7 @@
       ],
       "result_type": "T._CValidStation",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B09",
@@ -9267,7 +9257,7 @@
       ],
       "result_type": "T._CBoundChecksums",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B09",
@@ -9323,7 +9313,7 @@
       ],
       "result_type": "T._CParsedDocument",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B09",
@@ -9370,7 +9360,7 @@
       ],
       "result_type": "T._CValidatedReleaseGraph",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B10",
@@ -9917,7 +9907,7 @@
       ],
       "result_type": "T._CParsedDocument",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B11",
@@ -10061,7 +10051,7 @@
       ],
       "result_type": "T._CResourceStateOrError",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B12",
@@ -10330,7 +10320,7 @@
       ],
       "result_type": "T._CResourceStateOrError",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B17",
@@ -10552,7 +10542,7 @@
       ],
       "result_type": "T._CBoundChecksums",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B17",
@@ -10720,7 +10710,7 @@
       ],
       "result_type": "T._CAuthenticatedIndex",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B18",
@@ -10870,7 +10860,7 @@
       ],
       "result_type": "T._CBoundChecksums",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B21",
@@ -10926,7 +10916,7 @@
       ],
       "result_type": "T._CBoundChecksums",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B22",
@@ -11229,7 +11219,7 @@
       ],
       "result_type": "T._CResourceStateOrError",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B27",
@@ -11288,7 +11278,7 @@
       ],
       "result_type": "T._CParsedDocument",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B27",
@@ -11344,7 +11334,7 @@
       ],
       "result_type": "T._CComparedStationRow",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B29",
@@ -11409,7 +11399,7 @@
       ],
       "result_type": "T._CStationSourceRow",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B29",
@@ -11521,7 +11511,7 @@
       ],
       "result_type": "T._CResourceStateOrError",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B34",
@@ -12039,7 +12029,7 @@
       ],
       "result_type": "T._CValidStation",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B37",
@@ -12198,7 +12188,7 @@
       ],
       "result_type": "T._CValidStation",
       "owner": "typed native fixture retains the candidate Release and its Station/ConstantSet; synchronous borrow",
-      "cleanup": "call-bounded native strong references; no acquired resource or result survives refusal"
+      "cleanup": "call-bounded native strong references; returned immutable values remain fixture-owned"
     },
     {
       "caller_id": "B40",

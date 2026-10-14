@@ -635,12 +635,7 @@ class Release:
             raise InvalidArgumentError('historical_offsets_policy must be fallback or exclude')
         _bind_release_fields_1(self, historical_offsets_policy=historical_offsets_policy, astro_cache={}, meta=meta, index_path=index_path)
         _bind_release_fields_2(self, opened=())
-        rel = meta.get("release")
-        if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
-            raise InvalidReleaseError("release.datestamp is missing")
-        sv = rel.get("source_versions")
-        if sv is not None and (not isinstance(sv, dict) or not all(isinstance(v, str) for v in sv.values())):
-            raise InvalidReleaseError("release.source_versions is not an object of strings")
+        rel = _validate_release_header(meta)
         _bind_release_fields_3(self, release=rel)
         _bind_release_fields_4(self, files=tuple(files))
         try:
@@ -802,7 +797,7 @@ class Release:
 
     # ---- station access
 
-    def _station_from_entry(self, e) -> Station:
+    def _station_from_entry(self, e, read_line=None) -> Station:
         if self._stations is not None:
             return self._stations[e["station_id"]]
         sid = e["station_id"]
@@ -811,7 +806,7 @@ class Release:
             if st is not None:
                 self._lru.move_to_end(sid)
                 return st
-            d = self._read_line(e)
+            d = self._read_line(e) if read_line is None else read_line(e)
         if self._effective is not None:
             st = build_station(d, self._conv_by_id, self._lic_by_id, e.get("kind"), self._effective[sid])
         else:
@@ -827,7 +822,7 @@ class Release:
         if self._closed:
             raise FileError("the release is closed", path=None if self._jsonl is None else str(self._jsonl))
 
-    def _read_line(self, e):
+    def _read_line(self, e, decode=None, compare=None):
         """Called with self._lock held, so close() cannot run in the middle of it."""
         if self._fh is None:
             raise FileError("the release is closed", path=str(self._jsonl))
@@ -838,27 +833,37 @@ class Release:
             raise FileError("the release is closed", path=str(self._jsonl), cause=ex) from ex
         except OSError as ex:
             raise FileError(f"cannot read {self._jsonl}: {ex}", path=str(self._jsonl), cause=ex) from ex
+        comparing = False
         try:
             if len(data) != e["length"]:
                 raise InvalidReleaseError(f"short read of {self._jsonl} at {e['offset']}")
-            d = _json(data, f"{self._jsonl} line of {e['station_id']}")
+            what = f"{self._jsonl} line of {e['station_id']}"
+            d = _json(data, what) if decode is None else decode(data, what)
             if not isinstance(d, dict) or d.get("station_id") != e["station_id"]:
                 raise InvalidReleaseError(f"the line at offset {e['offset']} of {self._jsonl} is not "
                                           f"{e['station_id']}")
-            if self._index_path is not None:
+            if compare is not None:
+                comparing = True
+                compare(d, e)
+            elif self._index_path is not None:
                 self._check_line(d, e)
         except InvalidReleaseError as ex:
-            # the index does not match the file (CR D4): name it and drop it, so the next open rebuilds it
-            if self._index_path is not None:
-                try:
-                    self._index_path.unlink()
-                except FileNotFoundError:
-                    pass
-                except OSError as ux:
-                    _log.warning("cannot delete %s: %s", self._index_path, ux)
-                raise InvalidReleaseError(f"{self._index_path.name} does not match the release: {ex}") from ex
-            raise
+            if comparing:
+                raise
+            self._reject_index_mismatch(ex)
         return d
+
+    def _reject_index_mismatch(self, ex):
+        # the index does not match the file (CR D4): name it and drop it, so the next open rebuilds it
+        if self._index_path is not None:
+            try:
+                self._index_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as ux:
+                _log.warning("cannot delete %s: %s", self._index_path, ux)
+            raise InvalidReleaseError(f"{self._index_path.name} does not match the release: {ex}") from ex
+        raise ex
 
     def _check_line(self, d, e):
         """A line read through the stream index gets the checks of the full pass, and it must give its entry's
@@ -1326,6 +1331,16 @@ def _check_meta(meta, what):
         raise InvalidReleaseError(f"{what}: release.min_reader_version is required")
 
 
+def _validate_release_header(meta):
+    rel = meta.get("release")
+    if not isinstance(rel, dict) or not isinstance(rel.get("datestamp"), str):
+        raise InvalidReleaseError("release.datestamp is missing")
+    sv = rel.get("source_versions")
+    if sv is not None and (not isinstance(sv, dict) or not all(isinstance(v, str) for v in sv.values())):
+        raise InvalidReleaseError("release.source_versions is not an object of strings")
+    return rel
+
+
 def _refs(meta, what):
     """convention_id -> Convention and licence_id -> Licence; a malformed entry is invalid_release."""
     try:
@@ -1356,20 +1371,13 @@ def load_document(path: Path, mode: str, files, index_path: Optional[Path] = Non
         _check_meta(meta, str(meta_path_for(path)))
         conv, lic = _refs(meta, str(meta_path_for(path)))
         if mode == "stream":
-            for attempt in range(2):
-                had_index = index_path is not None and index_path.exists()
-                entries = _stream_index(path, conv, lic, index_path, index_sha256)
-                try:
-                    return Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path, index_path=index_path,
-                                   commercial_only=commercial_only, commercial_basis=commercial_basis,
-                                   historical_offsets_policy=historical_offsets_policy)
-                except InvalidReleaseError:
-                    if attempt or not had_index or index_path is None:
-                        raise
-                    try:
-                        index_path.unlink()
-                    except FileNotFoundError:
-                        pass
+            return _stream_index_with_retry(
+                path, conv, lic, index_path, index_sha256,
+                lambda entries: Release(meta=meta, entries=entries, files=files, mode="stream", jsonl=path,
+                                        index_path=index_path, commercial_only=commercial_only,
+                                        commercial_basis=commercial_basis,
+                                        historical_offsets_policy=historical_offsets_policy),
+            )
         data = _read_bytes(path)
         docs = []
         for i, line in enumerate(data.split(b"\n")):
@@ -1442,7 +1450,24 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha256: Optional[str] = None):
+def _stream_index_with_retry(path, conv, lic, index_path, index_sha256, load, **phases):
+    for attempt in range(2):
+        had_index = index_path is not None and index_path.exists()
+        entries = _stream_index(path, conv, lic, index_path, index_sha256, **phases)
+        try:
+            return load(entries)
+        except InvalidReleaseError:
+            if attempt or not had_index or index_path is None:
+                raise
+            try:
+                index_path.unlink()
+            except FileNotFoundError:
+                pass
+            phases.pop("supplied", None)
+
+
+def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha256: Optional[str] = None,
+                  project=None, encode=None, supplied=None, index_document=None):
     """Use index-v1.json when it is fresh, else make one pass over the .jsonl and write it (spec §6.2).
     index_sha256: the .jsonl digest from .verified (computed when not given)."""
     size = path.stat().st_size if path.exists() else None
@@ -1450,7 +1475,7 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
         raise FileError(f"cannot open {path}", path=str(path))
     if index_path is not None and index_path.exists():
         try:
-            idx = json.loads(index_path.read_text(encoding="utf-8"))
+            idx = json.loads(index_path.read_text(encoding="utf-8")) if supplied is None else supplied
             entries = _usable_index(idx, path.name, index_sha256 or file_sha256(path), size, conv, lic)
             if entries is not None:
                 with path.open('rb') as handle:
@@ -1476,6 +1501,8 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
                         handle.seek(end)
                         if all(not chunk.strip(b" \t\r\n\f\v")
                                for chunk in iter(lambda: handle.read(1 << 16), b"")):
+                            if index_document is not None:
+                                index_document(idx)
                             return entries
         except (OSError, ValueError, RecursionError):
             pass  # a stale or broken index is rebuilt
@@ -1499,20 +1526,23 @@ def _stream_index(path: Path, conv, lic, index_path: Optional[Path], index_sha25
                         raise InvalidReleaseError(f"{path} line {i + 1}: not a station")
                     _validate_refs(d, conv, lic)
                     try:
-                        entries.append(_entry(d, offset, len(body)))
+                        entries.append(_entry(d, offset, len(body)) if project is None else project(d, offset, len(body)))
                     except (KeyError, TypeError, AttributeError) as e:
                         raise InvalidReleaseError(f"{path} line {i + 1}: {e!r}") from e
                 offset += len(line)
     except OSError as e:
         raise FileError(f"cannot read {path}: {e}", path=str(path), cause=e) from e
     _resolve_kinds(entries)
-    if index_path is not None:
+    if index_path is not None or index_document is not None:
         from ._cache import atomic_write
         from ._client import SDK
         doc = {"index_version": INDEX_VERSION, "discovery_index_version": 1, "datestamp": path.name[len("OTC_"):-len(".jsonl")], "jsonl": path.name,
                "jsonl_sha256": h.hexdigest(), "jsonl_size": size, "by": SDK, "stations": entries}
+        if index_document is not None:
+            index_document(doc)
+    if index_path is not None:
         try:
-            atomic_write(index_path, encode_cache_json(doc))
+            atomic_write(index_path, encode_cache_json(doc) if encode is None else encode(doc))
         except OSError as e:  # the index only saves work: the release loads without it (spec §6.2)
             _log.warning("cannot write %s: %s", index_path, e)
     return entries

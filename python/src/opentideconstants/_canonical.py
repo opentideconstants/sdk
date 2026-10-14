@@ -508,13 +508,55 @@ def _decode_release_document(
     reader_version: T._CReaderVersion,
     document_kind: T._CDocumentKind,
 ) -> T._CParsedDocument:
-    raise NotImplementedError("B05 construction-only; body incomplete")
+    if (reader_version.major, reader_version.minor) != _release.version_key(_release.SUPPORTED_FORMAT_VERSION):
+        raise NotImplementedError("B05 native reader version context incomplete")
+    what = source_bytes.name if isinstance(source_bytes, T._DocumentSource) else document_kind
+    data = source_bytes.data if isinstance(source_bytes, T._DocumentSource) else source_bytes
+    document = _release._json(data, what)
+    if document_kind == "release":
+        _release._check_meta(document, what)
+        header = _release._validate_release_header(document)
+        _models.parse_time(header.get("created"), "release.created")
+    elif document_kind == "station_row":
+        if not isinstance(document, dict) or "station_id" not in document:
+            raise _errors.InvalidReleaseError(f"{what}: not a station")
+        if _release._status(document) == "active":
+            _models.check_station_types(document)
+    elif document_kind in ("pointer", "catalogue"):
+        if not isinstance(source_bytes, T._DocumentSource) or source_bytes.native_client is None:
+            raise NotImplementedError("B05 native metadata validation context incomplete")
+        if document_kind == "pointer":
+            source_bytes.native_client._info(document, source_bytes.name)
+        else:
+            source_bytes.native_client._index_infos(document, source_bytes.name)
+    return document
 
 
 def _validate_release_links(
     *, parsed_document: T._CParsedDocument, required_links: T._CRequiredLinks
 ) -> T._CValidatedReleaseGraph:
-    raise NotImplementedError("B06 construction-only; body incomplete")
+    document = _mutable_source(parsed_document)
+    if not isinstance(document, dict):
+        raise NotImplementedError("B06 native station source binding incomplete")
+    rows = document.get("stations")
+    if not isinstance(rows, list):
+        raise NotImplementedError("B06 native station source binding incomplete")
+    _release._refs(document, "the release")
+    try:
+        entries = [_release._entry(row) for row in rows]
+    except (KeyError, TypeError, AttributeError) as error:
+        raise _errors.InvalidReleaseError(f"bad station or reference data: {error!r}") from error
+    _release._resolve_kinds(entries)
+    for row in rows:
+        _release._validate_refs(row, required_links.conventions, required_links.licences)
+    convention_rows, licence_rows = document.get("conventions") or (), document.get("licences") or ()
+    assert isinstance(convention_rows, (list, tuple)) and isinstance(licence_rows, (list, tuple))
+    _release._check_ids(
+        entries,
+        [_models.Convention._parse(value) for value in convention_rows],
+        [_models.Licence._parse(value) for value in licence_rows],
+    )
+    return parsed_document
 
 
 def _materialize_typed_model(
@@ -1080,7 +1122,9 @@ def _access_raw_record(
     release_origin: T._CReleaseOrigin,
     native_profile: T._CNativeProfile,
 ) -> T._CRawRecordOrValidStation:
-    raise NotImplementedError("B08 construction-only; body incomplete")
+    if access_kind == "raw_record":
+        return _retain_raw_source_record(source_record=source_record, native_profile=native_profile)
+    return _check_station_origin(station=station, release_origin=release_origin)
 
 
 def _open_client_release(
@@ -1148,7 +1192,19 @@ def _forward_held_release(
 def _enforce_resource_lifetime(
     *, resource_state: T._CResourceState, lifetime_action: T._CLifetimeAction
 ) -> T._CResourceStateOrError:
-    raise NotImplementedError("B15 construction-only; body incomplete")
+    owner = resource_state.release_view if isinstance(resource_state, T._StreamReader) else resource_state
+    if not isinstance(owner, (_release.Release, _client.OpenTideConstants)):
+        raise NotImplementedError("B15 native lifetime owner incomplete")
+    if lifetime_action == "close":
+        if isinstance(owner, _client.OpenTideConstants):
+            owner.close()
+        else:
+            owner._close()
+    elif lifetime_action not in ("retained_metadata", "retained_model"):
+        owner._check_open()
+    if isinstance(resource_state, T._StreamReader):
+        return replace(resource_state, closed=owner._closed)
+    return resource_state
 
 
 def _bind_checksum_manifest(
@@ -1157,7 +1213,27 @@ def _bind_checksum_manifest(
     pointer_digests: T._CPointerDigests,
     required_files: T._CRequiredFiles,
 ) -> T._CBoundChecksums:
-    raise NotImplementedError("B16 construction-only; body incomplete")
+    data = checksum_bytes.data if isinstance(checksum_bytes, T._ChecksumSource) else checksum_bytes
+    what = checksum_bytes.name if isinstance(checksum_bytes, T._ChecksumSource) else ".sha256"
+    rows = _client._parse_sha256(data, what)
+    paths = []
+    for required in required_files:
+        if not isinstance(required, str):
+            raise NotImplementedError("B16 native required filename binding incomplete")
+        paths.append(_client.Path(required))
+    if paths:
+        remote_mode = checksum_bytes.load_mode if isinstance(checksum_bytes, T._ChecksumSource) else None
+        if remote_mode == "stream" or (remote_mode == "eager" and paths[0].name.endswith(".jsonl")):
+            for path in paths:
+                _client._require_stream_row(path.name, rows)
+        else:
+            _client._need_rows(paths[0], paths, rows, what)
+    if pointer_digests:
+        for name, digest in pointer_digests.items():
+            if name.endswith(".sha256"):
+                _client._check_cached_manifest_bytes(data, _client.Path(name), (digest,))
+        _client._check_pointer_digests(pointer_digests, rows)
+    return rows
 
 
 def _acquire_release_files(
@@ -1194,7 +1270,17 @@ def _select_cached_release(
 def _verify_release_files(
     *, release_files: T._CReleaseFiles, trusted_cached_pointer: T._CTrustedCachedPointer
 ) -> T._CVerificationResult:
-    raise NotImplementedError("B20 construction-only; body incomplete")
+    if not isinstance(release_files, _client.OpenTideConstants):
+        raise NotImplementedError("B20 native verified file owner incomplete")
+    release_files._check_open()
+    def bind_manifest(data: bytes, path: _client.Path, digests: T._CPointerDigests):
+        return _bind_checksum_manifest(
+            checksum_bytes=T._ChecksumSource(data, path.name), pointer_digests=digests, required_files=(),
+        )
+    return release_files._verify_release_files(
+        bind_manifest,
+        None if trusted_cached_pointer is None else trusted_cached_pointer.digests,
+    )
 
 
 def _publish_download(
@@ -1251,7 +1337,48 @@ def _authenticate_station_index(
     index_presence: T._CIndexPresence,
     reader_version: T._CReaderVersion,
 ) -> T._CAuthenticatedIndex:
-    raise NotImplementedError("B25 construction-only; body incomplete")
+    paths = (source_files.jsonl, source_files.meta)
+    records = {
+        source_files.jsonl.name: {"size": source_files.jsonl_size, "sha256": source_files.jsonl_sha256},
+        source_files.meta.name: {"size": source_files.meta_size, "sha256": source_files.meta_sha256},
+    }
+    _client._authenticate_cached_files(paths, records, True)
+    meta = _decode_release_document(
+        source_bytes=T._DocumentSource(_release._read_bytes(source_files.meta), str(source_files.meta)),
+        reader_version=reader_version, document_kind="release",
+    )
+    conventions, licences = _release._refs(meta, str(source_files.meta))
+    metadata = _mutable_source(meta)
+    assert isinstance(metadata, dict)
+    convention_rows, licence_rows = metadata.get("conventions") or (), metadata.get("licences") or ()
+    assert isinstance(convention_rows, (list, tuple)) and isinstance(licence_rows, (list, tuple))
+    native_conventions = [_models.Convention._parse(row) for row in convention_rows]
+    native_licences = [_models.Licence._parse(row) for row in licence_rows]
+    documents = []
+    def project(row, offset: int, length: int):
+        return _project_station_index(
+            station_source_row=row, source_byte_span=T._SourceByteSpan(offset, length),
+            projection_contract=T._ProjectionContract(
+                "Exact original canonical field table attached per member; known wrong type is invalid_release, absent nullable is null, missing arrays use each attached contract default. Raw fields preserve source JSON without computed fields.",
+                "Model IDs refer to B07, source/ownership objects also B08, historical fields B36, prediction/local/datum results B48. These are value projection behaviors, not an assertion that every getter has an independent algorithm.",
+                "Complete source object, including all unknown nested fields, represented by tolerant cache-specific definitions derived from accepted schema33a760ad. Known primitive types, required historical fields, source binding conditions and raw values remain unchanged.",
+                "25 scenario families enumerate required shared branches. They are not 25 executed passes or exhaustive binary-branch verification. Each family expands to its incorporated original case table and required additional guard-reaching witnesses.",
+                "Complete actual fallback object, including unknown nested fields. String reasons remain source strings in cache/raw and become typed other when unknown. Cache-source comparison includes every preserved field, not only current known keys.",
+            ),
+        )
+    def encode(document):
+        return _encode_cache_json(cache_document=document)
+    def validate(entries):
+        _release._check_ids(entries, native_conventions, native_licences)
+        return documents[-1]
+    authenticated = _release._stream_index_with_retry(
+        source_files.jsonl, conventions, licences, source_files.index_path, source_files.jsonl_sha256,
+        validate, project=project, encode=encode,
+        supplied=None if supplied_index is None else _mutable_source(supplied_index),
+        index_document=documents.append,
+    )
+    assert authenticated is not None
+    return authenticated
 
 
 def _compare_station_source(
@@ -1260,7 +1387,13 @@ def _compare_station_source(
     station_source_row: T._CStationSourceRow,
     index_presence: T._CIndexPresence,
 ) -> T._CComparedStationRow:
-    raise NotImplementedError("B26 construction-only; body incomplete")
+    if not isinstance(index_presence, _release.Release):
+        raise NotImplementedError("B26 native index owner incomplete")
+    try:
+        index_presence._check_line(_mutable_source(station_source_row), index_entry)
+    except _errors.InvalidReleaseError as error:
+        index_presence._reject_index_mismatch(error)
+    return station_source_row
 
 
 def _read_station_lazily(
@@ -1270,7 +1403,30 @@ def _read_station_lazily(
     release_origin: T._CReleaseOrigin,
     reader_version: T._CReaderVersion,
 ) -> T._CStationSourceRow:
-    raise NotImplementedError("B27 construction-only; body incomplete")
+    _enforce_resource_lifetime(resource_state=stream_reader, lifetime_action="station_read")
+    owner = stream_reader.release_view if isinstance(stream_reader, T._StreamReader) else stream_reader
+    if release_origin is not owner:
+        raise NotImplementedError("B27 native producing Release context incomplete")
+    entry = owner._by_id.get(station_id)
+    if entry is None:
+        raise NotImplementedError("B27 native admitted station entry incomplete")
+    if isinstance(stream_reader, T._StreamReader):
+        if stream_reader.index is not owner._by_id or stream_reader.station_lru is not owner._lru:
+            raise NotImplementedError("B27 borrowed native index/cache owner incomplete")
+        if stream_reader.index_presence.get(station_id) != entry.get("_index_presence"):
+            raise NotImplementedError("B27 borrowed native source presence incomplete")
+        if owner._fh is not None and not owner._fh.closed and stream_reader.file_descriptor != owner._fh.fileno():
+            raise NotImplementedError("B27 borrowed native descriptor incomplete")
+    def decode(data: bytes, what: str):
+        return _decode_release_document(
+            source_bytes=T._DocumentSource(data, what), reader_version=reader_version, document_kind="station_row",
+        )
+    def compare(row, native_entry):
+        return _compare_station_source(index_entry=native_entry, station_source_row=row, index_presence=owner)
+    def read_line(native_entry):
+        return owner._read_line(native_entry, decode=decode, compare=compare)
+    station = owner._station_from_entry(entry, read_line=read_line)
+    return station.raw
 
 
 def _encode_cache_json(*, cache_document: T._CCacheDocument) -> T._CCacheBytes:
@@ -1518,7 +1674,10 @@ def _retain_raw_source_record(
 def _check_station_origin(
     *, station: T._CStation, release_origin: T._CReleaseOrigin
 ) -> T._CValidStation:
-    raise NotImplementedError("B08.origin construction-only; body incomplete")
+    if not isinstance(release_origin, _release.Release):
+        raise NotImplementedError("B08.origin native producing Release incomplete")
+    release_origin._own_station(station, "station")
+    return station
 
 
 def _manage_cache_lock(

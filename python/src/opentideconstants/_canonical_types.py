@@ -2882,9 +2882,9 @@ class _RequiredLinks:
 class _StreamReader:
     release_view: Release
     file_descriptor: int
-    index: _JsonValue
-    index_presence: _JsonValue
-    station_lru: _JsonValue
+    index: Mapping[str, _IndexEntry]
+    index_presence: Mapping[str, tuple[Mapping[str, bool], frozenset[str], tuple[frozenset[str], ...]] | None]
+    station_lru: Mapping[str, Station]
     closed: bool
 
 
@@ -2928,6 +2928,21 @@ class _SourceFiles:
     jsonl_size: int
     meta_sha256: str
     meta_size: int
+    index_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ChecksumSource:
+    data: bytes
+    name: str
+    load_mode: Literal["eager", "stream"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _DocumentSource:
+    data: bytes
+    name: str
+    native_client: OpenTideConstants | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -3400,7 +3415,7 @@ _CCause: TypeAlias = Exception | None
 _CChangedBehaviors: TypeAlias = tuple[str, ...]
 
 
-_CChecksumBytes: TypeAlias = bytes
+_CChecksumBytes: TypeAlias = bytes | _ChecksumSource
 
 
 _CCitationStyle: TypeAlias = str
@@ -3939,7 +3954,7 @@ _CIncludeNoConstants: TypeAlias = bool
 _CIndexEntry: TypeAlias = _IndexEntry
 
 
-_CIndexPresence: TypeAlias = Mapping[str, bool]
+_CIndexPresence: TypeAlias = Mapping[str, bool] | Release
 
 
 _CInventoryAction: TypeAlias = Literal["list", "prune"]
@@ -4358,13 +4373,13 @@ _CReferencePath: TypeAlias = _ReferencePath
 _CReleaseCandidates: TypeAlias = tuple[str, ...]
 
 
-_CReleaseFiles: TypeAlias = tuple[FileInfo, ...]
+_CReleaseFiles: TypeAlias = tuple[FileInfo, ...] | OpenTideConstants
 
 
 _CReleaseMetadata: TypeAlias = _JsonValue
 
 
-_CReleaseOrigin: TypeAlias = _OpaqueOrigin
+_CReleaseOrigin: TypeAlias = _OpaqueOrigin | Release
 
 
 _CReleaseRequest: TypeAlias = Literal["latest"] | str
@@ -4385,10 +4400,10 @@ _CRequiredFiles: TypeAlias = tuple[_JsonValue, ...]
 _CRequiredLinks: TypeAlias = _RequiredLinks
 
 
-_CResourceState: TypeAlias = _ClientState | Release | _StreamReader
+_CResourceState: TypeAlias = _ClientState | Release | _StreamReader | OpenTideConstants
 
 
-_CResourceStateOrError: TypeAlias = _ClientState | Release | _StreamReader
+_CResourceStateOrError: TypeAlias = _ClientState | Release | _StreamReader | OpenTideConstants
 
 
 _CResultContext: TypeAlias = _ResultContext
@@ -4423,7 +4438,7 @@ _CSelectionOptions: TypeAlias = _SelectionOptions
 _CSourceByteSpan: TypeAlias = _SourceByteSpan
 
 
-_CSourceBytes: TypeAlias = bytes
+_CSourceBytes: TypeAlias = bytes | _DocumentSource
 
 
 _CSourceFiles: TypeAlias = _SourceFiles
@@ -4464,7 +4479,7 @@ _CStationSummary: TypeAlias = Stats | tuple[ConstantSet, ...]
 _CStep: TypeAlias = float | _Omitted
 
 
-_CStreamReader: TypeAlias = _StreamReader
+_CStreamReader: TypeAlias = _StreamReader | Release
 
 
 _CSummaryKind: TypeAlias = Literal["stats", "constant_sets"]

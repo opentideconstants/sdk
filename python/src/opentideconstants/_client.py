@@ -102,6 +102,45 @@ def _need_rows(path: Path, opened, rows, sha_name: str) -> None:
                                 actual=None)
 
 
+def _check_pointer_digests(pointer_digests, rows) -> None:
+    for n, sha in rows.items():
+        present = n in pointer_digests
+        digest = pointer_digests.get(n)
+        if not present:
+            raise ChecksumError(f"{n} is in the .sha256 file but not in the pointer", file=n, expected=None,
+                                actual=sha)
+        if digest is not None and digest != sha:
+            raise ChecksumError(f"{n}: the pointer and the .sha256 file disagree", file=n,
+                                expected=sha, actual=digest)
+
+
+def _require_stream_row(name, rows) -> None:
+    if name not in rows:
+        raise InvalidReleaseError(f"{name} is not in the .sha256 file")
+
+
+def _authenticate_cached_files(paths, records, verify, check_file=None) -> None:
+    for p in paths:
+        rec = records.get(p.name) or {}
+        size = rec.get("size")
+        try:
+            actual_size = p.stat().st_size
+        except OSError as e:  # removed or unreadable since it was found: cache, never absent (spec §5.2)
+            raise CacheError(f"cannot read {p}: {e}") from e
+        if size is not None and actual_size != size:
+            raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
+                                expected=rec.get("sha256"), actual=file_sha256(p))
+        if verify:
+            (OpenTideConstants._check_file if check_file is None else check_file)(p, rec.get("sha256"))
+
+
+def _check_cached_manifest_bytes(sha_body, sha_path, digests) -> None:
+    actual = hashlib.sha256(sha_body).hexdigest()
+    for expected in digests:
+        if expected != actual:
+            raise ChecksumError(f"{sha_path.name}: SHA-256 {actual}, but the cached pointer lists {expected}",
+                                file=str(sha_path), expected=expected, actual=actual)
+
 def _split_file_name(name: str):
     """OTC_<D><ext> -> (D, ext), with D a valid datestamp; else (None, None) (spec §4.2, CR D18)."""
     for ext in (".json.gz", ".jsonl", ".json"):
@@ -567,18 +606,7 @@ class OpenTideConstants:
         v = self._cache.read_verified(datestamp) or {"files": {}}
         d = self._cache.release_dir(datestamp)
         check = [path] + ([meta_path_for(path)] if path.name.endswith(".jsonl") else [])
-        for p in check:
-            rec = v["files"].get(p.name) or {}
-            size = rec.get("size")
-            try:
-                actual_size = p.stat().st_size
-            except OSError as e:  # removed or unreadable since it was found: cache, never absent (spec §5.2)
-                raise CacheError(f"cannot read {p}: {e}") from e
-            if size is not None and actual_size != size:
-                raise ChecksumError(f"{p.name}: size {actual_size} does not match {size}", file=str(p),
-                                    expected=rec.get("sha256"), actual=file_sha256(p))
-            if self._verify_on_open or mode == "stream":
-                self._check_file(p, rec.get("sha256"))
+        _authenticate_cached_files(check, v["files"], self._verify_on_open or mode == "stream", self._check_file)
         rel = load_document(path, mode, self._cached_files(datestamp),
                             index_path=d / "index-v1.json" if mode == "stream" else None,
                             index_sha256=(v["files"].get(path.name) or {}).get("sha256"),
@@ -855,15 +883,8 @@ class OpenTideConstants:
         list, and no file in the .sha256 that the pointer does not list."""
         if info is None:
             return
-        listed = {f.name: f for f in info.files}
-        for n, sha in rows.items():
-            f = listed.get(n)
-            if f is None:
-                raise ChecksumError(f"{n} is in the .sha256 file but not in the pointer", file=n, expected=None,
-                                    actual=sha)
-            if f.sha256 is not None and f.sha256 != sha:
-                raise ChecksumError(f"{n}: the pointer and the .sha256 file disagree", file=n,
-                                    expected=sha, actual=f.sha256)
+        _check_pointer_digests({f.name: f.sha256 for f in info.files}, rows)
+
 
     def _fetch_file(self, url: str, dest_dir: Path, expected_sha: Optional[str], expected_size, final_name: str,
                     datestamp: str, gz: bool = False):
@@ -912,8 +933,7 @@ class OpenTideConstants:
             try:
                 if mode == "stream" or (f"{base}.json.gz" not in rows and f"{base}.json" not in rows):
                     for n in (f"{base}.jsonl", f"{base}.meta.json"):
-                        if n not in rows:
-                            raise InvalidReleaseError(f"{n} is not in the .sha256 file")
+                        _require_stream_row(n, rows)
                         tmp = self._fetch_file(url_of(n), d, rows[n], size_of(n), n, datestamp)
                         wanted.append((n, tmp))
                         written[n] = os.path.getsize(tmp)
@@ -1156,6 +1176,9 @@ class OpenTideConstants:
         pointer lists for it, when one lists it (CR2 DR45); verify fetches nothing, so a mismatch is
         checksum_mismatch and the file stays."""
         self._check_open()
+        return self._verify_release_files()
+
+    def _verify_release_files(self, bind_manifest=None, trusted_pointer_digests=None) -> bool:
         rel = self._release
         ds = rel.datestamp
         opened = rel._opened
@@ -1170,12 +1193,9 @@ class OpenTideConstants:
             raise ChecksumError(f"no OTC_{ds}.sha256 next to {first}", file=str(first))
         sha_body = _read_bytes(sha_path)
         if self._loaded_from not in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED):
-            actual = hashlib.sha256(sha_body).hexdigest()
-            for expected in self._cached_pointer_sha256(ds):
-                if expected != actual:
-                    raise ChecksumError(f"{sha_path.name}: SHA-256 {actual}, but the cached pointer lists {expected}",
-                                        file=str(sha_path), expected=expected, actual=actual)
-        rows = _parse_sha256(sha_body, sha_path.name)
+            _check_cached_manifest_bytes(sha_body, sha_path, self._cached_pointer_sha256(ds))
+        rows = (_parse_sha256(sha_body, sha_path.name) if bind_manifest is None else
+                bind_manifest(sha_body, sha_path, trusted_pointer_digests or {}))
         local = self._loaded_from in (LoadedFrom.FILE, LoadedFrom.FILE_UNVERIFIED)
         for p in opened:
             if not p.is_file():
