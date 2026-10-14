@@ -1181,7 +1181,7 @@ class OpenTideConstants
                 check_types!(cs[k], table, "#{what}: #{k}") if cs[k]
             end
             build = cs.dig("provenance", "build")
-            check_types!(build, { "build_commit" => :t }, "#{what}: provenance.build") if build
+            check_types!(build, { "build_commit" => :t }, "#{what}: provenance.build") if build.is_a?(Hash)
             names = Set.new
             Array(cs["constituents"]).each do |c|
                 raise InvalidReleaseError, "#{what}: a constituent has no name" unless c["name"].is_a?(String)
