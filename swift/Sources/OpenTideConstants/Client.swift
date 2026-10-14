@@ -343,7 +343,7 @@ internal struct ClientIO:@unchecked Sendable {
                 let actual=SHA256.digest(try Reader.gunzip(Reader.read(path)))
                 guard actual==expected.lowercased() else { throw OpenTideConstantsError.checksumMismatch("checksum mismatch",["file":.string(json.path),"expected":.string(expected.lowercased()),"actual":.string(actual)]) }
             }
-        } else if verifyOnOpen { throw OpenTideConstantsError.checksumMismatch("no OTC_\(stamp).sha256 next to file") }
+        }
         let metadataNames=rows.map { Array($0.keys) } ?? names
         let metadata=metadataNames.sorted().map { name -> FileInfo in
             let p=directory.appendingPathComponent(name)
