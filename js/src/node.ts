@@ -212,6 +212,72 @@ export function tryLockSync(dir: string): boolean {
     return false;
 }
 
+/** Expired partial directories do not use keep's budget or contribute to prune's removed list (spec 4.3). */
+export function prunePartialSync(dir: string, verified: (file: string, requireDatestamp: boolean) => boolean,
+    log: (level: "info" | "warn", message: string) => void): void {
+    const lockDir = path.join(dir, ".lock");
+    const ownerFile = path.join(lockDir, "owner.json");
+    const token = randomBytes(16).toString("hex");
+    let identity: fs.Stats | null = null;
+    let published = false;
+    let cleared = false;
+    const owns = (): boolean => {
+        if (!identity) return false;
+        const current = fs.statSync(lockDir);
+        if (current.dev !== identity.dev || current.ino !== identity.ino) return false;
+        if (!published) return true;
+        const owner: unknown = JSON.parse(fs.readFileSync(ownerFile, "utf8"));
+        return typeof owner === "object" && owner !== null && "token" in owner && owner.token === token;
+    };
+    try {
+        // Taking the lock changes the parent mtime. Judge age only from this pre-take reading (DR89).
+        const mtime = fs.statSync(dir).mtimeMs;
+        const plant = process.env["OTC_TEST_PRUNE_PLANT_VERIFIED"];
+        const scale = process.env["OTC_TEST_LOCK_SCALE"];
+        if (plant && scale && /^[1-9]\d*$/.test(scale) && Number(scale) <= 1000 && verified(plant, true)) {
+            // Approved deterministic race hook: immediately before the take's mkdir (DR93/DR94).
+            fs.writeFileSync(path.join(dir, ".verified"), fs.readFileSync(plant));
+            log("warn", `test hook planted .verified in ${dir}`);
+        }
+        if (!tryLockSync(dir)) {
+            log("info", `prune: ${dir} is locked by another process; it is kept`);
+            return;
+        }
+        identity = fs.statSync(lockDir);
+        writeAtomicSync(ownerFile, new TextEncoder().encode(JSON.stringify({ pid: process.pid, host: os.hostname(),
+            sdk: SDK_ID, started_at: new Date().toISOString(), token })));
+        published = true;
+        if (verified(path.join(dir, ".verified"), false)) {
+            log("info", `prune: ${dir} became verified; it is kept`);
+            return;
+        }
+        if (Date.now() - mtime <= 120_000) return;
+        if (!owns()) return;
+        // Invalidate first; remove content while holding the lock, then release and rmdir, without recursion.
+        fs.rmSync(path.join(dir, ".verified"), { force: true });
+        for (const name of fs.readdirSync(dir)) {
+            if (name !== ".lock") fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+        }
+        cleared = true;
+        log("info", `prune: removed the incomplete release directory ${dir}`);
+    } catch (e) {
+        log("warn", `prune: cannot clean incomplete release directory ${dir}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+        if (identity) {
+            try { if (owns()) fs.rmSync(lockDir, { recursive: true, force: true }); }
+            catch (e) { log("warn", `prune: cannot release ${lockDir}: ${e instanceof Error ? e.message : String(e)}`); }
+        }
+        if (cleared) {
+            try { fs.rmdirSync(dir); }
+            catch (e) {
+                if (!isErrno(e, "ENOTEMPTY") && !isErrno(e, "EEXIST") && !isErrno(e, "ENOENT")) {
+                    log("warn", `prune: cannot remove ${dir}: ${e instanceof Error ? e.message : String(e)}`);
+                }
+            }
+        }
+    }
+}
+
 class NodeCache implements CacheStore {
     readonly base: string;
 
@@ -821,5 +887,5 @@ import(url).catch((e) => {
 /** @internal What client.ts uses, through "#node" (node-api.ts, CR T64). */
 export const nodeApi: NodeMod = {
     nodePlatform, nodePath, sha256Sync, createSha256State, gunzipSync, defaultCacheRoot, writeAtomicSync, readIfExists, statSize, readFileOrIo,
-    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, writeAllInto, runBlocking,
+    openLineReader, exists, mkdirp, listDir, checkReadable, removeFileSync, removeDirSync, tryLockSync, prunePartialSync, writeAllInto, runBlocking,
 };

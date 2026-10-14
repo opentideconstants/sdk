@@ -1040,6 +1040,22 @@ get release(): Release {
             .sort((a, b) => compareDatestamps(b, a)));
     }
 
+    /** Use the existing receipt predicate for a partial recheck and the source-qualified race hook. */
+    static #partialVerified(node: NodeMod, d: string, file: string, requireDatestamp: boolean): boolean {
+        const bytes = node.readIfExists(file);
+        if (bytes === null) return false;
+        try {
+            if (requireDatestamp) {
+                const document: unknown = JSON.parse(new TextDecoder().decode(bytes));
+                if (typeof document !== "object" || document === null || !("datestamp" in document) || document.datestamp !== d) return false;
+            }
+            return parseVerified(bytes, d) !== null;
+        } catch (e) {
+            if (e instanceof InvalidReleaseError || e instanceof SyntaxError) return false;
+            throw e;
+        }
+    }
+
     /**
      * Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. A release
      * directory that cannot be removed stops prune with `cache`; the CacheError's `removed` lists the releases removed
@@ -1072,6 +1088,13 @@ get release(): Release {
                 throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, removed: done, cause: e });
             }
             done.push(d);
+        }
+        const verified = new Set(all);
+        for (const d of node.listDir(store.describe("releases")).filter(isDatestamp).sort((a, b) => compareDatestamps(b, a))) {
+            if (verified.has(d) || d === loaded) continue;
+            node.prunePartialSync(store.describe(relDir(d)),
+                (file, requireDatestamp) => OpenTideConstants.#partialVerified(node, d, file, requireDatestamp),
+                (level, message) => log(this.#ctx, level, message));
         }
         return Object.freeze(done);
     }

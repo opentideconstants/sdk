@@ -352,9 +352,8 @@ export async function genericPointerMajor(ctx: Ctx): Promise<number | null> {
 
 /**
  * The `.verified` record of release D, checked key by key (spec 5.4, CR D26; PK10 T81): a record that is not JSON or
- * has no `files` object is the same as none (the release is verified again). A key with the wrong type is the same
- * as an absent key, and an absent datestamp is D. A version string that is present but not MAJOR.MINOR is
- * invalid_release (CR D9).
+ * has no `files` object is the same as none (the release is verified again). Known nullable keys may be absent,
+ * but a present wrong type or value makes the receipt malformed. An absent datestamp is D (spec 5.4).
  */
 export async function readVerified(store: CacheStore, d: string): Promise<Verified | null> {
     const b = await store.read(`${relDir(d)}/.verified`);
@@ -365,11 +364,33 @@ export async function readVerified(store: CacheStore, d: string): Promise<Verifi
 export function parseVerified(b: Uint8Array, d: string): Verified | null {
     let v: unknown;
     try {
-        v = JSON.parse(dec.decode(b));
+        if (b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return null;
+        v = parseJson(b, `${relDir(d)}/.verified`);
     } catch {
         return null;
     }
     if (!isObject(v) || !isObject(v["files"])) return null;
+    const pending: { value: unknown; depth: number }[] = [{ value: v, depth: 1 }];
+    while (pending.length) {
+        const { value, depth } = pending.pop()!;
+        if (typeof value === "number" && !Number.isFinite(value)) return null;
+        if (typeof value === "object" && value !== null) {
+            if (depth > 64) return null;
+            for (const child of Object.values(value)) pending.push({ value: child, depth: depth + 1 });
+        }
+    }
+    for (const key of ["datestamp", "format_version", "min_reader_version", "zenodo_version_doi", "verified_at", "by"]) {
+        const value = v[key];
+        if (value !== undefined && value !== null && typeof value !== "string") return null;
+    }
+    if (v["datestamp"] !== undefined && v["datestamp"] !== null && v["datestamp"] !== d) return null;
+    try {
+        checkVersion(v["format_version"], `${relDir(d)}/.verified: format_version`);
+        checkVersion(v["min_reader_version"], `${relDir(d)}/.verified: min_reader_version`);
+    } catch (e) {
+        if (e instanceof InvalidReleaseError) return null;
+        throw e;
+    }
     const files: Verified["files"] = {};
     for (const [name, f] of Object.entries(v["files"])) {
         if (!isObject(f)) return null;
@@ -378,7 +399,9 @@ export function parseVerified(b: Uint8Array, d: string): Verified | null {
         const url = f["url"];
         // a row's size is an integer: a null or absent one makes .verified malformed (spec 5.4, CR3 spec review 2
         // B10 and 3 C4), the same as a size that is not a non-negative integer
-        if (!(typeof size === "number" && Number.isInteger(size) && size >= 0)) return null;
+        if (!(typeof size === "number" && Number.isSafeInteger(size) && size >= 0)) return null;
+        if (sha !== undefined && sha !== null && !(typeof sha === "string" && /^[0-9a-fA-F]{64}$/.test(sha))) return null;
+        if (url !== undefined && url !== null && typeof url !== "string") return null;
         files[name] = {
             sha256: typeof sha === "string" && /^[0-9a-fA-F]{64}$/.test(sha) ? sha.toLowerCase() : null,
             size,
@@ -389,8 +412,6 @@ export function parseVerified(b: Uint8Array, d: string): Verified | null {
         const x = v[k];
         return typeof x === "string" ? x : x === null ? null : undefined;
     };
-    checkVersion(v["format_version"], `${relDir(d)}/.verified: format_version`);
-    checkVersion(v["min_reader_version"], `${relDir(d)}/.verified: min_reader_version`);
     const out: Verified = {
         files, verified_at: s("verified_at") ?? "", by: s("by") ?? "", datestamp: d, format_version: s("format_version") ?? null,
     };

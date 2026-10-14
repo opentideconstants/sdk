@@ -53,6 +53,9 @@ export interface NodeMod {
     removeDirSync(dir: string): void;
     /** Take `<dir>/.lock` without waiting (spec 5.4, CR2 DR3); false when another process holds a young lock. */
     tryLockSync(dir: string): boolean;
+    /** Best-effort expired partial cleanup; rechecks its receipt under an owned non-blocking lock. */
+    prunePartialSync(dir: string, verified: (file: string, requireDatestamp: boolean) => boolean,
+        log: (level: "info" | "warn", message: string) => void): void;
     writeAllInto(dir: string, files: readonly (readonly [string, Uint8Array])[], warn: (message: string) => void): string[];
     runBlocking(url: URL, data: unknown, timeoutMs?: number): BlockingResult;
 }

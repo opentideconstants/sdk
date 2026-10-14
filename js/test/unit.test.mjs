@@ -448,9 +448,8 @@ test("T81: .verified is checked key by key, not cast", async () => {
     assert.equal(parseVerified(b({ files: { a: { sha256: null, size: null, url: null } } }), "20991231"), null);
     assert.equal(parseVerified(b({ files: { a: { sha256: null, url: null } } }), "20991231"), null);
     const v = parseVerified(b({ files: { a: { sha256: 7, size: 3, url: 3 } }, datestamp: 5 }), "20991231");
-    assert.deepEqual(v.files.a, { sha256: null, size: 3, url: null });
-    assert.equal(v.datestamp, "20991231");
-    assert.throws(() => parseVerified(b({ files: {}, format_version: "1" }), "20991231"), isCode("invalid_release"));
+    assert.equal(v, null);
+    assert.equal(parseVerified(b({ files: {}, format_version: "1" }), "20991231"), null);
 });
 
 test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
