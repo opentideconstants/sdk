@@ -666,7 +666,7 @@ class OpenTideConstants:
         without waiting (spec §5.4, CR2 DR3): when another process holds a young lock, the note is skipped."""
         if info.zenodo_version_doi is None:
             return
-        if self._release is not None and self._release.datestamp == info.datestamp:
+        if self._file is None and self._release is not None and self._release.datestamp == info.datestamp:
             self._release._zenodo_version_doi = info.zenodo_version_doi
         try:
             v = self._cache.read_verified(info.datestamp)
