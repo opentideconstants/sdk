@@ -74,6 +74,10 @@ jobs:
           cmp supported-formats.json "$RUNNER_TEMP"/unpacked/opentideconstants-*/supported-formats.json
           gems="$RUNNER_TEMP/gems"
           gem install --local --no-document --install-dir "$gems" opentideconstants-*.gem
+          # The runner claims localtime only when tzinfo can load zone data, and the
+          # conformance profile requires it. Windows has no system zone files.
+          gem install --no-document --install-dir "$gems" tzinfo
+          if [ "${{ runner.os }}" = Windows ]; then gem install --no-document --install-dir "$gems" tzinfo-data; fi
           echo "GEM_HOME=$gems" >> "$GITHUB_ENV"
           echo "GEM_PATH=$gems" >> "$GITHUB_ENV"
       - name: The runner loads the gem that was just built
