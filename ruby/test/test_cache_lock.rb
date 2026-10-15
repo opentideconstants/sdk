@@ -105,6 +105,48 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    def test_empty_version_doi_keeps_metadata_but_omits_citation_suffix
+        stamp = "20991231.2"
+        expected_raw = JSON.parse(File.binread(fixture("good", "OTC_#{stamp}.json")))["stations"].first
+        observations = []
+        [["json", :eager], ["jsonl", :eager], ["jsonl", :stream]].each do |format, mode|
+            ["", nil, "10.5072/zenodo.2"].each do |doi|
+                cache = OTC::Cache.new(tmpdir)
+                directory = cache.ensure_dir(cache.release_dir(stamp))
+                names = ["OTC_#{stamp}.#{format}", "OTC_#{stamp}.meta.json", "OTC_#{stamp}.sha256"]
+                names.each { |name| FileUtils.cp(fixture("good", name), directory) }
+                files = names.reject { |name| name.end_with?(".sha256") }.to_h do |name|
+                    path = File.join(directory, name)
+                    [name, { "sha256" => Digest::SHA256.file(path).hexdigest, "size" => File.size(path), "url" => nil }]
+                end
+                cache.with_lock(directory) do
+                    cache.write_verified(stamp, files, "format_version" => "1.0", "min_reader_version" => "1.0", "zenodo_version_doi" => doi)
+                end
+                marker_path = File.join(directory, ".verified")
+                marker_before = File.binread(marker_path)
+                data_pins = names.to_h { |name| [name, Digest::SHA256.file(File.join(directory, name)).hexdigest] }
+                client = OTC.new(release: stamp, cache_dir: cache.root, offline: true, mode: mode, verify_on_open: true)
+                release = client.release
+                base = "OpenTideConstants contributors (2099). OpenTideConstants, release #{stamp} [Data set]. https://doi.org/10.5072/zenodo.1"
+                expected = doi.nil? || doi.empty? ? base : "#{base} (version DOI: https://doi.org/#{doi})"
+                actual = release.citation
+                doi.nil? ? assert_nil(release.zenodo_version_doi) : assert_equal(doi, release.zenodo_version_doi)
+                assert_equal expected_raw, client.station(expected_raw.fetch("station_id")).raw
+                assert_equal marker_before, File.binread(marker_path)
+                assert data_pins.all? { |name, digest| Digest::SHA256.file(File.join(directory, name)).hexdigest == digest }
+                client.close
+                assert_equal actual, release.citation
+                observations << { format: format, mode: mode.to_s, doi: doi, expected_citation: expected, actual_citation: actual, citation_matches: actual == expected, raw_preserved: true, metadata_preserved: true, receipt_preserved: true, data_preserved: true }
+            ensure
+                client&.close
+            end
+        end
+        if (proof_path = ENV["OTC_EMPTY_DOI_PROOF_PATH"])
+            File.write(proof_path, JSON.pretty_generate(observations) + "\n")
+        end
+        assert_empty observations.reject { |observation| observation[:citation_matches] }
+    end
+
     def test_doi_note_preserves_uppercase_receipt_and_verified_cached_open
         c = nil
         stamp = "20991231.2"

@@ -215,7 +215,7 @@ class OpenTideConstants
         # when the release has its own Zenodo version.
         def citation
             link = @concept_doi ? "https://doi.org/#{@concept_doi}" : default_url
-            version = @zenodo_version_doi ? " (version DOI: https://doi.org/#{@zenodo_version_doi})" : ""
+            version = @zenodo_version_doi && @zenodo_version_doi != "" ? " (version DOI: https://doi.org/#{@zenodo_version_doi})" : ""
             "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{link}#{version}"
         end
 
