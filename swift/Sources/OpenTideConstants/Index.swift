@@ -64,7 +64,7 @@ internal extension Reader {
         func require(_ condition:Bool)throws { if !condition { throw OpenTideConstantsError.invalidRelease("stale index-v1.json") } }
         let top=["index_version","datestamp","jsonl","jsonl_sha256","jsonl_size","by","stations"]
         try require(top.allSatisfy { doc.object.keys.contains($0) })
-        try require(doc["index_version"].integer==1 && doc["datestamp"]==meta["release"]["datestamp"] && doc["jsonl"].string==url.lastPathComponent && doc["jsonl_sha256"].string==digest && doc["jsonl_size"].integer==size && doc["by"].string != nil)
+        try require(doc["index_version"].integer==1 && doc["datestamp"].string==String(url.lastPathComponent.dropFirst(4).dropLast(6)) && doc["jsonl"].string==url.lastPathComponent && doc["jsonl_sha256"].string==digest && doc["jsonl_size"].integer==size && doc["by"].string != nil)
         if doc.object.keys.contains("discovery_index_version") { try require(doc["discovery_index_version"].integer==1) }
         try require({ if case .array=doc["stations"] { return true };return false }())
         let rows=doc["stations"].array,sets=rows.flatMap { $0["sets"].array }

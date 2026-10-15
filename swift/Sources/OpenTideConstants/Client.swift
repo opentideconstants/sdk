@@ -380,7 +380,7 @@ internal struct ClientIO:@unchecked Sendable {
     func read(_ path:URL,files:[FileInfo],from:LoadedFrom)throws->Loaded {
         var paths=[path]
         if path.lastPathComponent.hasSuffix(".jsonl") { paths.append(URL(fileURLWithPath:String(path.path.dropLast(6))+".meta.json")) }
-        let release=try Reader.load(path,mode:mode,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy,indexPath:mode == .stream ? path.deletingLastPathComponent().appendingPathComponent("index-v1.json"):nil,files:files,logger:logger)
+        let release=try Reader.load(path,mode:mode,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy,indexPath:mode == .stream && from != .file && from != .fileUnverified ? path.deletingLastPathComponent().appendingPathComponent("index-v1.json"):nil,files:files,logger:logger)
         return Loaded(release:release,from:from,paths:paths)
     }
     func file(_ file:String)throws->Loaded {

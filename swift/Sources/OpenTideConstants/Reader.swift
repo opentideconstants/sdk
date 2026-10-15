@@ -306,7 +306,7 @@ internal extension Reader {
             entries.append(IndexEntry.make(d,offset:offset,length:line.count))
         }
         let release=try Release(meta:meta,entries:entries,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
-        let document:JSONValue = .object(["index_version":.integer(1),"discovery_index_version":.integer(1),"datestamp":.string(release.datestamp),"jsonl":.string(url.lastPathComponent),"jsonl_sha256":.string(digest!),"jsonl_size":.integer(size!),"by":.string("opentideconstants-swift/0.1.0"),"stations":.array(entries.map { release.byId[$0.id]!.summary })])
+        let document:JSONValue = .object(["index_version":.integer(1),"discovery_index_version":.integer(1),"datestamp":.string(String(url.lastPathComponent.dropFirst(4).dropLast(6))),"jsonl":.string(url.lastPathComponent),"jsonl_sha256":.string(digest!),"jsonl_size":.integer(size!),"by":.string("opentideconstants-swift/0.1.0"),"stations":.array(entries.map { release.byId[$0.id]!.summary })])
         if let indexPath {
             do { try Cache.atomic(document.data(),indexPath) }
             catch { logger?("opentideconstants: cannot cache index-v1.json") }
