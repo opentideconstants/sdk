@@ -819,7 +819,9 @@ def check_station_types(d) -> None:
         off = d["subordinate_offsets"]
         _check_types(off, _OFFSET_TYPES, f"station {sid}: subordinate_offsets")
         for flag in off.get("qc_flags") or ():
-            _check_types(flag, {"flag": "T", "reason": "T"}, f"station {sid}: subordinate_offsets.qc_flags")
+            _check_types(flag, _QC_FLAG_TYPES, f"station {sid}: subordinate_offsets.qc_flags")
+            if not all(value is None or _is_finite(value) for value in (flag.get("values") or {}).values()):
+                raise InvalidReleaseError(f"station {sid}: subordinate_offsets.qc_flags values must be numbers or null")
     for v in d.get("validation") or ():
         _check_types(v, _VALIDATION_TYPES, f"station {sid}: validation")
     for cs in d.get("constant_sets") or ():

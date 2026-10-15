@@ -1700,6 +1700,51 @@ class MalformedInputTest(RepeatedIdsTest):
                         self.assertEqual(provenance.build.tool_versions, value)
                 self.assertEqual(Path(path).read_bytes(), source)
 
+    def test_generic_offset_qc_values_admission_and_raw_values(self):
+        missing = object()
+        finite = {"zero": 0, "negative_zero": -0.0, "positive": 7, "negative": -2, "fraction": 0.25,
+                  "null": None, "é": 1.5, "__proto__": -3, "wide": 9007199254740993}
+        bad = (("container-number", 17), ("container-zero", 0), ("container-boolean", False),
+               ("container-array", []), ("container-string", ""), ("member-boolean", {"value": False}),
+               ("member-string", {"value": "0"}), ("member-array", {"value": []}),
+               ("member-object", {"value": {}}), ("source-huge-integer", {"value": 10 ** 400}),
+               ("source-overflow-positive", {"value": "__QC_POS_OVERFLOW__"}),
+               ("source-overflow-negative", {"value": "__QC_NEG_OVERFLOW__"}))
+        good = (("missing", missing), ("null", None), ("empty", {}), ("finite-map", finite))
+        for label, value in bad + good:
+            for surface, mode in (("json", "eager"), ("jsonl", "eager"), ("jsonl", "stream")):
+                with self.subTest(cell=label, surface=surface, mode=mode):
+                    doc = json.loads((GOOD / "OTC_20991231.2.json").read_bytes())
+                    station = next(row for row in doc["stations"] if row["station_id"] == "OTC-T-0003")
+                    flag = {"flag": "source:controlled", "reason": "Preserved source QC", "unknown": True}
+                    if value is not missing:
+                        flag["values"] = value
+                    station["subordinate_offsets"]["qc_flags"] = [flag]
+                    path = self.dir / f"OTC_20991231.2.{surface}"
+                    if surface == "json":
+                        body = json.dumps(doc)
+                    else:
+                        rows = [json.loads(line) for line in (GOOD / "OTC_20991231.2.jsonl").read_text().splitlines()]
+                        rows = [station if row["station_id"] == "OTC-T-0003" else row for row in rows]
+                        body = "".join(json.dumps(row) + "\n" for row in rows)
+                        (self.dir / "OTC_20991231.2.meta.json").write_bytes((GOOD / "OTC_20991231.2.meta.json").read_bytes())
+                    body = body.replace('"__QC_POS_OVERFLOW__"', "1e400").replace('"__QC_NEG_OVERFLOW__"', "-1e400")
+                    path.write_text(body, encoding="utf-8")
+                    source = path.read_bytes()
+                    if (label, value) in bad:
+                        with self.assertRaises(otc.InvalidReleaseError):
+                            otc.OpenTideConstants(file=str(path), mode=mode).close()
+                    else:
+                        with otc.OpenTideConstants(file=str(path), mode=mode) as client:
+                            actual = client.require_station("OTC-T-0003")
+                            self.assertEqual(actual.raw, freeze(station))
+                            expected = None if value is missing else value
+                            self.assertEqual(actual.subordinate_offsets.qc_flags[0].values, expected)
+                            if label == "finite-map":
+                                actual_zero = actual.subordinate_offsets.qc_flags[0].values["negative_zero"]
+                                self.assertEqual(struct.pack(">d", actual_zero), struct.pack(">d", -0.0))
+                    self.assertEqual(path.read_bytes(), source)
+
     def test_huge_int_argument_is_invalid_argument(self):
         with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
             with self.assertRaises(otc.InvalidArgumentError):
