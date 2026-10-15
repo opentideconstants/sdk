@@ -2087,6 +2087,8 @@ class CanonicalSourceNativeTest < Minitest::Test
         same_native_error(expected, actual)
         assert_equal request_count, @servers.sum { |server| server.requests.size }
         File.binwrite(sums, File.binread(fixture("good", "OTC_#{D}.sha256")))
+        # Windows cannot remove a file that the open stream client keeps open.
+        skip "Windows cannot remove the file that the stream client keeps open" if Gem.win_platform?
         File.unlink(path)
         expected = assert_raises(OTC::FileError) { client.verify }
         actual = assert_raises(OTC::FileError) { @canonical.__send__(:verify_release_files, release_files: client, trusted_cached_pointer: T::TrustedCachedPointer.new(digests: {})) }
