@@ -5,6 +5,7 @@ import * as otc from "../dist/index.js";
 import { Session } from "node:inspector";
 import { createHash } from "node:crypto";
 import { releaseFromJsonl } from "../dist/loader.js";
+import { parseVerified } from "../dist/core.js";
 
 test("datestamps order by date, then counter", async () => {
     const { compareDatestamps } = await import("../dist/constants.js");
@@ -459,6 +460,19 @@ test("T81: .verified is checked key by key, not cast", async () => {
             assert.equal(receipt.files.a.url, url ?? null);
         } else assert.equal(receipt, null);
     }
+});
+
+test("T81: receipt normalization and JSON roundtrip preserve every file key", () => {
+    const files = {
+        ["__proto__"]: { sha256: "A".repeat(64), size: 1, url: null },
+        constructor: { sha256: null, size: 0, url: null },
+        "ordinary.json": { sha256: "c".repeat(64), size: 3, url: "https://example.invalid/ordinary.json" },
+    };
+    const receipt = parseVerified(enc({ files }), "20991231");
+    assert.ok(receipt);
+    const expected = { ...files, ["__proto__"]: { ...files.__proto__, sha256: "a".repeat(64) } };
+    assert.deepEqual(Object.keys(receipt.files).sort(), Object.keys(expected).sort());
+    assert.deepEqual(JSON.parse(JSON.stringify(receipt)).files, expected);
 });
 
 test("T81: cached releases require the receipt datestamp to match its directory", async () => {

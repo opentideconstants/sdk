@@ -391,7 +391,7 @@ export function parseVerified(b: Uint8Array, d: string): Verified | null {
         if (e instanceof InvalidReleaseError) return null;
         throw e;
     }
-    const files: Verified["files"] = {};
+    const files: Verified["files"] = Object.create(null);
     for (const [name, f] of Object.entries(v["files"])) {
         if (!isObject(f)) return null;
         const sha = f["sha256"];
