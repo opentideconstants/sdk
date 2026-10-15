@@ -802,20 +802,8 @@ get release(): Release {
             log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
             return Object.freeze(cached.map(toInfo));
         }
-        if (ctx.store) {
-            // a cached release keeps the version DOI of the newest entry read for it (spec 4.3)
-            for (const e of idx) {
-                let v: Awaited<ReturnType<typeof readVerified>> = null;
-                try {
-                    v = await readVerified(ctx.store, e.datestamp);
-                } catch (x) {
-                    // one malformed .verified never fails releases(); the note is best effort (R2-087)
-                    if (!(x instanceof OpenTideConstantsError)) throw x;
-                    log(ctx, "warn", `cannot read the .verified of ${e.datestamp}: ${x.message}`);
-                }
-                if (v) await syncZenodo(ctx, v, e);
-            }
-        }
+        // Every selected catalog entry refreshes eligible session metadata and best-effort cache notes (spec 4.3).
+        for (const entry of idx) await this.#observeEntry(entry);
         return Object.freeze(idx.map(toInfo));
     }
 
