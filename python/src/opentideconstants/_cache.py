@@ -32,6 +32,8 @@ DATESTAMP_RE = re.compile(r"\A[0-9]{8}(\.[2-9]|\.[1-9][0-9]{1,8})?\Z")
 LOCK_POLL_S = 0.5
 LOCK_STALE_S = 120.0      # how long a waiter waits before it may treat a lock as stale (spec §5.4)
 LOCK_STALE_AGE_S = 120.0  # how old the lock itself must be to be stale (spec §5.4, CR2 DR3)
+RELEASE_ATTEMPTS = 20     # Windows: a release blocked by a waiter reading owner.json tries again
+RELEASE_RETRY_S = 0.05    # seconds between those tries
 _STARTED_AT_RE = re.compile(r"\A([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|\+00:00)\Z")
 
 
@@ -461,11 +463,19 @@ def _release_lock(lock: Path, token: str) -> None:
         return  # gone or rewritten: another process took the lock as stale
     if not isinstance(owner, dict) or owner.get("token") != token:
         return
-    try:
-        (lock / "owner.json").unlink()
-        os.rmdir(lock)
-    except OSError as e:  # a lock left behind only costs a 120 s wait (spec §5.4), but it is logged (R3-224)
-        _log.warning("cannot remove %s: %s", lock, e)
+    for attempt in range(RELEASE_ATTEMPTS):
+        try:
+            (lock / "owner.json").unlink(missing_ok=attempt > 0)  # a retry may follow a delete that worked
+            os.rmdir(lock)
+            return
+        except OSError as e:
+            # On Windows a waiter reading owner.json blocks the delete (sharing violation): try again, bounded.
+            if os.name == "nt" and getattr(e, "winerror", None) == 32 and attempt + 1 < RELEASE_ATTEMPTS:
+                time.sleep(RELEASE_RETRY_S)
+                continue
+            # a lock left behind only costs a 120 s wait (spec §5.4), but it is logged (R3-224)
+            _log.warning("cannot remove %s: %s", lock, e)
+            return
 
 
 def try_lock(directory: Path) -> bool:
