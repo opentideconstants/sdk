@@ -681,6 +681,7 @@ export class OpenTideConstants {
         this.#reachedPointer();
         const from = this.#release.datestamp;
         if (compareDatestamps(res.datestamp, from) <= 0) {
+            if (!this.#file && res.datestamp === from) noteReleaseVersionDoi(this.#release, res.versionDoi ?? null);
             log(ctx, "debug", `automatic update check: ${from} is current`);
             return;
         }
