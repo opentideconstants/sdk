@@ -182,7 +182,7 @@ public final class OpenTideConstants {
             let entry=try await io.resolveLatest()
             state {
                 lastError=nil
-                if entry["datestamp"].string==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
+                if loadedFrom != .file && loadedFrom != .fileUnverified,entry["datestamp"].string==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
             }
             return ReleaseInfo(entry)
         }
