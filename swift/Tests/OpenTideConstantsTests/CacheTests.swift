@@ -285,6 +285,44 @@ final class CacheTests:XCTestCase {
         XCTAssertEqual(try rebuilt.stationCount,try r.stationCount)
         XCTAssertEqual(try JSONValue.parse(Data(contentsOf:index))["stations"].array.count,r.entries.count)
     }
+    // A partial release entry that is a symlink is not a cache directory: prune must not lock, empty or remove
+    // what it points to, whatever .verified marker the target holds.
+    func testPrunePreservesExternalDataBehindPartialReleaseSymlinks()async throws {
+        let repo=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let file=repo.appendingPathComponent("conformance/fixtures/good/OTC_20991231.2.json").path
+        let fm=FileManager.default
+        for (label,marker) in [("empty-marker","{}" as String?),("broken-json","{broken json"),("absent-marker",nil)] {
+            let root=fm.temporaryDirectory.appendingPathComponent("otc-swift-test-"+UUID().uuidString)
+            defer { try? fm.removeItem(at:root) }
+            let external=root.appendingPathComponent("external-user-data"),releases=root.appendingPathComponent("cache/v1/releases")
+            try fm.createDirectory(at:external,withIntermediateDirectories:true);try fm.createDirectory(at:releases,withIntermediateDirectories:true)
+            try Data("external record and provenance \(label)\n".utf8).write(to:external.appendingPathComponent("source-record-original"))
+            if let marker { try Data(marker.utf8).write(to:external.appendingPathComponent(".verified")) }
+            let link=releases.appendingPathComponent("20991231.30")
+            try fm.createSymbolicLink(atPath:link.path,withDestinationPath:"../../../external-user-data")
+            let old=Date().addingTimeInterval(-300)
+            try fm.setAttributes([.modificationDate:old],ofItemAtPath:external.path)
+            // An old link: age alone does not protect it.
+            var times=[timeval(tv_sec:Int(old.timeIntervalSince1970),tv_usec:0),timeval(tv_sec:Int(old.timeIntervalSince1970),tv_usec:0)]
+            XCTAssertEqual(lutimes(link.path,&times),0,label)
+            let originalMtime=try fm.attributesOfItem(atPath:external.path)[.modificationDate] as? Date
+            var originals:[String:Data]=[:]
+            for name in try fm.contentsOfDirectory(atPath:external.path) { originals[name]=try Data(contentsOf:external.appendingPathComponent(name)) }
+            let client=try await OpenTideConstants.open(file:file,cacheDir:root.appendingPathComponent("cache").path)
+            defer { client.close() }
+            let originalRaw=try XCTUnwrap(client.station(stationId:"OTC-T-0001")).raw.data()
+
+            let pruned=try await client.prune(keep:0)
+            XCTAssertEqual(pruned,[],label)
+            XCTAssertEqual(try fm.contentsOfDirectory(atPath:external.path).sorted(),originals.keys.sorted(),label)
+            for (name,bytes) in originals { XCTAssertEqual(try Data(contentsOf:external.appendingPathComponent(name)),bytes,label) }
+            XCTAssertEqual(try fm.attributesOfItem(atPath:external.path)[.modificationDate] as? Date,originalMtime,label)
+            XCTAssertEqual(try fm.attributesOfItem(atPath:link.path)[.type] as? FileAttributeType,.typeSymbolicLink,label)
+            XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath:link.path),"../../../external-user-data",label)
+            XCTAssertFalse(fm.fileExists(atPath:external.appendingPathComponent(".lock").path),label)
+            XCTAssertEqual(try XCTUnwrap(client.station(stationId:"OTC-T-0001")).raw.data(),originalRaw,label)
+        }
+    }
 }
 private extension URL {
     func creatingEmptyFile()throws->URL { try Data().write(to:self);return self }
