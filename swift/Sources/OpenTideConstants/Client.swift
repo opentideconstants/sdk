@@ -390,6 +390,11 @@ internal struct ClientIO:@unchecked Sendable {
         let stamp=String(name.dropFirst(4)).components(separatedBy:".json")[0]
         let directory=path.deletingLastPathComponent(),sha=directory.appendingPathComponent("OTC_\(stamp).sha256")
         let names=name.hasSuffix(".jsonl") ? [name,"OTC_\(stamp).meta.json"]:[name]
+        // Report the first missing file in open order (data file, then .meta.json), as the other SDKs do.
+        for name in names {
+            let p=directory.appendingPathComponent(name).path
+            guard FileManager.default.fileExists(atPath:p) else { throw OpenTideConstantsError.io("cannot open \(p): no such file",["path":.string(p)]) }
+        }
         let rows=FileManager.default.fileExists(atPath:sha.path) ? try Cache.checksums(sha):nil
         if let rows {
             for name in names { try check(directory.appendingPathComponent(name),sha:rows[name]) }
