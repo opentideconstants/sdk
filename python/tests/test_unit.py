@@ -1626,6 +1626,42 @@ class MalformedInputTest(RepeatedIdsTest):
             st = c.stations()[0]
             self.assertIsNone(st.constant_sets()[0].provenance.build.built_at)
 
+    def test_provenance_build_run_id_rejects_non_string_values(self):
+        for value in (17, True, {}):
+            def edit(station):
+                station["constant_sets"][0]["provenance"]["build"]["run_id"] = value
+            path = self.write(edit)
+            for mode in ("eager", "stream"):
+                with self.subTest(value=value, mode=mode), self.assertRaisesRegex(
+                        otc.InvalidReleaseError, "provenance.build.*run_id.*wrong type"):
+                    otc.OpenTideConstants(file=path, mode=mode).close()
+
+    def test_provenance_build_run_id_preserves_valid_and_nonobject_parent_values(self):
+        cases = (("missing", None), ("null", None), ("empty", ""), ("string", "source-run-17"),
+                 ("build-number", 17), ("build-null", None), ("build-array", []))
+        for label, value in cases:
+            expected_raw = []
+            def edit(station):
+                provenance = station["constant_sets"][0]["provenance"]
+                if label.startswith("build-"):
+                    provenance["build"] = value
+                elif label == "missing":
+                    provenance["build"].pop("run_id", None)
+                else:
+                    provenance["build"]["run_id"] = value
+                expected_raw.append(copy.deepcopy(provenance))
+            path = self.write(edit)
+            source = Path(path).read_bytes()
+            for mode in ("eager", "stream"):
+                with self.subTest(cell=label, mode=mode), otc.OpenTideConstants(file=path, mode=mode) as client:
+                    provenance = client.require_station("OTC-T-0001").constant_sets()[0].provenance
+                    self.assertEqual(provenance.raw, freeze(expected_raw[0]))
+                    if label.startswith("build-"):
+                        self.assertIsNone(provenance.build)
+                    else:
+                        self.assertEqual(provenance.build.run_id, value)
+                self.assertEqual(Path(path).read_bytes(), source)
+
     def test_huge_int_argument_is_invalid_argument(self):
         with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.jsonl")) as c:
             with self.assertRaises(otc.InvalidArgumentError):

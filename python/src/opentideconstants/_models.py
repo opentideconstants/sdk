@@ -834,7 +834,7 @@ def check_station_types(d) -> None:
                 _check_types(cs[k], table, f"{what}: {k}")
         build = (cs.get("provenance") or {}).get("build")
         if isinstance(build, dict):
-            _check_types(build, {"build_commit": "T"}, f"{what}: provenance.build")
+            _check_types(build, {"build_commit": "T", "run_id": "T"}, f"{what}: provenance.build")
         named = (cs.get("datum") or {}).get("named") or {}
         if not all(_is_finite(x) for x in named.values()):
             raise InvalidReleaseError(f"{what}: datum.named has a value that is not a number")
