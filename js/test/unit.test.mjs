@@ -285,9 +285,12 @@ test("T15: prune(null) is not a raw TypeError, and prune on a read-only release 
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, ".verified"), "{\"files\":{}}");
         }
-        fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o555);
-        assert.throws(() => c.prune({ keep: 1 }), isCode("cache"));
-        fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o755);
+        // chmod cannot make a folder read-only on Windows, so this part runs elsewhere only.
+        if (process.platform !== "win32") {
+            fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o555);
+            assert.throws(() => c.prune({ keep: 1 }), isCode("cache"));
+            fs.chmodSync(path.join(root, "v1", "releases", "20991231"), 0o755);
+        }
     } finally {
         c.close();
     }
@@ -682,7 +685,7 @@ test("DR59: generic-offset QC values require finite numbers or null and preserve
     }
 });
 
-test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
+test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 || (process.platform === "win32" && "chmod cannot make a folder unreadable on Windows") }, async () => {
     const { listDir } = await import("../dist/node.js");
     const d = tmpdir();
     fs.chmodSync(d, 0o000);
@@ -972,7 +975,7 @@ test("DR17: a restore that fails too is listed in the error", async () => {
     }
 });
 
-test("DR18: prune stops at the first failure and the cache error lists what it removed", async () => {
+test("DR18: prune stops at the first failure and the cache error lists what it removed", { skip: process.platform === "win32" && "chmod cannot make a folder read-only on Windows" }, async () => {
     const root = tmpdir();
     const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, `OTC_${D2}.jsonl`), cacheDir: root });
     try {
