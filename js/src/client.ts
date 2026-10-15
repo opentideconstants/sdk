@@ -9,7 +9,7 @@ import {
 } from "./constants.js";
 import {
     cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
-    loadCached, log, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, usable, verifyCached,
+    loadCached, log, openedCacheFiles, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, usable, verifyCached,
     checkBytes, checkSha256, type Ctx, type PointerEntry, type SyncDir,
 } from "./core.js";
 import {
@@ -1024,7 +1024,7 @@ get release(): Release {
             }
             return true;
         }
-        return verifyCached(this.#ctx, this.#release.datestamp, true, OpenTideConstants.#cachedReadHash(this.#ctx, this.#node));
+        return verifyCached(this.#ctx, this.#release.datestamp, true, OpenTideConstants.#cachedReadHash(this.#ctx, this.#node), openedCacheFiles(this.#release));
     }
 
     /**

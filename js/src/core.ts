@@ -750,6 +750,13 @@ export function cachedFileInfos(verified: Verified, pointerFiles: readonly FileI
         .sort(byName);
 }
 
+const openedCachePayloads = new WeakMap<Release, readonly string[]>();
+
+/** @internal The payload names actually selected when this cached release opened. */
+export function openedCacheFiles(release: Release): readonly string[] | undefined {
+    return openedCachePayloads.get(release);
+}
+
 /** Open a cached, verified release (spec 5.3: sizes are checked against .verified). Synchronous. */
 export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mode, warn: (message: string) => void = () => undefined,
     commercialOnly = false, pointerFiles: readonly FileInfo[] | null = null, commercialBasis: "strict" | "as_published_upstream" = "strict", historicalOffsetsPolicy: "fallback" | "exclude" = "fallback"): Release {
@@ -758,14 +765,18 @@ export function loadCached(dir: SyncDir, verified: Verified, d: string, mode: Mo
     // release.files (spec 4.3.1): the pointer entry after a download of latest, else the .verified rows
     const files = cachedFileInfos(verified, pointerFiles);
     const sized = (name: string) => sizedCacheFile(dir, verified, name);
+    const remember = (release: Release, payloads: readonly string[]) => {
+        openedCachePayloads.set(release, Object.freeze(payloads));
+        return release;
+    };
     if (mode === "eager") {
-        if (cachedFile(n.json, dir.size(n.json) !== null, verified)) return releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
-        return releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+        if (cachedFile(n.json, dir.size(n.json) !== null, verified)) return remember(releaseFromJson(sized(n.json), files, zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy), [n.json]);
+        return remember(releaseFromJsonl(sized(n.meta), sized(n.jsonl), { eager: true, files, zenodoVersionDoi: zenodo, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy }), [n.jsonl, n.meta]);
     }
     const prepared = authenticateCachedStreamIndex(dir, verified, d,
         { files, zenodoVersionDoi: zenodo, commercialOnly, commercialBasis, historicalOffsetsPolicy }, warn);
     try {
-        return releaseFromPrepared(prepared.native_prepared_release);
+        return remember(releaseFromPrepared(prepared.native_prepared_release), [n.jsonl, n.meta]);
     } catch (error) { prepared.close(); throw error; }
 }
 
@@ -945,7 +956,7 @@ async function cachedPointerSha256(ctx: Ctx, d: string): Promise<string[]> {
  * checksum_mismatch and the file stays.
  */
 export async function verifyCached(ctx: Ctx, d: string, againstPointer = false,
-    readHash?: (rel: string) => Promise<{ digest: string; bytesRead: number } | null>): Promise<true> {
+    readHash?: (rel: string) => Promise<{ digest: string; bytesRead: number } | null>, openedFiles?: readonly string[]): Promise<true> {
     const store = ctx.store;
     if (!store) throw new OfflineError("no cache");
     const dir = relDir(d);
@@ -985,7 +996,7 @@ export async function verifyCached(ctx: Ctx, d: string, againstPointer = false,
     }
     const rows = parseSha256(shaBytes, n.sha);
     const present = new Set(await store.list(dir));
-    const needed = ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json];
+    const needed = openedFiles ?? (ctx.mode === "stream" || !present.has(n.json) ? [n.jsonl, n.meta] : [n.json]);
     let checked = 0;
     for (const name of [...new Set([...needed, ...rows.keys()])]) {
         if (name === n.sha) continue;

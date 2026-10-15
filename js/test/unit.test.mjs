@@ -563,6 +563,36 @@ test("T81: verifyOnOpen authenticates receipt-only cached payloads without a che
     }
 });
 
+test("T81: explicit verify still requires the payload representation selected at open", async () => {
+    for (const [selected, suffixes, removed] of [
+        ["jsonl", ["jsonl", "meta.json"], ["jsonl"]], ["jsonl", ["jsonl", "meta.json"], ["meta.json"]],
+        ["jsonl", ["jsonl", "meta.json"], ["jsonl", "meta.json"]], ["json", ["json"], ["json"]],
+    ]) {
+        const root = tmpdir();
+        const directory = path.join(root, "v1", "releases", "20991231.2");
+        let client;
+        try {
+            fs.mkdirSync(directory, { recursive: true });
+            for (const suffix of ["json", "jsonl", "meta.json", "sha256"]) {
+                fs.copyFileSync(path.join(GOOD, `OTC_20991231.2.${suffix}`), path.join(directory, `OTC_20991231.2.${suffix}`));
+            }
+            const files = Object.fromEntries(suffixes.map(suffix => {
+                const name = `OTC_20991231.2.${suffix}`;
+                const bytes = fs.readFileSync(path.join(directory, name));
+                return [name, { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), url: null }];
+            }));
+            fs.writeFileSync(path.join(directory, ".verified"), JSON.stringify({ files, datestamp: "20991231.2", format_version: "1.0", min_reader_version: "0.1" }));
+            client = await otc.OpenTideConstants.open({ release: "20991231.2", cacheDir: root, mode: "eager", offline: true });
+            assert.equal(await client.verify(), true, selected);
+            for (const suffix of removed) fs.unlinkSync(path.join(directory, `OTC_20991231.2.${suffix}`));
+            await assert.rejects(client.verify(), isCode("io"));
+        } finally {
+            client?.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
+});
+
 test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
     const { listDir } = await import("../dist/node.js");
     const d = tmpdir();
