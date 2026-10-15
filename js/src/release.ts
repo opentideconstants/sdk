@@ -1343,6 +1343,7 @@ get historicalOffsetsPolicy()
         try {
             const table=predictionAstroTable(this,str(convention.raw,'astro_table_id') ?? '');
             if(!table)return false;
+            requireHistoricalTableCompatibility(table,convention);
             for(const constituent of objects(raw,'constituents'))table._row(str(constituent,'name') ?? '');
             return true;
         } catch(error) {if(error instanceof X.OpenTideConstantsError)return false;throw error;}
@@ -2013,6 +2014,11 @@ function canonicalJson(v: Json | undefined): string | undefined {
 }
 
 const predictionTables=new WeakMap<Release,Map<string,AstroTable>>();
+/** @internal Shared historical reference compatibility, after table validation. */
+export function requireHistoricalTableCompatibility(table:AstroTable,convention:Convention):void {
+    if(str(table._raw,'v0_model')!==convention.v0_model||(convention.tables_sha256!==null&&str(table._raw,'tables_sha256')!==convention.tables_sha256))
+        throw new X.UnsupportedConventionError(`astro table ${str(table._raw,'astro_table_id')} is incompatible with convention ${convention.convention_id}`);
+}
 /** @internal Shared astronomical metadata lookup; no computational engine dependency. */
 export function predictionAstroTable(release:Release,id:string|null=null):AstroTable|null {
     const metadata=release._header;
