@@ -732,8 +732,12 @@ class ReceiptAcquisitionTest(unittest.TestCase):
                         time.sleep(0.05)
                         self.assertTrue(thread.is_alive())
                         if replacement == "valid":
+                            # Replace it in one step, as a writer publishes a receipt: the waiting reader polls it,
+                            # and a write in place can show it a truncated file.
                             old["zenodo_version_doi"] = "10.5072/zenodo.new"
-                            path.write_text(json.dumps(old))
+                            staged = path.with_name(".tmp-receipt-test")
+                            staged.write_text(json.dumps(old))
+                            os.replace(staged, path)
                         elif replacement == "malformed":
                             path.write_text("{not JSON")
                         else:
@@ -746,7 +750,7 @@ class ReceiptAcquisitionTest(unittest.TestCase):
                 self.assertEqual(doc["zenodo_version_doi"], expected_doi)
                 self.assertEqual(len(doc["files"]), 3 if replacement == "valid" else 2)
                 self.assertTrue(any(held and (value is None if replacement != "valid" else
-                                             value.get("zenodo_version_doi") == expected_doi)
+                                             value is not None and value.get("zenodo_version_doi") == expected_doi)
                                     for value, held in reads))
                 self.assertEqual(len(publications), 1)
                 self.assertTrue(set(doc["files"]) <= set(publications[0]))
