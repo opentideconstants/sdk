@@ -1009,8 +1009,8 @@ class LockAndPruneTest(unittest.TestCase):
         lock = d / ".lock"
         stop = threading.Event()
 
-        def reader():
-            while not stop.is_set():
+        def reader():  # a waiter past its stale wait reads the lock's age once per poll
+            while not stop.wait(_cache.LOCK_POLL_S):
                 _cache.lock_age(lock)
 
         thread = threading.Thread(target=reader, daemon=True)

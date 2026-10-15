@@ -584,7 +584,13 @@ class CacheLockTest < Minitest::Test
         dir = cache.ensure_dir(cache.release_dir("20991231"))
         lock = File.join(dir, ".lock")
         stop = false
-        reader = Thread.new { cache.__send__(:lock_age, lock) until stop }
+        # a waiter past its stale wait reads the lock's age once per poll
+        reader = Thread.new do
+            until stop
+                cache.__send__(:lock_age, lock)
+                sleep(0.01)
+            end
+        end
         left = 0
         200.times do
             cache.with_lock(dir) { nil }
