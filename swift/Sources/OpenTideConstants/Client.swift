@@ -179,7 +179,9 @@ public final class OpenTideConstants {
         }
         catch let error as OpenTideConstantsError {
             guard error.code=="network",io.onNetworkError == .useCache,let doc=try? JSONValue.parse(Data(contentsOf:cache.pointer("OTC_index.json"))),case .array=doc["releases"] else { throw error }
-            return try doc["releases"].array.map { ReleaseInfo(try io.entry($0,source:baseUrl.appendingPathComponent("OTC_index.json"))) }.sorted { Cache.newer($0.datestamp,$1.datestamp) }
+            let entries=try doc["releases"].array.map { try io.entry($0,source:baseUrl.appendingPathComponent("OTC_index.json")) }.sorted { Cache.newer($0["datestamp"].string!,$1["datestamp"].string!) }
+            for entry in entries { await observeEntry(entry) }
+            return entries.map(ReleaseInfo.init)
         }
     }
     public func latest()async throws->ReleaseInfo {
