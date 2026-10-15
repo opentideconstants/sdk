@@ -784,6 +784,7 @@ get release(): Release {
         if (ctx.offline) {
             const idx = await cachedIndex(ctx);
             if (!idx) throw new OfflineError("offline and the release index is not cached");
+            for (const entry of idx) await this.#observeEntry(entry);
             return Object.freeze(idx.map(toInfo));
         }
         let idx: PointerEntry[];
@@ -801,6 +802,7 @@ get release(): Release {
             }
             if (!cached) throw e;
             log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
+            for (const entry of cached) await this.#observeEntry(entry);
             return Object.freeze(cached.map(toInfo));
         }
         // Every selected catalog entry refreshes eligible session metadata and best-effort cache notes (spec 4.3).
