@@ -2467,7 +2467,8 @@ class AutoUpdateFailureTest(unittest.TestCase):
         def boom():
             raise exc
         c._update = boom
-        time.sleep(0.01)
+        # longer than the monotonic clock step on Windows (about 16 ms), so the interval has passed there too
+        time.sleep(0.05)
         return c
 
     def _check(self, exc, cls):
