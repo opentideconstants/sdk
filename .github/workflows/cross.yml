@@ -192,6 +192,12 @@ jobs:
           ruby conformance/runners/ruby/check_api.rb
           npm run check:api --prefix js
           python c/tools/check_manifest.py
+          # The extractor must come from the toolchain that built the module (swiftly 6.4.0), not the selected Xcode.
+          # shellcheck disable=SC2016  # the single quotes hold Ruby code
+          resource=$(swift -print-target-info | ruby -rjson -e 'print JSON.parse($stdin.read).fetch("paths").fetch("runtimeResourcePath")')
+          OTC_SWIFT_SYMBOLGRAPH_EXTRACT="$resource/../../bin/swift-symbolgraph-extract"
+          test -x "$OTC_SWIFT_SYMBOLGRAPH_EXTRACT"
+          export OTC_SWIFT_SYMBOLGRAPH_EXTRACT
           swift run --skip-build --package-path conformance/runners/otc-swift CheckAPI
           python conformance/driver.py --check-cases
       - name: Run the native Swift vectors and full profile

@@ -411,9 +411,10 @@ import OpenTideConstants
         let target = "x86_64-apple-macosx13.0"
         #endif
         let bin = executable.deletingLastPathComponent()
-        // The extractor of the swift on PATH, the compiler that built the module. xcrun would pick the selected
-        // Xcode, which can be an older Swift than the toolchain that built it (the CI job uses a swiftly 6.4).
-        let (code, output) = try process(["swift", "symbolgraph-extract", "-sdk", sdk.trimmingCharacters(in: .whitespacesAndNewlines), "-module-name", "OpenTideConstants", "-I", bin.path, "-I", bin.appendingPathComponent("Modules").path, "-I", root.appendingPathComponent("swift/Sources/CZlib").path, "-target", target, "-minimum-access-level", "public", "-skip-synthesized-members", "-output-dir", scratch.path])
+        // The extractor must come from the toolchain that built the module. xcrun gives the selected Xcode's, which
+        // can be an older Swift (the CI job builds with swiftly 6.4), so the job names its own in this variable.
+        let extractor = ProcessInfo.processInfo.environment["OTC_SWIFT_SYMBOLGRAPH_EXTRACT"].map { [$0] } ?? ["xcrun", "swift-symbolgraph-extract"]
+        let (code, output) = try process(extractor + ["-sdk", sdk.trimmingCharacters(in: .whitespacesAndNewlines), "-module-name", "OpenTideConstants", "-I", bin.path, "-I", bin.appendingPathComponent("Modules").path, "-I", root.appendingPathComponent("swift/Sources/CZlib").path, "-target", target, "-minimum-access-level", "public", "-skip-synthesized-members", "-output-dir", scratch.path])
         try require(code == 0, "compiler symbol extraction failed: \(output)")
         return try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: scratch.appendingPathComponent("OpenTideConstants.symbols.json")))
     }
