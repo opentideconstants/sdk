@@ -227,7 +227,7 @@ class PredictionTest(unittest.TestCase):
                            for key, value in counts.items()]}, default=str, indent=2) + '\n')
 
     def test_native_extremes_independent_pin(self):
-        expected = json.loads((ROOT / 'conformance/cases/predict-extremes.json').read_text())['cases'][0]['steps'][0]['expect']['prediction']
+        expected = json.loads((ROOT / 'conformance/cases/predict-extremes.json').read_text(encoding='utf-8'))['cases'][0]['steps'][0]['expect']['prediction']
         result = self.client.extremes('OTC-P-0001', start=dt.datetime(2010, 3, 1, tzinfo=UTC), stop=dt.datetime(2010, 3, 4, tzinfo=UTC))
         self.assertEqual(len(result.items), len(expected['items']))
         for got, want in zip(result.items, expected['items']):

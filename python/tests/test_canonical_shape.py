@@ -3878,7 +3878,7 @@ def _observe_reused_entry(identifier: str, name: str) -> Iterator[None]:
                 ]
             }
             source = Path(frame.f_code.co_filename).resolve()
-            lines = source.read_text().splitlines()
+            lines = source.read_text(encoding="utf-8").splitlines()
             first = last = frame.f_code.co_firstlineno - 1
             while not lines[last].endswith(":"):
                 last += 1

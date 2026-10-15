@@ -256,7 +256,7 @@ class HistoricalOffsetModelTest(unittest.TestCase):
         for marker in ({"fallback": {"reason": "historical_offsets", "basis": "original subordinate row",
                                      "otc_finding": "retired profile"}},
                        {"qc_flags": [{"flag": "fallback:historical_offsets", "reason": "retired profile"}]}):
-            document = json.loads((GOOD / "OTC_20991231.2.json").read_text())
+            document = json.loads((GOOD / "OTC_20991231.2.json").read_text(encoding="utf-8"))
             station = next(st for st in document['stations'] if st.get('constant_sets'))
             station['constant_sets'][0].update(marker)
             with self.subTest(marker=marker), tempfile.TemporaryDirectory() as directory:
@@ -354,6 +354,7 @@ FIXTURES = ROOT / "conformance" / "fixtures"
 class CacheDatestampTest(unittest.TestCase):
     """Datestamps that name cache paths (spec §4.2, §5.4; review PK01 B1-4, P2)."""
 
+    @unittest.skipIf(os.name == "nt", "Windows does not allow a newline in a folder name")
     def test_cached_skips_a_name_with_a_trailing_newline(self):
         import tempfile
         from opentideconstants._cache import Cache
@@ -476,6 +477,7 @@ class LockHeartbeatTest(unittest.TestCase):
             self.assertTrue(lock.is_dir())
             self.assertEqual((lock / "owner.json").read_bytes(), foreign)
 
+    @unittest.skipIf(os.name == "nt", "chmod cannot make a file or folder unreadable or read-only on Windows")
     def test_real_refresh_error_is_logged_then_retried_and_cleanup_stops_worker(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -879,6 +881,7 @@ class LockAndPruneTest(unittest.TestCase):
         self.root.chmod(0o755)
         self.tmp.cleanup()
 
+    @unittest.skipIf(os.name == "nt", "chmod cannot make a file or folder unreadable or read-only on Windows")
     def test_a_stale_lock_that_cannot_be_removed_is_a_cache_error_not_a_hang(self):
         import threading
         from opentideconstants import _cache
@@ -909,7 +912,7 @@ class LockAndPruneTest(unittest.TestCase):
         d.mkdir()
         with lock_dir(d, "test") as held:
             self.assertTrue(held)
-            owner = json.loads((d / ".lock" / "owner.json").read_text())
+            owner = json.loads((d / ".lock" / "owner.json").read_text(encoding="utf-8"))
             self.assertGreaterEqual(len(owner.get("token", "")), 32)
             owner["token"] = "another process"
             (d / ".lock" / "owner.json").write_text(json.dumps(owner))
@@ -948,7 +951,7 @@ class LockAndPruneTest(unittest.TestCase):
             return len(polls) >= 30
         with _cache.lock_dir(d, "test", done=done) as held:
             self.assertFalse(held, "a waiter took a lock that is only seconds old")
-        self.assertEqual(json.loads((d / ".lock" / "owner.json").read_text())["token"], "other")
+        self.assertEqual(json.loads((d / ".lock" / "owner.json").read_text(encoding="utf-8"))["token"], "other")
 
     def test_a_waiter_takes_an_old_lock_by_started_at_or_by_mtime(self):
         _cache = self._fast_wait()
@@ -957,7 +960,7 @@ class LockAndPruneTest(unittest.TestCase):
                 d = self._lock(started_at="2000-01-01T00:00:00Z") if kind == "started_at" else self._lock(mtime=946684800)
                 with _cache.lock_dir(d, "test", done=lambda: False) as held:
                     self.assertTrue(held)
-                    self.assertNotEqual(json.loads((d / ".lock" / "owner.json").read_text())["token"], "other")
+                    self.assertNotEqual(json.loads((d / ".lock" / "owner.json").read_text(encoding="utf-8"))["token"], "other")
                 os.rmdir(d)
 
     def test_two_waiters_on_a_crashed_lock_never_hold_it_together(self):
@@ -1008,13 +1011,13 @@ class LockAndPruneTest(unittest.TestCase):
             with otc.OpenTideConstants(release="20991231", base_url=srv.url, cache_dir=str(self.cache)) as c:
                 rd = self.cache / "v1" / "releases" / "20991231"
                 (rd / ".lock").mkdir()  # another process holds it (young)
-                before = (rd / ".verified").read_text()
+                before = (rd / ".verified").read_text(encoding="utf-8")
                 info = types.SimpleNamespace(datestamp="20991231", zenodo_version_doi="10.5072/zenodo.77")
                 t = threading.Thread(target=c._note_entry, args=(info,), daemon=True)
                 t.start()
                 t.join(5)
                 self.assertFalse(t.is_alive(), "the DOI note waits for the release lock")
-                self.assertEqual((rd / ".verified").read_text(), before)
+                self.assertEqual((rd / ".verified").read_text(encoding="utf-8"), before)
         finally:
             srv.close()
 
@@ -1023,11 +1026,11 @@ class LockAndPruneTest(unittest.TestCase):
         try:
             with otc.OpenTideConstants(release="20991231", base_url=srv.url, cache_dir=str(self.cache)) as c:
                 vp = self.cache / "v1" / "releases" / "20991231" / ".verified"
-                v = json.loads(vp.read_text())
+                v = json.loads(vp.read_text(encoding="utf-8"))
                 v["zenodo_version_doi"] = "10.5072/zenodo.9"
                 vp.write_text(json.dumps(v))
                 c.releases()
-                self.assertEqual(json.loads(vp.read_text())["zenodo_version_doi"], "10.5072/zenodo.9")
+                self.assertEqual(json.loads(vp.read_text(encoding="utf-8"))["zenodo_version_doi"], "10.5072/zenodo.9")
         finally:
             srv.close()
 
@@ -1043,6 +1046,9 @@ class LockAndPruneTest(unittest.TestCase):
         finally:
             srv.close()
 
+    # As in Ruby (R13-A1), this is POSIX only: the held stream release keeps its file open and still reads it
+    # after prune removes it. Windows cannot remove a file that is open.
+    @unittest.skipIf(os.name == "nt", "Windows cannot remove a file that a held release keeps open")
     def test_prune_removes_an_earlier_held_release_but_keeps_current(self):
         idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
         script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
@@ -1532,7 +1538,7 @@ class SourceRecordTest(RepeatedIdsTest):
 
     def test_known_fields_and_distinct_licences(self):
         record = self.source_record()
-        meta = json.loads((FIXTURES / 'knc/OTC_20991231.2.meta.json').read_text())
+        meta = json.loads((FIXTURES / 'knc/OTC_20991231.2.meta.json').read_text(encoding="utf-8"))
         restricted = next(row for row in meta['licences'] if not row['commercial_use'])
         record['licence_id'] = restricted['licence_id']
         record['upstream_licence_id'] = 'noaa'
@@ -1779,7 +1785,7 @@ class MalformedInputTest(RepeatedIdsTest):
                     if surface == "json":
                         body = json.dumps(doc)
                     else:
-                        rows = [json.loads(line) for line in (GOOD / "OTC_20991231.2.jsonl").read_text().splitlines()]
+                        rows = [json.loads(line) for line in (GOOD / "OTC_20991231.2.jsonl").read_text(encoding="utf-8").splitlines()]
                         rows = [station if row["station_id"] == "OTC-T-0003" else row for row in rows]
                         body = "".join(json.dumps(row) + "\n" for row in rows)
                         (self.dir / "OTC_20991231.2.meta.json").write_bytes((GOOD / "OTC_20991231.2.meta.json").read_bytes())
@@ -1950,6 +1956,7 @@ class ErrorClassTest(unittest.TestCase):
         with self.assertRaises(otc.OfflineError):
             otc.OpenTideConstants(cache_dir=str(self.cache), offline=True)
 
+    @unittest.skipIf(os.name == "nt", "chmod cannot make a file or folder unreadable or read-only on Windows")
     def test_unreadable_verified_is_a_cache_error_not_absent(self):
         # spec §5.2 step 6 (CR2 DR16): a cached file that cannot be read is cache
         d = self.cached()
@@ -1981,6 +1988,7 @@ class ErrorClassTest(unittest.TestCase):
         self.assertEqual(len(loaded), 1)
         self.assertIsNone(loaded[0]._fh, "the loaded release's file handle leaks")
 
+    @unittest.skipIf(os.name == "nt", "chmod cannot make a file or folder unreadable or read-only on Windows")
     def test_unreadable_cached_index_is_a_cache_error_not_absent(self):
         # R2-090: an unreadable cached OTC_index.json was "absent", so releases() offline said offline_unavailable
         d = self.cached()
