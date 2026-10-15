@@ -118,9 +118,10 @@ class Cache:
         p = self.base / "releases" / datestamp
         return ensure_dir(p) if create else p
 
-    def read_verified(self, datestamp: str):
+    def read_verified(self, datestamp: str, *, normalize: bool = True):
         """The .verified object, or None when it is absent or not a usable record (then the release is not
-        trusted). A .verified that exists but cannot be read is CacheError, not "not cached" (spec §5.2 step 6)."""
+        trusted). A .verified that exists but cannot be read is CacheError, not "not cached" (spec §5.2 step 6).
+        DOI-only writes can retain admitted source fields with normalize=False."""
         p = self.release_dir(datestamp) / ".verified"
         try:
             text = p.read_text(encoding="utf-8")
@@ -161,9 +162,10 @@ class Cache:
             if size is None or not 0 <= size <= 9007199254740991 \
                     or sha is not None and re.fullmatch(r"[0-9a-fA-F]{64}", sha) is None:
                 return None
-            rec["size"] = size  # 1024.0 is the integer 1024 (CR2 DR10)
-            if sha is not None:
-                rec["sha256"] = sha.lower()
+            if normalize:
+                rec["size"] = size  # 1024.0 is the integer 1024 (CR2 DR10)
+                if sha is not None:
+                    rec["sha256"] = sha.lower()
         for k in ("zenodo_version_doi", "format_version", "min_reader_version", "datestamp", "verified_at", "by"):
             if not _opt(doc.get(k), str):
                 return None

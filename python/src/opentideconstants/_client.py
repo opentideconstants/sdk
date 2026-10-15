@@ -674,7 +674,7 @@ class OpenTideConstants:
                 return
             d = self._cache.release_dir(info.datestamp)
             with lock_dir(d, SDK, wait=False) as held:
-                v = self._cache.read_verified(info.datestamp) if held else None
+                v = self._cache.read_verified(info.datestamp, normalize=False) if held else None
                 if v is None or v.get("zenodo_version_doi") == info.zenodo_version_doi:
                     return
                 v["zenodo_version_doi"] = info.zenodo_version_doi

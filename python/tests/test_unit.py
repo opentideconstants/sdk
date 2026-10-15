@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import operator
+import socket
 import struct
 import subprocess
 import sys
@@ -565,6 +566,57 @@ class ReceiptAcquisitionTest(unittest.TestCase):
             client.releases()
         doc = self._check_receipt("public-doi-note")
         self.assertEqual(doc["zenodo_version_doi"], "10.5072/zenodo.2")
+
+    def test_public_doi_note_preserves_raw_receipt_fields(self):
+        cases = (("json-upper", "eager", ".json", False),
+                 ("jsonl-upper", "stream", ".jsonl", False),
+                 ("meta-upper", "stream", ".meta.json", False),
+                 ("json-lower", "eager", None, False),
+                 ("stream-lower", "stream", None, False),
+                 ("busy-upper", "stream", ".jsonl", True))
+        for label, mode, uppercase_suffix, busy in cases:
+            with self.subTest(cell=label), tempfile.TemporaryDirectory() as directory:
+                self.cache = Path(directory) / "cache"
+                self._open(mode).close()
+                path = self._receipt()
+                before = json.loads(path.read_bytes())
+                before.update(zenodo_version_doi="10.5072/zenodo.old", by="original-source-writer",
+                              verified_at="2026-10-14T00:00:00Z", unknown_receipt={"preserve": [True, None]})
+                for name, row in before["files"].items():
+                    if uppercase_suffix is not None and name.endswith(uppercase_suffix):
+                        row["sha256"] = row["sha256"].upper()
+                    row["unknown_row"] = {"retain": True}
+                path.write_bytes(encode_cache_json(before))
+                before_bytes = path.read_bytes()
+                source = {name: (path.parent / name).read_bytes() for name in before["files"]}
+                owner_bytes = None
+                if busy:
+                    lock = path.parent / ".lock"
+                    lock.mkdir()
+                    owner_bytes = json.dumps({"pid": os.getpid(), "host": socket.gethostname(),
+                                              "sdk": "foreign-native-test", "token": "other-owner",
+                                              "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}).encode()
+                    (lock / "owner.json").write_bytes(owner_bytes)
+                with self._open(mode) as client:
+                    self.assertEqual(client.loaded_from, otc.LoadedFrom.CACHE)
+                    self.assertTrue(client.verify())
+                    raw = client.require_station("OTC-T-0001").raw
+                    projected = _cache.Cache(self.cache).read_verified("20991231.2")
+                    for name, row in projected["files"].items():
+                        self.assertEqual(row["sha256"], before["files"][name]["sha256"].lower())
+                    client.releases()
+                    self.assertEqual(client.release.zenodo_version_doi, "10.5072/zenodo.2")
+                    self.assertEqual(client.require_station("OTC-T-0001").raw, raw)
+                after = json.loads(path.read_bytes())
+                print("NATIVE_RAW_DOI_NOTE", label, json.dumps({"before": before, "after": after}), flush=True)
+                expected = copy.deepcopy(before)
+                if not busy:
+                    expected["zenodo_version_doi"] = "10.5072/zenodo.2"
+                self.assertEqual(after, expected)
+                self.assertEqual({name: (path.parent / name).read_bytes() for name in source}, source)
+                if busy:
+                    self.assertEqual(path.read_bytes(), before_bytes)
+                    self.assertEqual((path.parent / ".lock" / "owner.json").read_bytes(), owner_bytes)
 
     def test_locked_reread_replaces_stale_state_and_publishes_receipt_last(self):
         for replacement in ("valid", "malformed", "absent"):
