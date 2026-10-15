@@ -506,7 +506,14 @@ internal struct ClientIO:@unchecked Sendable {
         let stored=candidate.flatMap { pointerShape(name,$0) ? $0:nil }
         let secondTag=readTag()
         let etag=stored != nil && firstTag != nil && firstTag==secondTag ? String(data:firstTag!,encoding:.ascii):nil
-        if offline { guard let stored else { throw OpenTideConstantsError.offlineUnavailable("\(name) not cached") };return stored }
+        if offline {
+            guard let stored else {
+                // a cached file that cannot be read is a cache error, not a file that is not cached
+                if FileManager.default.fileExists(atPath:path.path),!FileManager.default.isReadableFile(atPath:path.path) { throw OpenTideConstantsError.cache("cannot read \(path.path)",["path":.string(path.path)]) }
+                throw OpenTideConstantsError.offlineUnavailable("\(name) not cached")
+            }
+            return stored
+        }
         var response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile,etag:etag)
         if response.status==304,stored==nil { response=try await HTTP.response(url,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile) }
         if response.status==404 { return nil }
