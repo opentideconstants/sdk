@@ -134,7 +134,7 @@ internal extension Reader {
             let names=cs["constituents"].array.compactMap { $0["name"].string }
             guard names.count == cs["constituents"].array.count,Set(names).count==names.count else { throw OpenTideConstantsError.invalidRelease("constituent names absent/duplicate") }
             if cs["datum"]["named"].object.values.contains(where: { $0.number == nil }) { throw OpenTideConstantsError.invalidRelease("datum value nonnumeric") }
-            for q in cs["qc_flags"].array { if q["values"].object.values.contains(where: { !$0.isNull && $0.number == nil }) { throw OpenTideConstantsError.invalidRelease("qc value nonnumeric") } }
+            for q in cs["qc_flags"].array { try checkQcValues(q["values"]) }
             _ = try parseTime(cs["record_span"]["start"].string); _ = try parseTime(cs["record_span"]["end"].string)
             if cs["fallback"]["reason"].string == "historical_offsets" || cs["qc_flags"].array.contains(where: { $0["flag"].string == "fallback:historical_offsets" }) { throw OpenTideConstantsError.invalidRelease("historical label belongs to offsets") }
             sets.append(ConstantSet(raw:cs,convention:conv,licence:lic,isRecommended:id==recommended,validation:validation.enumerated().filter { $0.element.setId==id }.sorted { left,right in let a=left.element.window ?? "",b=right.element.window ?? "";return a==b ? left.offset < right.offset : a < b }.map(\.element)))
@@ -149,11 +149,14 @@ internal extension Reader {
     }
 }
 internal extension Reader {
+    static func checkQcValues(_ values: JSONValue) throws {
+        if values.object.values.contains(where: { !$0.isNull && $0.number == nil }) { throw OpenTideConstantsError.invalidRelease("qc value nonnumeric") }
+    }
     static func historical(_ d: JSONValue) throws {
         try check(d,_offset_types,"offsets")
         let marked=d.object.keys.contains("offset_id") || d["fallback"]["reason"].string == "historical_offsets" || d["qc_flags"].array.contains { $0["flag"].string == "fallback:historical_offsets" }
         if !marked {
-            for row in d["qc_flags"].array { try check(row,["flag":"T","reason":"T"],"offset qc flag") }
+            for row in d["qc_flags"].array { try check(row,_qc_flag_types,"offset qc flag");try checkQcValues(row["values"]) }
         }
         guard marked else { return }
         func require(_ ok: Bool, _ field: String) throws { if !ok { throw OpenTideConstantsError.invalidRelease("invalid historical \(field)") } }
