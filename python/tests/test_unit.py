@@ -1070,6 +1070,40 @@ class LockAndPruneTest(unittest.TestCase):
         finally:
             srv.close()
 
+    def test_a_release_held_open_during_prune_is_never_served_and_goes_once_closed(self):
+        # On every platform, and above all on Windows, where an open file cannot be removed: what prune leaves of
+        # a release that a live client holds open is (a) never listed, opened or verified as that release, and
+        # (b) removed by a later prune once the client is closed.
+        idx = json.loads((FIXTURES / "good" / "OTC_index.json").read_text(encoding="utf-8"))
+        script = {"/OTC_latest-f1.json": (200, {}, json.dumps(idx["releases"][1]).encode())}
+        srv = _Server(script=script)
+        old_dir = self.cache / "v1" / "releases" / "20991231"
+        try:
+            with otc.OpenTideConstants(base_url=srv.url, cache_dir=str(self.cache), mode="stream") as c:
+                self.assertEqual(c.release.datestamp, "20991231")
+                del script["/OTC_latest-f1.json"]
+                self.assertTrue(c.update().updated)
+                try:
+                    c.prune(keep=0)
+                except otc.CacheError:
+                    pass  # Windows: the held release's open file cannot be removed yet
+                self.assertEqual(c.cached_releases(), ("20991231.2",))
+                self.assertFalse((old_dir / ".verified").exists())
+                with self.assertRaises(otc.OpenTideConstantsError):
+                    otc.OpenTideConstants(release="20991231", offline=True, cache_dir=str(self.cache),
+                                          mode="stream")
+            if old_dir.exists():
+                # what is left is a partial release; prune removes those once they are older than the lock age
+                old = time.time() - 3600
+                os.utime(old_dir, (old, old))
+            with otc.OpenTideConstants(release="20991231.2", offline=True, cache_dir=str(self.cache),
+                                       mode="stream") as later:
+                self.assertEqual(later.prune(keep=0), ())
+            self.assertFalse(old_dir.exists(), "a release left behind by an earlier prune is still there")
+            self.assertTrue((self.cache / "v1" / "releases" / "20991231.2" / ".verified").is_file())
+        finally:
+            srv.close()
+
     @unittest.skipIf(os.name == "nt", "needs POSIX symlinks")
     def test_prune_preserves_external_data_behind_partial_release_symlinks(self):
         # A partial release entry that is a symlink is not a cache directory: prune must not lock, empty or
