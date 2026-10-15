@@ -732,7 +732,7 @@ export class OpenTideConstants {
     /** Note the selected entry's DOI for its cached release and, when it matches, the current session. */
     async #observeEntry(entry: PointerEntry): Promise<void> {
         if (entry.zenodo_version_doi === null) return;
-        if (entry.datestamp === this.#release.datestamp) noteReleaseVersionDoi(this.#release, entry.zenodo_version_doi);
+        if (!this.#file && entry.datestamp === this.#release.datestamp) noteReleaseVersionDoi(this.#release, entry.zenodo_version_doi);
         const ctx = this.#ctx;
         if (!ctx.store) return;
         try {
