@@ -627,13 +627,22 @@ internal struct ClientIO:@unchecked Sendable {
         for file in listed { let name=file["name"].string!;guard rows[name]==file["sha256"].string else { throw OpenTideConstantsError.checksumMismatch("pointer/checksum disagreement",["file":.string(name),"expected":file["sha256"],"actual":rows[name].map(JSONValue.string) ?? .null]) } }
         guard Set(rows.keys)==Set(listed.compactMap { $0["name"].string }) else { throw OpenTideConstantsError.checksumMismatch("checksum lists extra file") }
     }
-    func checked(_ stamp:String,name:String,rows:[String:String],entry:JSONValue?,to path:URL)async throws->Int64 {
+    /// Downloads name to path and checks it against its checksum row. URLSession decodes a body sent with
+    /// Content-Encoding: gzip and cannot return the stored .gz bytes, so a decoded .gz is checked against the row of
+    /// decodedName (the file it decompresses to) instead, and decoded is true.
+    func checked(_ stamp:String,name:String,rows:[String:String],entry:JSONValue?,to path:URL,decodedName:String?=nil)async throws->(size:Int64,decoded:Bool) {
         guard let expected=rows[name] else { throw OpenTideConstantsError.checksumMismatch("\(name) not listed",["file":.string(name)]) }
         let file=entry?["files"].array.first(where:{ $0["name"].string==name })
-        try await HTTP.file(url(name,entry:entry),to:path,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile)
+        let decoded=try await HTTP.file(url(name,entry:entry),to:path,timeout:timeout,userAgent:userAgent,proxy:proxy,caFile:caFile)
+        if decoded,let decodedName {
+            guard let plain=rows[decodedName] else { throw OpenTideConstantsError.checksumMismatch("\(decodedName) not listed",["file":.string(decodedName)]) }
+            let actual=try SHA256.file(path)
+            guard actual==plain else { throw OpenTideConstantsError.checksumMismatch("decoded checksum mismatch",["file":.string(name),"expected":.string(plain),"actual":.string(actual)]) }
+            return ((try FileManager.default.attributesOfItem(atPath:path.path)[.size] as? NSNumber)?.int64Value ?? -1,true)
+        }
         let actual=try SHA256.file(path),size=(try FileManager.default.attributesOfItem(atPath:path.path)[.size] as? NSNumber)?.int64Value ?? -1
         guard actual==expected,file?["size"].integer==nil || file?["size"].integer==size else { throw OpenTideConstantsError.checksumMismatch("size or checksum mismatch",["file":.string(name),"expected":.string(expected),"actual":.string(actual)]) }
-        return size
+        return (size,false)
     }
     func fetch(_ stamp:String,entry:JSONValue?)async throws->Loaded {
         let directory=try cache.releaseDir(stamp),token=try await cache.takeLock(directory)
@@ -656,11 +665,11 @@ internal struct ClientIO:@unchecked Sendable {
             if name==json,rows[gz] != nil {
                 let compressed=directory.appendingPathComponent(".tmp-\(UUID().uuidString).gz")
                 defer { try? FileManager.default.removeItem(at:compressed) }
-                _=try await checked(stamp,name:gz,rows:rows,entry:entry,to:compressed)
-                try Cache.gunzip(compressed,to:temporary)
+                if try await checked(stamp,name:gz,rows:rows,entry:entry,to:compressed,decodedName:json).decoded { try FileManager.default.moveItem(at:compressed,to:temporary) }
+                else { try Cache.gunzip(compressed,to:temporary) }
                 guard try SHA256.file(temporary)==rows[json] else { throw OpenTideConstantsError.checksumMismatch("decompressed checksum mismatch",["file":.string(json)]) }
                 size=(try FileManager.default.attributesOfItem(atPath:temporary.path)[.size] as? NSNumber)?.int64Value ?? -1
-            } else { size=try await checked(stamp,name:name,rows:rows,entry:entry,to:temporary) }
+            } else { size=try await checked(stamp,name:name,rows:rows,entry:entry,to:temporary).size }
             try Cache.install(temporary,directory.appendingPathComponent(name))
             verified[name] = .object(["sha256":.string(rows[name]!),"size":.integer(size),"url":.string(url(name,entry:entry).absoluteString)])
         }

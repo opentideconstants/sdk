@@ -123,7 +123,10 @@ internal enum HTTP {
         }
         return response.bytes
     }
-    static func file(_ url:URL,to path:URL,timeout:Double,userAgent:String?,proxy:String?=nil,caFile:String?=nil,listed:Bool=true)async throws {
+    /// Downloads url to path. Returns true when URLSession removed a Content-Encoding (a CDN that sends a .gz file with
+    /// Content-Encoding: gzip): the file then holds the decoded bytes, because URLSession cannot return the stored ones.
+    @discardableResult
+    static func file(_ url:URL,to path:URL,timeout:Double,userAgent:String?,proxy:String?=nil,caFile:String?=nil,listed:Bool=true)async throws->Bool {
         let configuration=URLSessionConfiguration.ephemeral
         configuration.urlCache=nil;configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest=timeout;configuration.timeoutIntervalForResource=timeout
@@ -153,9 +156,11 @@ internal enum HTTP {
                 let size=(try FileManager.default.attributesOfItem(atPath:temporary.path)[.size] as? NSNumber)?.int64Value
                 if let length=response.value(forHTTPHeaderField:"Content-Length"),let expected=Int64(length),response.value(forHTTPHeaderField:"Content-Encoding")==nil,expected != size { throw OpenTideConstantsError.network("short body",["url":.string(redact(url.absoluteString))]) }
                 try FileManager.default.moveItem(at:temporary,to:path)
-                return
+                let encoding=(response.value(forHTTPHeaderField:"Content-Encoding") ?? "").trimmingCharacters(in:.whitespaces).lowercased()
+                return ["gzip","x-gzip","deflate","br"].contains(encoding)
             } catch let error as OpenTideConstantsError { throw error }
             catch { throw OpenTideConstantsError.io("cannot write \(path.path): \(error)",["path":.string(path.path)]) }
         }
+        throw OpenTideConstantsError.network("request failed",["url":.string(redact(url.absoluteString))])
     }
 }
