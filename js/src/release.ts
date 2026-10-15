@@ -310,7 +310,7 @@ export function checkShape(doc: JsonObject, id: string): void {
             if (o) check(o, table, `${where}${k}.`);
         }
         const build = obj(obj(cs, "provenance"), "build");
-        if (build) check(build, { build_commit: "T" }, `${where}provenance.build.`);
+        if (build) check(build, { build_commit: "T", run_id: "T" }, `${where}provenance.build.`);
         const span = obj(cs, "record_span");
         for (const k of ["start", "end"]) checkedTime(span?.[k], `record_span.${k} of set ${typeof cs["set_id"] === "string" ? cs["set_id"] : "?"}`);
         const named = obj(obj(cs, "datum"), "named");
