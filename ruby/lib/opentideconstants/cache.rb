@@ -310,17 +310,28 @@ class OpenTideConstants
         def remove_release(datestamp, partial: false)
             dir = release_dir(datestamp)
             return true unless File.directory?(dir)
-            mtime = File.mtime(dir) if partial
+            if partial
+                candidate = File.lstat(dir)
+                return false unless candidate.directory?
+                mtime = candidate.mtime
+                same_directory = lambda do
+                    current = File.lstat(dir)
+                    current.directory? && current.dev == candidate.dev && current.ino == candidate.ino
+                end
+            end
             return false if partial && Time.now - mtime <= 120
             removed = false
+            return false if partial && !same_directory.call
             taken = try_lock(dir) do
                 if partial
+                    next unless same_directory.call
                     if verified(datestamp)
                         log(:info, "prune: #{datestamp} became verified; kept")
                         next
                     end
                     next unless Time.now - mtime > 120
                 end
+                next if partial && !same_directory.call
                 remove_file(File.join(dir, ".verified"))
                 Dir.children(dir).each do |name|
                     next if name == ".lock"
