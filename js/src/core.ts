@@ -950,6 +950,26 @@ export async function verifyCached(ctx: Ctx, d: string, againstPointer = false,
     if (!store) throw new OfflineError("no cache");
     const dir = relDir(d);
     const n = names(d);
+    // Open authenticates only the selected payloads against their receipt; explicit verify uses the sidecar below.
+    if (!againstPointer) {
+        const verified = await readVerified(store, d);
+        const present = new Set(await store.list(dir));
+        if (!verified || !usable(ctx.mode, d, present, verified)) throw new OfflineError(`release ${d} is not cached in this mode`);
+        const needed = ctx.mode === "eager" && cachedFile(n.json, present.has(n.json), verified) ? [n.json] : [n.jsonl, n.meta];
+        for (const name of needed) {
+            const file = store.describe(`${dir}/${name}`);
+            let measured: { digest: string; bytesRead: number } | null;
+            if (readHash) measured = await readHash(`${dir}/${name}`);
+            else {
+                const bytes = await store.read(`${dir}/${name}`);
+                measured = bytes ? { digest: await ctx.platform.sha256(bytes), bytesRead: bytes.length } : null;
+            }
+            if (!measured) throw new FileError(`cannot read ${file}: it is missing from the cache`, { path: file });
+            const row = verified.files[name];
+            checkBytes(name, measured.digest, measured.bytesRead, row.sha256, row.size);
+        }
+        return true;
+    }
     const shaBytes = await store.read(`${dir}/${n.sha}`);
     if (!shaBytes) throw new ChecksumError(`${n.sha} is missing from the cache`, { file: store.describe(`${dir}/${n.sha}`), expected: null, actual: null });
     if (againstPointer) {
