@@ -103,6 +103,9 @@ private enum HeldPrediction {
         var raw = station.raw.object
         raw["aliases"] = .object(station.aliases.mapValues { .array($0.map(JSONValue.string)) })
         raw["kind"] = station.kind.map { .string($0.rawValue) } ?? .null
+        // typed values, as the other runners report them: an unknown type is "other", and no status is "active"
+        raw["type"] = station.raw["type"].isNull ? .null : .string(station.type.rawValue)
+        raw["status"] = .string(station.status.rawValue)
         raw["recommended_set_id"] = station.recommendedSet.map { .string($0.setId) } ?? .null
         raw["is_reference"] = .bool(station.isReference)
         raw["is_subordinate"] = .bool(station.isSubordinate)
@@ -144,7 +147,7 @@ private enum HeldPrediction {
     static func constantSet(_ value: ConstantSet) -> JSONValue {
         let span = value.recordSpan.map { .object(["start": plain($0.start), "end": plain($0.end), "good_samples": plain($0.goodSamples)]) as JSONValue } ?? .null
         let datum = value.datum.map { .object(["msl_offset_m": plain($0.mslOffsetM), "named": plain($0.named)]) as JSONValue } ?? .null
-        var fields: [String: JSONValue] = ["set_id": plain(value.setId), "source": plain(value.source), "source_type": plain(value.sourceType), "quantity": plain(value.quantity), "source_record_id": plain(value.sourceRecordId), "source_version": plain(value.sourceVersion), "record_span": span, "datum": datum, "qc_status": plain(value.qcStatus), "qc_flags": .array(value.qcFlags.map { .object(["flag": plain($0.flag), "reason": plain($0.reason), "values": plain($0.values)]) }), "dropped_constituents": .array(value.droppedConstituents.map { .object(["name": plain($0.name), "dropped_reason": plain($0.droppedReason), "detail": plain($0.detail)]) }), "time_base": value.timeBase.map(timeBase) ?? .null, "is_recommended": plain(value.isRecommended), "convention_id": plain(value.convention.conventionId), "licence_id": plain(value.licence.licenceId), "constituent_count": plain(value.constituents.count)]
+        var fields: [String: JSONValue] = ["set_id": plain(value.setId), "source": plain(value.source), "source_type": plain(value.sourceType), "quantity": value.raw["quantity"].isNull ? .null : plain(value.quantity), "source_record_id": plain(value.sourceRecordId), "source_version": plain(value.sourceVersion), "record_span": span, "datum": datum, "qc_status": plain(value.qcStatus), "qc_flags": .array(value.qcFlags.map { .object(["flag": plain($0.flag), "reason": plain($0.reason), "values": plain($0.values)]) }), "dropped_constituents": .array(value.droppedConstituents.map { .object(["name": plain($0.name), "dropped_reason": plain($0.droppedReason), "detail": plain($0.detail)]) }), "time_base": value.timeBase.map(timeBase) ?? .null, "is_recommended": plain(value.isRecommended), "convention_id": plain(value.convention.conventionId), "licence_id": plain(value.licence.licenceId), "constituent_count": plain(value.constituents.count)]
         if let fallback = value.fallback {
             fields["fallback"] = .object([
                 "reason": fallback.raw["reason"].isNull ? .null : plain(fallback.reason),
