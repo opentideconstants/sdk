@@ -49,6 +49,26 @@ jobs:
           done
           echo "ruby: $failed of 50 runs failed" | tee -a stress-logs/summary.txt
           grep -h "cannot remove\|EACCES\|Permission" stress-logs/ruby-*.log | sort | uniq -c | head -20 || true
+      - name: Python release while a waiter reads the lock age, 20 runs
+        run: |
+          failed=0
+          for i in $(seq 1 20); do
+            if ! python -m unittest discover -s python/tests -p test_unit.py -k test_release_removes_the_lock_while_a_waiter_reads_its_age > "stress-logs/python-release-$i.log" 2>&1; then
+              failed=$((failed + 1))
+            fi
+          done
+          echo "python release: $failed of 20 runs failed" | tee -a stress-logs/summary.txt
+          grep -h "releases left the lock\|cannot remove" stress-logs/python-release-*.log | sort | uniq -c | head -10 || true
+      - name: Ruby release while a waiter reads the lock age, 20 runs
+        run: |
+          failed=0
+          for i in $(seq 1 20); do
+            if ! ruby -Iruby/lib -Iruby/test ruby/test/test_cache_lock.rb -n test_release_removes_the_lock_while_a_waiter_reads_its_age > "stress-logs/ruby-release-$i.log" 2>&1; then
+              failed=$((failed + 1))
+            fi
+          done
+          echo "ruby release: $failed of 20 runs failed" | tee -a stress-logs/summary.txt
+          grep -h "releases left the lock" stress-logs/ruby-release-*.log | sort | uniq -c | head -10 || true
       - name: Upload the logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -58,4 +78,4 @@ jobs:
       - name: Fail when any run failed
         run: |
           cat stress-logs/summary.txt
-          ! grep -v " 0 of 50 " stress-logs/summary.txt
+          ! grep -v -E " 0 of (50|20) " stress-logs/summary.txt
