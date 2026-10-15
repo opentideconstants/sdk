@@ -575,6 +575,28 @@ class CacheLockTest < Minitest::Test
         end
     end
 
+    # A waiter reads owner.json to judge the lock's age. On Windows a file that
+    # is open cannot be deleted, so a release that met such a read left the
+    # lock behind, and the next process waited until it was stale.
+    def test_release_removes_the_lock_while_a_waiter_reads_its_age
+        cache = quick_cache
+        dir = cache.ensure_dir(cache.release_dir("20991231"))
+        lock = File.join(dir, ".lock")
+        stop = false
+        reader = Thread.new { cache.__send__(:lock_age, lock) until stop }
+        left = 0
+        200.times do
+            cache.with_lock(dir) { nil }
+            next unless File.exist?(lock)
+            left += 1
+            FileUtils.rm_rf(lock)
+        end
+        assert_equal 0, left, "#{left} of 200 releases left the lock behind while a waiter read its age"
+    ensure
+        stop = true
+        reader&.join(5)
+    end
+
     def test_two_waiters_on_a_crashed_lock_never_hold_it_together
         cache = quick_cache
         dir, = held_lock(cache, "20991231", started_at: "2000-01-01T00:00:00Z")

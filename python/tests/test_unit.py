@@ -995,6 +995,35 @@ class LockAndPruneTest(unittest.TestCase):
         self.assertEqual(overlap, [False], "two waiters held the lock at the same time")
         self.assertTrue(second_in.is_set())
 
+    def test_release_removes_the_lock_while_a_waiter_reads_its_age(self):
+        # A waiter reads owner.json to judge the lock's age. On Windows an open file cannot be deleted, so a
+        # release that met such a read left the lock behind, and the next process waited until it was stale.
+        import threading
+        from opentideconstants import _cache
+        d = self.root / "rel"
+        d.mkdir()
+        lock = d / ".lock"
+        stop = threading.Event()
+
+        def reader():
+            while not stop.is_set():
+                _cache.lock_age(lock)
+
+        thread = threading.Thread(target=reader, daemon=True)
+        thread.start()
+        left = 0
+        try:
+            for _ in range(200):
+                with _cache.lock_dir(d, "release-race") as held:
+                    self.assertTrue(held)
+                if lock.exists():
+                    left += 1
+                    shutil.rmtree(lock, ignore_errors=True)
+        finally:
+            stop.set()
+            thread.join(5)
+        self.assertEqual(left, 0, f"{left} of 200 releases left the lock behind while a waiter read its age")
+
     def test_try_lock_takes_an_old_lock_and_leaves_a_young_one(self):
         from opentideconstants import _cache
         d = self._lock(started_at="2000-01-01T00:00:00Z")
