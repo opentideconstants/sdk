@@ -254,7 +254,14 @@ public final class OpenTideConstants {
             let partial = !verified.contains(stamp)
             do {
                 let path=try cache.releaseDir(stamp)
-                let modified=partial ? (try FileManager.default.attributesOfItem(atPath:path.path)[.modificationDate] as? Date):nil
+                let candidate=partial ? try FileManager.default.attributesOfItem(atPath:path.path):nil
+                let modified=candidate?[.modificationDate] as? Date
+                if partial { guard candidate?[.type] as? FileAttributeType == .typeDirectory,candidate?[.systemNumber] is NSNumber,candidate?[.systemFileNumber] is NSNumber else { continue } }
+                func sameDirectory()->Bool {
+                    guard partial else { return true }
+                    guard let current=try? FileManager.default.attributesOfItem(atPath:path.path) else { return false }
+                    return current[.type] as? FileAttributeType == .typeDirectory && (current[.systemNumber] as? NSNumber)==(candidate?[.systemNumber] as? NSNumber) && (current[.systemFileNumber] as? NSNumber)==(candidate?[.systemFileNumber] as? NSNumber)
+                }
                 let environment=ProcessInfo.processInfo.environment
                 let scaleText=environment["OTC_TEST_LOCK_SCALE"] ?? ""
                 let validScale=scaleText.range(of:#"^[1-9][0-9]{0,3}$"#,options:.regularExpression)?.upperBound==scaleText.endIndex && (1...1000).contains(Int(scaleText) ?? 0)
@@ -271,16 +278,20 @@ public final class OpenTideConstants {
                         io.logger?("opentideconstants: warning: OTC_TEST_PRUNE_PLANT_VERIFIED wrote \(stamp)")
                     } catch { io.logger?("opentideconstants: ignored OTC_TEST_PRUNE_PLANT_VERIFIED for \(stamp): \(error)") }
                 }:nil
+                guard sameDirectory() else { continue }
                 let token=try await cache.takeLock(path,wait:false,beforeMkdir:beforeMkdir)
                 guard token != nil else { io.logger?("opentideconstants: skipped locked release \(stamp)");continue }
                 defer { cache.releaseLock(path,token) }
+                guard sameDirectory() else { continue }
                 if partial {
                     if try cache.verified(stamp) != nil { io.logger?("opentideconstants: kept newly verified release \(stamp)");continue }
                 }
                 let marker=path.appendingPathComponent(".verified")
+                guard sameDirectory() else { continue }
                 if FileManager.default.fileExists(atPath:marker.path) { try FileManager.default.removeItem(at:marker) }
                 for child in try FileManager.default.contentsOfDirectory(at:path,includingPropertiesForKeys:nil) where child.lastPathComponent != ".lock" { try FileManager.default.removeItem(at:child) }
                 cache.releaseLock(path,token)
+                guard sameDirectory() else { continue }
                 if rmdir(path.path) != 0 && errno != ENOENT && errno != ENOTEMPTY && errno != EEXIST { throw OpenTideConstantsError.cache("cannot remove directory \(path.path)") }
                 if partial { io.logger?("opentideconstants: removed partial release \(stamp)") }
                 else { removed.append(stamp) }
