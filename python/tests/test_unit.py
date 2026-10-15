@@ -156,14 +156,15 @@ class CommonBehaviorTraceTest(unittest.TestCase):
     def test_real_public_common_routes_preserve_ordered_native_boundaries(self):
         events = []
         active = ["none"]
-        sdk_root = (ROOT / "python" / "src" / "opentideconstants").resolve()
+        sdk_root = Path(otc.__file__).resolve().parent  # python/src, or the installed package (OTC_TEST_INSTALLED)
 
         def profile(frame, event, value):
             filename = Path(frame.f_code.co_filename)
             if event not in ("call", "return") or not filename.is_relative_to(sdk_root):
                 return
             events.append({"route": active[0], "event": event,
-                           "file": str(filename.relative_to(ROOT)),
+                           "file": str(filename.relative_to(ROOT) if filename.is_relative_to(ROOT)
+                                       else filename.relative_to(sdk_root.parent)),
                            "symbol": code_qualname(frame.f_code),
                            "line": frame.f_code.co_firstlineno,
                            "inputs": {name: type(item).__name__ for name, item in frame.f_locals.items()},

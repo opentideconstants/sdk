@@ -115,7 +115,7 @@ class PredictionTest(unittest.TestCase):
         events = []
         route = ['none']
         counts = {}
-        root = (ROOT / 'python/src/opentideconstants').resolve()
+        root = Path(otc.__file__).resolve().parent  # python/src, or the installed package (OTC_TEST_INSTALLED)
         selected = {'_window', '_context', '_chosen', '_table', '_reference', '_datum', '_subdatum',
                     '_result', '_current', '_current_events', 'heights', 'heights_at', 'extremes',
                     'currents', 'current_events', 'events', 'instant', 'datums', 'ranges', 'astro_table',
@@ -145,7 +145,7 @@ class PredictionTest(unittest.TestCase):
             if counts[key] > 4:
                 return
             context = frame.f_locals.get('context')
-            entry = {'route': route[0], 'event': event, 'file': str(filename.relative_to(ROOT)),
+            entry = {'route': route[0], 'event': event, 'file': str(filename.relative_to(ROOT) if filename.is_relative_to(ROOT) else filename.relative_to(root.parent)),
                      'symbol': code_qualname(frame.f_code), 'line': frame.f_code.co_firstlineno,
                      'inputs': {key: summary(frame.f_locals[key]) for key in
                                 ('station', 'start', 'stop', 'step_s', 'quantity', 'set_id', 'datum',
