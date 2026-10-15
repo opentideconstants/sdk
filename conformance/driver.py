@@ -82,6 +82,25 @@ def runner_skips(case, runner, profile):
     if (runner == "swift" or profile == "swift") and case["id"].split("@", 1)[0] == "predict-heights/fractional-instants":
         return False
     return names is not None and runner not in RED_RUNNERS and runner not in names and profile not in names
+
+
+# Cases whose setup Windows cannot do. Each is skipped there, with its reason in the output and the report.
+WINDOWS_OPEN_FILE_DELETES = {"cache/dr100-stale-rows-dropped-stream", "rules/pk11/verify-missing-data-file"}
+WINDOWS_CASE_SENSITIVE_ENV = {"rules/pk12/http-proxy-uppercase-cgi"}
+
+
+def windows_skip(case, platform=None):
+    """Why a case cannot run on Windows, or None (always None on other platforms)."""
+    if (platform or os.name) != "nt":
+        return None
+    base = case["id"].split("@", 1)[0]
+    if any(step.get("driver") == "chmod" for step in case.get("steps", [])):
+        return "Windows cannot make files unreadable via chmod"
+    if base in WINDOWS_OPEN_FILE_DELETES:
+        return "a live stream release keeps its data file open, and Windows cannot delete an open file"
+    if base in WINDOWS_CASE_SENSITIVE_ENV:
+        return "environment variable names are case-insensitive on Windows"
+    return None
 RESERVED_EXPECT = {"error", "error_fields", "error_message", "tolerance"}
 
 # Open variants for matrix cases: (suffix, file extension or None for the server, mode, features needed)
@@ -1765,6 +1784,12 @@ def main():
     t0 = time.monotonic()
     try:
         for c in cases:
+            windows_reason = windows_skip(c)
+            if windows_reason:
+                counts["SKIP"] += 1
+                report.append({"id": c["id"], "status": "SKIP", "windows": windows_reason})
+                print(f"SKIP  {c['id']}  (Windows: {windows_reason})")
+                continue
             missing = [] if a.cross else [f for f in c.get("requires", []) if f not in features]
             if not a.cross and not missing and runner_skips(c, hello.get("runner"), profile):
                 counts["SKIP"] += 1
