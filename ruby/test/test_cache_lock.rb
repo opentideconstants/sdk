@@ -399,6 +399,45 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    # On every platform, and above all on Windows, where an open file cannot be
+    # removed: what prune leaves of a release that a live client holds open is
+    # (a) never listed, opened or verified as that release, and (b) removed by
+    # a later prune once the client is closed.
+    def test_a_release_held_open_during_prune_is_never_served_and_goes_once_closed
+        over = {}
+        srv = serve(File.join(FIXTURES, "good"), over)
+        old_ptr = JSON.parse(File.read(fixture("good", "OTC_index.json")))["releases"].find { |e| e["datestamp"] == "20991231" }
+        over["OTC_latest-f1.json"] = [200, {}, JSON.generate(old_ptr)]
+        cache = tmpdir
+        old_dir = File.join(cache, "v1", "releases", "20991231")
+        c = OTC.new(base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+        assert_equal "20991231", c.release.datestamp
+        over.delete("OTC_latest-f1.json")
+        assert c.update!.updated
+        begin
+            c.prune(keep: 0)
+        rescue OTC::CacheError
+            nil # Windows: the held release's open file cannot be removed yet
+        end
+        assert_equal %w[20991231.2], c.cached_releases
+        refute File.exist?(File.join(old_dir, ".verified"))
+        assert_raises(OTC::Error) { OTC.new(release: "20991231", offline: true, cache_dir: cache, mode: :stream) }
+        c.close
+        c = nil
+        if File.exist?(old_dir)
+            # what is left is a partial release; prune removes those once they are older than the lock age
+            old = Time.now - 3600
+            File.utime(old, old, old_dir)
+        end
+        later = OTC.new(release: "20991231.2", offline: true, cache_dir: cache, mode: :stream)
+        assert_equal [], later.prune(keep: 0)
+        later.close
+        refute File.exist?(old_dir), "a release left behind by an earlier prune is still there"
+        assert File.file?(File.join(cache, "v1", "releases", "20991231.2", ".verified"))
+    ensure
+        c&.close
+    end
+
     # A file client does not own the cache copy with the same datestamp.
     def test_prune_from_a_file_does_not_protect_a_matching_cache_release
         srv = serve

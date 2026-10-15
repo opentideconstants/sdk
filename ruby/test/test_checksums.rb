@@ -139,6 +139,13 @@ class ChecksumTest < Minitest::Test
         # On Windows the open client keeps its handle on the cached copy, so it cannot be removed there.
         refute File.exist?(cached), "the corrupt cached copy is still there" unless Gem.win_platform?
         assert_includes srv.requests[before..], "/OTC_#{D}.jsonl"
+        # On every platform: the corrupt copy is never served offline, and once the client is closed the next
+        # online open replaces it with the right bytes.
+        c.close
+        c = nil
+        assert_raises(OTC::Error) { OTC.new(release: D, offline: true, cache_dir: cache, mode: :stream, verify_on_open: false).close }
+        c = OTC.new(release: D, base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+        assert_equal original, File.binread(cached), "the corrupt cached copy was not replaced once the client was closed"
     ensure
         c&.close
     end
