@@ -88,6 +88,8 @@ jobs:
             exit 1
           fi
 
+  # The C SDK is paused, and its own workflow (c.yml) builds and tests it. The
+  # cross-SDK cases here run Python, Ruby and TypeScript without building C.
   cross:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -95,10 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-24.04, c_runner: c/build/otc_runner }
-          - { os: macos-14, c_runner: c/build/otc_runner }
-          - { os: windows-2022, c_runner: c/build/Debug/otc_runner.exe }
+        os: [ubuntu-24.04, macos-14, windows-2022]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
@@ -106,6 +105,12 @@ jobs:
         with: { python-version: "3.12" }
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with: { ruby-version: "3.3" }
+      # The Ruby runner claims localtime only when tzinfo can load zone data; Windows has no
+      # system zone files, so it also needs tzinfo-data there.
+      - name: Zone data for the Ruby runner
+        run: |
+          gem install tzinfo --no-document
+          if [ "${{ runner.os }}" = Windows ]; then gem install tzinfo-data --no-document; fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
@@ -115,21 +120,6 @@ jobs:
       - name: Build the TypeScript SDK
         working-directory: js
         run: npm ci && npm run build
-      - name: libcurl (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
-      - name: libcurl (Windows, vcpkg)
-        if: runner.os == 'Windows'
-        run: vcpkg install curl:x64-windows
-      - name: Build the C library with otc_fetch
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = Windows ]; then
-            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
-          else
-            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
-          fi
-          cmake --build c/build --config Debug --parallel
       - name: The case files are current
         run: |
           python conformance/tools/build_cases.py --check
@@ -138,14 +128,13 @@ jobs:
         run: uv run conformance/tools/build_fixtures.py --check
       - name: supported-formats.json matches each SDK's SUPPORTED_FORMAT_VERSION
         run: python conformance/tools/check_supported_formats.py
-      - name: Cross-SDK cases (Python, Ruby, TypeScript, C)
+      - name: Cross-SDK cases (Python, Ruby, TypeScript)
         shell: bash
         run: |
           python conformance/driver.py \
             --cross python="python conformance/runners/python/runner.py" \
             --cross ruby="ruby conformance/runners/ruby/runner.rb" \
             --cross typescript="node conformance/runners/node/runner.mjs" \
-            --cross c="${{ matrix.c_runner }}" \
             --report cross-report.json
       - name: Upload the report
         if: always()
@@ -158,7 +147,7 @@ jobs:
   # The accepted Swift source requires Apple Security and SwiftPM 6.4.
   # This separate hosted gate qualifies macOS 26; it does not claim Linux/iOS support.
   swift-cross:
-    name: macOS 26 / Swift 6.4.0 / five SDKs
+    name: macOS 26 / Swift 6.4.0 / four SDKs
     runs-on: macos-26
     timeout-minutes: 90
     steps:
@@ -193,8 +182,6 @@ jobs:
           gem install tzinfo --no-document
           npm ci --prefix js
           npm run build --prefix js
-          cmake -S c -B c/build-fetch -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON
-          cmake --build c/build-fetch --parallel 2
       - name: Build the native Swift SDK and runner
         run: |
           swift build --package-path swift -Xswiftc -warnings-as-errors
@@ -221,7 +208,6 @@ jobs:
             --cross python="python conformance/runners/python/runner.py" \
             --cross ruby="ruby conformance/runners/ruby/runner.rb" \
             --cross typescript="node conformance/runners/node/runner.mjs" \
-            --cross c="c/build-fetch/otc_runner" \
             --cross swift="swift run --skip-build --package-path conformance/runners/otc-swift Runner" \
             --no-expected-failures --report swift-cross.json
       - name: Upload the native qualification reports
