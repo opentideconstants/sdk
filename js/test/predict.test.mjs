@@ -117,9 +117,11 @@ test('native browser all immutable vectors and actual Intl localization',async()
     } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
 });
 
-test('native browser cache prefetch reads only the selected format',async()=>{
-    const fixture=process.env.OTC_BROWSER_CACHE_NATIVE_DIR??(process.env.OTC_HISTORY_BROWSER_JSON?path.dirname(process.env.OTC_HISTORY_BROWSER_JSON):null);
-    assert.ok(fixture,'lossless actual H4 JSON/JSONL/META fixture required');
+// This case needs the private lossless H4 JSON/JSONL/META fixture; without OTC_BROWSER_CACHE_NATIVE_DIR or
+// OTC_HISTORY_BROWSER_JSON it is skipped and says so.
+const browserCacheFixture=process.env.OTC_BROWSER_CACHE_NATIVE_DIR??(process.env.OTC_HISTORY_BROWSER_JSON?path.dirname(process.env.OTC_HISTORY_BROWSER_JSON):null);
+test('native browser cache prefetch reads only the selected format',{skip:browserCacheFixture?false:'OTC_BROWSER_CACHE_NATIVE_DIR (or OTC_HISTORY_BROWSER_JSON) is not set: the lossless actual H4 fixture is private'},async()=>{
+    const fixture=browserCacheFixture;
     const root=fileURLToPath(new URL('../..',import.meta.url)),dist=process.env.OTC_BROWSER_SDK_DIR??path.join(root,'js/dist');
     const parsed=JSON.parse(fs.readFileSync(path.join(fixture,'OTC_20261011.json'),'utf8'));
     const date=parsed.release.datestamp,stem=`OTC_${date}`,digest=b=>createHash('sha256').update(b).digest('hex');
