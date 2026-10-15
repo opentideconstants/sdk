@@ -164,11 +164,17 @@ public final class OpenTideConstants {
     public func cachedReleases()throws->[String] { try release.checkOpen();return try cache.cached() }
     private func state<Value>(_ body:()throws->Value)rethrows->Value { lock.lock();defer { lock.unlock() };return try body() }
     internal func checkOpen()throws { try state { guard !closed else { throw OpenTideConstantsError.io("the release is closed") };try release.checkOpen() } }
+    private func observeEntry(_ entry:JSONValue)async {
+        await io.noteVersionDoi(entry)
+        state {
+            if loadedFrom != .file && loadedFrom != .fileUnverified,entry["datestamp"].string==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
+        }
+    }
     public func releases()async throws->[ReleaseInfo] {
         try checkOpen()
         do {
             let entries=try await io.index()
-            for entry in entries { await io.noteVersionDoi(entry) }
+            for entry in entries { await observeEntry(entry) }
             return entries.map(ReleaseInfo.init)
         }
         catch let error as OpenTideConstantsError {
@@ -180,10 +186,8 @@ public final class OpenTideConstants {
         try checkOpen()
         do {
             let entry=try await io.resolveLatest()
-            state {
-                lastError=nil
-                if loadedFrom != .file && loadedFrom != .fileUnverified,entry["datestamp"].string==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
-            }
+            await observeEntry(entry)
+            state { lastError=nil }
             return ReleaseInfo(entry)
         }
         catch let error as OpenTideConstantsError { if ["unsupported_format","reader_too_old"].contains(error.code) { state { lastError=nil } };throw error }
@@ -214,12 +218,9 @@ public final class OpenTideConstants {
         while try !takeUpdate() { try await Task.sleep(nanoseconds:10_000_000) }
         defer { state { updating=false } }
         let from=release.datestamp,entry=try await io.resolveLatest(),to=entry["datestamp"].string!
-        state {
-            lastError=nil
-            if to==release.datestamp,let doi=entry["zenodo_version_doi"].string { release.zenodoVersionDoi=doi }
-        }
+        await observeEntry(entry)
+        state { lastError=nil }
         guard Cache.newer(to,from) else { state { lastCheck=ProcessInfo.processInfo.systemUptime };return UpdateResult(updated:false,from:from,to:from) }
-        await io.noteVersionDoi(entry)
         let loaded:ClientIO.Loaded
         if let cached=try io.usableCached(to,doi:entry["zenodo_version_doi"].string) { loaded=cached } else { loaded=try await io.fetch(to,entry:entry) }
         return try state {
