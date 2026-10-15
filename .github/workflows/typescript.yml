@@ -152,7 +152,8 @@ jobs:
         run: |
           uv run conformance/server.py --host 127.0.0.1 --port 18765 --proxy-port 18766 >"$RUNNER_TEMP/server.log" 2>&1 &
           server=$!
-          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "--- fixture server log"; cat "$RUNNER_TEMP/server.log"; fi' EXIT
+          # Stop the server on exit: a server left running keeps the uv cache locked, and setup-uv's post step then fails.
+          trap 'status=$?; kill "$server" 2>/dev/null || true; wait "$server" 2>/dev/null || true; if [ "$status" -ne 0 ]; then echo "--- fixture server log"; cat "$RUNNER_TEMP/server.log"; fi' EXIT
           # Wait until the server answers (at most 60 s; uv may first fetch a Python).
           for _ in $(seq 1 120); do
             if curl -s -o /dev/null http://127.0.0.1:18765/ && curl -s -o /dev/null http://127.0.0.1:18766/; then break; fi
