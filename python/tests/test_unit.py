@@ -32,6 +32,20 @@ from opentideconstants._release import freeze, haversine  # noqa: E402
 
 GOOD = ROOT / "conformance" / "fixtures" / "good"
 
+_QUALNAMES = {}
+
+
+def code_qualname(code):
+    """The qualified name of the function that owns ``code``. Python 3.11 added code.co_qualname; on 3.10 it is
+    found from the function object that holds the code, once per code object."""
+    name = getattr(code, "co_qualname", None)
+    if name is not None:
+        return name
+    if code not in _QUALNAMES:
+        owners = [ref for ref in gc.get_referrers(code) if getattr(ref, "__code__", None) is code]
+        _QUALNAMES[code] = owners[0].__qualname__ if owners else code.co_name
+    return _QUALNAMES[code]
+
 
 class CacheJSONTest(unittest.TestCase):
     def test_native_lock_owners_use_canonical_bytes(self):
@@ -149,7 +163,7 @@ class CommonBehaviorTraceTest(unittest.TestCase):
                 return
             events.append({"route": active[0], "event": event,
                            "file": str(filename.relative_to(ROOT)),
-                           "symbol": frame.f_code.co_qualname,
+                           "symbol": code_qualname(frame.f_code),
                            "line": frame.f_code.co_firstlineno,
                            "inputs": {name: type(item).__name__ for name, item in frame.f_locals.items()},
                            "output_type": type(value).__name__ if event == "return" else None})

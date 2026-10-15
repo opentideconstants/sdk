@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if not os.environ.get('OTC_TEST_INSTALLED'):
     sys.path.insert(0, str(ROOT / 'python' / 'src'))
 import opentideconstants as otc
+from test_unit import code_qualname  # noqa: E402
 
 UTC = dt.timezone.utc
 PREDICT = ROOT / 'conformance' / 'fixtures' / 'predict'
@@ -139,13 +140,13 @@ class PredictionTest(unittest.TestCase):
             name = frame.f_code.co_name
             if event not in ('call', 'return') or name not in selected or not filename.is_relative_to(root):
                 return
-            key = (route[0], frame.f_code.co_qualname, event)
+            key = (route[0], code_qualname(frame.f_code), event)
             counts[key] = counts.get(key, 0) + 1
             if counts[key] > 4:
                 return
             context = frame.f_locals.get('context')
             entry = {'route': route[0], 'event': event, 'file': str(filename.relative_to(ROOT)),
-                     'symbol': frame.f_code.co_qualname, 'line': frame.f_code.co_firstlineno,
+                     'symbol': code_qualname(frame.f_code), 'line': frame.f_code.co_firstlineno,
                      'inputs': {key: summary(frame.f_locals[key]) for key in
                                 ('station', 'start', 'stop', 'step_s', 'quantity', 'set_id', 'datum',
                                  'bin_number', 'offset_id', 'series', 'name', 'at', 'year') if key in frame.f_locals},
