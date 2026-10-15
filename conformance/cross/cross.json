@@ -2002,6 +2002,7 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
+       "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0006",
        "OTC-T-0019",
@@ -2019,7 +2020,6 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
-       "OTC-T-0002",
        "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0020"
@@ -2104,6 +2104,7 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
+       "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0006",
        "OTC-T-0019",
@@ -2121,7 +2122,6 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
-       "OTC-T-0002",
        "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0020"
@@ -2192,6 +2192,7 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
+       "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0006",
        "OTC-T-0019",
@@ -2209,7 +2210,6 @@
      "expect": {
       "station_ids": [
        "OTC-T-0001",
-       "OTC-T-0002",
        "OTC-T-0003",
        "OTC-T-0004",
        "OTC-T-0020"
@@ -2844,12 +2844,6 @@
      "value": 5374.0
     },
     {
-     "driver": "json_set",
-     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
-     "pointer": "/stations/10/country",
-     "value": "ZZ"
-    },
-    {
      "driver": "copy",
      "files": [
       "${cache}/v1/releases/20991231.2/index-v1.json"
@@ -2874,18 +2868,6 @@
      "expect": {
       "loaded_from": "cache",
       "datestamp": "20991231.2"
-     }
-    },
-    {
-     "as": "reader",
-     "op": "stations",
-     "args": {
-      "country": "ZZ"
-     },
-     "expect": {
-      "station_ids": [
-       "OTC-T-0011"
-      ]
      }
     },
     {
@@ -2945,6 +2927,179 @@
      "driver": "assert_sha256",
      "path": "${cache}/v1/releases/20991231.2/index-v1.json",
      "equals": "${tmp}/index-copy/index-v1.json"
+    },
+    {
+     "driver": "assert_requests",
+     "source": "any",
+     "count": 0
+    }
+   ]
+  },
+  {
+   "id": "cross/index-entry-country-mismatch",
+   "title": "OTC-T-0011's index entry gives country ZZ, its line does not (the index is still fresh): reading the line is invalid_release naming index-v1.json, which is deleted; the next open rebuilds it",
+   "spec": "6.2",
+   "roles": {
+    "writer": [
+     "fs",
+     "fetch",
+     "stream"
+    ],
+    "reader": [
+     "fs",
+     "fetch",
+     "stream"
+    ]
+   },
+   "steps": [
+    {
+     "as": "writer",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "base_url": "${server}/good/",
+      "cache_dir": "${cache}",
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "download",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "writer",
+     "op": "station_count",
+     "expect": {
+      "station_count": 20
+     }
+    },
+    {
+     "as": "writer",
+     "op": "close"
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified",
+      "OTC_20991231.2.sha256",
+      "OTC_20991231.2.jsonl",
+      "OTC_20991231.2.meta.json",
+      "index-v1.json"
+     ],
+     "absent": [
+      ".lock"
+     ],
+     "no_tmp": true
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
+    },
+    {
+     "driver": "json_set",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "pointer": "/stations/10/country",
+     "value": "ZZ"
+    },
+    {
+     "driver": "server_stop"
+    },
+    {
+     "driver": "clear_log"
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0011"
+     },
+     "expect": {
+      "error": "invalid_release",
+      "error_message": {
+       "$contains": "index-v1.json"
+      }
+     }
+    },
+    {
+     "driver": "assert_files",
+     "dir": "${cache}/v1/releases/20991231.2",
+     "present": [
+      ".verified"
+     ],
+     "absent": [
+      "index-v1.json"
+     ]
+    },
+    {
+     "as": "reader",
+     "op": "open",
+     "args": {
+      "release": "20991231.2",
+      "cache_dir": "${cache}",
+      "offline": true,
+      "mode": "stream"
+     },
+     "expect": {
+      "loaded_from": "cache",
+      "datestamp": "20991231.2"
+     }
+    },
+    {
+     "as": "reader",
+     "op": "station",
+     "args": {
+      "station_id": "OTC-T-0011"
+     },
+     "expect": {
+      "station": {
+       "station_id": "OTC-T-0011",
+       "name": "Ålesund",
+       "country": "NOR",
+       "lat": 62.4722,
+       "lon": 6.1517,
+       "type": "reference",
+       "kind": "tide",
+       "timezone": "Europe/Oslo",
+       "aliases": {
+        "gesla": [
+         "test-gesla-0011"
+        ]
+       },
+       "status": "active",
+       "is_reference": true,
+       "is_subordinate": false,
+       "is_tide": true,
+       "is_current": false,
+       "recommended_set_id": "OTC-T-0011/gesla-fit"
+      }
+     }
+    },
+    {
+     "as": "reader",
+     "op": "close"
+    },
+    {
+     "driver": "assert_index",
+     "path": "${cache}/v1/releases/20991231.2/index-v1.json",
+     "jsonl": "${cache}/v1/releases/20991231.2/OTC_20991231.2.jsonl",
+     "datestamp": "20991231.2"
     },
     {
      "driver": "assert_requests",

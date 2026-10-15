@@ -2382,22 +2382,33 @@ def cross_r2_pk07(R2, fill, offline, no_requests, roles, idx, jl, rdir):
                         drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
                     roles=roles))
     # DR10: an integer key written as a number with an integral value (12.0) is that integer. The index stays
-    # fresh: a marked entry shows in the reader's answers, a line is read through the float offset, and the
-    # file is not rewritten.
+    # fresh: a line is read through the float offset, and the file is not rewritten.
     jsize = (FIXTURES / "good" / f"OTC_{d}.jsonl").stat().st_size
-    pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
     out.append(case("cross/index-float-ints", "index_version, jsonl_size and an entry's offset and length written as 1.0, 25846.0, ...: the index is fresh, so it is used and not rewritten (CR2 DR10)", "6.2",
                     fill + [drv("json_set", path=idx, pointer="/index_version", value=1.0),
                             drv("json_set", path=idx, pointer="/jsonl_size", value=float(jsize)),
                             drv("json_set", path=idx, pointer="/stations/0/offset", value=float(a["offset"])),
                             drv("json_set", path=idx, pointer="/stations/0/length", value=float(a["length"])),
-                            drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ"),
                             drv("copy", files=[idx], to="${tmp}/index-copy")] + offline + [
                         reader_open,
-                        as_("reader", step("stations", {"station_ids": ["OTC-T-0011"]}, country="ZZ")),
                         as_("reader", step("station", {"station": enc_station(R2, R2.by_id[a["station_id"]])}, station_id=a["station_id"])),
                         as_("reader", step("close")),
                         drv("assert_sha256", path=idx, equals="${tmp}/index-copy/index-v1.json"), no_requests],
+                    roles=roles))
+    # Every reader checks an index entry against its .jsonl line (the canonical cache contract): an entry whose
+    # country is not its line's is invalid_release naming index-v1.json, which is deleted; the next open
+    # rebuilds it.
+    pos = [s["station_id"] for s in R2.doc["stations"]].index("OTC-T-0011")
+    tamper_error = {**err("invalid_release"), "error_message": {"$contains": "index-v1.json"}}
+    out.append(case("cross/index-entry-country-mismatch", "OTC-T-0011's index entry gives country ZZ, its line does not (the index is still fresh): reading the line is invalid_release naming index-v1.json, which is deleted; the next open rebuilds it", "6.2",
+                    fill + [drv("json_set", path=idx, pointer=f"/stations/{pos}/country", value="ZZ")] + offline + [
+                        reader_open,
+                        as_("reader", step("station", tamper_error, station_id="OTC-T-0011")),
+                        drv("assert_files", dir=rdir, present=[".verified"], absent=["index-v1.json"]),
+                        reader_open,
+                        as_("reader", step("station", {"station": enc_station(R2, R2.by_id["OTC-T-0011"])}, station_id="OTC-T-0011")),
+                        as_("reader", step("close")),
+                        drv("assert_index", path=idx, jsonl=jl, datestamp=d), no_requests],
                     roles=roles))
     # An entry whose sets disagree with its line (a convention that resolves, but is not the line's; a
     # constituent left out): reading the line is invalid_release naming index-v1.json, which is deleted, and
@@ -2544,8 +2555,8 @@ def cross_rules(R2, fill, offline, no_requests, roles, idx, jl, rdir):
         ("recommended_set", {"set_id": RN.rec_set(s1n)["set_id"]}, {"station_id": "OTC-T-0001"}),
         ("constant_set", {"set": None}, {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/no"}),
         ("constant_set", {"set": None}, {"station_id": "OTC-T-0001", "set_id": "OTC-T-0001/gesla"}),
-        ("stations", {"station_ids": [s["station_id"] for s in apply_filters(RN, RN.active, {"source_type": "official"})]}, {"source_type": "official"}),
-        ("stations", {"station_ids": [s["station_id"] for s in apply_filters(RN, RN.active, {"kind": "tide", "country": "USA"})]}, {"kind": "tide", "country": "USA"})]))
+        ("stations", {"station_ids": [s["station_id"] for s in discovery_filters(RN, RN.active, {"source_type": "official"})]}, {"source_type": "official"}),
+        ("stations", {"station_ids": [s["station_id"] for s in discovery_filters(RN, RN.active, {"kind": "tide", "country": "USA"})]}, {"kind": "tide", "country": "USA"})]))
     latest_writer = [as_("writer", step("open", {"loaded_from": "download", "datestamp": d}, base_url=G, cache_dir="${cache}", mode="stream")),
                      as_("writer", step("release_metadata", {"zenodo_version_doi": vdoi})),
                      as_("writer", step("close"))]
