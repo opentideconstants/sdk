@@ -1048,6 +1048,43 @@ class LockAndPruneTest(unittest.TestCase):
         finally:
             srv.close()
 
+    @unittest.skipIf(os.name == "nt", "needs POSIX symlinks")
+    def test_prune_preserves_external_data_behind_partial_release_symlinks(self):
+        # A partial release entry that is a symlink is not a cache directory: prune must not lock, empty or
+        # remove what it points to, whatever .verified marker the target holds.
+        cases = {"empty-marker": "{}", "broken-json": "{broken json", "absent-marker": None}
+        for label, marker in cases.items():
+            with self.subTest(cell=label):
+                root = self.root / label
+                external = root / "external-user-data"
+                releases = root / "cache" / "v1" / "releases"
+                external.mkdir(parents=True)
+                releases.mkdir(parents=True)
+                (external / "source-record-original").write_bytes(
+                    f"external record and provenance {label}\n".encode())
+                if marker is not None:
+                    (external / ".verified").write_bytes(marker.encode())
+                link = releases / "20991231.30"
+                os.symlink("../../../external-user-data", link)
+                old = time.time() - 300
+                os.utime(external, (old, old))
+                os.utime(link, (old, old), follow_symlinks=False)  # an old link: age alone does not protect it
+                original_mtime = external.stat().st_mtime_ns
+                originals = {p.name: p.read_bytes() for p in external.iterdir()}
+                with otc.OpenTideConstants(file=str(GOOD / "OTC_20991231.2.json"),
+                                           cache_dir=str(root / "cache")) as c:
+                    original_raw = json.dumps(c.station("OTC-T-0001").raw, sort_keys=True, default=dict)
+
+                    self.assertEqual(c.prune(keep=0), ())
+                    self.assertEqual(sorted(p.name for p in external.iterdir()), sorted(originals))
+                    for name, data in originals.items():
+                        self.assertEqual((external / name).read_bytes(), data)
+                    self.assertEqual(external.stat().st_mtime_ns, original_mtime)
+                    self.assertTrue(link.is_symlink())
+                    self.assertEqual(os.readlink(link), "../../../external-user-data")
+                    self.assertFalse((external / ".lock").exists())
+                    self.assertEqual(json.dumps(c.station("OTC-T-0001").raw, sort_keys=True, default=dict), original_raw)
+
 
 class StreamIndexTest(unittest.TestCase):
     """The stream index is checked, not trusted (spec §6.2, CR D4, D17; review PK05)."""
