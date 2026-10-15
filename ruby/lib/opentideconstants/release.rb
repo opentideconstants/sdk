@@ -34,8 +34,17 @@ class OpenTideConstants
         # The metadata: readable after close too (CR2 DR32). Every other
         # method is a query, and after close it is io "the release is
         # closed" (spec §4.2, CR D21).
-        attr_reader :datestamp, :created, :format_version, :concept_doi, :zenodo_version_doi, :source_versions,
+        attr_reader :datestamp, :created, :format_version, :concept_doi, :source_versions,
                     :build_commit, :changelog_url, :files
+
+        def zenodo_version_doi
+            @state.fetch(:zenodo_version_doi, @zenodo_version_doi)
+        end
+
+        def note_version_doi(doi)
+            @state[:zenodo_version_doi] = doi
+        end
+        private :note_version_doi
 
         # meta: the release document without its stations. stations: an
         # enumerator of [raw_station, pos, len, view]; view (Reader.line_view)
@@ -215,7 +224,8 @@ class OpenTideConstants
         # when the release has its own Zenodo version.
         def citation
             link = @concept_doi ? "https://doi.org/#{@concept_doi}" : default_url
-            version = @zenodo_version_doi && @zenodo_version_doi != "" ? " (version DOI: https://doi.org/#{@zenodo_version_doi})" : ""
+            doi = zenodo_version_doi
+            version = doi && doi != "" ? " (version DOI: https://doi.org/#{doi})" : ""
             "OpenTideConstants contributors (#{@datestamp[0, 4]}). OpenTideConstants, release #{@datestamp} [Data set]. #{link}#{version}"
         end
 

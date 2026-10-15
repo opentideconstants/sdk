@@ -105,6 +105,39 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    def test_held_release_observes_same_stamp_doi_updates
+        pointer = JSON.parse(File.read(fixture("good", "OTC_latest-f1.json")))
+        doi = "10.5072/zenodo.changed"
+        %i[latest check_for_update update! releases].each do |operation|
+            over = {}
+            srv = serve(File.join(FIXTURES, "good"), over)
+            cache = tmpdir
+            client = OTC.new(base_url: srv.url("/"), cache_dir: cache, mode: :stream)
+            held = client.release
+            raw = held.station("OTC-T-0001").raw
+            marker_path = File.join(cache, "v1/releases", held.datestamp, ".verified")
+            marker = JSON.parse(File.read(marker_path))
+            entry = pointer.merge("zenodo_version_doi" => doi)
+            over["OTC_latest-f1.json"] = [200, {}, JSON.generate(entry)]
+            over["OTC_latest.json"] = [200, {}, JSON.generate(entry)]
+            over["OTC_index.json"] = [200, {}, JSON.generate("releases" => [entry])]
+            client.public_send(operation)
+            assert_equal doi, held.zenodo_version_doi
+            assert_equal doi, client.release.zenodo_version_doi
+            assert_includes held.citation, "https://doi.org/#{doi}"
+            assert_equal raw, held.station("OTC-T-0001").raw
+            assert held.frozen?
+            assert raw.frozen?
+            refute held.respond_to?(:zenodo_version_doi=)
+            marker["zenodo_version_doi"] = doi
+            assert_equal marker, JSON.parse(File.read(marker_path))
+            client.close
+            assert_equal doi, held.zenodo_version_doi
+        ensure
+            client&.close
+        end
+    end
+
     def test_empty_version_doi_keeps_metadata_but_omits_citation_suffix
         stamp = "20991231.2"
         expected_raw = JSON.parse(File.binread(fixture("good", "OTC_#{stamp}.json")))["stations"].first
