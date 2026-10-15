@@ -998,6 +998,42 @@ test("DR18: prune stops at the first failure and the cache error lists what it r
     }
 });
 
+// A partial release entry that is a symlink is not a cache directory: prune must not lock, empty or remove
+// what it points to, whatever .verified marker the target holds.
+test("prune preserves external data behind partial release symlinks", { skip: process.platform === "win32" }, async (t) => {
+    for (const [label, marker] of [["empty-marker", "{}"], ["broken-json", "{broken json"], ["absent-marker", null]]) await t.test(label, async () => {
+        const root = tmpdir();
+        const external = path.join(root, "external-user-data");
+        const releases = path.join(root, "cache", "v1", "releases");
+        fs.mkdirSync(external, { recursive: true });
+        fs.mkdirSync(releases, { recursive: true });
+        fs.writeFileSync(path.join(external, "source-record-original"), `external record and provenance ${label}\n`);
+        if (marker !== null) fs.writeFileSync(path.join(external, ".verified"), marker);
+        const link = path.join(releases, "20991231.30");
+        fs.symlinkSync("../../../external-user-data", link);
+        const old = (Date.now() - 300_000) / 1000;
+        fs.utimesSync(external, old, old);
+        fs.lutimesSync(link, old, old); // an old link: age alone does not protect it
+        const originalMtime = fs.statSync(external, { bigint: true }).mtimeNs;
+        const originals = new Map(fs.readdirSync(external).map((name) => [name, fs.readFileSync(path.join(external, name))]));
+        const c = await otc.OpenTideConstants.open({ file: path.join(GOOD, "OTC_20991231.2.json"), cacheDir: path.join(root, "cache") });
+        try {
+            const originalRaw = JSON.stringify(c.station("OTC-T-0001").raw);
+
+            assert.deepEqual([...c.prune({ keep: 0 })], [], label);
+            assert.deepEqual(fs.readdirSync(external).sort(), [...originals.keys()].sort(), label);
+            for (const [name, bytes] of originals) assert.deepEqual(fs.readFileSync(path.join(external, name)), bytes, label);
+            assert.equal(fs.statSync(external, { bigint: true }).mtimeNs, originalMtime, label);
+            assert.ok(fs.lstatSync(link).isSymbolicLink(), label);
+            assert.equal(fs.readlinkSync(link), "../../../external-user-data", label);
+            assert.equal(fs.existsSync(path.join(external, ".lock")), false, label);
+            assert.equal(JSON.stringify(c.station("OTC-T-0001").raw), originalRaw, label);
+        } finally {
+            c.close();
+        }
+    });
+});
+
 test("R2-085 (CR2 DR16): update() heals a cached release whose file has the wrong size and downloads it again", async () => {
     const index = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8"));
     let pointer = JSON.stringify(index.releases.find((e) => e.datestamp === "20991231"));
