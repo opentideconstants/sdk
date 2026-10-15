@@ -15,7 +15,7 @@ class Release {
         if (MODE.startsWith("station-without-")) {   // a full station with one field left out (undefined)
             const st = { station_id: id, name: "X", country: "GBR", lat: 1, lon: 2, type: "reference", kind: "tide",
                 timezone: "Europe/London", aliases: {}, status: "active", isReference: true, isSubordinate: false,
-                isTide: true, isCurrent: false, recommendedSet: null, validation: [{ set_id: "s", reference_source: "noaa",
+                isTide: true, isCurrent: false, recommendedSet: null, recommended_is_fallback: null, validation: [{ set_id: "s", reference_source: "noaa",
                     reference_station: null, reference_distance_km: null, window: "2099-01", time_mae_min: 1, time_p95_min: null,
                     time_bias_min: null, height_mae_m: null, range_error_m: null, missed_events: null, extra_events: null,
                     previous_release: null }] };

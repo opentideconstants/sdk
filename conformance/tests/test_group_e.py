@@ -154,7 +154,9 @@ def test_readme_records_suite_choices():
 
 def test_almost_runner_fails_on_later_steps(tmp_path):
     report = tmp_path / "r.json"
-    r = run_driver("--runner", f"{sys.executable} {ALMOST_RUNNER}", "--only", "^stations/", "--all-steps", "--report", str(report),
+    # Only the matrix variants (an id with "@"): their step 0 is the driver's open. A runner-specific case such as
+    # stations/fallback-python opens later, after its own setup steps.
+    r = run_driver("--runner", f"{sys.executable} {ALMOST_RUNNER}", "--only", "^stations/[^@]*@", "--all-steps", "--report", str(report),
                    timeout=300)
     assert r.returncode == 1, r.stdout[-500:]
     check_almost_report(json.loads(report.read_text()))

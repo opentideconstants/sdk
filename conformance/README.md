@@ -134,7 +134,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 
 | Op | Args | Public API call | Result |
 |---|---|---|---|
-| `open` | client options (`release`, `file`, `cache_dir`, `offline`, `mode`, `base_url`, `timeout`, `proxy`, `ca_file`, `user_agent`, `on_network_error`, `auto_update`, `update_interval`, `verify_on_open`, `commercial_only`; C also `require_checksum`) | close the current client, open a new one (C: `otc_fetch_*` then `otc_open_file`) | `{loaded_from, datestamp, format_version}` |
+| `open` | client options (`release`, `file`, `cache_dir`, `offline`, `mode`, `base_url`, `timeout`, `proxy`, `ca_file`, `user_agent`, `on_network_error`, `auto_update`, `update_interval`, `verify_on_open`, `commercial_only`, `commercial_basis`, `historical_offsets_policy`; C also `require_checksum`) | close the current client, open a new one (C: `otc_fetch_*` then `otc_open_file`) | `{loaded_from, datestamp, format_version}` |
 | `close` | | `close` | `{}` |
 | `hold_release` | `name` | keep `client.release` under `name` | `{}` |
 | `loaded_from` | | `client.loaded_from` | `{loaded_from}` |
