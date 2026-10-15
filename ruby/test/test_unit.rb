@@ -2,6 +2,10 @@
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "minitest/autorun"
 require "json"
+require "tmpdir"
+require "fileutils"
+require "zlib"
+require "digest"
 require "opentideconstants"
 
 ROOT = File.expand_path("../..", __dir__)
@@ -49,6 +53,57 @@ class VersionTest < Minitest::Test
 end
 
 class FormatOneTest < Minitest::Test
+    def test_build_run_id_requires_a_string_when_present
+        source = File.join(FIXTURES, "good/OTC_20991231.2.json")
+        source_pin = Digest::SHA256.file(source).hexdigest
+        base = JSON.parse(File.binread(source))
+        observations = []
+        { "number" => 17, "boolean" => true, "array" => [], "object" => {}, "missing" => :missing, "null" => nil, "empty" => "", "string" => "native-run" }.each do |name, value|
+            doc = Marshal.load(Marshal.dump(base))
+            station_raw = doc.fetch("stations").first
+            set_raw = station_raw.fetch("constant_sets").first
+            build_raw = set_raw.fetch("provenance").fetch("build")
+            value == :missing ? build_raw.delete("run_id") : build_raw["run_id"] = value
+            invalid = %w[number boolean array object].include?(name)
+            Dir.mktmpdir("otc-run-id") do |directory|
+                prefix = File.join(directory, "OTC_20991231.2")
+                File.write(prefix + ".json", JSON.generate(doc))
+                Zlib::GzipWriter.open(prefix + ".json.gz") { |gzip| gzip.write(JSON.generate(doc)) }
+                File.write(prefix + ".jsonl", doc.fetch("stations").map { |station| JSON.generate(station) + "\n" }.join)
+                File.write(prefix + ".meta.json", JSON.generate(doc.reject { |key, _row| key == "stations" }))
+                [["json", :eager], ["json.gz", :eager], ["jsonl", :eager], ["jsonl", :stream]].each do |format, mode|
+                    path = prefix + "." + format
+                    before = Digest::SHA256.file(path).hexdigest
+                    row = { case: name, format: format, mode: mode.to_s, expected_invalid: invalid }
+                    begin
+                        client = OpenTideConstants.new(file: path, mode: mode)
+                        station = client.station(station_raw.fetch("station_id"))
+                        set = station.constant_set(set_raw.fetch("set_id"))
+                        actual = set.provenance.build.run_id
+                        row[:actual_value] = actual
+                        assert_equal station_raw, station.raw
+                        assert_equal set_raw, set.raw
+                        expected = value == :missing ? nil : value
+                        expected.nil? ? assert_nil(actual) : assert_equal(expected, actual)
+                        row[:pass] = !invalid
+                    rescue OpenTideConstants::Error => error
+                        row[:error_code] = error.code
+                        row[:pass] = invalid && error.code == "invalid_release"
+                    ensure
+                        client&.close
+                    end
+                    assert_equal before, Digest::SHA256.file(path).hexdigest
+                    observations << row
+                end
+            end
+        end
+        assert_equal source_pin, Digest::SHA256.file(source).hexdigest
+        if (path = ENV["OTC_RUN_ID_PROOF_PATH"])
+            File.write(path, JSON.pretty_generate(observations) + "\n")
+        end
+        assert_empty observations.reject { |row| row[:pass] }
+    end
+
     def test_unknown_source_type_filter_uses_typed_enum_and_preserves_raw
         path = File.join(FIXTURES, "bad/unknown-enums/OTC_20991231.json")
         raw = JSON.parse(File.read(path)).fetch("stations").find { |station| station["station_id"] == "OTC-T-0016" }
