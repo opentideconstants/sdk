@@ -653,7 +653,7 @@ class OpenTideConstants
         return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && !entry["zenodo_version_doi"].nil?
         cache.note_version_doi(d, entry["zenodo_version_doi"])
         @lock.synchronize do
-            next if @closed || !@release || @release.datestamp != d || @release.zenodo_version_doi == entry["zenodo_version_doi"]
+            next if @file || @closed || !@release || @release.datestamp != d || @release.zenodo_version_doi == entry["zenodo_version_doi"]
             refreshed = @release.dup
             refreshed.instance_variable_set(:@zenodo_version_doi, entry["zenodo_version_doi"])
             @release = refreshed.freeze
