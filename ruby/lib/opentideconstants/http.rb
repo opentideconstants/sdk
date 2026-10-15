@@ -194,8 +194,11 @@ class OpenTideConstants
             unless %w[http https].include?(to.scheme)
                 raise NetworkError.new("GET #{from}: a redirect to #{to} is not http or https", url: url, status: nil)
             end
-            # a Location such as "https:" or "//:8080/x" has no host: Net::HTTP would connect to localhost
-            if to.host.nil? || to.host.empty?
+            # a Location such as "https:" or "//:8080/x" has no host: Net::HTTP would connect to localhost.
+            # Check the Location itself too: the uri gem in Ruby 3.0 keeps the base host when it resolves "//:8080/x".
+            own = URI.parse(location.strip)
+            own_authority = own.scheme || location.strip.start_with?("//")
+            if to.host.nil? || to.host.empty? || (own_authority && (own.host.nil? || own.host.empty?))
                 raise NetworkError.new("GET #{from}: a redirect to #{location.strip.inspect} has no host", url: url, status: nil)
             end
             if from.scheme == "https" && to.scheme == "http"
