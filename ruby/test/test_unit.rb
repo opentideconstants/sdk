@@ -53,6 +53,74 @@ class VersionTest < Minitest::Test
 end
 
 class FormatOneTest < Minitest::Test
+    def test_qc_values_requires_nullable_finite_numbers_on_both_paths
+        source = File.join(FIXTURES, "good/OTC_20991231.2.json")
+        source_pin = Digest::SHA256.file(source).hexdigest
+        base = JSON.parse(File.binread(source))
+        observations = []
+        cases = {
+            "container-string" => "bad", "container-number" => 17, "container-boolean" => true,
+            "container-false" => false, "container-array" => [], "member-string" => { "value" => "bad" },
+            "member-boolean" => { "value" => true }, "member-false" => { "value" => false },
+            "member-array" => { "value" => [] }, "member-object" => { "value" => {} },
+            "member-overflow" => { "value" => "__OTC_OVERFLOW__" }, "member-huge-integer" => { "value" => 10**400 },
+            "missing" => :missing, "null" => nil, "empty" => {},
+            "numbers" => { "null" => nil, "zero" => 0, "negative_zero" => -0.0, "negative" => -7, "fraction" => 0.25, "large" => 1e308, "unknown🌊" => 3, "__proto__" => 4 }
+        }
+        %w[generic-offset constant-set].each do |consumer|
+            cases.each do |name, value|
+                doc = Marshal.load(Marshal.dump(base))
+                station_raw = consumer == "generic-offset" ? doc.fetch("stations").find { |row| row["subordinate_offsets"] } : doc.fetch("stations").first
+                parent = consumer == "generic-offset" ? station_raw.fetch("subordinate_offsets") : station_raw.fetch("constant_sets").first
+                flag = { "flag" => "time_base", "reason" => "controlled native values witness" }
+                flag["values"] = value unless value == :missing
+                parent["qc_flags"] = [flag]
+                invalid = name.start_with?("container-", "member-")
+                Dir.mktmpdir("otc-qc-values") do |directory|
+                    prefix = File.join(directory, "OTC_20991231.2")
+                    encode = ->(row) { JSON.generate(row).gsub('"__OTC_OVERFLOW__"', "1e400") }
+                    File.write(prefix + ".json", encode.call(doc))
+                    Zlib::GzipWriter.open(prefix + ".json.gz") { |gzip| gzip.write(encode.call(doc)) }
+                    File.write(prefix + ".jsonl", doc.fetch("stations").map { |station| encode.call(station) + "\n" }.join)
+                    File.write(prefix + ".meta.json", encode.call(doc.reject { |key, _row| key == "stations" }))
+                    names = %w[json json.gz jsonl meta.json].map { |format| prefix + "." + format }
+                    File.write(prefix + ".sha256", names.map { |path| "#{Digest::SHA256.file(path).hexdigest}  #{File.basename(path)}\n" }.join)
+                    pins = (names + [prefix + ".sha256"]).to_h { |path| [path, Digest::SHA256.file(path).hexdigest] }
+                    expected_station = JSON.parse(File.binread(prefix + ".json")).fetch("stations").find { |station| station["station_id"] == station_raw["station_id"] }
+                    [["json", :eager], ["json.gz", :eager], ["jsonl", :eager], ["jsonl", :stream]].each do |format, mode|
+                        row = { consumer: consumer, case: name, format: format, mode: mode.to_s, expected_invalid: invalid }
+                        begin
+                            client = OpenTideConstants.new(file: prefix + "." + format, mode: mode)
+                            station = client.station(station_raw.fetch("station_id"))
+                            qc = consumer == "generic-offset" ? station.subordinate_offsets.qc_flags.first : station.constant_set(parent.fetch("set_id")).qc_flags.first
+                            actual = qc.values
+                            row[:actual_inspect] = actual.inspect
+                            assert_equal expected_station, station.raw
+                            unless invalid
+                                expected = value == :missing ? nil : value
+                                expected.nil? ? assert_nil(actual) : assert_equal(expected, actual)
+                                assert (1.0 / actual["negative_zero"]).negative? if name == "numbers"
+                            end
+                            row[:pass] = !invalid
+                        rescue OpenTideConstants::Error => error
+                            row[:error_code] = error.code
+                            row[:pass] = invalid && error.code == "invalid_release"
+                        ensure
+                            client&.close
+                        end
+                        assert pins.all? { |path, digest| Digest::SHA256.file(path).hexdigest == digest }
+                        observations << row
+                    end
+                end
+            end
+        end
+        assert_equal source_pin, Digest::SHA256.file(source).hexdigest
+        if (path = ENV["OTC_QC_VALUES_PROOF_PATH"])
+            File.write(path, JSON.pretty_generate(observations) + "\n")
+        end
+        assert_empty observations.reject { |row| row[:pass] }
+    end
+
     def test_build_tool_versions_requires_a_nullable_map_of_strings
         source = File.join(FIXTURES, "good/OTC_20991231.2.json")
         source_pin = Digest::SHA256.file(source).hexdigest

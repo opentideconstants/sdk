@@ -1174,12 +1174,20 @@ class OpenTideConstants
             if raw["subordinate_offsets"]
                 check_types!(raw["subordinate_offsets"], OFFSET_TYPES, "#{what}: subordinate_offsets")
                 Array(raw["subordinate_offsets"]["qc_flags"]).each do |flag|
-                    check_types!(flag, { "flag" => :t, "reason" => :t }, "#{what}: subordinate_offsets.qc_flags")
+                    check_qc_flag!(flag, "#{what}: subordinate_offsets.qc_flags")
                 end
             end
             Array(raw["validation"]).each { |v| check_types!(v, VALIDATION_TYPES, "#{what}: validation") }
             Array(raw["constant_sets"]).each { |cs| check_set!(cs, what) }
         end
+
+        def self.check_qc_flag!(flag, what)
+            check_types!(flag, QC_FLAG_TYPES, what)
+            unless (flag["values"] || {}).values.all? { |value| value.nil? || real?(value) }
+                raise InvalidReleaseError, "#{what}: a qc_flags value is not a number or null"
+            end
+        end
+        private_class_method :check_qc_flag!
 
         def self.check_set!(cs, station)
             raise InvalidReleaseError, "#{station}: a set has no set_id" unless cs["set_id"].is_a?(String)
@@ -1207,10 +1215,7 @@ class OpenTideConstants
             end
             Array(cs["dropped_constituents"]).each { |x| check_types!(x, DROPPED_TYPES, "#{what}: dropped_constituents") }
             Array(cs["qc_flags"]).each do |f|
-                check_types!(f, QC_FLAG_TYPES, "#{what}: qc_flags")
-                unless (f["values"] || {}).values.all? { |x| x.nil? || real?(x) }
-                    raise InvalidReleaseError, "#{what}: a qc_flags value is not a number or null"
-                end
+                check_qc_flag!(f, "#{what}: qc_flags")
             end
             span = cs["record_span"]
             if span
