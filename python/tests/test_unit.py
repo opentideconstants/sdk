@@ -999,7 +999,11 @@ class LockAndPruneTest(unittest.TestCase):
         # A waiter reads owner.json to judge the lock's age. On Windows an open file cannot be deleted, so a
         # release that met such a read left the lock behind, and the next process waited until it was stale.
         import threading
-        from opentideconstants import _cache
+        _cache = self._fast_wait()
+        # a lock left behind is stale at once, so the next take recovers it instead of waiting 120 s
+        saved_age = _cache.LOCK_STALE_AGE_S
+        _cache.LOCK_STALE_AGE_S = 0.0
+        self.addCleanup(setattr, _cache, "LOCK_STALE_AGE_S", saved_age)
         d = self.root / "rel"
         d.mkdir()
         lock = d / ".lock"
@@ -1018,7 +1022,6 @@ class LockAndPruneTest(unittest.TestCase):
                     self.assertTrue(held)
                 if lock.exists():
                     left += 1
-                    shutil.rmtree(lock, ignore_errors=True)
         finally:
             stop.set()
             thread.join(5)

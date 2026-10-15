@@ -579,7 +579,8 @@ class CacheLockTest < Minitest::Test
     # is open cannot be deleted, so a release that met such a read left the
     # lock behind, and the next process waited until it was stale.
     def test_release_removes_the_lock_while_a_waiter_reads_its_age
-        cache = quick_cache
+        # a lock left behind is stale at once, so the next take recovers it instead of waiting 120 s
+        cache = OTC::Cache.new(tmpdir, lock_stale_s: 0.05, lock_poll_s: 0.01, lock_stale_age_s: 0)
         dir = cache.ensure_dir(cache.release_dir("20991231"))
         lock = File.join(dir, ".lock")
         stop = false
@@ -587,9 +588,7 @@ class CacheLockTest < Minitest::Test
         left = 0
         200.times do
             cache.with_lock(dir) { nil }
-            next unless File.exist?(lock)
-            left += 1
-            FileUtils.rm_rf(lock)
+            left += 1 if File.exist?(lock)
         end
         assert_equal 0, left, "#{left} of 200 releases left the lock behind while a waiter read its age"
     ensure
