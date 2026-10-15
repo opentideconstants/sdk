@@ -295,7 +295,7 @@ class StreamIndexTest < Minitest::Test
         built = File.binread(index_path(cache))
         repaired = []
         [->(rows) { rows.reject! { |row| row["station_id"] == "OTC-T-0011" } }, ->(rows) { rows.first["kind"] = "current" }].each do |mutate|
-            idx = JSON.parse(built)
+            idx = JSON.parse(built.dup) # an older json gem re-tags the string it parses as UTF-8
             mutate.call(idx["stations"])
             File.write(index_path(cache), JSON.generate(idx))
             c = OTC.new(release: D, cache_dir: cache, mode: :stream, offline: true)

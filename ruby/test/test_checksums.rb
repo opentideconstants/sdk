@@ -19,7 +19,7 @@ class CacheEncodingTest < Minitest::Test
             cache = OTC::Cache.new(tmpdir)
             cache.write_verified(D, {}, "format_version" => value_for(fixture))
             bytes = File.binread(File.join(cache.release_dir(D), ".verified"))
-            document = JSON.parse(bytes)
+            document = JSON.parse(bytes.dup) # an older json gem re-tags the string it parses as UTF-8
             assert_equal "opentideconstants-ruby/#{OTC::VERSION}", document.fetch("by")
             assert Time.iso8601(document.fetch("verified_at"))
             expected = '{"by":' + JSON.generate(document.fetch("by")) + ',"datestamp":"' + D +

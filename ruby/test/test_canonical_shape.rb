@@ -2186,7 +2186,7 @@ class CanonicalSourceNativeTest < Minitest::Test
         ]
         source_rows = File.readlines(File.join(client.__send__(:cache).release_dir(D), "OTC_#{D}.jsonl")).count { |line| !OTC::Reader.blank?(line) }
         mutations.each do |mutate|
-            index = JSON.parse(original)
+            index = JSON.parse(original.dup) # an older json gem re-tags the string it parses as UTF-8
             mutate.call(index)
             File.binwrite(path, JSON.generate(index))
             _result, calls = native_phase_trace { authenticated_native_index(client) }
