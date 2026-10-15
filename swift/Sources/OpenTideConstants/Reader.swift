@@ -140,6 +140,7 @@ internal extension Reader {
             sets.append(ConstantSet(raw:cs,convention:conv,licence:lic,isRecommended:id==recommended,validation:validation.enumerated().filter { $0.element.setId==id }.sorted { left,right in let a=left.element.window ?? "",b=right.element.window ?? "";return a==b ? left.offset < right.offset : a < b }.map(\.element)))
         }
         if let rid=d["recommended_set_id"].string, !sets.contains(where: { $0.setId==rid }) { throw OpenTideConstantsError.invalidRelease("recommended set unresolved") }
+        if !d["aliases"].isNull { guard case .object = d["aliases"] else { throw OpenTideConstantsError.invalidRelease("malformed aliases") } }
         for alias in d["aliases"].object.values { if alias.string == nil && !( { if case .array(let values) = alias { return values.allSatisfy { $0.string != nil } }; return false }() ) { throw OpenTideConstantsError.invalidRelease("malformed aliases") } }
         if !d["subordinate_offsets"].isNull {
             try historical(d["subordinate_offsets"])
@@ -216,6 +217,12 @@ internal extension Reader {
         let created = meta["release"]["created"]
         guard created.isNull || created.string != nil else {
             throw OpenTideConstantsError.invalidRelease("created has the wrong type")
+        }
+        let sourceVersions = meta["release"]["source_versions"]
+        if !sourceVersions.isNull {
+            guard case .object(let versions) = sourceVersions, versions.values.allSatisfy({ $0.string != nil }) else {
+                throw OpenTideConstantsError.invalidRelease("release.source_versions is not an object of strings")
+            }
         }
         let fv=meta["format_version"].string ?? ""
         guard fv.range(of:#"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,options:.regularExpression) != nil else { throw OpenTideConstantsError.invalidRelease("invalid format version") }

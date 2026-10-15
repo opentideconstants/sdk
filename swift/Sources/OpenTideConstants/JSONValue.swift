@@ -66,7 +66,10 @@ internal func parseTime(_ s: String?) throws -> Date? {
         offset = (h * 3600 + m * 60) * (zone.hasPrefix("-") ? -1 : 1)
     }
     let fraction = Double("0" + part(7)) ?? 0
-    return date.addingTimeInterval(fraction - Double(offset))
+    let instant = date.addingTimeInterval(fraction - Double(offset))
+    // as in the other SDKs, an offset that moves the time out of years 1 to 9999 in UTC is not a valid time
+    guard cal.component(.era, from: instant) == 1, cal.component(.year, from: instant) <= 9999 else { throw OpenTideConstantsError.invalidRelease("time out of range: \(s)") }
+    return instant
 }
 
 // Native token parsing keeps temporary storage bounded to one JSONL record. The
