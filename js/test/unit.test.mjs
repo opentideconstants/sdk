@@ -451,6 +451,14 @@ test("T81: .verified is checked key by key, not cast", async () => {
     const v = parseVerified(b({ files: { a: { sha256: 7, size: 3, url: 3 } }, datestamp: 5 }), "20991231");
     assert.equal(v, null);
     assert.equal(parseVerified(b({ files: {}, format_version: "1" }), "20991231"), null);
+    // Isolate the URL guard: every other row field and the directory datestamp are valid.
+    for (const [url, valid] of [[3, false], ["https://example.invalid/a", true], [null, true], [undefined, true]]) {
+        const receipt = parseVerified(b({ files: { a: { sha256: "a".repeat(64), size: 3, url } }, datestamp: "20991231" }), "20991231");
+        if (valid) {
+            assert.ok(receipt);
+            assert.equal(receipt.files.a.url, url ?? null);
+        } else assert.equal(receipt, null);
+    }
 });
 
 test("T81: cached releases require the receipt datestamp to match its directory", async () => {
