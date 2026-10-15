@@ -583,9 +583,13 @@ internal struct ClientIO:@unchecked Sendable {
         }
         guard let latest else { throw OpenTideConstantsError.releaseNotFound("latest pointer missing") }
         if readable(latest) { await noteVersionDoi(latest);return latest }
-        let values=try await index()
+        // a missing OTC_index.json (404) leaves only the pointer's release, which this reader is too old for
+        let values:[JSONValue]
+        do { values=try await index() } catch OpenTideConstantsError.releaseNotFound { values=[] }
         if let supported=values.first(where:readable) { await noteVersionDoi(supported);return supported }
-        if ([latest]+values).contains(where:{ ($0["format_version"].string ?? "").split(separator:".").first=="1" }) { throw OpenTideConstantsError.readerTooOld("no readable release") }
+        if let tooNew=([latest]+values).first(where:{ ($0["format_version"].string ?? "").split(separator:".").first=="1" }) {
+            throw OpenTideConstantsError.readerTooOld("release \(tooNew["datestamp"].string ?? "?") needs reader \(tooNew["min_reader_version"].string ?? "?"); SDK reads 1.0")
+        }
         throw OpenTideConstantsError.unsupportedFormat("no supported format")
     }
     func url(_ name:String,entry:JSONValue?)->URL {
