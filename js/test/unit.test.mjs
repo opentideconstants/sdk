@@ -1038,6 +1038,45 @@ test("prune preserves external data behind partial release symlinks", { skip: pr
     });
 });
 
+// On every platform, and above all on Windows, where an open file cannot be removed: what prune leaves of a
+// release that a live client holds open is (a) never listed, opened or verified as that release, and (b) removed
+// by a later prune once the client is closed.
+test("a release held open during prune is never served and goes once closed", async () => {
+    const index = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8"));
+    const script = { "OTC_latest-f1.json": [200, {}, JSON.stringify(index.releases.find((e) => e.datestamp === "20991231"))] };
+    const srv = await fixtureServer(script);
+    const cache = tmpdir();
+    const oldDir = path.join(cache, "v1", "releases", "20991231");
+    let c = await otc.OpenTideConstants.open({ baseUrl: srv.url, cacheDir: cache, mode: "stream" });
+    try {
+        assert.equal(c.release.datestamp, "20991231");
+        delete script["OTC_latest-f1.json"];
+        assert.ok((await c.update()).updated);
+        try { c.prune({ keep: 0 }); } catch (e) { if (e?.code !== "cache") throw e; } // Windows: still open
+        assert.deepEqual([...c.cachedReleases()], [D2]);
+        assert.equal(fs.existsSync(path.join(oldDir, ".verified")), false);
+        await assert.rejects(otc.OpenTideConstants.open({ release: "20991231", offline: true, cacheDir: cache, mode: "stream" }));
+        c.close();
+        c = null;
+        if (fs.existsSync(oldDir)) {
+            // what is left is a partial release; prune removes those once they are older than the lock age
+            const old = (Date.now() - 3_600_000) / 1000;
+            fs.utimesSync(oldDir, old, old);
+        }
+        const later = await otc.OpenTideConstants.open({ release: D2, offline: true, cacheDir: cache, mode: "stream" });
+        try {
+            assert.deepEqual([...later.prune({ keep: 0 })], []);
+        } finally {
+            later.close();
+        }
+        assert.equal(fs.existsSync(oldDir), false, "a release left behind by an earlier prune is still there");
+        assert.ok(fs.existsSync(path.join(cache, "v1", "releases", D2, ".verified")));
+    } finally {
+        c?.close();
+        await srv.close();
+    }
+});
+
 test("R2-085 (CR2 DR16): update() heals a cached release whose file has the wrong size and downloads it again", async () => {
     const index = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_index.json"), "utf8"));
     let pointer = JSON.stringify(index.releases.find((e) => e.datestamp === "20991231"));
