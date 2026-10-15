@@ -281,6 +281,13 @@ export function checkShape(doc: JsonObject, id: string): void {
             if (!typeOk(o[k], t)) throw new InvalidReleaseError(`station ${id}: ${what}${k} has the wrong type`);
         }
     };
+    const checkQcFlag = (flag: JsonObject, where: string) => {
+        check(flag, QC_FLAG_TYPES, `${where}qc_flags.`);
+        const values = obj(flag, "values");
+        if (values && !Object.values(values).every((value) => value === null || finite(value))) {
+            throw new InvalidReleaseError(`station ${id}: ${where}a qc_flags value is not a number or null`);
+        }
+    };
     check(doc, STATION_TYPES, "");
     const a = doc["aliases"];
     if (isObject(a)) {
@@ -295,7 +302,7 @@ export function checkShape(doc: JsonObject, id: string): void {
     checkSourceRecords(doc);
     if (off) {
         check(off, OFFSET_TYPES, "subordinate_offsets.");
-        for (const flag of objects(off, "qc_flags")) check(flag, { flag: "T", reason: "T" }, "subordinate_offsets.qc_flags.");
+        for (const flag of objects(off, "qc_flags")) checkQcFlag(flag, "subordinate_offsets.");
     }
     for (const v of objects(doc, "validation")) check(v, VALIDATION_TYPES, "validation ");
     for (const cs of objects(doc, "constant_sets")) {
@@ -330,13 +337,7 @@ export function checkShape(doc: JsonObject, id: string): void {
             names.add(name);
         }
         for (const x of objects(cs, "dropped_constituents")) check(x, DROPPED_TYPES, `${where}dropped_constituents.`);
-        for (const f of objects(cs, "qc_flags")) {
-            check(f, QC_FLAG_TYPES, `${where}qc_flags.`);
-            const values = obj(f, "values");
-            if (values && !Object.values(values).every((x) => x === null || finite(x))) {
-                throw new InvalidReleaseError(`station ${id}: ${where}a qc_flags value is not a number or null`);
-            }
-        }
+        for (const flag of objects(cs, "qc_flags")) checkQcFlag(flag, where);
         const tb = obj(cs, "time_base");
         const corr = obj(tb, "correction");
         if (corr) check(corr, CORRECTION_TYPES, `${where}time_base.correction.`);

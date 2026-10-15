@@ -648,6 +648,39 @@ test("DR59: build tool_versions must be a nullable map of strings in each native
     }
 });
 
+test("DR59: generic-offset QC values require finite numbers or null and preserve valid map values", async () => {
+    const valid = JSON.parse('{"minus_zero":-0,"fraction":1.5,"null":null,"δ":-3.25,"__proto__":2}');
+    for (const values of [false, { value: false }, { value: "bad" }, valid]) {
+        const root = tmpdir();
+        try {
+            const doc = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.json")));
+            const station = doc.stations.find(row => row.subordinate_offsets);
+            station.subordinate_offsets.qc_flags = [{ flag: "time_base", reason: "native values control", values }];
+            const prefix = path.join(root, "OTC_20991231.2");
+            const encoded = JSON.stringify(doc).replace('"minus_zero":0', '"minus_zero":-0');
+            fs.writeFileSync(`${prefix}.json`, encoded);
+            fs.writeFileSync(`${prefix}.jsonl`, JSON.parse(encoded).stations.map(row => JSON.stringify(row).replace('"minus_zero":0', '"minus_zero":-0') + "\n").join(""));
+            const meta = { ...doc };
+            delete meta.stations;
+            fs.writeFileSync(`${prefix}.meta.json`, JSON.stringify(meta));
+            for (const [extension, mode] of [["json", "eager"], ["jsonl", "eager"], ["jsonl", "stream"]]) {
+                if (values !== valid) {
+                    await assert.rejects(otc.OpenTideConstants.open({ file: `${prefix}.${extension}`, mode }), isCode("invalid_release"));
+                } else {
+                    const client = await otc.OpenTideConstants.open({ file: `${prefix}.${extension}`, mode });
+                    try {
+                        const actual = client.requireStation(station.station_id);
+                        assert.deepEqual(actual.subordinateOffsets.qc_flags[0].values, valid);
+                        assert.deepEqual(actual.raw, JSON.parse(encoded).stations.find(row => row.station_id === station.station_id));
+                    } finally { client.close(); }
+                }
+            }
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
+});
+
 test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
     const { listDir } = await import("../dist/node.js");
     const d = tmpdir();
